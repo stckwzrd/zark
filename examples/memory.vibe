@@ -1,0 +1,33 @@
+// No heap at all: everything lives in a stack buffer.
+fn main() !void {
+    var mem: [1024]u8
+    var fb = FixedBuf.init(mem[..])
+    let a = fb.allocator()
+
+    var xs = List[i32].init(a)
+    for i in 0..10 { xs.push((i * 3) as i32)? }
+    println("xs = {xs.slice()}, buffer used {fb.used}/{mem.len}")
+
+    let name = a.dup("vibe")?
+    println("dup: {name}, remaining {fb.remaining()}")
+
+    // formatting never allocates: write into a buffer you own
+    var line: [64]u8
+    let s = bprint(line[..], "sum of first {xs.len} = {xs.get(9) + xs.get(1)}")?
+    println("bprint -> '{s}' ({s.len} bytes)")
+
+    var tiny: [4]u8
+    let r = bprint(tiny[..], "too long for four bytes") catch |e| { println("bprint failed: {e}"); "" }
+    println("r.len = {r.len}")
+
+    // out of memory is an explicit error, not a crash
+    var big = List[i64].init(a)
+    for i in 0..1000 {
+        big.push(i) catch |e| {
+            println("OOM after {big.len} items: {e}")
+            break
+        }
+    }
+    fb.reset()
+    println("after reset: used {fb.used}")
+}

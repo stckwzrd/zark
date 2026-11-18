@@ -1,0 +1,331 @@
+// Calls: free functions, generics, methods, static methods, union constructors, function pointers.
+
+import "gen_expr.vibe"
+
+fn recv_name(t: *Type) str {
+    if t.k == .Strct { return t.si.decl.name }
+    if t.k == .Enm { return t.ei.decl.name }
+    return ""
+}
+
+fn te_mentions(te: *TypeExpr, names: List[str]) bool {
+    match te.k {
+        .Name => {
+            if contains_str(names, te.name) { return true }
+            for x in te.args { if te_mentions(x, names) { return true } }
+            return false
+        }
+        .Ptr, .Slice, .Errun, .Array => return te_mentions(te.elem, names)
+        .Func => {
+            for x in te.args { if te_mentions(x, names) { return true } }
+            if te.ret != null { return te_mentions(te.ret, names) }
+            return false
+        }
+    }
+    return false
+}
+
+fn all_bound(tps: List[str], env: Env) bool {
+    for tp in tps { if !env.has(tp) { return false } }
+    return true
+}
+
+impl Gen {
+    fn expr_to_type_expr(self, e: *Expr) !*TypeExpr {
+        if e.k == .Ident {
+            let t = self.a.create[TypeExpr]()?
+            t.k = .Name
+            t.name = e.name
+            t.args = List[*TypeExpr].init(self.a)
+            return t
+        }
+        if e.k == .Index {
+            let base = self.expr_to_type_expr(e.l)?
+            if base == null { return null }
+            let t = self.a.create[TypeExpr]()?
+            t.k = .Name
+            t.name = base.name
+            t.args = List[*TypeExpr].init(self.a)
+            for x in e.args {
+                let at = self.expr_to_type_expr(x)?
+                if at == null { return null }
+                t.args.push(at)?
+            }
+            return t
+        }
+        if e.k == .Unary && e.op == .star {
+            let inner = self.expr_to_type_expr(e.l)?
+            if inner == null { return null }
+            let t = self.a.create[TypeExpr]()?
+            t.k = .Ptr
+            t.elem = inner
+            t.args = List[*TypeExpr].init(self.a)
+            return t
+        }
+        return null
+    }
+
+    /// is `e` syntactically naming a type? (`Point`, `List[i32]`, `Self`)
+    fn names_type(self, e: *Expr) bool {
+        if e.k == .Ident {
+            if self.has_var(e.name) { return false }
+            return self.structs.has(e.name) || self.enums.has(e.name) || self.aliases.has(e.name) || (e.name == "Self" && self.env.has("Self"))
+        }
+        if e.k == .Index {
+            return e.l.k == .Ident && !self.has_var(e.l.name) && self.structs.has(e.l.name)
+        }
+        return false
+    }
+
+    fn type_args(self, args: List[*Expr], line: i64) !List[*Type] {
+        var out = List[*Type].init(self.a)
+        for x in args {
+            let te = self.expr_to_type_expr(x)?
+            if te == null { self.err(line); eprintln("expected a type argument"); return error.CompileFailed }
+            out.push(self.resolve_type_at(te, line)?)?
+        }
+        return out
+    }
+
+    fn gen_call(self, e: *Expr, expected: *Type) !Value {
+        let callee = e.l
+        if callee.k == .Ident && !self.has_var(callee.name) {
+            let name = callee.name
+            if self.is_builtin(name) && !self.fns.has(name) { return self.gen_builtin(name, e.args, e.line) }
+            if self.fns.has(name) { return self.call_decl(self.fns.get(name)?, self.new_env()?, null, e.args, self.no_types(), expected, e.line) }
+            if !self.consts.has(name) { self.err(e.line); eprintln("unknown function '{name}'"); return error.CompileFailed }
+        }
+        if callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field) {
+            if callee.l.k == .Field {
+                let targs = self.type_args(callee.args, e.line)?
+                return self.gen_field_call(callee.l, e.args, targs, expected, e.line)
+            }
+            if self.fns.has(callee.l.name) {
+                let targs = self.type_args(callee.args, e.line)?
+                return self.call_decl(self.fns.get(callee.l.name)?, self.new_env()?, null, e.args, targs, expected, e.line)
+            }
+        }
+        if callee.k == .Field { return self.gen_field_call(callee, e.args, self.no_types(), expected, e.line) }
+        if callee.k == .EnumLit {
+            let t = lit_target(expected)
+            if t == null { self.err(e.line); eprintln("cannot infer union type for '.{callee.name}(...)'"); return error.CompileFailed }
+            if !is_union(t) { self.err(e.line); eprintln("'.{callee.name}(...)' used where '{self.type_name(t)?}' is expected"); return error.CompileFailed }
+            if e.args.len != 1 { self.err(e.line); eprintln("a union variant takes exactly one payload"); return error.CompileFailed }
+            return self.make_union(t, callee.name, e.args.get(0), e.line)
+        }
+        let fv = self.gen_expr(callee, null)?
+        return self.call_indirect(fv, e.args, e.line)
+    }
+
+    fn gen_field_call(self, f: *Expr, args: List[*Expr], explicit: List[*Type], expected: *Type, line: i64) !Value {
+        if self.names_type(f.l) {
+            let t = self.type_from_expr(f.l, expected, f.name, line)?
+            if is_union(t) && field_index(t.si, f.name) >= 0 {
+                if args.len != 1 { self.err(line); eprintln("a union variant takes exactly one payload"); return error.CompileFailed }
+                return self.make_union(t, f.name, args.get(0), line)
+            }
+            let rname = recv_name(t)
+            if rname.len == 0 { self.err(line); eprintln("'{self.type_name(t)?}' has no methods"); return error.CompileFailed }
+            var kb = self.sb()
+            sprint(&kb, "{rname}.{f.name}")?
+            if !self.methods.has(kb.slice()) { self.err(line); eprintln("'{self.type_name(t)?}' has no method '{f.name}'"); return error.CompileFailed }
+            let md = self.methods.get(kb.slice())?
+            let env = self.recv_env(md, t)?
+            return self.call_decl(md, env, null, args, explicit, expected, line)
+        }
+        var recv = self.gen_addr(f.l)?
+        if recv.ty.k == .Ptr && recv_name(recv.ty.elem).len > 0 { recv = self.deref_agg(recv)? }
+        let rname = recv_name(recv.ty)
+        if rname.len == 0 { self.err(line); eprintln("'{self.type_name(recv.ty)?}' has no methods"); return error.CompileFailed }
+        var kb = self.sb()
+        sprint(&kb, "{rname}.{f.name}")?
+        if self.methods.has(kb.slice()) { return self.call_method(self.methods.get(kb.slice())?, recv, args, explicit, expected, line) }
+        if recv.ty.k == .Strct && !recv.ty.si.decl.is_union {
+            let idx = field_index(recv.ty.si, f.name)
+            if idx >= 0 {
+                let fty = recv.ty.si.fields.get(idx).ty
+                if fty.k == .Func {
+                    let fp = self.gep_field(recv.ty, recv.v, idx)?
+                    let fv = self.load(fty, fp)?
+                    return self.call_indirect(fv, args, line)
+                }
+            }
+        }
+        self.err(line); eprintln("'{self.type_name(recv.ty)?}' has no method '{f.name}'")
+        return error.CompileFailed
+    }
+
+    fn call_indirect(self, fv: Value, args: List[*Expr], line: i64) !Value {
+        if fv.ty.k != .Func { self.err(line); eprintln("'{self.type_name(fv.ty)?}' is not callable"); return error.CompileFailed }
+        let sig = fv.ty
+        if args.len != sig.params.len { self.err(line); eprintln("function pointer expects {sig.params.len} argument(s), got {args.len}"); return error.CompileFailed }
+        var argtxt = self.sb()
+        for i, x in args {
+            let pt = sig.params.get(i)
+            let v = self.coerce(self.gen_expr(x, pt)?, pt, x.line)?
+            if i > 0 { argtxt.append(", ")? }
+            sprint(&argtxt, "{self.llty(v.ty)?} {v.v}")?
+        }
+        if sig.ret.k == .Void {
+            sprint(self.ins()?, "  call void {fv.v}({argtxt.slice()})\n")?
+            return Value{ ty: self.t_void, v: "" }
+        }
+        let t = self.tmp()?
+        sprint(self.ins()?, "  {t} = call {self.llty(sig.ret)?} {fv.v}({argtxt.slice()})\n")?
+        return Value{ ty: sig.ret, v: t }
+    }
+
+    fn recv_env(self, md: *FnDecl, t: *Type) !Env {
+        let env = self.new_env()?
+        env.put("Self", t)?
+        if t.k == .Strct {
+            let args = t.si.args
+            if md.receiver_params.len != args.len { self.err(md.line); eprintln("impl for '{t.si.decl.name}' must list {args.len} type parameter(s)"); return error.CompileFailed }
+            for i, tp in md.receiver_params { env.put(tp, args.get(i))? }
+        }
+        return env
+    }
+
+    fn call_method(self, md: *FnDecl, recv: Addr, args: List[*Expr], explicit: List[*Type], expected: *Type, line: i64) !Value {
+        let env = self.recv_env(md, recv.ty)?
+        if md.params.len == 0 { self.err(line); eprintln("'{md.name}' is a static method; call it as Type.{md.name}()"); return error.CompileFailed }
+        return self.call_decl(md, env, &recv, args, explicit, expected, line)
+    }
+
+    fn unify(self, te: *TypeExpr, actual: *Type, tps: List[str], env: Env) !void {
+        match te.k {
+            .Name => {
+                if te.args.len == 0 {
+                    if contains_str(tps, te.name) && !env.has(te.name) { env.put(te.name, actual)? }
+                    return
+                }
+                if actual.k == .Strct && actual.si.decl.name == te.name {
+                    for i, x in te.args { if i < actual.si.args.len { self.unify(x, actual.si.args.get(i), tps, env)? } }
+                }
+            }
+            .Ptr => { if actual.k == .Ptr { self.unify(te.elem, actual.elem, tps, env)? } }
+            .Slice => { if actual.k == .Slice { self.unify(te.elem, actual.elem, tps, env)? } }
+            .Errun => { if actual.k == .Errun { self.unify(te.elem, actual.elem, tps, env)? } }
+            .Array => { if actual.k == .Array { self.unify(te.elem, actual.elem, tps, env)? } }
+            .Func => {
+                if actual.k == .Func && actual.params.len == te.args.len {
+                    for i, x in te.args { self.unify(x, actual.params.get(i), tps, env)? }
+                    if te.ret != null { self.unify(te.ret, actual.ret, tps, env)? }
+                }
+            }
+        }
+    }
+
+    fn call_decl(self, decl: *FnDecl, base_env: Env, recv: *Addr, args: List[*Expr], explicit: List[*Type], expected: *Type, line: i64) !Value {
+        var off = 0
+        if recv != null { off = 1 }
+        if !decl.variadic && args.len + off != decl.params.len { self.err(line); eprintln("'{decl.name}' expects {decl.params.len - off} argument(s), got {args.len}"); return error.CompileFailed }
+        if decl.variadic && args.len + off < decl.params.len { self.err(line); eprintln("'{decl.name}' expects at least {decl.params.len - off} argument(s)"); return error.CompileFailed }
+
+        let env = self.copy_env(base_env)?
+        let tps = decl.type_params
+        if explicit.len > 0 {
+            if explicit.len != tps.len { self.err(line); eprintln("'{decl.name}' expects {tps.len} type argument(s)"); return error.CompileFailed }
+            for i, tp in tps { env.put(tp, explicit.get(i))? }
+        }
+
+        var vals = List[Value].init(self.a)
+        var have = List[bool].init(self.a)
+        for _i in 0..args.len {
+            vals.push(Value{ ty: null, v: "" })?
+            have.push(false)?
+        }
+        // pass 1: non-literal args (to infer generics)
+        for i, x in args {
+            let pi = i + off
+            if pi >= decl.params.len { continue }
+            let pte = decl.params.get(pi).ty
+            let generic = te_mentions(pte, tps)
+            if generic && !all_bound(tps, env) && is_literal(x) { continue }
+            var exp: *Type = null
+            if !generic || all_bound(tps, env) { exp = self.resolve_type(pte, env)? }
+            let v = self.gen_expr(x, exp)?
+            vals.set(i, v)
+            have.set(i, true)
+            if generic { self.unify(pte, v.ty, tps, env)? }
+        }
+        // pass 2: literals, now with known types
+        for i, x in args {
+            if have.get(i) { continue }
+            let pi = i + off
+            if pi >= decl.params.len { continue }
+            let pte = decl.params.get(pi).ty
+            var exp: *Type = null
+            if all_bound(tps, env) { exp = self.resolve_type(pte, env)? }
+            let v = self.gen_expr(x, exp)?
+            vals.set(i, v)
+            have.set(i, true)
+            self.unify(pte, v.ty, tps, env)?
+        }
+        if recv != null {
+            let pte = decl.params.get(0).ty
+            if pte.k == .Ptr { self.unify(pte.elem, recv.ty, tps, env)? } else { self.unify(pte, recv.ty, tps, env)? }
+        }
+        if !all_bound(tps, env) && decl.ret != null && expected != null { self.unify(decl.ret, expected, tps, env)? }
+        if !all_bound(tps, env) { self.err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed }
+
+        var targs = List[*Type].init(self.a)
+        for tp in tps { targs.push(env.get(tp)?)? }
+        let fi = self.inst_fn(decl, env, targs)?
+
+        var argtxt = self.sb()
+        if recv != null {
+            let pt = fi.params.get(0)
+            if pt.k == .Ptr {
+                sprint(&argtxt, "ptr {recv.v}")?
+            } else {
+                let rv = self.load(recv.ty, recv.v)?
+                let cv = self.coerce(rv, pt, line)?
+                sprint(&argtxt, "{self.llty(pt)?} {cv.v}")?
+            }
+        }
+        for i, x in args {
+            let pi = i + off
+            if !have.get(i) {
+                var exp: *Type = null
+                if x.k == .StrLit { exp = self.t_ptr_u8 }
+                vals.set(i, self.gen_expr(x, exp)?)
+            }
+            var v = vals.get(i)
+            if pi < fi.params.len { v = self.coerce(v, fi.params.get(pi), x.line)? } else { v = self.c_promote(v, x.line)? }
+            if argtxt.len > 0 { argtxt.append(", ")? }
+            sprint(&argtxt, "{self.llty(v.ty)?} {v.v}")?
+        }
+
+        var fnty = self.llty(fi.ret)?
+        if decl.variadic {
+            var ft = self.sb()
+            sprint(&ft, "{self.llty(fi.ret)?} (")?
+            for i, p in fi.params {
+                if i > 0 { ft.append(", ")? }
+                ft.append(self.llty(p)?)?
+            }
+            if fi.params.len > 0 { ft.append(", ...)")? } else { ft.append("...)")? }
+            fnty = ft.slice()
+        }
+        if fi.ret.k == .Void {
+            sprint(self.ins()?, "  call {fnty} @{fi.llname}({argtxt.slice()})\n")?
+            return Value{ ty: self.t_void, v: "" }
+        }
+        let t = self.tmp()?
+        sprint(self.ins()?, "  {t} = call {fnty} @{fi.llname}({argtxt.slice()})\n")?
+        return Value{ ty: fi.ret, v: t }
+    }
+
+    fn c_promote(self, v: Value, line: i64) !Value {
+        if v.ty.k == .Int && v.ty.bits < 32 {
+            if v.ty.signed { return self.cast(v, self.t_i32, line) }
+            return self.cast(v, self.mk_int(32, false)?, line)
+        }
+        if v.ty.k == .Bool { return self.cast(v, self.t_i32, line) }
+        if v.ty.k == .Float && v.ty.bits == 32 { return self.cast(v, self.t_f64, line) }
+        if v.ty.k == .Slice { self.err(line); eprintln("slices cannot be passed to C varargs; pass .ptr (and .len) explicitly"); return error.CompileFailed }
+        if v.ty.k == .Null { return Value{ ty: self.t_ptr_u8, v: "null" } }
+        return v
+    }
+}

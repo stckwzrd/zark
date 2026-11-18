@@ -1,0 +1,1752 @@
+// Native backend: our LLVM IR subset -> x86-64 machine code -> ELF .o (no LLVM involved).
+// Strategy: every SSA value lives in a stack slot; each instruction loads operands into scratch
+// registers, computes, and stores the result. Calls follow the System V AMD64 ABI for scalars;
+// aggregates are passed by pointer and returned through a hidden sret pointer.
+
+import "x64.vibe"
+
+enum LK { I, F32, F64, P, V, S, A }
+
+struct LT {
+    k: LK
+    bits: i64
+    size: i64
+    align: i64
+    fields: List[*LT]
+    offs: List[i64]
+    n: i64
+    elem: *LT
+}
+
+fn is_agg(t: *LT) bool { return t.k == .S || t.k == .A }
+fn is_flt(t: *LT) bool { return t.k == .F32 || t.k == .F64 }
+
+// ------------------------------------------------------------------ line cursor
+struct Cur { s: str, i: i64 }
+
+impl Cur {
+    fn ws(self) { while self.i < self.s.len && self.s[self.i] == ' ' { self.i += 1 } }
+    fn peek(self) u8 {
+        if self.i < self.s.len { return self.s[self.i] }
+        return 0
+    }
+    fn eat(self, c: u8) bool {
+        self.ws()
+        if self.peek() == c {
+            self.i += 1
+            return true
+        }
+        return false
+    }
+    fn eat_word(self, w: str) bool {
+        self.ws()
+        if self.i + w.len <= self.s.len && self.s[self.i..self.i + w.len] == w {
+            let after = self.i + w.len
+            if after == self.s.len || !(is_alnum(self.s[after]) || self.s[after] == '_' || self.s[after] == '.') {
+                self.i = after
+                return true
+            }
+        }
+        return false
+    }
+    fn word(self) str {
+        self.ws()
+        let st = self.i
+        while self.i < self.s.len {
+            let c = self.s[self.i]
+            if c == ' ' || c == ',' || c == '(' || c == ')' || c == ']' || c == '}' { break }
+            self.i += 1
+        }
+        return self.s[st..self.i]
+    }
+    /// operand text up to a top-level ',' ')' ']' or end
+    fn value(self) str {
+        self.ws()
+        let st = self.i
+        var d = 0
+        while self.i < self.s.len {
+            let c = self.s[self.i]
+            if c == '"' {
+                self.i += 1
+                while self.i < self.s.len && self.s[self.i] != '"' { self.i += 1 }
+            } else if c == '{' || c == '[' || c == '(' {
+                d += 1
+            } else if c == '}' || c == ']' || c == ')' {
+                if d == 0 { break }
+                d -= 1
+            } else if c == ',' && d == 0 {
+                break
+            }
+            self.i += 1
+        }
+        var e = self.i
+        while e > st && self.s[e - 1] == ' ' { e -= 1 }
+        return self.s[st..e]
+    }
+    fn label(self) str {
+        // "label %name"
+        _ = self.eat_word("label")
+        self.ws()
+        if self.peek() == '%' { self.i += 1 }
+        return self.word()
+    }
+}
+
+// ------------------------------------------------------------------ instructions
+struct Arg { ty: *LT, v: str, id1: i64 }
+struct PhiIn { v: str, pred: str }
+
+struct Ins {
+    op: str
+    dest: str
+    ty: *LT       // result type / main operand type
+    ty2: *LT      // cast target, store value type...
+    a: str
+    b: str
+    c: str
+    tb: *LT       // type of b (insertvalue elem, select)
+    pred: str
+    n: i64
+    args: List[Arg]     // call args, gep indices
+    phis: List[PhiIn]
+    l1: str
+    l2: str
+    callee: str
+    variadic: bool
+    nfixed: i64
+    rd: i64
+    ra: i64
+    id1: i64
+    ia1: i64
+    ib1: i64
+    ic1: i64
+    cl1: i64
+}
+
+struct Block { label: str, ins: List[*Ins] }
+struct AggIn { ty: *LT, dst: i64, ptr: i64 }
+struct Iv { name: str, start: i64, end: i64, w: i64, reg: i64, alloca: bool, bad: bool, alias: i64, nocall: bool }
+struct LoopR { s: i64, e: i64 }
+struct Save { reg: i64, off: i64 }
+
+struct Native {
+    a: Allocator
+    obj: ObjFile
+    named: Map[*LT]
+    t_i1: *LT
+    t_i8: *LT
+    t_i32: *LT
+    t_i64: *LT
+    t_ptr: *LT
+    t_void: *LT
+    t_f32: *LT
+    t_f64: *LT
+    // per function
+    slot: Map[i64]
+    allocas: Map[i64]
+    frame: i64
+    sret_slot: i64
+    nlocal: i64
+    fname: str
+    ivreg: List[i64]
+    ivs: List[Iv]
+    byn: List[i64]
+    idxm: Map[i64]
+    cur: *Ins
+    fused: Map[i64]
+    lazy: Map[i64]
+    next: str
+    saved: List[Save]
+}
+
+fn new_native(a: Allocator) !*Native {
+    let n = a.create[Native]()?
+    n.a = a
+    n.obj = new_obj(a)
+    n.named = Map[*LT].init(a)
+    n.t_i1 = n.int_t(1)?
+    n.t_i8 = n.int_t(8)?
+    n.t_i32 = n.int_t(32)?
+    n.t_i64 = n.int_t(64)?
+    n.byn = List[i64].init(a)
+    n.ivreg = List[i64].init(a)
+    n.t_ptr = n.basic(.P, 8)?
+    n.t_void = n.basic(.V, 0)?
+    n.t_f32 = n.basic(.F32, 4)?
+    n.t_f64 = n.basic(.F64, 8)?
+    return n
+}
+
+fn align_up(x: i64, a: i64) i64 {
+    if a <= 1 { return x }
+    return (x + a - 1) / a * a
+}
+
+fn parse_num(s: str) i64 {
+    if s == "true" { return 1 }
+    if s == "false" || s == "null" || s == "zeroinitializer" || s == "undef" || s == "poison" { return 0 }
+    if s.len > 2 && s[0] == '0' && s[1] == 'x' { return (parse_int_radix(s[2..], 16) catch 0) as i64 }
+    if s.len > 0 && s[0] == '-' { return 0 - (parse_int_radix(s[1..], 10) catch 0) as i64 }
+    return (parse_int_radix(s, 10) catch 0) as i64
+}
+
+fn f32_bits_of_hex(s: str) i64 {
+    // LLVM writes float constants as the bits of the equivalent double
+    let d = f64_from_bits(parse_num(s) as u64)
+    var f: f32 = d as f32
+    return (*(&f as *u32)) as i64
+}
+
+impl Native {
+    // ------------------------------------------------------------------ types
+    fn basic(self, k: LK, size: i64) !*LT {
+        let t = self.a.create[LT]()?
+        t.k = k
+        t.size = size
+        t.align = max(size, 1)
+        return t
+    }
+    fn int_t(self, bits: i64) !*LT {
+        var size = bits / 8
+        if bits == 1 { size = 1 }
+        let t = self.basic(.I, size)?
+        t.bits = bits
+        return t
+    }
+
+    fn ty(self, c: *Cur) !*LT {
+        c.ws()
+        let ch = c.peek()
+        if ch == '{' {
+            c.i += 1
+            let t = self.basic(.S, 0)?
+            t.fields = List[*LT].init(self.a)
+            t.offs = List[i64].init(self.a)
+            while true {
+                c.ws()
+                if c.peek() == '}' {
+                    c.i += 1
+                    break
+                }
+                t.fields.push(self.ty(c)?)?
+                _ = c.eat(',')
+            }
+            self.layout(t)
+            return t
+        }
+        if ch == '[' {
+            c.i += 1
+            c.ws()
+            let n = parse_num(c.word())
+            _ = c.eat_word("x")
+            let el = self.ty(c)?
+            _ = c.eat(']')
+            let t = self.basic(.A, el.size * n)?
+            t.n = n
+            t.elem = el
+            t.align = el.align
+            return t
+        }
+        if ch == '%' {
+            c.i += 2   // %"
+            let st = c.i
+            while c.peek() != '"' { c.i += 1 }
+            let name = c.s[st..c.i]
+            c.i += 1
+            return self.named.get(name) catch {
+                eprintln("native: unknown type %\"{name}\"")
+                return error.CompileFailed
+            }
+        }
+        let w = c.word()
+        match w {
+            "i1" => return self.t_i1
+            "i8" => return self.t_i8
+            "i16" => return self.int_t(16)
+            "i32" => return self.t_i32
+            "i64" => return self.t_i64
+            "ptr" => return self.t_ptr
+            "void" => return self.t_void
+            "float" => return self.t_f32
+            "double" => return self.t_f64
+        }
+        eprintln("native: unknown type '{w}'")
+        return error.CompileFailed
+    }
+
+    fn layout(self, t: *LT) {
+        var off = 0
+        var al = 1
+        for f in t.fields {
+            off = align_up(off, f.align)
+            t.offs.push(off) catch {}
+            off += f.size
+            al = max(al, f.align)
+        }
+        t.size = align_up(off, al)
+        t.align = al
+    }
+
+    /// byte offset + type of aggregate element `idx`
+    fn elem_at(self, t: *LT, idx: i64) Arg {
+        if t.k == .S { return Arg{ ty: t.fields.get(idx), v: "", id1: 0 } }
+        return Arg{ ty: t.elem, v: "", id1: 0 }
+    }
+    fn elem_off(self, t: *LT, idx: i64) i64 {
+        if t.k == .S { return t.offs.get(idx) }
+        return t.elem.size * idx
+    }
+
+    // ------------------------------------------------------------------ module
+    fn compile_module(self, ir: str) !void {
+        var lines = List[str].init(self.a)
+        var st = 0
+        for i, ch in ir {
+            if ch == '\n' {
+                lines.push(ir[st..i])?
+                st = i + 1
+            }
+        }
+        if st < ir.len { lines.push(ir[st..])? }
+        var i = 0
+        while i < lines.len {
+            let ln = lines.get(i)
+            if ln.len == 0 || ln[0] == ';' {
+                i += 1
+                continue
+            }
+            if str_starts_with(ln, "%\"") {
+                let q = str_find_byte(ln[2..], '"') + 2
+                let name = ln[2..q]
+                var c = Cur{ s: ln, i: q + 1 }
+                _ = c.eat('=')
+                _ = c.eat_word("type")
+                self.named.put(name, self.ty(&c)?)?
+            } else if ln[0] == '@' {
+                self.global(ln) catch |e| {
+                    eprintln("native: cannot parse global: {ln}")
+                    return e
+                }
+            } else if str_starts_with(ln, "define ") {
+                var j = i + 1
+                while j < lines.len && lines.get(j) != "}" { j += 1 }
+                self.function(ln, lines.slice()[i + 1..j])?
+                i = j
+            }
+            i += 1
+        }
+    }
+
+    fn global(self, ln: str) !void {
+        let sp = str_find_byte(ln, ' ')
+        let name = ln[1..sp]
+        var c = Cur{ s: ln, i: sp }
+        _ = c.eat('=')
+        let private = c.eat_word("private")
+        _ = c.eat_word("unnamed_addr")
+        var is_const = false
+        if c.eat_word("constant") { is_const = true } else { _ = c.eat_word("global") }
+        let t = self.ty(&c)?
+        c.ws()
+        let init = c.s[c.i..]
+        var buf = &self.obj.data
+        var sec = SEC_DATA
+        let has_ptrs = str_find_byte(init, '@') >= 0
+        if is_const && !has_ptrs {
+            buf = &self.obj.rodata
+            sec = SEC_RODATA
+        }
+        align_buf(buf, t.align)?
+        let off = buf.len
+        for _k in 0..t.size { buf.push(0)? }
+        self.const_bytes(t, init, buf, off, sec == SEC_DATA)?
+        self.obj.define(name, sec, off, t.size, !private, false)?
+    }
+
+    /// write the constant `v` of type `t` into buf[off..]
+    fn const_bytes(self, t: *LT, v: str, buf: *List[u8], off: i64, relocs: bool) !void {
+        if v == "zeroinitializer" || v == "undef" || v == "null" { return }
+        if t.k == .A && v.len > 1 && v[0] == 'c' && v[1] == '"' {
+            var i = 2
+            var o = off
+            while i < v.len && v[i] != '"' {
+                if v[i] == '\\' {
+                    buf.items[o] = (parse_int_radix(v[i + 1..i + 3], 16) catch 0) as u8
+                    i += 3
+                } else {
+                    buf.items[o] = v[i]
+                    i += 1
+                }
+                o += 1
+            }
+            return
+        }
+        if is_agg(t) {
+            // { T v, T v } or [T v, T v]
+            var c = Cur{ s: v, i: 1 }
+            var k = 0
+            while k < t.n || (t.k == .S && k < t.fields.len) {
+                let et = self.ty(&c)?
+                let ev = c.value()
+                self.const_bytes(et, ev, buf, off + self.elem_off(t, k), relocs)?
+                _ = c.eat(',')
+                k += 1
+            }
+            return
+        }
+        if v[0] == '@' {
+            if !relocs { eprintln("native: pointer in read-only data"); return error.CompileFailed }
+            self.obj.data_relocs.push(Reloc{ off: off, sym: v[1..], kind: R_X86_64_64, addend: 0 })?
+            return
+        }
+        var bits = parse_num(v)
+        if t.k == .F32 { bits = f32_bits_of_hex(v) }
+        for k in 0..t.size { buf.items[off + k] = ((bits >> (k * 8)) & 0xff) as u8 }
+    }
+
+    // ------------------------------------------------------------------ frame
+    fn new_slot(self, size: i64, align: i64) i64 {
+        self.frame = align_up(self.frame + max(size, 1), max(align, 8))
+        return 0 - self.frame
+    }
+
+    fn def_slot(self, name: str, t: *LT) !void {
+        self.slot.put(name, self.new_slot(align_up(t.size, 8), t.align))?
+    }
+
+    fn loc(self, name: str) i64 {
+        return self.slot.get(name) catch 0
+    }
+
+    fn reg_of(self, name: str) i64 {
+        let i = self.idx_get(&self.ivs, name)
+        if i < 0 { return -1 }
+        return self.rg(i + 1)
+    }
+
+    fn idx_key(self, name: str) i64 {
+        let n = name.len
+        if n < 3 || name[0] != '%' || (name[1] != 't' && name[1] != 'v') { return -1 }
+        var i = n
+        var k = 0
+        var m = 1
+        while i > 2 && name[i - 1] >= '0' && name[i - 1] <= '9' {
+            k += ((name[i - 1] - '0') as i64) * m
+            m *= 10
+            i -= 1
+            if n - i > 7 { return -1 }
+        }
+        if i == n { return -1 }
+        return k
+    }
+
+    fn idx_put(self, name: str, i: i64) !void {
+        let k = self.idx_key(name)
+        if k >= 0 {
+            while self.byn.len <= k { self.byn.push(-1)? }
+            if self.byn.items[k] < 0 {
+                self.byn.items[k] = i
+                return
+            }
+        }
+        self.idxm.put(name, i)?
+    }
+
+    fn idx_get(self, ivs: *List[Iv], name: str) i64 {
+        let k = self.idx_key(name)
+        if k >= 0 && k < self.byn.len {
+            let i = self.byn.items[k]
+            if i >= 0 && ivs.items[i].name == name { return i }
+        }
+        return self.idxm.get(name) catch -1
+    }
+
+    fn rg(self, id1: i64) i64 {
+        if id1 == 0 { return -1 }
+        let r = self.ivreg.items[id1 - 1]
+        if r >= 64 { return -1 }
+        return r
+    }
+
+    fn rgv(self, id1: i64) i64 {
+        if id1 == 0 { return -1 }
+        let r = self.ivreg.items[id1 - 1]
+        if r >= 64 { return r - 64 }
+        return -1
+    }
+
+    fn opreg(self, v: str) i64 {
+        let i = self.cur
+        if v.ptr == i.a.ptr { return self.rg(i.ia1) }
+        if v.ptr == i.b.ptr { return self.rg(i.ib1) }
+        if v.ptr == i.c.ptr { return self.rg(i.ic1) }
+        if v.ptr == i.callee.ptr { return self.rg(i.cl1) }
+        for ar in i.args {
+            if v.ptr == ar.v.ptr { return self.rg(ar.id1) }
+        }
+        return self.reg_of(v)
+    }
+
+    fn src_reg(self, scratch: i64, t: *LT, v: str, sign: bool) !i64 {
+        if v[0] == '%' {
+            let r = self.opreg(v)
+            if r >= 0 { return r }
+        }
+        self.load_mem(scratch, t, v, sign)?
+        return scratch
+    }
+
+    fn dreg(self, ins: *Ins) i64 {
+        if ins.rd >= 0 { return ins.rd }
+        return RAX
+    }
+
+    fn is_imm(self, t: *LT, v: str) bool {
+        if t.size != 8 || t.k == .F64 || v.len == 0 || v[0] == '%' || v[0] == '@' { return false }
+        let n = parse_num(v)
+        return n >= -2147483648 && n <= 2147483647
+    }
+
+    fn cc_of(self, pred: str) i64 {
+        match pred {
+            "eq" => return CC_E
+            "ne" => return CC_NE
+            "slt" => return CC_L
+            "sle" => return CC_LE
+            "sgt" => return CC_G
+            "sge" => return CC_GE
+            "ult" => return CC_B
+            "ule" => return CC_BE
+            "ugt" => return CC_A
+            "uge" => return CC_AE
+        }
+        return CC_E
+    }
+
+    fn cmp_ins(self, ins: *Ins) !void {
+        let asm = &self.obj.text
+        let signed = ins.pred[0] == 's'
+        let ra = self.src_reg(RAX, ins.ty2, ins.a, signed)?
+        if self.is_imm(ins.ty2, ins.b) {
+            asm.alu_imm(7, ra, parse_num(ins.b))?
+        } else {
+            let rb = self.src_reg(RCX, ins.ty2, ins.b, signed)?
+            asm.cmp(ra, rb)?
+        }
+    }
+
+    fn cmp_br(self, ins: *Ins, br: *Ins) !void {
+        let asm = &self.obj.text
+        self.cmp_ins(ins)?
+        let cc = self.cc_of(ins.pred)
+        if br.l1 == self.next {
+            asm.jcc(cc ^ 1, br.l2)?
+        } else {
+            asm.jcc(cc, br.l1)?
+            if br.l2 != self.next { asm.jmp(br.l2)? }
+        }
+    }
+
+    fn bump(self, m: *Map[i64], name: str) {
+        if name.len == 0 || name[0] != '%' || !m.has(name) { return }
+        let e = &m.entries[m.__find(name)]
+        e.value += 1
+    }
+
+    fn note(self, ivs: *List[Iv], name: str, pos: i64, w: i64, access: bool) i64 {
+        if name.len == 0 || name[0] != '%' { return 0 }
+        let i = self.idx_get(ivs, name)
+        if i < 0 { return 0 }
+        let iv = &ivs.items[i]
+        if iv.alloca && !access { iv.bad = true }
+        if pos < iv.start { iv.start = pos }
+        if pos > iv.end { iv.end = pos }
+        iv.w += w
+        return i + 1
+    }
+
+    fn alloc_regs(self, params: List[Arg], blocks: List[Block]) !void {
+        self.byn.len = 0
+        self.idxm = Map[i64].init(self.a)
+        self.saved = List[Save].init(self.a)
+        var bidx = Map[i64].init(self.a)
+        var bstart = List[i64].init(self.a)
+        var bend = List[i64].init(self.a)
+        var total = 0
+        for bi, blk in blocks {
+            bidx.put(blk.label, bi)?
+            bstart.push(total)?
+            total += blk.ins.len
+            bend.push(total - 1)?
+        }
+
+        var cc = List[i64].init(self.a)
+        cc.push(0)?
+        var loops = List[LoopR].init(self.a)
+        for bi, blk in blocks {
+            if blk.ins.len == 0 { continue }
+            let t = blk.ins.get(blk.ins.len - 1)
+            if t.op != "br" { continue }
+            let targets = [t.l1, t.l2]
+            for tl in targets {
+                if tl.len == 0 || !bidx.has(tl) { continue }
+                let ti = bidx.get(tl)?
+                if ti > bi { continue }
+                loops.push(LoopR{ s: bstart.get(ti), e: bend.get(bi) })?
+            }
+        }
+        var depth = List[i64].init(self.a)
+        if loops.len > 0 {
+            for _k in 0..total { depth.push(0)? }
+            for lp in loops {
+                for q in lp.s..lp.e + 1 { depth.items[q] += 1 }
+            }
+        }
+
+        var ivs = List[Iv].init(self.a)
+        for p in params {
+            if is_agg(p.ty) || p.ty.size != 8 { continue }
+            self.idx_put(p.v, ivs.len)?
+            ivs.push(Iv{ name: p.v, start: -1, end: -1, w: 0, reg: -1, alloca: false, bad: false, alias: -1, nocall: false })?
+        }
+        var pos = 0
+        for blk in blocks {
+            for ins in blk.ins {
+                if ins.dest.len > 0 && !is_agg(ins.ty) && ins.ty.size == 8 {
+                    if ins.op == "alloca" {
+                        ins.id1 = ivs.len + 1
+                        self.idx_put(ins.dest, ivs.len)?
+                        ivs.push(Iv{ name: ins.dest, start: total + 1, end: -2, w: 0, reg: -1, alloca: true, bad: false, alias: -1, nocall: false })?
+                    } else if ins.op != "phi" && ins.op != "insertvalue" {
+                        ins.id1 = ivs.len + 1
+                        self.idx_put(ins.dest, ivs.len)?
+                        ivs.push(Iv{ name: ins.dest, start: pos, end: pos, w: 1, reg: -1, alloca: false, bad: false, alias: -1, nocall: false })?
+                    }
+                }
+                pos += 1
+            }
+        }
+
+        pos = 0
+        for blk in blocks {
+            for ins in blk.ins {
+                var w = 1
+                if loops.len > 0 {
+                    for _k in 0..min(depth.get(pos), 4) { w *= 10 }
+                }
+                let op = ins.op
+                var ncall = cc.get(cc.len - 1)
+                if op.len == 4 && ((op[0] == 'c' && op[1] == 'a') || (op[0] == 'f' && op[1] == 'r')) { ncall += 1 }
+                cc.push(ncall)?
+                var access = false
+                if op == "load" { access = !is_agg(ins.ty) && ins.ty.size == 8 }
+                if op == "store" { access = !is_agg(ins.ty2) && ins.ty2.size == 8 }
+                if ins.a.len > 0 { ins.ia1 = self.note(&ivs, ins.a, pos, w, access && (op == "load" || op == "store")) }
+                if ins.b.len > 0 { ins.ib1 = self.note(&ivs, ins.b, pos, w, false) }
+                if ins.c.len > 0 { ins.ic1 = self.note(&ivs, ins.c, pos, w, false) }
+                if ins.callee.len > 0 { ins.cl1 = self.note(&ivs, ins.callee, pos, w, false) }
+                for ai in 0..ins.args.len {
+                    let ar = &ins.args.items[ai]
+                    ar.id1 = self.note(&ivs, ar.v, pos, w, false)
+                }
+                for pi in ins.phis {
+                    if bidx.has(pi.pred) { _ = self.note(&ivs, pi.v, bend.get(bidx.get(pi.pred)?), w, false) }
+                }
+                pos += 1
+            }
+        }
+
+        if loops.len > 0 {
+            var multi = List[i64].init(self.a)
+            var bof = List[i64].init(self.a)
+            for bi, blk in blocks {
+                for _q in 0..blk.ins.len { bof.push(bi)? }
+            }
+            for k in 0..ivs.len {
+                let iv = &ivs.items[k]
+                if iv.start > iv.end { continue }
+                if iv.end > bend.get(bof.get(max(iv.start, 0))) { multi.push(k)? }
+            }
+            var changed = true
+            while changed {
+                changed = false
+                for lp in loops {
+                    for mk in multi {
+                        let iv = &ivs.items[mk]
+                        if iv.start < lp.s && iv.end >= lp.s && iv.end < lp.e {
+                            iv.end = lp.e
+                            changed = true
+                        }
+                    }
+                }
+            }
+        }
+
+        pos = 0
+        for bi, blk in blocks {
+            for k, ins in blk.ins {
+                if ins.op == "load" && ins.ia1 > 0 && ins.id1 > 0 {
+                    let vi = ins.ia1 - 1
+                    let ti = ins.id1 - 1
+                    let v = &ivs.items[vi]
+                    let t = &ivs.items[ti]
+                    if v.alloca && !v.bad && v.start <= v.end && !t.alloca && t.end <= bend.get(bi) && t.end - pos <= 24 {
+                        var clean = true
+                        for q in k + 1..t.end - bstart.get(bi) {
+                            let o = blk.ins.get(q)
+                            if o.op == "store" && o.a == ins.a { clean = false }
+                        }
+                        if clean {
+                            t.alias = vi
+                            if t.end > v.end { v.end = t.end }
+                            v.w += t.w
+                        }
+                    }
+                }
+                pos += 1
+            }
+        }
+        for k in 0..ivs.len {
+            let iv = &ivs.items[k]
+            if iv.start >= 0 && iv.start <= iv.end { iv.nocall = cc.get(iv.end + 1) - cc.get(iv.start + 1) == 0 }
+        }
+        self.scan(&ivs, total)?
+        self.ivs = ivs
+
+        var seen = 0
+        self.ivreg.len = 0
+        for k in 0..ivs.len {
+            self.ivreg.push(-1)?
+            let iv = &ivs.items[k]
+            var reg = iv.reg
+            if iv.alias >= 0 { reg = ivs.items[iv.alias].reg }
+            if reg < 0 { continue }
+            if iv.alloca { self.ivreg.items[k] = reg + 64 } else { self.ivreg.items[k] = reg }
+            if reg != R8 && reg != R9 && (seen & (1 << reg)) == 0 {
+                seen = seen | (1 << reg)
+                self.saved.push(Save{ reg: reg, off: self.new_slot(8, 8) })?
+            }
+        }
+    }
+
+    fn scan(self, ivs: *List[Iv], total: i64) !void {
+        var head = List[i64].init(self.a)
+        for _k in 0..total + 2 { head.push(-1)? }
+        var nxt = List[i64].init(self.a)
+        for k in 0..ivs.len {
+            nxt.push(-1)?
+            let iv = &ivs.items[k]
+            iv.reg = -1
+            if iv.bad || iv.start > iv.end || iv.alias >= 0 { continue }
+            nxt.items[k] = head.get(iv.start + 1)
+            head.items[iv.start + 1] = k
+        }
+
+        let pool = [RBX, R12, R13, R14, R15, R8, R9]
+        var active = List[i64].init(self.a)
+        var busy = 0
+        for s in 0..total + 2 {
+            var k = head.get(s)
+            while k >= 0 {
+                let cur = &ivs.items[k]
+                var j = 0
+                while j < active.len {
+                    if ivs.items[active.get(j)].end < cur.start {
+                        busy = busy ^ (1 << ivs.items[active.get(j)].reg)
+                        active.items[j] = active.get(active.len - 1)
+                        active.len -= 1
+                    } else {
+                        j += 1
+                    }
+                }
+                var free = -1
+                var np = 5
+                if cur.nocall { np = 7 }
+                for t in 0..np {
+                    var ri = t
+                    if cur.nocall { ri = (t + 5) % 7 }
+                    if (busy & (1 << pool[ri])) == 0 {
+                        free = pool[ri]
+                        break
+                    }
+                }
+                if free >= 0 {
+                    cur.reg = free
+                    busy = busy | (1 << free)
+                    active.push(k)?
+                } else {
+                    var vi = -1
+                    for j2 in 0..active.len {
+                        let o = &ivs.items[active.get(j2)]
+                        if o.reg >= 8 && o.reg < 10 && !cur.nocall { continue }
+                        if vi < 0 || o.w < ivs.items[active.get(vi)].w { vi = j2 }
+                    }
+                    if vi >= 0 && ivs.items[active.get(vi)].w < cur.w {
+                        let victim = &ivs.items[active.get(vi)]
+                        cur.reg = victim.reg
+                        victim.reg = -1
+                        active.items[vi] = k
+                    }
+                }
+                k = nxt.get(k)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ function
+    fn function(self, hdr: str, body: []str) !void {
+        let asm = &self.obj.text
+        self.slot = Map[i64].init(self.a)
+        self.allocas = Map[i64].init(self.a)
+        self.frame = 0
+        self.sret_slot = 0
+        // header: define [internal ]RET @name(T %a.0, ...) {
+        var c = Cur{ s: hdr, i: 7 }
+        let internal = c.eat_word("internal")
+        let ret = self.ty(&c)?
+        c.ws()
+        c.i += 1 // @
+        let st = c.i
+        while c.peek() != '(' { c.i += 1 }
+        let name = c.s[st..c.i]
+        self.fname = name
+        c.i += 1
+        var params = List[Arg].init(self.a)
+        while !c.eat(')') {
+            let pt = self.ty(&c)?
+            c.ws()
+            let pn = c.value()
+            params.push(Arg{ ty: pt, v: pn, id1: 0 })?
+            _ = c.eat(',')
+        }
+
+        // pass 1: parse instructions, allocate slots
+        var blocks = List[Block].init(self.a)
+        var phis_of = Map[List[*Ins]].init(self.a)   // block label -> phis
+        if is_agg(ret) { self.sret_slot = self.new_slot(8, 8) }
+        for ln in body {
+            if ln.len == 0 { continue }
+            if ln[0] != ' ' {
+                blocks.push(Block{ label: ln[0..ln.len - 1], ins: List[*Ins].init(self.a) })?
+                continue
+            }
+            let ins = self.parse_ins(ln) catch |e| {
+                eprintln("native: cannot parse in {name}: {ln}")
+                return e
+            }
+            blocks.items[blocks.len - 1].ins.push(ins)?
+            if ins.op == "phi" {
+                let bl = blocks.get(blocks.len - 1).label
+                if !phis_of.has(bl) { phis_of.put(bl, List[*Ins].init(self.a))? }
+                let e = &phis_of.entries[phis_of.__find(bl)]
+                e.value.push(ins)?
+            }
+        }
+
+        self.alloc_regs(params, blocks)?
+        for p in params {
+            if self.reg_of(p.v) < 0 { self.def_slot(p.v, p.ty)? }
+        }
+        for blk in blocks {
+            for ins in blk.ins {
+                ins.ra = -1
+                if ins.op == "alloca" {
+                    ins.rd = self.rgv(ins.id1)
+                } else {
+                    ins.rd = self.rg(ins.id1)
+                    if ins.op == "load" || ins.op == "store" { ins.ra = self.rgv(ins.ia1) }
+                }
+                if ins.rd >= 0 { continue }
+                if ins.op == "alloca" {
+                    self.allocas.put(ins.dest, self.new_slot(ins.ty.size, ins.ty.align))?
+                } else if ins.dest.len > 0 {
+                    self.def_slot(ins.dest, ins.ty)?
+                }
+            }
+        }
+
+        // prologue
+        let start = asm.pos()
+        asm.b(0x55)?                         // push rbp
+        asm.mov_rr(RBP, RSP)?                // mov rbp, rsp
+        asm.rex(true, 0, RSP, false)?        // sub rsp, imm32 (patched)
+        asm.b(0x81)?
+        asm.b(0xEC)?
+        let frame_patch = asm.pos()
+        asm.d32(0)?
+        for sv in self.saved { asm.st(sv.reg, RBP, sv.off, 8)? }
+        self.prologue(params, ret)?
+
+        self.fused = Map[i64].init(self.a)
+        self.lazy = Map[i64].init(self.a)
+        var cmps = Map[i64].init(self.a)
+        var runs = Map[i64].init(self.a)
+        var lsrc = Map[i64].init(self.a)
+        for blk in blocks {
+            for k, ins in blk.ins {
+                if k + 1 >= blk.ins.len { continue }
+                if ins.op == "icmp" {
+                    let br = blk.ins.get(k + 1)
+                    if br.op == "br" && br.c == ins.dest && !phis_of.has(br.l1) && !phis_of.has(br.l2) { cmps.put(ins.dest, 0)? }
+                } else if ins.op == "load" && is_agg(ins.ty) && self.allocas.has(ins.a) {
+                    var j = k + 1
+                    while j < blk.ins.len && blk.ins.get(j).op == "extractvalue" && blk.ins.get(j).a == ins.dest { j += 1 }
+                    if j > k + 1 {
+                        cmps.put(ins.dest, 0)?
+                        runs.put(ins.dest, j - k - 1)?
+                        lsrc.put(ins.dest, self.allocas.get(ins.a)?)?
+                    }
+                }
+            }
+        }
+        if cmps.len > 0 {
+            for blk in blocks {
+                for ins in blk.ins {
+                    self.bump(&cmps, ins.a)
+                    self.bump(&cmps, ins.b)
+                    self.bump(&cmps, ins.c)
+                    self.bump(&cmps, ins.callee)
+                    for ar in ins.args { self.bump(&cmps, ar.v) }
+                    for pi in ins.phis { self.bump(&cmps, pi.v) }
+                }
+            }
+            for e in cmps.entries {
+                if !e.used { continue }
+                if runs.has(e.key) {
+                    if e.value == runs.get(e.key)? { self.lazy.put(e.key, lsrc.get(e.key)?)? }
+                } else if e.value == 1 {
+                    self.fused.put(e.key, 1)?
+                }
+            }
+        }
+
+        // pass 2: code
+        for bi, blk in blocks {
+            asm.bind(blk.label)?
+            self.next = ""
+            if bi + 1 < blocks.len { self.next = blocks.get(bi + 1).label }
+            var k = 0
+            while k < blk.ins.len {
+                let ins = blk.ins.get(k)
+                self.cur = ins
+                if ins.op == "icmp" && self.fused.has(ins.dest) && k + 1 < blk.ins.len {
+                    self.cmp_br(ins, blk.ins.get(k + 1))?
+                    break
+                }
+                let is_term = ins.op == "br" || ins.op == "ret" || ins.op == "unreachable"
+                if ins.op == "br" { self.phi_moves(blk.label, ins, &phis_of)? }
+                self.emit_ins(ins, ret)?
+                if is_term { break }
+                k += 1
+            }
+        }
+        patch_u32(&asm.code, frame_patch, align_up(self.frame, 16))
+        asm.resolve_fixups()?
+        self.obj.define(name, SEC_TEXT, start, asm.pos() - start, !internal, true)?
+    }
+
+    fn prologue(self, params: List[Arg], ret: *LT) !void {
+        let asm = &self.obj.text
+        let iregs = [RDI, RSI, RDX, RCX, R8, R9]
+        var ni = 0
+        var nf = 0
+        var nstack = 0
+        if is_agg(ret) {
+            asm.st(RDI, RBP, self.sret_slot, 8)?
+            ni = 1
+        }
+        // phase A: spill registers (aggregate params arrive as pointers)
+        var agg_in = List[AggIn].init(self.a)
+        for p in params {
+            let off = self.loc(p.v)
+            let pr = self.reg_of(p.v)
+            if is_flt(p.ty) && nf < 8 {
+                if pr >= 0 {
+                    asm.movq_r_x(pr, nf, true)?
+                } else {
+                    asm.movq_r_x(R10, nf, true)?
+                    asm.st(R10, RBP, off, p.ty.size)?
+                }
+                nf += 1
+            } else if !is_flt(p.ty) && ni < 6 {
+                if pr >= 0 {
+                    asm.mov_rr(pr, iregs[ni])?
+                } else if is_agg(p.ty) {
+                    let tmp = self.new_slot(8, 8)
+                    asm.st(iregs[ni], RBP, tmp, 8)?
+                    agg_in.push(AggIn{ ty: p.ty, dst: off, ptr: tmp })?
+                } else {
+                    asm.st(iregs[ni], RBP, off, max(p.ty.size, 1))?
+                }
+                ni += 1
+            } else {
+                // stack-passed: [rbp + 16 + 8*k]
+                let soff = 16 + 8 * nstack
+                nstack += 1
+                if is_agg(p.ty) {
+                    asm.ld(R11, RBP, soff, 8, false)?
+                    self.copy(RBP, off, R11, 0, p.ty.size)?
+                } else if pr >= 0 {
+                    asm.ld(pr, RBP, soff, 8, false)?
+                } else {
+                    asm.ld(R10, RBP, soff, 8, false)?
+                    asm.st(R10, RBP, off, max(p.ty.size, 1))?
+                }
+            }
+        }
+        // phase B: copy aggregates from their incoming pointers
+        for x in agg_in {
+            asm.ld(R11, RBP, x.ptr, 8, false)?
+            self.copy(RBP, x.dst, R11, 0, x.ty.size)?
+        }
+    }
+
+    // ------------------------------------------------------------------ parsing one instruction
+    fn new_ins(self) !*Ins {
+        let i = self.a.create[Ins]()?
+        i.args = List[Arg].init(self.a)
+        i.phis = List[PhiIn].init(self.a)
+        return i
+    }
+
+    fn parse_ins(self, ln: str) !*Ins {
+        let ins = self.new_ins()?
+        var c = Cur{ s: ln, i: 0 }
+        c.ws()
+        if c.peek() == '%' {
+            let st = c.i
+            while c.peek() != ' ' { c.i += 1 }
+            ins.dest = c.s[st..c.i]
+            _ = c.eat('=')
+        }
+        ins.op = c.word()
+        let op = ins.op
+        if op == "alloca" {
+            ins.ty = self.ty(&c)?
+        } else if op == "load" {
+            ins.ty = self.ty(&c)?
+            _ = c.eat(',')
+            _ = self.ty(&c)?
+            ins.a = c.value()
+        } else if op == "store" {
+            ins.ty2 = self.ty(&c)?
+            ins.b = c.value()
+            _ = c.eat(',')
+            _ = self.ty(&c)?
+            ins.a = c.value()
+        } else if op == "getelementptr" {
+            ins.ty2 = self.ty(&c)?
+            _ = c.eat(',')
+            _ = self.ty(&c)?
+            ins.a = c.value()
+            while c.eat(',') {
+                let it = self.ty(&c)?
+                ins.args.push(Arg{ ty: it, v: c.value(), id1: 0 })?
+            }
+            ins.ty = self.t_ptr
+        } else if op == "icmp" || op == "fcmp" {
+            ins.pred = c.word()
+            ins.ty2 = self.ty(&c)?
+            ins.a = c.value()
+            _ = c.eat(',')
+            ins.b = c.value()
+            ins.ty = self.t_i1
+        } else if op == "fneg" {
+            ins.ty = self.ty(&c)?
+            ins.a = c.value()
+        } else if op == "select" {
+            _ = self.ty(&c)?
+            ins.c = c.value()
+            _ = c.eat(',')
+            ins.ty = self.ty(&c)?
+            ins.a = c.value()
+            _ = c.eat(',')
+            _ = self.ty(&c)?
+            ins.b = c.value()
+        } else if op == "extractvalue" {
+            ins.ty2 = self.ty(&c)?
+            ins.a = c.value()
+            _ = c.eat(',')
+            ins.n = parse_num(c.value())
+            ins.ty = self.elem_at(ins.ty2, ins.n).ty
+        } else if op == "insertvalue" {
+            ins.ty = self.ty(&c)?
+            ins.a = c.value()
+            _ = c.eat(',')
+            ins.tb = self.ty(&c)?
+            ins.b = c.value()
+            _ = c.eat(',')
+            ins.n = parse_num(c.value())
+        } else if op == "phi" {
+            ins.ty = self.ty(&c)?
+            while c.eat('[') {
+                let v = c.value()
+                _ = c.eat(',')
+                c.ws()
+                c.i += 1 // %
+                let pl = c.value()
+                _ = c.eat(']')
+                ins.phis.push(PhiIn{ v: v, pred: pl })?
+                _ = c.eat(',')
+            }
+        } else if op == "call" {
+            ins.ty = self.ty(&c)?
+            c.ws()
+            if c.peek() == '(' {
+                c.i += 1
+                var nf = 0
+                while !c.eat(')') {
+                    if c.eat_word("...") {
+                        ins.variadic = true
+                    } else {
+                        _ = self.ty(&c)?
+                        nf += 1
+                    }
+                    _ = c.eat(',')
+                }
+                ins.nfixed = nf
+            }
+            c.ws()
+            let st = c.i
+            while c.peek() != '(' { c.i += 1 }
+            ins.callee = c.s[st..c.i]
+            c.i += 1
+            while !c.eat(')') {
+                let at = self.ty(&c)?
+                ins.args.push(Arg{ ty: at, v: c.value(), id1: 0 })?
+                _ = c.eat(',')
+            }
+            if ins.ty.k == .V { ins.dest = "" }
+        } else if op == "br" {
+            c.ws()
+            if c.eat_word("label") {
+                c.ws()
+                c.i += 1
+                ins.l1 = c.word()
+            } else {
+                _ = self.ty(&c)?
+                ins.c = c.value()
+                _ = c.eat(',')
+                ins.l1 = c.label()
+                _ = c.eat(',')
+                ins.l2 = c.label()
+            }
+        } else if op == "ret" {
+            ins.ty = self.ty(&c)?
+            if ins.ty.k != .V { ins.a = c.value() }
+        } else if op == "unreachable" {
+        } else if op == "trunc" || op == "zext" || op == "sext" || op == "sitofp" || op == "uitofp" || op == "fptosi" || op == "fptoui" || op == "fpext" || op == "fptrunc" || op == "ptrtoint" || op == "inttoptr" || op == "bitcast" {
+            ins.ty2 = self.ty(&c)?
+            ins.a = c.word()
+            _ = c.eat_word("to")
+            ins.ty = self.ty(&c)?
+        } else {
+            // binary: op T a, b
+            ins.ty = self.ty(&c)?
+            ins.a = c.value()
+            _ = c.eat(',')
+            ins.b = c.value()
+        }
+        return ins
+    }
+
+    // ------------------------------------------------------------------ operand access
+    /// load a scalar operand into `reg` (sign-extended if `sign`)
+    fn load_op(self, reg: i64, t: *LT, v: str, sign: bool) !void {
+        if v[0] == '%' {
+            let vr = self.opreg(v)
+            if vr >= 0 {
+                if vr != reg { self.obj.text.mov_rr(reg, vr)? }
+                return
+            }
+        }
+        self.load_mem(reg, t, v, sign)?
+    }
+
+    fn load_mem(self, reg: i64, t: *LT, v: str, sign: bool) !void {
+        let asm = &self.obj.text
+        let c0 = v[0]
+        if c0 == '%' {
+            let so = self.slot.get(v) catch 1
+            if so != 1 {
+                var size = t.size
+                if t.k == .P || is_agg(t) { size = 8 }
+                asm.ld(reg, RBP, so, max(size, 1), sign && t.k == .I)?
+                return
+            }
+            let ao = self.allocas.get(v) catch 1
+            if ao == 1 { eprintln("native: unknown value {v} in {self.fname}"); return error.CompileFailed }
+            asm.lea(reg, RBP, ao)?
+            return
+        }
+        if c0 == '@' {
+            asm.lea_sym(reg, v[1..])?
+            return
+        }
+        var bits = parse_num(v)
+        if t.k == .F32 && v.len > 2 && v[1] == 'x' { bits = f32_bits_of_hex(v) }
+        if t.k == .I && sign && t.bits < 64 && t.bits > 1 {
+            let sh = 64 - t.bits
+            bits = (bits << sh) >> sh
+        }
+        asm.mov_imm(reg, bits)?
+    }
+
+    /// memory location of an aggregate operand (materializing constants into a scratch slot)
+    fn agg_loc(self, t: *LT, v: str) !i64 {
+        if self.lazy.len > 0 && v[0] == '%' && self.lazy.has(v) { return self.lazy.get(v)? }
+        if v[0] == '%' && self.slot.has(v) { return self.slot.get(v) }
+        let tmp = self.new_slot(align_up(t.size, 8), t.align)
+        self.put(t, v, RBP, tmp)?
+        return tmp
+    }
+
+    /// write operand `v` of type `t` to [base+disp] (base must not be r10/rsi/rdi/rcx)
+    fn put(self, t: *LT, v: str, base: i64, disp: i64) !void {
+        let asm = &self.obj.text
+        if !is_agg(t) {
+            let r = self.src_reg(R10, t, v, false)?
+            asm.st(r, base, disp, max(t.size, 1))?
+            return
+        }
+        if v == "undef" || v == "poison" { return }
+        if v == "zeroinitializer" {
+            self.zero(base, disp, t.size)?
+            return
+        }
+        if v[0] == '%' {
+            self.copy(base, disp, RBP, self.loc(v), t.size)?
+            return
+        }
+        // constant aggregate: { T v, T v } / [T v, ...]
+        var c = Cur{ s: v, i: 1 }
+        var k = 0
+        while k < t.n || (t.k == .S && k < t.fields.len) {
+            let et = self.ty(&c)?
+            let ev = c.value()
+            self.put(et, ev, base, disp + self.elem_off(t, k))?
+            _ = c.eat(',')
+            k += 1
+        }
+    }
+
+    fn zero(self, base: i64, disp: i64, size: i64) !void {
+        let asm = &self.obj.text
+        asm.xor_(R10, R10)?
+        var o = 0
+        while o + 8 <= size {
+            asm.st(R10, base, disp + o, 8)?
+            o += 8
+        }
+        while o < size {
+            asm.st(R10, base, disp + o, 1)?
+            o += 1
+        }
+    }
+
+    /// memcpy [db+dd] <- [sb+sd], n bytes (clobbers r10; rsi/rdi/rcx for large copies)
+    fn copy(self, db: i64, dd: i64, sb: i64, sd: i64, n: i64) !void {
+        let asm = &self.obj.text
+        if n > 64 {
+            asm.lea(RSI, sb, sd)?
+            asm.lea(RDI, db, dd)?
+            asm.mov_imm(RCX, n)?
+            asm.b(0xF3)?
+            asm.b(0xA4)?   // rep movsb
+            return
+        }
+        var o = 0
+        while o < n {
+            var w = 8
+            while o + w > n { w = w / 2 }
+            asm.ld(R10, sb, sd + o, w, false)?
+            asm.st(R10, db, dd + o, w)?
+            o += w
+        }
+    }
+
+    fn store_res(self, ins: *Ins, reg: i64) !void {
+        let dr = ins.rd
+        if dr >= 0 {
+            if dr != reg { self.obj.text.mov_rr(dr, reg)? }
+            return
+        }
+        self.obj.text.st(reg, RBP, self.loc(ins.dest), max(ins.ty.size, 1))?
+    }
+
+    // ------------------------------------------------------------------ phis
+    fn phi_moves(self, from: str, br: *Ins, phis_of: *Map[List[*Ins]]) !void {
+        self.phi_moves_to(from, br.l1, phis_of)?
+        if br.l2.len > 0 && br.l2 != br.l1 { self.phi_moves_to(from, br.l2, phis_of)? }
+    }
+
+    fn phi_moves_to(self, from: str, to: str, phis_of: *Map[List[*Ins]]) !void {
+        if !phis_of.has(to) { return }
+        let list = phis_of.get(to)?
+        for p in list {
+            for inc in p.phis {
+                if inc.pred == from { self.put(p.ty, inc.v, RBP, self.loc(p.dest))? }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ instruction selection
+    fn emit_ins(self, ins: *Ins, ret: *LT) !void {
+        let asm = &self.obj.text
+        let op = ins.op
+        if op == "alloca" || op == "phi" { return }
+        if op == "load" {
+            if self.lazy.len > 0 && is_agg(ins.ty) && self.lazy.has(ins.dest) { return }
+            let rd = ins.rd
+            let ra = ins.ra
+            var ao = 1
+            if ra < 0 && ins.a[0] == '%' { ao = self.allocas.get(ins.a) catch 1 }
+            if ra >= 0 {
+                if rd < 0 {
+                    asm.st(ra, RBP, self.loc(ins.dest), 8)?
+                } else if rd != ra {
+                    asm.mov_rr(rd, ra)?
+                }
+            } else if ao != 1 {
+                if rd >= 0 {
+                    asm.ld(rd, RBP, ao, 8, false)?
+                } else {
+                    self.copy(RBP, self.loc(ins.dest), RBP, ao, ins.ty.size)?
+                }
+            } else {
+                let pb = self.src_reg(R11, self.t_ptr, ins.a, false)?
+                if rd >= 0 {
+                    asm.ld(rd, pb, 0, 8, false)?
+                } else {
+                    self.copy(RBP, self.loc(ins.dest), pb, 0, ins.ty.size)?
+                }
+            }
+            return
+        }
+        if op == "store" {
+            let ra = ins.ra
+            var ao = 1
+            if ra < 0 && ins.a[0] == '%' { ao = self.allocas.get(ins.a) catch 1 }
+            if ra >= 0 {
+                self.load_op(ra, ins.ty2, ins.b, false)?
+            } else if ao != 1 {
+                self.put(ins.ty2, ins.b, RBP, ao)?
+            } else {
+                let pb = self.src_reg(R11, self.t_ptr, ins.a, false)?
+                self.put(ins.ty2, ins.b, pb, 0)?
+            }
+            return
+        }
+        if op == "getelementptr" {
+            let acc = self.dreg(ins)
+            self.load_op(acc, self.t_ptr, ins.a, false)?
+            var t = ins.ty2
+            for k, ix in ins.args {
+                let isconst = ix.v[0] != '%'
+                var esz = t.size
+                if k > 0 && t.k == .S {
+                    let fi = parse_num(ix.v)
+                    let o = t.offs.get(fi)
+                    if o != 0 { asm.add_imm(acc, o)? }
+                    t = t.fields.get(fi)
+                    continue
+                }
+                if k > 0 {
+                    t = t.elem
+                    esz = t.size
+                }
+                if isconst {
+                    let n = parse_num(ix.v)
+                    if n != 0 { asm.add_imm(acc, n * esz)? }
+                } else {
+                    let ri = self.src_reg(RCX, ix.ty, ix.v, true)?
+                    if esz == 1 {
+                        asm.add(acc, ri)?
+                    } else {
+                        asm.imul_rri(RCX, ri, esz)?
+                        asm.add(acc, RCX)?
+                    }
+                }
+            }
+            self.store_res(ins, acc)?
+            return
+        }
+        if op == "extractvalue" {
+            let src = self.agg_loc(ins.ty2, ins.a)? + self.elem_off(ins.ty2, ins.n)
+            if ins.rd >= 0 {
+                asm.ld(ins.rd, RBP, src, 8, false)?
+            } else {
+                self.copy(RBP, self.loc(ins.dest), RBP, src, ins.ty.size)?
+            }
+            return
+        }
+        if op == "insertvalue" {
+            let d = self.loc(ins.dest)
+            self.put(ins.ty, ins.a, RBP, d)?
+            self.put(ins.tb, ins.b, RBP, d + self.elem_off(ins.ty, ins.n))?
+            return
+        }
+        if op == "icmp" {
+            self.cmp_ins(ins)?
+            asm.setcc(self.cc_of(ins.pred), RAX)?
+            self.store_res(ins, RAX)?
+            return
+        }
+        if op == "fcmp" {
+            let dbl = ins.ty2.k == .F64
+            asm.movq_x_r(0, self.src_reg(RAX, ins.ty2, ins.a, false)?, dbl)?
+            asm.movq_x_r(1, self.src_reg(RAX, ins.ty2, ins.b, false)?, dbl)?
+            var p = -1
+            if dbl { p = 0x66 }
+            let pr = ins.pred
+            if pr == "olt" || pr == "ole" {
+                asm.sse(p, 0x0F2E, 1, 0)?   // ucomis b, a
+                if pr == "olt" { asm.setcc(CC_A, RAX)? } else { asm.setcc(CC_AE, RAX)? }
+            } else {
+                asm.sse(p, 0x0F2E, 0, 1)?   // ucomis a, b
+                if pr == "oeq" {
+                    asm.setcc(CC_E, RAX)?
+                    asm.setcc(CC_NP, RCX)?
+                    asm.and_(RAX, RCX)?
+                } else if pr == "une" {
+                    asm.setcc(CC_NE, RAX)?
+                    asm.setcc(CC_P, RCX)?
+                    asm.or_(RAX, RCX)?
+                } else if pr == "ogt" {
+                    asm.setcc(CC_A, RAX)?
+                } else {
+                    asm.setcc(CC_AE, RAX)?
+                }
+            }
+            self.store_res(ins, RAX)?
+            return
+        }
+        if op == "br" {
+            if ins.c.len == 0 {
+                if ins.l1 != self.next { asm.jmp(ins.l1)? }
+                return
+            }
+            self.load_op(RAX, self.t_i1, ins.c, false)?
+            asm.test(RAX, RAX)?
+            if ins.l1 == self.next {
+                asm.jcc(CC_E, ins.l2)?
+            } else {
+                asm.jcc(CC_NE, ins.l1)?
+                if ins.l2 != self.next { asm.jmp(ins.l2)? }
+            }
+            return
+        }
+        if op == "ret" {
+            if ins.ty.k != .V {
+                if is_agg(ins.ty) {
+                    asm.ld(R11, RBP, self.sret_slot, 8, false)?
+                    self.put(ins.ty, ins.a, R11, 0)?
+                    asm.mov_rr(RAX, R11)?
+                } else if is_flt(ins.ty) {
+                    self.load_op(RAX, ins.ty, ins.a, false)?
+                    asm.movq_x_r(0, RAX, ins.ty.k == .F64)?
+                } else {
+                    self.load_op(RAX, ins.ty, ins.a, false)?
+                }
+            }
+            for sv in self.saved { asm.ld(sv.reg, RBP, sv.off, 8, false)? }
+            asm.mov_rr(RSP, RBP)?
+            asm.b(0x5D)?   // pop rbp
+            asm.b(0xC3)?   // ret
+            return
+        }
+        if op == "unreachable" {
+            asm.b(0x0F)?
+            asm.b(0x0B)?
+            return
+        }
+        if op == "call" { return self.emit_call(ins) }
+        if op == "select" {
+            self.load_op(RAX, ins.ty, ins.a, false)?
+            self.load_op(RCX, ins.ty, ins.b, false)?
+            self.load_op(RDX, self.t_i1, ins.c, false)?
+            asm.test(RDX, RDX)?
+            asm.cmov(CC_E, RAX, RCX)?
+            self.store_res(ins, RAX)?
+            return
+        }
+        if op == "fneg" {
+            self.load_op(RAX, ins.ty, ins.a, false)?
+            if ins.ty.k == .F64 { asm.mov_imm(RCX, 0 - 0x7fffffffffffffff - 1)? } else { asm.mov_imm(RCX, 0x80000000)? }
+            asm.xor_(RAX, RCX)?
+            self.store_res(ins, RAX)?
+            return
+        }
+        if self.emit_cast(ins)? { return }
+        self.emit_binop(ins)?
+    }
+
+    fn emit_cast(self, ins: *Ins) !bool {
+        let asm = &self.obj.text
+        let op = ins.op
+        if op == "trunc" || op == "zext" || op == "ptrtoint" || op == "inttoptr" || op == "bitcast" {
+            let acc = self.dreg(ins)
+            self.load_op(acc, ins.ty2, ins.a, false)?
+            if ins.ty.k == .I && ins.ty.bits == 1 { asm.alu_imm(4, acc, 1)? }
+            self.store_res(ins, acc)?
+            return true
+        }
+        if op == "sext" {
+            let acc = self.dreg(ins)
+            self.load_op(acc, ins.ty2, ins.a, true)?
+            self.store_res(ins, acc)?
+            return true
+        }
+        if op == "sitofp" || op == "uitofp" {
+            let dbl = ins.ty.k == .F64
+            self.load_op(RAX, ins.ty2, ins.a, op == "sitofp")?
+            if op == "uitofp" && ins.ty2.bits == 64 {
+                // values >= 2^63: halve (keeping the low bit), convert, double
+                let lbig = self.local_label()?
+                let ldone = self.local_label()?
+                asm.test(RAX, RAX)?
+                asm.jcc(CC_S, lbig)?
+                asm.cvtsi2f(dbl, 0, RAX)?
+                asm.jmp(ldone)?
+                asm.bind(lbig)?
+                asm.mov_rr(RCX, RAX)?
+                asm.mov_imm(RDX, 1)?
+                asm.and_(RCX, RDX)?
+                asm.mov_imm(RDX, 1)?
+                asm.shift_cl_imm1(RAX)?
+                asm.or_(RAX, RCX)?
+                asm.cvtsi2f(dbl, 0, RAX)?
+                var p = 0xF3
+                if dbl { p = 0xF2 }
+                asm.sse(p, 0x0F58, 0, 0)?
+                asm.bind(ldone)?
+            } else {
+                asm.cvtsi2f(dbl, 0, RAX)?
+            }
+            asm.movq_r_x(RAX, 0, dbl)?
+            self.store_res(ins, RAX)?
+            return true
+        }
+        if op == "fptosi" || op == "fptoui" {
+            let dbl = ins.ty2.k == .F64
+            self.load_op(RAX, ins.ty2, ins.a, false)?
+            asm.movq_x_r(0, RAX, dbl)?
+            asm.cvttf2si(dbl, RAX, 0)?
+            self.store_res(ins, RAX)?
+            return true
+        }
+        if op == "fpext" || op == "fptrunc" {
+            let from_dbl = ins.ty2.k == .F64
+            self.load_op(RAX, ins.ty2, ins.a, false)?
+            asm.movq_x_r(0, RAX, from_dbl)?
+            if op == "fpext" { asm.sse(0xF3, 0x0F5A, 0, 0)? } else { asm.sse(0xF2, 0x0F5A, 0, 0)? }
+            asm.movq_r_x(RAX, 0, !from_dbl)?
+            self.store_res(ins, RAX)?
+            return true
+        }
+        return false
+    }
+
+    fn local_label(self) !str {
+        self.nlocal += 1
+        var b = List[u8].init(self.a)
+        sprint(&b, ".L{self.nlocal}")?
+        return b.slice()
+    }
+
+    fn emit_binop(self, ins: *Ins) !void {
+        let asm = &self.obj.text
+        let op = ins.op
+        let t = ins.ty
+        if is_flt(t) {
+            let dbl = t.k == .F64
+            if op == "frem" {
+                asm.movq_x_r(0, self.src_reg(RAX, t, ins.a, false)?, dbl)?
+                asm.movq_x_r(1, self.src_reg(RAX, t, ins.b, false)?, dbl)?
+                if dbl { asm.call_sym("fmod")? } else { asm.call_sym("fmodf")? }
+                asm.movq_r_x(RAX, 0, dbl)?
+                self.store_res(ins, RAX)?
+                return
+            }
+            var sop = 0
+            match op {
+                "fadd" => sop = 0x0F58
+                "fmul" => sop = 0x0F59
+                "fsub" => sop = 0x0F5C
+                "fdiv" => sop = 0x0F5E
+            }
+            if sop == 0 { eprintln("native: unsupported float op '{op}'"); return error.CompileFailed }
+            asm.movq_x_r(0, self.src_reg(RAX, t, ins.a, false)?, dbl)?
+            asm.movq_x_r(1, self.src_reg(RAX, t, ins.b, false)?, dbl)?
+            var p = 0xF3
+            if dbl { p = 0xF2 }
+            asm.sse(p, sop, 0, 1)?
+            let acc = self.dreg(ins)
+            asm.movq_r_x(acc, 0, dbl)?
+            self.store_res(ins, acc)?
+            return
+        }
+        let signed = op == "sdiv" || op == "srem" || op == "ashr"
+        let acc = self.dreg(ins)
+        var alu = -1
+        match op {
+            "add" => alu = 0
+            "or" => alu = 1
+            "and" => alu = 4
+            "sub" => alu = 5
+            "xor" => alu = 6
+        }
+        if alu >= 0 || op == "mul" {
+            self.load_op(acc, t, ins.a, false)?
+            if self.is_imm(t, ins.b) {
+                if op == "mul" { asm.imul_rri(acc, acc, parse_num(ins.b))? } else { asm.alu_imm(alu, acc, parse_num(ins.b))? }
+            } else {
+                let rb = self.src_reg(RCX, t, ins.b, false)?
+                match op {
+                    "add" => asm.add(acc, rb)?
+                    "sub" => asm.sub(acc, rb)?
+                    "mul" => asm.imul(acc, rb)?
+                    "and" => asm.and_(acc, rb)?
+                    "or" => asm.or_(acc, rb)?
+                    _ => asm.xor_(acc, rb)?
+                }
+            }
+            self.store_res(ins, acc)?
+            return
+        }
+        if (op == "shl" || op == "lshr" || op == "ashr") && self.is_imm(t, ins.b) {
+            self.load_op(acc, t, ins.a, signed)?
+            var n = 4
+            if op == "lshr" { n = 5 }
+            if op == "ashr" { n = 7 }
+            asm.shift_imm(n, acc, parse_num(ins.b) & 63)?
+            self.store_res(ins, acc)?
+            return
+        }
+        self.load_op(RAX, t, ins.a, signed)?
+        let rb = self.src_reg(RCX, t, ins.b, signed)?
+        if rb != RCX && (op == "shl" || op == "lshr" || op == "ashr") { asm.mov_rr(RCX, rb)? }
+        match op {
+            "shl" => asm.shift_cl(4, RAX)?
+            "lshr" => asm.shift_cl(5, RAX)?
+            "ashr" => asm.shift_cl(7, RAX)?
+            "sdiv", "srem" => {
+                asm.cqo()?
+                asm.grp3(7, rb)?
+                if op == "srem" { asm.mov_rr(RAX, RDX)? }
+            }
+            "udiv", "urem" => {
+                asm.xor_(RDX, RDX)?
+                asm.grp3(6, rb)?
+                if op == "urem" { asm.mov_rr(RAX, RDX)? }
+            }
+            _ => {
+                eprintln("native: unsupported instruction '{op}'")
+                return error.CompileFailed
+            }
+        }
+        self.store_res(ins, RAX)?
+    }
+
+    // ------------------------------------------------------------------ calls
+    fn emit_call(self, ins: *Ins) !void {
+        let asm = &self.obj.text
+        var callee = ins.callee
+        var nargs = ins.args.len
+        if callee == "@llvm.memset.p0.i64" {
+            callee = "@memset"
+            nargs = 3
+        }
+        let iregs = [RDI, RSI, RDX, RCX, R8, R9]
+        let sret = is_agg(ins.ty)
+        // classify
+        var kind = List[i64].init(self.a)   // 0 = int reg, 1 = sse reg, 2 = stack
+        var regno = List[i64].init(self.a)
+        var ni = 0
+        if sret { ni = 1 }
+        var nf = 0
+        var nstack = 0
+        for k in 0..nargs {
+            let at = ins.args.get(k).ty
+            if is_flt(at) && nf < 8 {
+                kind.push(1)?
+                regno.push(nf)?
+                nf += 1
+            } else if !is_flt(at) && ni < 6 {
+                kind.push(0)?
+                regno.push(iregs[ni])?
+                ni += 1
+            } else {
+                kind.push(2)?
+                regno.push(nstack)?
+                nstack += 1
+            }
+        }
+        // aggregate constants need memory before we start filling registers
+        var locs = List[i64].init(self.a)
+        for k in 0..nargs {
+            let ar = ins.args.get(k)
+            if is_agg(ar.ty) { locs.push(self.agg_loc(ar.ty, ar.v)?)? } else { locs.push(0)? }
+        }
+        let stack_bytes = align_up(nstack * 8, 16)
+        if stack_bytes > 0 {
+            asm.mov_imm(R10, stack_bytes)?
+            asm.sub(RSP, R10)?
+        }
+        for k in 0..nargs {
+            if kind.get(k) != 2 { continue }
+            let ar = ins.args.get(k)
+            if is_agg(ar.ty) { asm.lea(R10, RBP, locs.get(k))? } else { self.load_op(R10, ar.ty, ar.v, ar.ty.k == .I) ? }
+            asm.st(R10, RSP, 8 * regno.get(k), 8)?
+        }
+        for k in 0..nargs {
+            let ar = ins.args.get(k)
+            if kind.get(k) == 1 {
+                self.load_op(R10, ar.ty, ar.v, false)?
+                asm.movq_x_r(regno.get(k), R10, ar.ty.k == .F64)?
+            } else if kind.get(k) == 0 {
+                if is_agg(ar.ty) {
+                    asm.lea(regno.get(k), RBP, locs.get(k))?
+                } else {
+                    // C ABI: small ints are extended by the callee's expectation; extend signed for safety
+                    self.load_op(regno.get(k), ar.ty, ar.v, ar.ty.k == .I && ar.ty.bits > 1)?
+                }
+            }
+        }
+        if sret { asm.lea(RDI, RBP, self.loc(ins.dest))? }
+        if callee[0] == '%' {
+            self.load_op(R11, self.t_ptr, callee, false)?
+            if ins.variadic { asm.mov_imm(RAX, nf)? }
+            asm.call_reg(R11)?
+        } else {
+            if ins.variadic { asm.mov_imm(RAX, nf)? }
+            asm.call_sym(callee[1..])?
+        }
+        if stack_bytes > 0 {
+            asm.mov_imm(R10, stack_bytes)?
+            asm.add(RSP, R10)?
+        }
+        if ins.dest.len > 0 && !sret {
+            if is_flt(ins.ty) {
+                asm.movq_r_x(RAX, 0, ins.ty.k == .F64)?
+            }
+            self.store_res(ins, RAX)?
+        }
+    }
+}
+
+impl Asm {
+    fn shift_cl_imm1(self, r: i64) !void {
+        // shr r, 1
+        self.rex(true, 0, r, false)?
+        self.b(0xD1)?
+        self.b(0xE8 | (r & 7))?
+    }
+}
+
+/// compile a whole IR module to an ELF object file
+fn native_compile(a: Allocator, ir: str, out_path: str) !void {
+    let n = new_native(a)?
+    n.compile_module(ir)?
+    n.obj.write(out_path)?
+}

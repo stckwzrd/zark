@@ -1,0 +1,28 @@
+fn fib(n: i64) i64 {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn sieve(a: Allocator, n: i64) !i64 {
+    let flags = a.alloc[bool](n + 1)?
+    defer a.free(flags)
+    var count = 0
+    for i in 2..n + 1 {
+        if !flags[i] {
+            count += 1
+            var j = i * i
+            while j <= n { flags[j] = true; j += i }
+        }
+    }
+    return count
+}
+
+fn main() !void {
+    let t0 = clock()
+    let f = fib(38)
+    let t1 = clock()
+    let p = sieve(c_allocator(), 50_000_000)?
+    let t2 = clock()
+    println("fib(38) = {f}  in {(t1 - t0) as f64 / 1000.0} ms")
+    println("primes < 50M = {p}  in {(t2 - t1) as f64 / 1000.0} ms")
+}

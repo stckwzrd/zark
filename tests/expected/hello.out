@@ -1,0 +1,9 @@
+p = Point{ x: 3, y: 4 }, len = 5
+scaled: Point{ x: 6, y: 8 }
+sum = 45
+caught error.DivByZero
+q=5 r=-1
+not red: .Green
+xs = [0, 1, 4, 9, 16], max = 7
+[5, 1, 4] 3
+bye!

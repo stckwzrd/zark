@@ -1,0 +1,635 @@
+// ===== Vibe standard prelude (auto-imported) =====
+// Rule: nothing in the language or in this prelude allocates behind your back.
+// Every heap allocation goes through an Allocator value that you pass in explicitly.
+
+// ---- libc ----
+extern fn printf(fmt: *u8, ...) i32
+extern fn malloc(n: u64) *void
+extern fn calloc(n: u64, size: u64) *void
+extern fn free(p: *void)
+extern fn exit(code: i32)
+extern fn memcmp(a: *void, b: *void, n: u64) i32
+extern fn memcpy(dst: *void, src: *void, n: u64) *void
+extern fn memmove(dst: *void, src: *void, n: u64) *void
+extern fn memset(dst: *void, c: i32, n: u64) *void
+extern fn strlen(s: *u8) u64
+extern fn fdopen(fd: i32, mode: *u8) *void
+extern fn fgets(buf: *u8, n: i32, f: *void) *u8
+extern fn clock() i64
+extern fn rand() i32
+extern fn srand(seed: u32)
+extern fn time(t: *i64) i64
+
+// ---- math (libm) ----
+extern fn sqrt(x: f64) f64
+extern fn sin(x: f64) f64
+extern fn cos(x: f64) f64
+extern fn tan(x: f64) f64
+extern fn pow(x: f64, y: f64) f64
+extern fn exp(x: f64) f64
+extern fn log(x: f64) f64
+extern fn floor(x: f64) f64
+extern fn ceil(x: f64) f64
+extern fn fabs(x: f64) f64
+
+const PI = 3.141592653589793
+
+// ---- process ----
+var __argc: i64 = 0
+var __argv: **u8 = null
+var __stdin: *void = null
+
+fn arg_count() i64 { return __argc }
+fn arg(i: i64) str {
+    if i < 0 || i >= __argc { panic("arg index {i} out of range") }
+    return cstr(__argv[i])
+}
+
+// ---- runtime helpers used by the compiler (never allocate) ----
+fn __str_eq(a: str, b: str) bool {
+    if a.len != b.len { return false }
+    if a.len == 0 { return true }
+    return memcmp(a.ptr, b.ptr, a.len as u64) == 0
+}
+
+fn __oob(i: i64, n: i64, file: str, line: i64) {
+    eprintln("panic: index {i} out of bounds (len {n}) at {file}:{line}")
+    exit(1)
+}
+
+// ================================================================ memory
+
+/// An allocator is just a context pointer plus two functions.
+/// Contract: alloc_fn returns zeroed memory aligned to `align`, or null.
+struct Allocator {
+    ctx: *void
+    alloc_fn: fn(*void, u64, u64) *void
+    free_fn: fn(*void, *void, u64)
+}
+
+impl Allocator {
+    /// n zeroed elements of T
+    fn alloc[T](self, n: i64) ![]T {
+        if n == 0 { return (null as *T)[0..0] }
+        let p = self.alloc_fn(self.ctx, (n as u64) * sizeof(T), alignof(T))
+        if p == null { return error.OutOfMemory }
+        return (p as *T)[0..n]
+    }
+    fn free[T](self, s: []T) {
+        if s.len > 0 { self.free_fn(self.ctx, s.ptr, (s.len as u64) * sizeof(T)) }
+    }
+    /// one zeroed T
+    fn create[T](self) !*T {
+        let s = self.alloc[T](1)?
+        return s.ptr
+    }
+    fn destroy[T](self, p: *T) { self.free_fn(self.ctx, p, sizeof(T)) }
+    /// copy a string into memory owned by this allocator
+    fn dup(self, s: str) !str {
+        let d = self.alloc[u8](s.len)?
+        if s.len > 0 { memcpy(d.ptr, s.ptr, s.len as u64) }
+        return d
+    }
+}
+
+// -- libc heap
+fn __c_alloc(ctx: *void, n: u64, align: u64) *void { return calloc(1, n) }
+fn __c_free(ctx: *void, p: *void, n: u64) { free(p) }
+fn c_allocator() Allocator {
+    return Allocator{ ctx: null, alloc_fn: __c_alloc, free_fn: __c_free }
+}
+
+// -- bump allocator over a buffer you own (stack, static, or anything). Never touches the heap.
+struct FixedBuf {
+    buf: []u8
+    used: i64
+}
+
+impl FixedBuf {
+    fn init(buf: []u8) Self { return Self{ buf: buf, used: 0 } }
+    fn allocator(self) Allocator {
+        return Allocator{ ctx: self, alloc_fn: __fixed_alloc, free_fn: __fixed_free }
+    }
+    fn reset(self) { self.used = 0 }
+    fn remaining(self) i64 { return self.buf.len - self.used }
+}
+
+fn __fixed_alloc(ctx: *void, n: u64, align: u64) *void {
+    let fb = ctx as *FixedBuf
+    let base = fb.buf.ptr as u64
+    let addr = base + (fb.used as u64)
+    let aligned = (addr + align - 1) / align * align
+    let off = (aligned - base) as i64
+    if off + (n as i64) > fb.buf.len { return null }
+    fb.used = off + n as i64
+    let p = fb.buf.ptr + off
+    memset(p, 0, n)
+    return p
+}
+
+fn __fixed_free(ctx: *void, p: *void, n: u64) {
+    // only the most recent allocation can be given back
+    let fb = ctx as *FixedBuf
+    if (p as u64) + n == (fb.buf.ptr as u64) + (fb.used as u64) { fb.used -= n as i64 }
+}
+
+// ================================================================ generic helpers
+
+fn min[T](a: T, b: T) T { if a < b { return a } return b }
+fn max[T](a: T, b: T) T { if a > b { return a } return b }
+fn abs[T](a: T) T { if a < 0 { return -a } return a }
+fn swap[T](a: *T, b: *T) { let t = *a; *a = *b; *b = t }
+
+/// in-place quicksort of any slice whose elements support < and >
+fn sort[T](s: []T) { if s.len > 1 { __qsort(s.ptr, 0, s.len - 1) } }
+
+fn __qsort[T](a: *T, lo: i64, hi: i64) {
+    if lo >= hi { return }
+    let pivot = a[(lo + hi) / 2]
+    var i = lo
+    var j = hi
+    while i <= j {
+        while a[i] < pivot { i += 1 }
+        while a[j] > pivot { j -= 1 }
+        if i <= j {
+            swap(&a[i], &a[j])
+            i += 1
+            j -= 1
+        }
+    }
+    __qsort(a, lo, j)
+    __qsort(a, i, hi)
+}
+
+// ================================================================ strings (no allocation)
+
+fn cstr(p: *u8) str { return p[0..strlen(p) as i64] }
+
+fn str_starts_with(s: str, prefix: str) bool {
+    if prefix.len > s.len { return false }
+    return s[0..prefix.len] == prefix
+}
+
+fn str_ends_with(s: str, suffix: str) bool {
+    if suffix.len > s.len { return false }
+    return s[s.len - suffix.len..] == suffix
+}
+
+fn str_find(s: str, needle: str) i64 {
+    if needle.len == 0 { return 0 }
+    var i = 0
+    while i + needle.len <= s.len {
+        if s[i..i + needle.len] == needle { return i }
+        i += 1
+    }
+    return -1
+}
+
+fn __is_space(c: u8) bool { return c == ' ' || c == '\n' || c == '\t' || c == '\r' }
+
+fn str_trim(s: str) str {
+    var a = 0
+    var b = s.len
+    while a < b && __is_space(s[a]) { a += 1 }
+    while b > a && __is_space(s[b - 1]) { b -= 1 }
+    return s[a..b]
+}
+
+fn parse_int(s: str) !i64 {
+    let t = str_trim(s)
+    if t.len == 0 { return error.InvalidNumber }
+    var i = 0
+    var neg = false
+    if t[0] == '-' { neg = true; i = 1 }
+    if i >= t.len { return error.InvalidNumber }
+    var v = 0
+    while i < t.len {
+        let c = t[i]
+        if c < '0' || c > '9' { return error.InvalidNumber }
+        v = v * 10 + (c - '0') as i64
+        i += 1
+    }
+    if neg { return -v }
+    return v
+}
+
+/// read one line from stdin into `buf` (without the newline)
+fn read_line(buf: []u8) !str {
+    if __stdin == null { __stdin = fdopen(0, "r") }
+    if fgets(buf.ptr, buf.len as i32, __stdin) == null { return error.EndOfFile }
+    var s = cstr(buf.ptr)
+    if s.len > 0 && s[s.len - 1] == '\n' { s = s[0..s.len - 1] }
+    return s
+}
+
+// ================================================================ List[T]
+
+struct List[T] {
+    items: []T   // capacity = items.len
+    len: i64
+    a: Allocator
+}
+
+impl List[T] {
+    fn init(a: Allocator) Self { return Self{ a: a, .. } }
+
+    fn deinit(self) {
+        self.a.free(self.items)
+        self.items = self.items[0..0]
+        self.len = 0
+    }
+
+    fn reserve(self, n: i64) !void {
+        if n <= self.items.len { return }
+        var cap = self.items.len * 2
+        if cap < 8 { cap = 8 }
+        if cap < n { cap = n }
+        let fresh = self.a.alloc[T](cap)?
+        if self.len > 0 { memcpy(fresh.ptr, self.items.ptr, (self.len as u64) * sizeof(T)) }
+        self.a.free(self.items)
+        self.items = fresh
+    }
+
+    fn push(self, v: T) !void {
+        self.reserve(self.len + 1)?
+        self.items[self.len] = v
+        self.len += 1
+    }
+
+    fn append(self, xs: []T) !void {
+        self.reserve(self.len + xs.len)?
+        for x in xs {
+            self.items[self.len] = x
+            self.len += 1
+        }
+    }
+
+    fn pop(self) !T {
+        if self.len == 0 { return error.Empty }
+        self.len -= 1
+        return self.items[self.len]
+    }
+
+    fn last(self) !T {
+        if self.len == 0 { return error.Empty }
+        return self.items[self.len - 1]
+    }
+
+    fn get(self, i: i64) T { return self.slice()[i] }
+    fn set(self, i: i64, v: T) { self.slice()[i] = v }
+    fn slice(self) []T { return self.items[0..self.len] }
+    fn is_empty(self) bool { return self.len == 0 }
+    fn clear(self) { self.len = 0 }
+
+    fn contains(self, v: T) bool {
+        for x in self.slice() { if x == v { return true } }
+        return false
+    }
+
+    fn reverse(self) {
+        var i = 0
+        var j = self.len - 1
+        while i < j {
+            swap(&self.items[i], &self.items[j])
+            i += 1
+            j -= 1
+        }
+    }
+
+    fn sort(self) { sort(self.slice()) }
+}
+
+// ================================================================ Map[V]
+// string-keyed hash map; keys are NOT copied (use Allocator.dup if you need ownership)
+
+struct MapEntry[V] { key: str, value: V, used: bool }
+
+struct Map[V] {
+    entries: []MapEntry[V]
+    len: i64
+    a: Allocator
+}
+
+fn hash_str(s: str) u64 {
+    var h: u64 = 14695981039346656037
+    for c in s {
+        h = h ^ (c as u64)
+        h = h * 1099511628211
+    }
+    return h
+}
+
+impl Map[V] {
+    fn init(a: Allocator) Self { return Self{ a: a, .. } }
+
+    fn deinit(self) {
+        self.a.free(self.entries)
+        self.entries = self.entries[0..0]
+        self.len = 0
+    }
+
+    fn __find(self, key: str) i64 {
+        let cap = self.entries.len
+        var i = (hash_str(key) % (cap as u64)) as i64
+        while true {
+            let e = &self.entries[i]
+            if !e.used || e.key == key { return i }
+            i = (i + 1) % cap
+        }
+        return -1
+    }
+
+    fn __insert(self, key: str, value: V) {
+        let e = &self.entries[self.__find(key)]
+        if !e.used { self.len += 1 }
+        e.key = key
+        e.value = value
+        e.used = true
+    }
+
+    fn __grow(self) !void {
+        let old = self.entries
+        var nc = old.len * 2
+        if nc < 16 { nc = 16 }
+        self.entries = self.a.alloc[MapEntry[V]](nc)?
+        self.len = 0
+        for e in old {
+            if e.used { self.__insert(e.key, e.value) }
+        }
+        self.a.free(old)
+    }
+
+    fn put(self, key: str, value: V) !void {
+        if (self.len + 1) * 4 > self.entries.len * 3 { self.__grow()? }
+        self.__insert(key, value)
+    }
+
+    fn get(self, key: str) !V {
+        if self.entries.len == 0 { return error.NotFound }
+        let e = &self.entries[self.__find(key)]
+        if !e.used { return error.NotFound }
+        return e.value
+    }
+
+    fn has(self, key: str) bool {
+        if self.entries.len == 0 { return false }
+        return self.entries[self.__find(key)].used
+    }
+}
+
+// ================================================================ Option[T]
+
+union Option[T] {
+    Some: T
+    None
+}
+
+impl Option[T] {
+    fn is_some(self) bool {
+        match *self {
+            .Some(_) => return true
+            .None => return false
+        }
+        return false
+    }
+    fn unwrap_or(self, d: T) T {
+        match *self {
+            .Some(v) => return v
+            .None => return d
+        }
+        return d
+    }
+}
+
+// ================================================================ C strings
+
+/// copy `s` into `buf` and NUL-terminate it (no allocation)
+fn to_cstr(buf: []u8, s: str) !*u8 {
+    if s.len + 1 > buf.len { return error.NoSpace }
+    if s.len > 0 { memcpy(buf.ptr, s.ptr, s.len as u64) }
+    buf[s.len] = 0
+    return buf.ptr
+}
+
+impl Allocator {
+    /// NUL-terminated copy for passing to C
+    fn dupz(self, s: str) !*u8 {
+        let d = self.alloc[u8](s.len + 1)?
+        if s.len > 0 { memcpy(d.ptr, s.ptr, s.len as u64) }
+        return d.ptr
+    }
+}
+
+// ================================================================ characters
+
+fn is_digit(c: u8) bool { return c >= '0' && c <= '9' }
+fn is_alpha(c: u8) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+fn is_alnum(c: u8) bool { return is_alpha(c) || is_digit(c) }
+fn is_upper(c: u8) bool { return c >= 'A' && c <= 'Z' }
+fn is_hex(c: u8) bool { return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') }
+
+// ================================================================ files
+
+extern fn fopen(path: *u8, mode: *u8) *void
+extern fn fclose(f: *void) i32
+extern fn fread(buf: *void, size: u64, n: u64, f: *void) u64
+extern fn fwrite(buf: *void, size: u64, n: u64, f: *void) u64
+extern fn fseek(f: *void, off: i64, whence: i32) i32
+extern fn ftell(f: *void) i64
+extern fn remove(path: *u8) i32
+extern fn mkdir(path: *u8, mode: u32) i32
+
+/// read a whole file; memory comes from `a`
+fn read_file(a: Allocator, path: str) !str {
+    var pbuf: [4096]u8
+    let f = fopen(to_cstr(pbuf[..], path)?, "rb")
+    if f == null { return error.FileNotFound }
+    defer _ = fclose(f)
+    _ = fseek(f, 0, 2)
+    let n = ftell(f)
+    _ = fseek(f, 0, 0)
+    if n < 0 { return error.ReadFailed }
+    let buf = a.alloc[u8](n)?
+    if n > 0 && fread(buf.ptr, 1, n as u64, f) != n as u64 {
+        a.free(buf)
+        return error.ReadFailed
+    }
+    return buf
+}
+
+fn write_file(path: str, data: str) !void {
+    var pbuf: [4096]u8
+    let f = fopen(to_cstr(pbuf[..], path)?, "wb")
+    if f == null { return error.CannotOpen }
+    defer _ = fclose(f)
+    if data.len > 0 && fwrite(data.ptr, 1, data.len as u64, f) != data.len as u64 { return error.WriteFailed }
+}
+
+fn file_exists(path: str) bool {
+    var pbuf: [4096]u8
+    let p = to_cstr(pbuf[..], path) catch return false
+    let f = fopen(p, "rb")
+    if f == null { return false }
+    _ = fclose(f)
+    return true
+}
+
+// ================================================================ processes
+
+extern fn fork() i32
+extern fn execvp(file: *u8, argv: **u8) i32
+extern fn waitpid(pid: i32, status: *i32, options: i32) i32
+extern fn _exit(code: i32)
+extern fn getenv(name: *u8) *u8
+extern fn fflush(f: *void) i32
+
+/// run a program (searched in PATH) and wait for it; returns its exit code
+fn run(a: Allocator, argv: []str) !i32 {
+    if argv.len == 0 { return error.NoProgram }
+    let cargs = a.alloc[*u8](argv.len + 1)?
+    defer a.free(cargs)
+    for i, s in argv { cargs[i] = a.dupz(s)? }
+    defer { for i in 0..argv.len { a.free_fn(a.ctx, cargs[i], (argv[i].len + 1) as u64) } }
+    _ = fflush(null)
+    let pid = fork()
+    if pid < 0 { return error.ForkFailed }
+    if pid == 0 {
+        _ = execvp(cargs[0], cargs.ptr)
+        eprintln("error: cannot run '{argv[0]}'")
+        _exit(127)
+    }
+    var status: i32 = 0
+    if waitpid(pid, &status, 0) < 0 { return error.WaitFailed }
+    if (status & 0x7f) != 0 { return error.Signaled }
+    return (status >> 8) & 0xff
+}
+
+fn env(name: str) !str {
+    var nbuf: [256]u8
+    let p = getenv(to_cstr(nbuf[..], name)?)
+    if p == null { return error.NotFound }
+    return cstr(p)
+}
+
+// ================================================================ Arena
+// Growable bump allocator on top of a parent allocator. free() is a no-op; deinit() releases everything.
+// Chunks are linked through a small header, so the arena itself never needs a container.
+
+struct __ChunkHdr { prev: *__ChunkHdr, size: u64 }
+
+struct Arena {
+    parent: Allocator
+    head: *__ChunkHdr
+    used: u64      // bytes used in head chunk (after header)
+    cap: u64       // usable bytes in head chunk
+    total: u64     // bytes handed out overall
+}
+
+impl Arena {
+    fn init(parent: Allocator) Self { return Self{ parent: parent, .. } }
+    fn allocator(self) Allocator {
+        return Allocator{ ctx: self, alloc_fn: __arena_alloc, free_fn: __arena_free }
+    }
+    fn deinit(self) {
+        var c = self.head
+        while c != null {
+            let prev = c.prev
+            self.parent.free_fn(self.parent.ctx, c, c.size)
+            c = prev
+        }
+        self.head = null
+        self.used = 0
+        self.cap = 0
+    }
+}
+
+fn __arena_alloc(ctx: *void, n: u64, align: u64) *void {
+    let ar = ctx as *Arena
+    let hdr = sizeof(__ChunkHdr)
+    if ar.head != null {
+        let base = (ar.head as u64) + hdr
+        let at = (base + ar.used + align - 1) / align * align
+        if at + n <= base + ar.cap {
+            ar.used = at + n - base
+            ar.total += n
+            return at as *void
+        }
+    }
+    var size: u64 = 64 * 1024
+    while size < n + align + hdr { size *= 2 }
+    let mem = ar.parent.alloc_fn(ar.parent.ctx, size, 16)
+    if mem == null { return null }
+    let c = mem as *__ChunkHdr
+    c.prev = ar.head
+    c.size = size
+    ar.head = c
+    ar.used = 0
+    ar.cap = size - hdr
+    return __arena_alloc(ctx, n, align)
+}
+
+fn __arena_free(ctx: *void, p: *void, n: u64) {}
+
+// ================================================================ more string helpers
+
+fn str_rfind_byte(s: str, c: u8) i64 {
+    var i = s.len - 1
+    while i >= 0 {
+        if s[i] == c { return i }
+        i -= 1
+    }
+    return -1
+}
+
+fn str_find_byte(s: str, c: u8) i64 {
+    for i, x in s { if x == c { return i } }
+    return -1
+}
+
+/// parse with an explicit radix (2..36); accepts an optional 0x/0b/0o prefix when radix == 0
+fn parse_int_radix(s: str, radix: i64) !u64 {
+    var t = s
+    var r = radix
+    if r == 0 {
+        r = 10
+        if t.len > 2 && t[0] == '0' {
+            if t[1] == 'x' { r = 16; t = t[2..] } else if t[1] == 'b' { r = 2; t = t[2..] } else if t[1] == 'o' { r = 8; t = t[2..] }
+        }
+    }
+    if t.len == 0 { return error.InvalidNumber }
+    var v: u64 = 0
+    for c in t {
+        if c == '_' { continue }
+        var d: i64 = 99
+        if is_digit(c) { d = (c - '0') as i64 } else if c >= 'a' && c <= 'z' { d = (c - 'a') as i64 + 10 } else if c >= 'A' && c <= 'Z' { d = (c - 'A') as i64 + 10 }
+        if d >= r { return error.InvalidNumber }
+        v = v * (r as u64) + (d as u64)
+    }
+    return v
+}
+
+extern fn strtod(s: *u8, end: **u8) f64
+
+fn parse_float(s: str) !f64 {
+    var buf: [128]u8
+    let p = to_cstr(buf[..], s)?
+    var end: *u8 = null
+    let v = strtod(p, &end)
+    if (end as u64) - (p as u64) != s.len as u64 { return error.InvalidNumber }
+    return v
+}
+
+/// reinterpret the bits of a value (same size required at the call site)
+fn bits_f64(x: f64) u64 { var y = x; return *(&y as *u64) }
+fn f64_from_bits(x: u64) f64 { var y = x; return *(&y as *f64) }
+
+// ================================================================ time
+struct Timespec { sec: i64, nsec: i64 }
+extern fn clock_gettime(id: i32, ts: *Timespec) i32
+
+/// monotonic wall clock in nanoseconds
+fn now_ns() i64 {
+    var ts = Timespec{ sec: 0, nsec: 0 }
+    _ = clock_gettime(1, &ts)
+    return ts.sec * 1000000000 + ts.nsec
+}

@@ -1,0 +1,277 @@
+// Vibe lexer, written in Vibe. Mirrors src/lexer.zig token for token.
+
+enum Tag {
+    eof, ident, int_lit, float_lit, str_lit, char_lit,
+    semi, lparen, rparen, lbrace, rbrace, lbracket, rbracket,
+    comma, dot, dotdot, ellipsis, colon, fat_arrow,
+    plus, minus, star, slash, percent, amp, pipe, caret, tilde, bang, question,
+    eq, eqeq, neq, lt, le, gt, ge, shl, shr, andand, oror,
+    plus_eq, minus_eq, star_eq, slash_eq, percent_eq,
+    kw_fn, kw_let, kw_var, kw_const, kw_if, kw_else, kw_while, kw_for, kw_in,
+    kw_return, kw_break, kw_continue, kw_struct, kw_enum, kw_impl, kw_extern,
+    kw_export, kw_defer, kw_errdefer, kw_error, kw_catch, kw_true, kw_false,
+    kw_null, kw_as, kw_import, kw_match, kw_sizeof, kw_alignof, kw_union, kw_type, kw_is,
+}
+
+struct Token {
+    tag: Tag
+    text: str
+    line: i64
+}
+
+fn keyword(s: str) Tag {
+    match s {
+        "fn" => return .kw_fn
+        "let" => return .kw_let
+        "var" => return .kw_var
+        "const" => return .kw_const
+        "if" => return .kw_if
+        "else" => return .kw_else
+        "while" => return .kw_while
+        "for" => return .kw_for
+        "in" => return .kw_in
+        "return" => return .kw_return
+        "break" => return .kw_break
+        "continue" => return .kw_continue
+        "struct" => return .kw_struct
+        "enum" => return .kw_enum
+        "impl" => return .kw_impl
+        "extern" => return .kw_extern
+        "export" => return .kw_export
+        "defer" => return .kw_defer
+        "errdefer" => return .kw_errdefer
+        "error" => return .kw_error
+        "catch" => return .kw_catch
+        "true" => return .kw_true
+        "false" => return .kw_false
+        "null" => return .kw_null
+        "as" => return .kw_as
+        "import" => return .kw_import
+        "match" => return .kw_match
+        "sizeof" => return .kw_sizeof
+        "alignof" => return .kw_alignof
+        "union" => return .kw_union
+        "type" => return .kw_type
+        "is" => return .kw_is
+    }
+    return .ident
+}
+
+fn ends_statement(t: Tag) bool {
+    match t {
+        .ident, .int_lit, .float_lit, .str_lit, .char_lit, .rparen, .rbracket, .rbrace,
+        .kw_return, .kw_break, .kw_continue, .question, .kw_true, .kw_false, .kw_null => return true
+    }
+    return false
+}
+
+/// longest operator at the start of `s`; .eof if none
+struct Op { tag: Tag, len: i64 }
+
+fn operator(s: str) Op {
+    if s.len >= 3 && s[0..3] == "..." { return Op{ tag: .ellipsis, len: 3 } }
+    if s.len >= 2 {
+        match s[0..2] {
+            ".." => return Op{ tag: .dotdot, len: 2 }
+            "=>" => return Op{ tag: .fat_arrow, len: 2 }
+            "==" => return Op{ tag: .eqeq, len: 2 }
+            "!=" => return Op{ tag: .neq, len: 2 }
+            "<=" => return Op{ tag: .le, len: 2 }
+            ">=" => return Op{ tag: .ge, len: 2 }
+            "<<" => return Op{ tag: .shl, len: 2 }
+            ">>" => return Op{ tag: .shr, len: 2 }
+            "&&" => return Op{ tag: .andand, len: 2 }
+            "||" => return Op{ tag: .oror, len: 2 }
+            "+=" => return Op{ tag: .plus_eq, len: 2 }
+            "-=" => return Op{ tag: .minus_eq, len: 2 }
+            "*=" => return Op{ tag: .star_eq, len: 2 }
+            "/=" => return Op{ tag: .slash_eq, len: 2 }
+            "%=" => return Op{ tag: .percent_eq, len: 2 }
+        }
+    }
+    var t: Tag = .eof
+    match s[0] {
+        '(' => t = .lparen
+        ')' => t = .rparen
+        '{' => t = .lbrace
+        '}' => t = .rbrace
+        '[' => t = .lbracket
+        ']' => t = .rbracket
+        ',' => t = .comma
+        '.' => t = .dot
+        ':' => t = .colon
+        ';' => t = .semi
+        '+' => t = .plus
+        '-' => t = .minus
+        '*' => t = .star
+        '/' => t = .slash
+        '%' => t = .percent
+        '&' => t = .amp
+        '|' => t = .pipe
+        '^' => t = .caret
+        '~' => t = .tilde
+        '!' => t = .bang
+        '?' => t = .question
+        '=' => t = .eq
+        '<' => t = .lt
+        '>' => t = .gt
+    }
+    return Op{ tag: t, len: 1 }
+}
+
+struct Lexer {
+    src: str
+    file: str
+    i: i64
+    line: i64
+    depth: i64
+    toks: List[Token]
+}
+
+impl Lexer {
+    fn emit(self, tag: Tag, text: str) !void {
+        self.toks.push(Token{ tag: tag, text: text, line: self.line })?
+    }
+
+    fn fail(self, msg: str) !void {
+        eprintln("{self.file}:{self.line}: error: {msg}")
+        return error.LexFailed
+    }
+
+    fn peek(self, k: i64) u8 {
+        if self.i + k < self.src.len { return self.src[self.i + k] }
+        return 0
+    }
+
+    fn number(self) !void {
+        let src = self.src
+        let start = self.i
+        var is_float = false
+        if src[self.i] == '0' && (self.peek(1) == 'x' || self.peek(1) == 'b' || self.peek(1) == 'o') {
+            self.i += 2
+            while self.i < src.len && (is_alnum(src[self.i]) || src[self.i] == '_') { self.i += 1 }
+        } else {
+            while self.i < src.len && (is_digit(src[self.i]) || src[self.i] == '_') { self.i += 1 }
+            if self.i + 1 < src.len && src[self.i] == '.' && is_digit(src[self.i + 1]) {
+                is_float = true
+                self.i += 1
+                while self.i < src.len && (is_digit(src[self.i]) || src[self.i] == '_') { self.i += 1 }
+            }
+            if self.i < src.len && (src[self.i] == 'e' || src[self.i] == 'E') {
+                is_float = true
+                self.i += 1
+                if self.i < src.len && (src[self.i] == '+' || src[self.i] == '-') { self.i += 1 }
+                while self.i < src.len && is_digit(src[self.i]) { self.i += 1 }
+            }
+        }
+        if is_float { self.emit(.float_lit, src[start..self.i])? } else { self.emit(.int_lit, src[start..self.i])? }
+    }
+
+    fn string(self) !void {
+        let src = self.src
+        let start = self.i
+        self.i += 1
+        var bdepth = 0 // inside {interpolation}
+        while self.i < src.len && !(src[self.i] == '"' && bdepth == 0) {
+            let c = src[self.i]
+            if c == '\\' {
+                self.i += 2
+                continue
+            }
+            if c == '{' && self.peek(1) == '{' && bdepth == 0 {
+                self.i += 2
+                continue
+            }
+            if c == '{' { bdepth += 1 }
+            if c == '}' && bdepth > 0 { bdepth -= 1 }
+            if c == '"' && bdepth > 0 {
+                self.i += 1
+                while self.i < src.len && src[self.i] != '"' {
+                    if src[self.i] == '\\' { self.i += 1 }
+                    self.i += 1
+                }
+            }
+            if self.i < src.len && src[self.i] == '\n' { self.line += 1 }
+            self.i += 1
+        }
+        if self.i >= src.len { self.fail("unterminated string")? }
+        self.i += 1
+        self.emit(.str_lit, src[start + 1..self.i - 1])?
+    }
+
+    fn run(self) !void {
+        let src = self.src
+        while self.i < src.len {
+            let c = src[self.i]
+            if c == '\n' {
+                if self.depth == 0 && self.toks.len > 0 && ends_statement(self.toks.get(self.toks.len - 1).tag) {
+                    self.emit(.semi, "\\n")?
+                }
+                self.line += 1
+                self.i += 1
+                continue
+            }
+            if c == ' ' || c == '\t' || c == '\r' {
+                self.i += 1
+                continue
+            }
+            if c == '/' && self.peek(1) == '/' {
+                while self.i < src.len && src[self.i] != '\n' { self.i += 1 }
+                continue
+            }
+            if c == '/' && self.peek(1) == '*' {
+                self.i += 2
+                while self.i + 1 < src.len && !(src[self.i] == '*' && src[self.i + 1] == '/') {
+                    if src[self.i] == '\n' { self.line += 1 }
+                    self.i += 1
+                }
+                self.i += 2
+                continue
+            }
+            if is_alpha(c) || c == '_' {
+                let start = self.i
+                while self.i < src.len && (is_alnum(src[self.i]) || src[self.i] == '_') { self.i += 1 }
+                let text = src[start..self.i]
+                self.emit(keyword(text), text)?
+                continue
+            }
+            if is_digit(c) {
+                self.number()?
+                continue
+            }
+            if c == '"' {
+                self.string()?
+                continue
+            }
+            if c == '\'' {
+                let start = self.i
+                self.i += 1
+                if self.i < src.len && src[self.i] == '\\' { self.i += 1 }
+                self.i += 1
+                if self.i >= src.len || src[self.i] != '\'' { self.fail("bad char literal")? }
+                self.i += 1
+                self.emit(.char_lit, src[start + 1..self.i - 1])?
+                continue
+            }
+            let op = operator(src[self.i..])
+            if op.tag == .eof {
+                eprintln("{self.file}:{self.line}: error: unexpected character '{src[self.i..self.i + 1]}'")
+                return error.LexFailed
+            }
+            self.emit(op.tag, src[self.i..self.i + op.len])?
+            match op.tag {
+                .lparen, .lbracket => self.depth += 1
+                .rparen, .rbracket => self.depth -= 1
+            }
+            self.i += op.len
+        }
+        self.emit(.semi, "")?
+        self.emit(.eof, "")?
+    }
+}
+
+fn tokenize(a: Allocator, src: str, file: str) !List[Token] {
+    var lx = Lexer{ src: src, file: file, i: 0, line: 1, depth: 0, toks: List[Token].init(a) }
+    lx.run()?
+    return lx.toks
+}

@@ -1,0 +1,50 @@
+enum Dir { North, East, South, West }
+impl Dir {
+    fn turn(self) Dir {
+        match *self {
+            .North => return .East
+            .East => return .South
+            .South => return .West
+            _ => return .North
+        }
+        return .North
+    }
+}
+
+struct Stack[T] { items: List[T] }
+impl Stack[T] {
+    fn push(self, v: T) !void { self.items.push(v)? }
+    fn pop(self) !T { return self.items.pop() }
+}
+
+fn main() !void {
+    let heap = c_allocator()
+    var xs: List[i32] = List.init(heap)
+    xs.push(10)?
+    xs.push(20)?
+    for i, x in xs { println("  [{i}] = {x}") }
+
+    let buf: []f64 = heap.alloc(4)?
+    defer heap.free(buf)
+    buf[2] = 1.5
+    println("buf[2] = {buf[2]}")
+
+    var d = Dir.North
+    for _k in 0..5 { d = d.turn() }
+    println("after 5 turns: {d}")
+
+    var st = Stack[str]{ items: List.init(heap) }
+    st.push("a")?
+    st.push("b")?
+    println("pop: {st.pop()?} {st.pop()?}")
+    let empty = st.pop() catch |e| { println("  empty -> {e}"); "none" }
+    println(empty)
+
+    let words: []str = ["zig", "vibe", "c++"]
+    for w in words { print("{w}:{w.len} ") }
+    println("")
+    let hex = 0xff + 0b101
+    println("hex+bin = {hex}, args = {arg_count()}, first = {arg(0)}")
+    let raw = "braces: {{ literal }}"
+    println(raw)
+}

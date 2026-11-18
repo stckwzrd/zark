@@ -1,0 +1,41 @@
+fn add(a: i64, b: i64) i64 { return a + b }
+fn mul(a: i64, b: i64) i64 { return a * b }
+
+fn fold(xs: []i64, init: i64, f: fn(i64, i64) i64) i64 {
+    var acc = init
+    for x in xs { acc = f(acc, x) }
+    return acc
+}
+
+struct Button {
+    label: str
+    on_click: fn(str)
+}
+
+fn hello(who: str) { println("  clicked: {who}") }
+
+// C qsort with a Vibe comparator
+extern fn qsort(base: *void, n: u64, size: u64, cmp: fn(*void, *void) i32)
+fn cmp_i64(a: *void, b: *void) i32 {
+    let x = *(a as *i64)
+    let y = *(b as *i64)
+    if x < y { return -1 }
+    if x > y { return 1 }
+    return 0
+}
+
+fn main() {
+    let xs: []i64 = [1, 2, 3, 4, 5]
+    println("sum = {fold(xs, 0, add)}, product = {fold(xs, 1, mul)}")
+    var op: fn(i64, i64) i64 = add
+    println("op(2, 3) = {op(2, 3)}")
+    op = mul
+    println("op(2, 3) = {op(2, 3)}")
+
+    let b = Button{ label: "OK", on_click: hello }
+    b.on_click(b.label)
+
+    var arr = [9, 4, 7, 1, 8]
+    qsort(&arr, arr.len as u64, sizeof(i64), cmp_i64)
+    println("qsort: {arr}")
+}

@@ -1,0 +1,92 @@
+const N = 4 * 2
+var counter = 0
+
+struct Pair[A, B] { first: A, second: B }
+
+impl Pair[A, B] {
+    fn swap(self) Pair[B, A] { return Pair[B, A]{ first: self.second, second: self.first } }
+}
+
+fn bump() i64 { counter += 1; return counter }
+
+fn open(name: str) !i64 {
+    if name == "bad" { return error.NotFound }
+    return name.len
+}
+
+fn work(name: str) !i64 {
+    defer println("  defer: leaving work({name})")
+    errdefer println("  errdefer: work({name}) failed")
+    let n = open(name)?
+    return n * 10
+}
+
+fn work2(name: str) !i64 {
+    errdefer println("  errdefer runs for a runtime error too: {name}")
+    return open(name)
+}
+
+fn main() !void {
+    var grid: [N]i32
+    for i in 0..N { grid[i] = (i * i) as i32 }
+    println("grid = {grid}")
+
+    let p = Pair[i64, str]{ first: 42, second: "vibe" }
+    println("{p} -> {p.swap()}")
+
+    let heap = c_allocator()
+    var xs = List[i64].init(heap)
+    defer xs.deinit()
+    for x in [9, 3, 7, 1, 8, 2] { xs.push(x)? }
+    xs.sort()
+    println("sorted: {xs.slice()}")
+    xs.reverse()
+    println("reversed: {xs.slice()} contains 7? {xs.contains(7)}")
+    let last = xs.pop()?
+    println("popped {last}, len now {xs.len}")
+
+    var m = Map[i64].init(heap)
+    defer m.deinit()
+    for w in ["a", "bb", "a", "ccc", "bb", "a"] {
+        let c = m.get(w) catch 0
+        m.put(w, c + 1)?
+    }
+    println("a={m.get("a") catch 0} bb={m.get("bb") catch 0} zz={m.get("zz") catch -1}")
+
+    var sb = List[u8].init(heap)
+    defer sb.deinit()
+    sb.append("hello")?
+    sb.push(',')?
+    sb.append(" world")?
+    let s = sb.slice()
+    println("sb = '{s}' len={s.len} find(world)={str_find(s, "world")}")
+    println("trim='{str_trim("   hi  ")}' starts={str_starts_with(s, "hell")}")
+
+    let v = parse_int(" -123 ")?
+    println("parsed {v}, bad -> {parse_int("12x") catch |e| { println("  err {e}"); 0 }}")
+
+    println("work ok = {work("hello")?}")
+    let r = work("bad") catch -1
+    println("work bad = {r}")
+    _ = work2("bad") catch 0
+
+    // loops with break / continue / defer
+    var i = 0
+    while true {
+        defer counter += 100
+        i += 1
+        if i % 2 == 0 { continue }
+        if i > 6 { break }
+        print("{i} ")
+    }
+    println("| counter={counter} bump={bump()}")
+
+    var lb: [32]u8
+    let label = bprint(lb[..], "count: {xs.len} items")?
+    println(label, label.len)
+    println("min={min(3.5, 2.25)} abs={abs(-9)} pi={PI}")
+    let u: u8 = 250
+    let w = u as i64 + 10
+    println("u8 -> i64: {w}, sizeof(Pair[i64, str]) = {sizeof(Pair[i64, str])}")
+    return error.Boom
+}

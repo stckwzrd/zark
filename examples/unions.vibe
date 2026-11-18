@@ -1,0 +1,60 @@
+// A tiny expression evaluator: tagged unions + match, the shape of a compiler AST.
+union Expr {
+    Num: i64
+    Neg: *Expr
+    Add: Bin
+    Mul: Bin
+    Var
+}
+
+struct Bin { l: *Expr, r: *Expr }
+
+fn eval(e: *Expr, x: i64) i64 {
+    match *e {
+        .Num(n) => return n
+        .Neg(inner) => return -eval(inner, x)
+        .Add(b) => return eval(b.l, x) + eval(b.r, x)
+        .Mul(b) => return eval(b.l, x) * eval(b.r, x)
+        .Var => return x
+    }
+    return 0
+}
+
+fn show(e: *Expr) {
+    match *e {
+        .Num(n) => print(n)
+        .Var => print("x")
+        .Neg(inner) => { print("-"); show(inner) }
+        .Add(b) => { print("("); show(b.l); print(" + "); show(b.r); print(")") }
+        .Mul(b) => { show(b.l); print(" * "); show(b.r) }
+    }
+}
+
+fn node(a: Allocator, e: Expr) !*Expr {
+    let p = a.create[Expr]()?
+    *p = e
+    return p
+}
+
+fn main() !void {
+    var mem: [4096]u8
+    var fb = FixedBuf.init(mem[..])
+    let a = fb.allocator()
+
+    // 3 * (x + -2)
+    let x = node(a, Expr.Var)?
+    let two = node(a, .Num(2))?
+    let neg = node(a, .Neg(two))?
+    let sum = node(a, .Add(Bin{ l: x, r: neg }))?
+    let three = node(a, .Num(3))?
+    let root = node(a, .Mul(Bin{ l: three, r: sum }))?
+
+    show(root)
+    println("")
+    for v in [0, 1, 5] { println("  x = {v} -> {eval(root, v)}") }
+    println("as value: {*two}")
+
+    let some = Option[i64].Some(42)
+    let none: Option[i64] = .None
+    println("{some} {none} unwrap_or: {some.unwrap_or(0)} {none.unwrap_or(-1)}")
+}

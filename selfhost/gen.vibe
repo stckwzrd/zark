@@ -1,0 +1,975 @@
+// Code generator core: types, instantiation, emission helpers, functions.
+// Mirrors src/codegen.zig.
+
+import "parser.vibe"
+
+enum TK { Int, Float, Bool, Void, Ptr, Slice, Array, Strct, Enm, Errun, ErrVal, Null, Func }
+
+struct Type {
+    k: TK
+    bits: i64          // Int bits, Float bits
+    signed: bool
+    elem: *Type        // Ptr/Slice/Array elem, Errun inner
+    len: u64           // Array length
+    si: *StructInst
+    ei: *EnumInfo
+    params: List[*Type] // Func
+    ret: *Type          // Func
+}
+
+struct FieldInfo { name: str, ty: *Type }
+
+struct StructInst {
+    decl: *StructDecl
+    args: List[*Type]
+    llname: str
+    display: str
+    fields: List[FieldInfo]
+    names_global: str
+    payload_words: u64
+}
+
+struct EnumInfo { decl: *EnumDecl, names_global: str }
+
+struct Value { ty: *Type, v: str }
+struct Addr { ty: *Type, v: str, imm: bool }
+struct Var { ptr: str, ty: *Type, mutable: bool }
+struct Defer { stmt: *Stmt, is_err: bool }
+struct Scope { vars: Map[Var], defers: List[Defer] }
+struct Loop { brk: str, cont: str, depth: i64 }
+
+type Env = *Map[*Type]
+
+struct FnInst {
+    decl: *FnDecl
+    env: Env
+    llname: str
+    params: List[*Type]
+    ret: *Type
+    generated: bool
+}
+
+struct FmtB { fmt: List[u8], args: List[u8], string_mode: bool }
+
+struct Gen {
+    a: Allocator
+    safety: bool
+
+    fns: Map[*FnDecl]
+    methods: Map[*FnDecl]
+    structs: Map[*StructDecl]
+    enums: Map[*EnumInfo]
+    consts: Map[*ConstDecl]
+    aliases: Map[*TypeExpr]
+    globals: Map[Var]
+    fn_order: List[*FnDecl]      // declaration order (deterministic output)
+    const_order: List[*ConstDecl]
+
+    struct_insts: Map[*StructInst]
+    fn_insts: Map[*FnInst]
+    pending: List[*FnInst]
+    declared: Map[bool]
+    errors: Map[i64]
+    error_names: List[str]
+
+    types_out: List[u8]
+    globals_out: List[u8]
+    decls_out: List[u8]
+    funcs_out: List[u8]
+    nstr: i64
+
+    body: List[u8]
+    allocas: List[u8]
+    ntmp: i64
+    nlbl: i64
+    scopes: List[Scope]
+    loops: List[Loop]
+    cur: *FnInst
+    env: Env
+    terminated: bool
+    cur_label: str
+    file: str
+
+    t_i64: *Type
+    t_i32: *Type
+    t_u64: *Type
+    t_u8: *Type
+    t_f64: *Type
+    t_bool: *Type
+    t_void: *Type
+    t_str: *Type
+    t_errval: *Type
+    t_null: *Type
+    t_ptr_u8: *Type
+}
+
+fn new_gen(a: Allocator, safety: bool) !*Gen {
+    let g = a.create[Gen]()?
+    g.a = a
+    g.safety = safety
+    g.fns = Map[*FnDecl].init(a)
+    g.methods = Map[*FnDecl].init(a)
+    g.structs = Map[*StructDecl].init(a)
+    g.enums = Map[*EnumInfo].init(a)
+    g.consts = Map[*ConstDecl].init(a)
+    g.aliases = Map[*TypeExpr].init(a)
+    g.globals = Map[Var].init(a)
+    g.fn_order = List[*FnDecl].init(a)
+    g.const_order = List[*ConstDecl].init(a)
+    g.struct_insts = Map[*StructInst].init(a)
+    g.fn_insts = Map[*FnInst].init(a)
+    g.pending = List[*FnInst].init(a)
+    g.declared = Map[bool].init(a)
+    g.errors = Map[i64].init(a)
+    g.error_names = List[str].init(a)
+    g.types_out = List[u8].init(a)
+    g.globals_out = List[u8].init(a)
+    g.decls_out = List[u8].init(a)
+    g.funcs_out = List[u8].init(a)
+    g.body = List[u8].init(a)
+    g.allocas = List[u8].init(a)
+    g.scopes = List[Scope].init(a)
+    g.loops = List[Loop].init(a)
+    g.env = g.new_env()?
+    g.cur_label = "entry"
+    g.t_i64 = g.mk_int(64, true)?
+    g.t_i32 = g.mk_int(32, true)?
+    g.t_u64 = g.mk_int(64, false)?
+    g.t_u8 = g.mk_int(8, false)?
+    g.t_f64 = g.mk(.Float)?
+    g.t_f64.bits = 64
+    g.t_bool = g.mk(.Bool)?
+    g.t_void = g.mk(.Void)?
+    g.t_str = g.mk_elem(.Slice, g.t_u8)?
+    g.t_errval = g.mk(.ErrVal)?
+    g.t_null = g.mk(.Null)?
+    g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?
+    g.error_names.push("ok")?
+    return g
+}
+
+// ------------------------------------------------------------------ type predicates
+
+fn type_eq(a: *Type, b: *Type) bool {
+    if a == b { return true }
+    if a.k != b.k { return false }
+    match a.k {
+        .Int => return a.bits == b.bits && a.signed == b.signed
+        .Float => return a.bits == b.bits
+        .Ptr, .Slice, .Errun => return type_eq(a.elem, b.elem)
+        .Array => return a.len == b.len && type_eq(a.elem, b.elem)
+        .Strct => return a.si == b.si
+        .Enm => return a.ei == b.ei
+        .Func => {
+            if a.params.len != b.params.len || !type_eq(a.ret, b.ret) { return false }
+            for i in 0..a.params.len { if !type_eq(a.params.get(i), b.params.get(i)) { return false } }
+            return true
+        }
+    }
+    return true
+}
+
+fn is_str(t: *Type) bool { return t.k == .Slice && t.elem.k == .Int && t.elem.bits == 8 && !t.elem.signed }
+fn is_union(t: *Type) bool { return t.k == .Strct && t.si.decl.is_union }
+
+fn field_index(si: *StructInst, name: str) i64 {
+    for i, f in si.fields { if f.name == name { return i } }
+    return -1
+}
+
+fn contains_str(list: List[str], s: str) bool {
+    for x in list { if x == s { return true } }
+    return false
+}
+
+impl Gen {
+    // ------------------------------------------------------------------ small helpers
+    fn sb(self) List[u8] { return List[u8].init(self.a) }
+
+    fn new_env(self) !Env {
+        let m = self.a.create[Map[*Type]]()?
+        *m = Map[*Type].init(self.a)
+        return m
+    }
+
+    fn copy_env(self, e: Env) !Env {
+        let m = self.new_env()?
+        for en in e.entries { if en.used { m.put(en.key, en.value)? } }
+        return m
+    }
+
+    fn mk(self, k: TK) !*Type {
+        let t = self.a.create[Type]()?
+        t.k = k
+        return t
+    }
+    fn mk_int(self, bits: i64, signed: bool) !*Type {
+        let t = self.mk(.Int)?
+        t.bits = bits
+        t.signed = signed
+        return t
+    }
+    fn mk_elem(self, k: TK, elem: *Type) !*Type {
+        let t = self.mk(k)?
+        t.elem = elem
+        return t
+    }
+
+    fn err(self, line: i64) {
+        eprint("{self.file}:{line}: error: ")
+    }
+
+    // ------------------------------------------------------------------ registration
+    fn add_decls(self, decls: List[Decl], file: str) !void {
+        self.file = file
+        for d in decls {
+            match d.k {
+                .Func => {
+                    let f = d.f
+                    if f.receiver.len > 0 {
+                        var kb = self.sb()
+                        sprint(&kb, "{f.receiver}.{f.name}")?
+                        let key = kb.slice()
+                        if self.methods.has(key) { self.err(f.line); eprintln("duplicate method '{key}'"); return error.CompileFailed }
+                        self.methods.put(key, f)?
+                    } else {
+                        if self.fns.has(f.name) {
+                            let old = self.fns.get(f.name)?
+                            if old.is_extern && f.is_extern { continue }
+                            self.err(f.line); eprintln("duplicate function '{f.name}'"); return error.CompileFailed
+                        }
+                        self.fns.put(f.name, f)?
+                        self.fn_order.push(f)?
+                    }
+                }
+                .Struct => {
+                    if self.structs.has(d.s.name) { self.err(d.s.line); eprintln("duplicate struct '{d.s.name}'"); return error.CompileFailed }
+                    self.structs.put(d.s.name, d.s)?
+                }
+                .Enum => {
+                    let e = d.en
+                    let info = self.a.create[EnumInfo]()?
+                    var nb = self.sb()
+                    sprint(&nb, "@enum.{e.name}.names")?
+                    info.decl = e
+                    info.names_global = nb.slice()
+                    self.enums.put(e.name, info)?
+                    var refs = self.sb()
+                    for i, v in e.variants {
+                        let s = self.str_global(v)?
+                        if i > 0 { refs.append(", ")? }
+                        sprint(&refs, "ptr {s}")?
+                    }
+                    sprint(&self.globals_out, "{info.names_global} = private constant [{e.variants.len} x ptr] [{refs.slice()}]\n")?
+                }
+                .Const => {
+                    self.consts.put(d.c.name, d.c)?
+                    self.const_order.push(d.c)?
+                }
+                .Alias => {
+                    if self.aliases.has(d.path) || self.structs.has(d.path) { self.err(d.line); eprintln("duplicate type name '{d.path}'"); return error.CompileFailed }
+                    self.aliases.put(d.path, d.ty)?
+                }
+                .Import => {}
+            }
+        }
+    }
+
+    fn emit_global_var(self, c: *ConstDecl) !void {
+        var ty: *Type = null
+        if c.ty != null {
+            ty = self.resolve_type(c.ty, self.env)?
+        } else if c.value.k == .FloatLit {
+            ty = self.t_f64
+        } else if c.value.k == .BoolLit {
+            ty = self.t_bool
+        } else {
+            ty = self.t_i64
+        }
+        var init = "zeroinitializer"
+        if ty.k == .Int {
+            var b = self.sb()
+            sprint(&b, "{self.eval_const(c.value)?}")?
+            init = b.slice()
+        } else if ty.k == .Bool {
+            init = "false"
+            if c.value.k == .BoolLit && c.value.bval { init = "true" }
+        } else if ty.k == .Float {
+            var f = 0.0
+            if c.value.k == .FloatLit { f = c.value.fval } else { f = self.eval_const(c.value)? as f64 }
+            init = self.float_const(f, ty.bits)?
+        }
+        var nb = self.sb()
+        sprint(&nb, "@g.{c.name}")?
+        let name = nb.slice()
+        sprint(&self.globals_out, "{name} = global {self.llty(ty)?} {init}\n")?
+        self.globals.put(c.name, Var{ ptr: name, ty: ty, mutable: true })?
+    }
+
+    // ------------------------------------------------------------------ type helpers
+    fn llty(self, t: *Type) !str {
+        match t.k {
+            .Int => {
+                var b = self.sb()
+                sprint(&b, "i{t.bits}")?
+                return b.slice()
+            }
+            .Float => {
+                if t.bits == 32 { return "float" }
+                return "double"
+            }
+            .Bool => return "i1"
+            .Void => return "void"
+            .Ptr, .Null, .Func => return "ptr"
+            .Slice => return "{{ ptr, i64 }}"
+            .Array => {
+                var b = self.sb()
+                sprint(&b, "[{t.len} x {self.llty(t.elem)?}]")?
+                return b.slice()
+            }
+            .Strct => {
+                var b = self.sb()
+                sprint(&b, "%\"{t.si.llname}\"")?
+                return b.slice()
+            }
+            .Enm, .ErrVal => return "i32"
+            .Errun => {
+                if t.elem.k == .Void { return "{{ i32 }}" }
+                var b = self.sb()
+                sprint(&b, "{{ i32, {self.llty(t.elem)?} }}")?
+                return b.slice()
+            }
+        }
+        return "void"
+    }
+
+    fn int_name(self, t: *Type) !str {
+        var b = self.sb()
+        if t.signed { sprint(&b, "i{t.bits}")? } else { sprint(&b, "u{t.bits}")? }
+        return b.slice()
+    }
+
+    fn mangle(self, t: *Type) !str {
+        var b = self.sb()
+        match t.k {
+            .Int => return self.int_name(t)
+            .Float => sprint(&b, "f{t.bits}")?
+            .Bool => return "bool"
+            .Void => return "void"
+            .Null => return "null"
+            .Ptr => sprint(&b, "P{self.mangle(t.elem)?}")?
+            .Slice => sprint(&b, "S{self.mangle(t.elem)?}")?
+            .Array => sprint(&b, "A{t.len}{self.mangle(t.elem)?}")?
+            .Strct => return t.si.llname
+            .Enm => return t.ei.decl.name
+            .Errun => sprint(&b, "E{self.mangle(t.elem)?}")?
+            .ErrVal => return "error"
+            .Func => {
+                sprint(&b, "F{t.params.len}")?
+                for p in t.params { sprint(&b, "_{self.mangle(p)?}")? }
+                sprint(&b, "_R{self.mangle(t.ret)?}")?
+            }
+        }
+        return b.slice()
+    }
+
+    fn type_name(self, t: *Type) !str {
+        if is_str(t) { return "str" }
+        var b = self.sb()
+        match t.k {
+            .Int => return self.int_name(t)
+            .Float => sprint(&b, "f{t.bits}")?
+            .Bool => return "bool"
+            .Void => return "void"
+            .Null => return "null"
+            .Ptr => sprint(&b, "*{self.type_name(t.elem)?}")?
+            .Slice => sprint(&b, "[]{self.type_name(t.elem)?}")?
+            .Array => sprint(&b, "[{t.len}]{self.type_name(t.elem)?}")?
+            .Strct => return t.si.display
+            .Enm => return t.ei.decl.name
+            .Errun => sprint(&b, "!{self.type_name(t.elem)?}")?
+            .ErrVal => return "error"
+            .Func => {
+                b.append("fn(")?
+                for i, p in t.params {
+                    if i > 0 { b.append(", ")? }
+                    b.append(self.type_name(p)?)?
+                }
+                b.append(")")?
+                if t.ret.k != .Void { sprint(&b, " {self.type_name(t.ret)?}")? }
+            }
+        }
+        return b.slice()
+    }
+
+    fn builtin_type(self, name: str) !*Type {
+        match name {
+            "i8" => return self.mk_int(8, true)
+            "i16" => return self.mk_int(16, true)
+            "i32" => return self.mk_int(32, true)
+            "i64", "isize" => return self.mk_int(64, true)
+            "u8" => return self.mk_int(8, false)
+            "u16" => return self.mk_int(16, false)
+            "u32" => return self.mk_int(32, false)
+            "u64", "usize" => return self.mk_int(64, false)
+            "f32" => {
+                let t = self.mk(.Float)?
+                t.bits = 32
+                return t
+            }
+            "f64" => return self.t_f64
+            "bool" => return self.t_bool
+            "void" => return self.t_void
+            "str" => return self.t_str
+        }
+        return null
+    }
+
+    fn resolve_type(self, te: *TypeExpr, env: Env) !*Type {
+        match te.k {
+            .Ptr => return self.mk_elem(.Ptr, self.resolve_type(te.elem, env)?)
+            .Slice => return self.mk_elem(.Slice, self.resolve_type(te.elem, env)?)
+            .Errun => return self.mk_elem(.Errun, self.resolve_type(te.elem, env)?)
+            .Func => {
+                let t = self.mk(.Func)?
+                t.params = List[*Type].init(self.a)
+                for p in te.args { t.params.push(self.resolve_type(p, env)?)? }
+                t.ret = self.t_void
+                if te.ret != null { t.ret = self.resolve_type(te.ret, env)? }
+                return t
+            }
+            .Array => {
+                let n = self.eval_const(te.len)?
+                if n < 0 { self.err(te.len.line); eprintln("negative array length"); return error.CompileFailed }
+                let t = self.mk_elem(.Array, self.resolve_type(te.elem, env)?)?
+                t.len = n as u64
+                return t
+            }
+            .Name => {
+                if te.args.len == 0 {
+                    if env.has(te.name) { return env.get(te.name) }
+                    let bt = self.builtin_type(te.name)?
+                    if bt != null { return bt }
+                    if self.enums.has(te.name) {
+                        let t = self.mk(.Enm)?
+                        t.ei = self.enums.get(te.name)?
+                        return t
+                    }
+                    if self.aliases.has(te.name) {
+                        let empty = self.new_env()?
+                        return self.resolve_type(self.aliases.get(te.name)?, empty)
+                    }
+                }
+                if self.structs.has(te.name) {
+                    let sd = self.structs.get(te.name)?
+                    if sd.type_params.len != te.args.len {
+                        self.err(sd.line); eprintln("struct '{te.name}' expects {sd.type_params.len} type argument(s), got {te.args.len}")
+                        return error.CompileFailed
+                    }
+                    var args = List[*Type].init(self.a)
+                    for x in te.args { args.push(self.resolve_type(x, env)?)? }
+                    let t = self.mk(.Strct)?
+                    t.si = self.get_struct(sd, args)?
+                    return t
+                }
+                self.err(0); eprintln("unknown type '{te.name}'")
+                return error.CompileFailed
+            }
+        }
+        return error.CompileFailed
+    }
+
+    fn get_struct(self, sd: *StructDecl, args: List[*Type]) !*StructInst {
+        var name = self.sb()
+        var disp = self.sb()
+        name.append(sd.name)?
+        disp.append(sd.name)?
+        if args.len > 0 { disp.append("[")? }
+        for i, x in args {
+            sprint(&name, ".{self.mangle(x)?}")?
+            if i > 0 { disp.append(", ")? }
+            disp.append(self.type_name(x)?)?
+        }
+        if args.len > 0 { disp.append("]")? }
+        let key = name.slice()
+        if self.struct_insts.has(key) { return self.struct_insts.get(key) }
+        let inst = self.a.create[StructInst]()?
+        inst.decl = sd
+        inst.args = args
+        inst.llname = key
+        inst.display = disp.slice()
+        inst.fields = List[FieldInfo].init(self.a)
+        self.struct_insts.put(key, inst)?
+        let env = self.new_env()?
+        for i, tp in sd.type_params { env.put(tp, args.get(i))? }
+        for f in sd.fields { inst.fields.push(FieldInfo{ name: f.name, ty: self.resolve_type(f.ty, env)? })? }
+        if sd.is_union {
+            var maxsz: u64 = 0
+            var refs = self.sb()
+            for i, f in inst.fields {
+                maxsz = max(maxsz, self.size_of(f.ty)?)
+                if i > 0 { refs.append(", ")? }
+                sprint(&refs, "ptr {self.str_global(f.name)?}")?
+            }
+            inst.payload_words = (maxsz + 7) / 8
+            var nb = self.sb()
+            sprint(&nb, "@union.{inst.llname}.names")?
+            inst.names_global = nb.slice()
+            sprint(&self.globals_out, "{inst.names_global} = private constant [{inst.fields.len} x ptr] [{refs.slice()}]\n")?
+            sprint(&self.types_out, "%\"{inst.llname}\" = type {{ i32, [{inst.payload_words} x i64] }}\n")?
+            return inst
+        }
+        sprint(&self.types_out, "%\"{inst.llname}\" = type {{ ")?
+        for i, f in inst.fields {
+            if i > 0 { self.types_out.append(", ")? }
+            self.types_out.append(self.llty(f.ty)?)?
+        }
+        self.types_out.append(" }\n")?
+        return inst
+    }
+
+    fn eval_const(self, e: *Expr) !i64 {
+        match e.k {
+            .IntLit => return e.ival as i64
+            .Ident => {
+                if self.consts.has(e.name) {
+                    let c = self.consts.get(e.name)?
+                    if !c.mutable { return self.eval_const(c.value) }
+                }
+                self.err(e.line); eprintln("'{e.name}' is not a compile-time constant")
+                return error.CompileFailed
+            }
+            .Unary => {
+                let v = self.eval_const(e.l)?
+                if e.op == .minus { return 0 - v }
+                if e.op == .tilde { return v ^ -1 }
+            }
+            .Binary => {
+                let l = self.eval_const(e.l)?
+                let r = self.eval_const(e.r)?
+                match e.op {
+                    .plus => return l + r
+                    .minus => return l - r
+                    .star => return l * r
+                    .slash, .percent => {
+                        if r == 0 { self.err(e.line); eprintln("division by zero in constant"); return error.CompileFailed }
+                        if e.op == .slash { return l / r }
+                        return l % r
+                    }
+                    .shl => return l << (r & 63)
+                    .shr => return l >> (r & 63)
+                    .amp => return l & r
+                    .pipe => return l | r
+                    .caret => return l ^ r
+                }
+            }
+            .Sizeof => return self.size_of(self.resolve_type(e.ty, self.env)?)? as i64
+            .Alignof => return self.align_of(self.resolve_type(e.ty, self.env)?)? as i64
+        }
+        self.err(e.line); eprintln("expression is not a compile-time constant")
+        return error.CompileFailed
+    }
+
+    fn size_of(self, t: *Type) !u64 {
+        match t.k {
+            .Int, .Float => return (t.bits / 8) as u64
+            .Bool => return 1
+            .Void => return 0
+            .Ptr, .Null, .Func => return 8
+            .Slice => return 16
+            .Enm, .ErrVal => return 4
+            .Array => return t.len * self.size_of(t.elem)?
+            .Strct => {
+                if t.si.decl.is_union { return 8 + 8 * t.si.payload_words }
+                var off: u64 = 0
+                var maxa: u64 = 1
+                for f in t.si.fields {
+                    let sz = self.size_of(f.ty)?
+                    let al = self.align_of(f.ty)?
+                    maxa = max(maxa, al)
+                    off = (off + al - 1) / al * al + sz
+                }
+                return (off + maxa - 1) / maxa * maxa
+            }
+            .Errun => {
+                let al = max(4 as u64, self.align_of(t.elem)?)
+                let off = (4 + al - 1) / al * al
+                let total = off + self.size_of(t.elem)?
+                return (total + al - 1) / al * al
+            }
+        }
+        return 0
+    }
+
+    fn align_of(self, t: *Type) !u64 {
+        match t.k {
+            .Array => return self.align_of(t.elem)
+            .Strct => {
+                if t.si.decl.is_union { return 8 }
+                var m: u64 = 1
+                for f in t.si.fields { m = max(m, self.align_of(f.ty)?) }
+                return m
+            }
+            .Slice => return 8
+            .Errun => return max(4 as u64, self.align_of(t.elem)?)
+            .Void => return 1
+        }
+        return max(1 as u64, self.size_of(t)?)
+    }
+
+    // ------------------------------------------------------------------ emission helpers
+    fn str_global(self, bytes: str) !str {
+        self.nstr += 1
+        var nb = self.sb()
+        sprint(&nb, "@.str.{self.nstr}")?
+        let name = nb.slice()
+        sprint(&self.globals_out, "{name} = private unnamed_addr constant [{bytes.len + 1} x i8] c\"")?
+        let w = &self.globals_out
+        for c in bytes {
+            if c >= 0x20 && c < 0x7f && c != '"' && c != '\\' { w.push(c)? } else { sprint(w, "\\{c:02X}")? }
+        }
+        w.append("\\00\"\n")?
+        return name
+    }
+
+    fn float_const(self, f: f64, bits: i64) !str {
+        var v = f
+        if bits == 32 { v = (f as f32) as f64 }
+        var b = self.sb()
+        sprint(&b, "0x{bits_f64(v):016X}")?
+        return b.slice()
+    }
+
+    fn tmp(self) !str {
+        self.ntmp += 1
+        var b = self.sb()
+        sprint(&b, "%t{self.ntmp}")?
+        return b.slice()
+    }
+
+    fn new_label(self, base: str) !str {
+        self.nlbl += 1
+        var b = self.sb()
+        sprint(&b, "{base}{self.nlbl}")?
+        return b.slice()
+    }
+
+    /// the body buffer, opening a fresh (dead) block if the current one is terminated
+    fn ins(self) !*List[u8] {
+        if self.terminated {
+            let l = self.new_label("dead")?
+            self.label(l)?
+        }
+        return &self.body
+    }
+
+    fn label(self, name: str) !void {
+        if !self.terminated { sprint(&self.body, "  br label %{name}\n")? }
+        sprint(&self.body, "{name}:\n")?
+        self.cur_label = name
+        self.terminated = false
+    }
+
+    fn br(self, l: str) !void {
+        sprint(self.ins()?, "  br label %{l}\n")?
+        self.terminated = true
+    }
+
+    fn alloca(self, ty: *Type, hint: str) !str {
+        self.ntmp += 1
+        var b = self.sb()
+        sprint(&b, "%v.{hint}.{self.ntmp}")?
+        let name = b.slice()
+        sprint(&self.allocas, "  {name} = alloca {self.llty(ty)?}\n")?
+        return name
+    }
+
+    fn load(self, ty: *Type, ptr: str) !Value {
+        let t = self.tmp()?
+        sprint(self.ins()?, "  {t} = load {self.llty(ty)?}, ptr {ptr}\n")?
+        return Value{ ty: ty, v: t }
+    }
+
+    fn store(self, v: Value, ptr: str) !void {
+        if v.ty.k == .Void { return }
+        sprint(self.ins()?, "  store {self.llty(v.ty)?} {v.v}, ptr {ptr}\n")?
+    }
+
+    fn zero_fill(self, ty: *Type, ptr: str) !void {
+        if ty.k == .Array || ty.k == .Strct {
+            self.declare("llvm.memset.p0.i64", "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")?
+            let gp = self.tmp()?
+            sprint(self.ins()?, "  {gp} = getelementptr {self.llty(ty)?}, ptr null, i32 1\n")?
+            let sz = self.tmp()?
+            sprint(self.ins()?, "  {sz} = ptrtoint ptr {gp} to i64\n")?
+            sprint(self.ins()?, "  call void @llvm.memset.p0.i64(ptr {ptr}, i8 0, i64 {sz}, i1 false)\n")?
+            return
+        }
+        sprint(self.ins()?, "  store {self.llty(ty)?} zeroinitializer, ptr {ptr}\n")?
+    }
+
+    fn extract(self, agg: Value, idx: i64, ty: *Type) !Value {
+        let t = self.tmp()?
+        sprint(self.ins()?, "  {t} = extractvalue {self.llty(agg.ty)?} {agg.v}, {idx}\n")?
+        return Value{ ty: ty, v: t }
+    }
+
+    fn insert(self, agg_ty: *Type, agg: str, v: Value, idx: i64) !str {
+        let t = self.tmp()?
+        sprint(self.ins()?, "  {t} = insertvalue {self.llty(agg_ty)?} {agg}, {self.llty(v.ty)?} {v.v}, {idx}\n")?
+        return t
+    }
+
+    fn gep_field(self, agg_ty: *Type, ptr: str, idx: i64) !str {
+        let t = self.tmp()?
+        sprint(self.ins()?, "  {t} = getelementptr {self.llty(agg_ty)?}, ptr {ptr}, i32 0, i32 {idx}\n")?
+        return t
+    }
+
+    fn declare(self, name: str, text: str) !void {
+        if self.declared.has(name) { return }
+        self.declared.put(name, true)?
+        sprint(&self.decls_out, "{text}\n")?
+    }
+
+    fn error_id(self, name: str) !i64 {
+        if self.errors.has(name) { return self.errors.get(name) }
+        let id = self.error_names.len
+        self.error_names.push(name)?
+        self.errors.put(name, id)?
+        return id
+    }
+
+    fn num(self, n: i64) !str {
+        var b = self.sb()
+        sprint(&b, "{n}")?
+        return b.slice()
+    }
+
+    // ------------------------------------------------------------------ scopes
+    fn push_scope(self) !void {
+        self.scopes.push(Scope{ vars: Map[Var].init(self.a), defers: List[Defer].init(self.a) })?
+    }
+
+    fn pop_scope(self) !void {
+        let idx = self.scopes.len - 1
+        if !self.terminated { self.run_defers(idx, idx, false)? }
+        self.scopes.len -= 1
+    }
+
+    /// run defers of scopes[hi] down to scopes[lo], innermost first
+    fn run_defers(self, hi: i64, lo: i64, is_err: bool) !void {
+        var i = hi + 1
+        while i > lo {
+            i -= 1
+            var j = self.scopes.items[i].defers.len
+            while j > 0 {
+                j -= 1
+                let d = self.scopes.items[i].defers.get(j)
+                if d.is_err && !is_err { continue }
+                self.push_scope()?
+                self.gen_stmt(d.stmt)?
+                self.pop_scope()?
+            }
+        }
+    }
+
+    fn has_err_defers(self) bool {
+        for sc in self.scopes {
+            for d in sc.defers { if d.is_err { return true } }
+        }
+        return false
+    }
+
+    fn declare_var(self, name: str, v: Var, line: i64) !void {
+        let sc = &self.scopes.items[self.scopes.len - 1]
+        if sc.vars.has(name) { self.err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed }
+        sc.vars.put(name, v)?
+    }
+
+    fn lookup_var(self, name: str) !Var {
+        var i = self.scopes.len
+        while i > 0 {
+            i -= 1
+            let sc = &self.scopes.items[i]
+            if sc.vars.has(name) { return sc.vars.get(name) }
+        }
+        return self.globals.get(name)
+    }
+
+    fn has_var(self, name: str) bool {
+        var i = self.scopes.len
+        while i > 0 {
+            i -= 1
+            if self.scopes.items[i].vars.has(name) { return true }
+        }
+        return self.globals.has(name)
+    }
+
+    // ------------------------------------------------------------------ functions
+    fn inst_fn(self, decl: *FnDecl, env: Env, type_args: List[*Type]) !*FnInst {
+        var name = self.sb()
+        if decl.is_extern || decl.is_export {
+            name.append(decl.name)?
+        } else {
+            name.append("vb.")?
+            if decl.receiver.len > 0 {
+                name.append(self.mangle(env.get("Self")?)?)?
+                name.append(".")?
+            }
+            name.append(decl.name)?
+            for x in type_args { sprint(&name, ".{self.mangle(x)?}")? }
+        }
+        let key = name.slice()
+        if self.fn_insts.has(key) { return self.fn_insts.get(key) }
+
+        let saved_file = self.file
+        self.file = decl.file
+        defer self.file = saved_file
+        var params = List[*Type].init(self.a)
+        for p in decl.params { params.push(self.resolve_type(p.ty, env)?)? }
+        var ret = self.t_void
+        if decl.ret != null { ret = self.resolve_type(decl.ret, env)? }
+        let fi = self.a.create[FnInst]()?
+        *fi = FnInst{ decl: decl, env: env, llname: key, params: params, ret: ret, generated: false }
+        self.fn_insts.put(key, fi)?
+        if decl.is_extern {
+            var txt = self.sb()
+            sprint(&txt, "declare {self.llty(ret)?} @{decl.name}(")?
+            for i, p in params {
+                if i > 0 { txt.append(", ")? }
+                txt.append(self.llty(p)?)?
+            }
+            if decl.variadic {
+                if params.len > 0 { txt.append(", ...")? } else { txt.append("...")? }
+            }
+            txt.append(")")?
+            self.declare(decl.name, txt.slice())?
+        } else {
+            self.pending.push(fi)?
+        }
+        return fi
+    }
+
+    fn no_types(self) List[*Type] { return List[*Type].init(self.a) }
+
+    fn generate(self) !void {
+        for c in self.const_order { if c.mutable { self.emit_global_var(c)? } }
+        var main_inst: *FnInst = null
+        if self.fns.has("main") {
+            let m = self.fns.get("main")?
+            if m.type_params.len > 0 || m.params.len > 0 { self.err(m.line); eprintln("main takes no parameters"); return error.CompileFailed }
+            main_inst = self.inst_fn(m, self.new_env()?, self.no_types())?
+        }
+        for f in self.fn_order { if f.is_export { _ = self.inst_fn(f, self.new_env()?, self.no_types())? } }
+        while self.pending.len > 0 {
+            let fi = self.pending.pop()?
+            if fi.generated { continue }
+            fi.generated = true
+            self.gen_function(fi)?
+        }
+        if main_inst != null { self.gen_main_wrapper(main_inst)? }
+        var refs = self.sb()
+        for i, n in self.error_names {
+            let s = self.str_global(n)?
+            if i > 0 { refs.append(", ")? }
+            sprint(&refs, "ptr {s}")?
+        }
+        sprint(&self.globals_out, "@__vibe_errnames = private constant [{self.error_names.len} x ptr] [{refs.slice()}]\n")?
+    }
+
+    fn output(self, out: *List[u8]) !void {
+        out.append("; generated by vibe (self-hosted)\n")?
+        out.append(self.types_out.slice())?
+        out.append("\n")?
+        out.append(self.globals_out.slice())?
+        out.append("\n")?
+        out.append(self.decls_out.slice())?
+        out.append("\n")?
+        out.append(self.funcs_out.slice())?
+    }
+
+    fn gen_main_wrapper(self, mi: *FnInst) !void {
+        let w = &self.funcs_out
+        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?
+        if self.globals.has("__argc") {
+            w.append("  %argc64 = sext i32 %argc to i64\n  store i64 %argc64, ptr @g.__argc\n  store ptr %argv, ptr @g.__argv\n")?
+        }
+        let rt = mi.ret
+        if rt.k == .Void {
+            sprint(w, "  call void @{mi.llname}()\n  ret i32 0\n")?
+        } else if rt.k == .Int {
+            sprint(w, "  %r = call {self.llty(rt)?} @{mi.llname}()\n")?
+            if rt.bits == 32 {
+                w.append("  ret i32 %r\n")?
+            } else if rt.bits > 32 {
+                w.append("  %r2 = trunc i64 %r to i32\n  ret i32 %r2\n")?
+            } else {
+                sprint(w, "  %r2 = zext i{rt.bits} %r to i32\n  ret i32 %r2\n")?
+            }
+        } else if rt.k == .Errun && rt.elem.k == .Void {
+            self.declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?
+            self.declare("fflush", "declare i32 @fflush(ptr)")?
+            let f = self.str_global("error: %s\n")?
+            sprint(w, "  %r = call {{ i32 }} @{mi.llname}()\n  %tag = extractvalue {{ i32 }} %r, 0\n  %bad = icmp ne i32 %tag, 0\n  br i1 %bad, label %err, label %ok\nok:\n  ret i32 0\nerr:\n  call i32 @fflush(ptr null)\n")?
+            sprint(w, "  %np = getelementptr ptr, ptr @__vibe_errnames, i32 %tag\n  %n = load ptr, ptr %np\n  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n)\n  ret i32 1\n")?
+        } else {
+            self.err(mi.decl.line); eprintln("main must return void, an integer, or !void")
+            return error.CompileFailed
+        }
+        w.append("}\n")?
+    }
+
+    fn gen_function(self, fi: *FnInst) !void {
+        let decl = fi.decl
+        self.file = decl.file
+        self.body = self.sb()
+        self.allocas = self.sb()
+        self.scopes = List[Scope].init(self.a)
+        self.loops = List[Loop].init(self.a)
+        self.ntmp = 0
+        self.nlbl = 0
+        self.terminated = false
+        self.cur_label = "entry"
+        self.cur = fi
+        self.env = fi.env
+
+        self.push_scope()?
+        var hdr = self.sb()
+        var linkage = "internal "
+        if decl.is_export || fi.llname == "vb.main" { linkage = "" }
+        sprint(&hdr, "define {linkage}{self.llty(fi.ret)?} @{fi.llname}(")?
+        for i, p in decl.params {
+            let pt = fi.params.get(i)
+            if i > 0 { hdr.append(", ")? }
+            sprint(&hdr, "{self.llty(pt)?} %a.{i}")?
+            let slot = self.alloca(pt, p.name)?
+            var an = self.sb()
+            sprint(&an, "%a.{i}")?
+            self.store(Value{ ty: pt, v: an.slice() }, slot)?
+            self.declare_var(p.name, Var{ ptr: slot, ty: pt, mutable: false }, decl.line)?
+        }
+        hdr.append(") {{\n")?
+
+        self.gen_stmt(decl.body)?
+        if !self.terminated {
+            self.run_defers(self.scopes.len - 1, 0, false)?
+            if fi.ret.k == .Void {
+                sprint(self.ins()?, "  ret void\n")?
+            } else if fi.ret.k == .Errun && fi.ret.elem.k == .Void {
+                sprint(self.ins()?, "  ret {{ i32 }} zeroinitializer\n")?
+            } else {
+                sprint(self.ins()?, "  unreachable\n")?
+            }
+            self.terminated = true
+        }
+        self.scopes.len -= 1
+
+        let w = &self.funcs_out
+        w.append(hdr.slice())?
+        w.append("entry:\n")?
+        w.append(self.allocas.slice())?
+        w.append(self.body.slice())?
+        w.append("}\n\n")?
+    }
+}

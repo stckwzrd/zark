@@ -1,0 +1,118 @@
+// AST for the self-hosted Vibe compiler.
+// Nodes are "fat" structs with a kind tag: simple to build and to inspect.
+
+import "lexer.vibe"
+
+enum TEK { Name, Ptr, Slice, Array, Errun, Func }
+
+struct TypeExpr {
+    k: TEK
+    name: str                // Name
+    args: List[*TypeExpr]    // Name type args, Func params
+    elem: *TypeExpr          // Ptr/Slice/Array/Errun inner
+    len: *Expr               // Array length
+    ret: *TypeExpr           // Func return (null = void)
+}
+
+enum EK {
+    IntLit, FloatLit, BoolLit, StrLit, Interp, NullLit, Ident, EnumLit, ErrorVal,
+    Binary, Unary, Call, Field, Index, Slice, StructLit, ArrayLit, Cast, Try, Catch,
+    Sizeof, Alignof, Is,
+}
+
+struct FieldInit { name: str, value: *Expr }
+
+// interpolation part: kind 0 = literal text, 1 = expression, 2 = expression with format spec
+struct IPart { kind: i64, lit: str, e: *Expr, spec: str }
+
+struct Expr {
+    k: EK
+    line: i64
+    ival: u64
+    fval: f64
+    bval: bool
+    name: str               // Ident, StrLit bytes, EnumLit/ErrorVal/Field/Is name, Catch err name
+    op: Tag                 // Binary/Unary operator
+    l: *Expr                // Binary lhs, Unary/Field/Index/Slice/Cast/Try/Catch/Is operand, Call callee
+    r: *Expr                // Binary rhs, Slice lo
+    x: *Expr                // Slice hi
+    args: List[*Expr]       // Call args, Index args, ArrayLit elems
+    ty: *TypeExpr           // StructLit, Cast, Sizeof, Alignof
+    fields: List[FieldInit] // StructLit
+    parts: List[IPart]      // Interp
+    handler: *Stmt          // Catch
+    zero_rest: bool         // StructLit `..`
+    has_name: bool          // Catch |e|
+}
+
+enum SK { Let, Assign, ExprS, If, While, ForRange, ForEach, Ret, Brk, Cont, Block, Defer, Match }
+
+struct MatchArm { pats: List[*Expr], body: *Stmt }
+
+struct Stmt {
+    k: SK
+    line: i64
+    name: str              // Let/For var name
+    idx: str               // ForEach index name
+    has_idx: bool
+    mutable: bool          // Let: var
+    is_err: bool           // Defer: errdefer
+    ty: *TypeExpr          // Let type
+    e: *Expr               // Let init, Assign value, ExprS, cond, Ret value, range lo, ForEach seq, Match value
+    e2: *Expr              // Assign target, range hi
+    op: Tag                // Assign op
+    body: *Stmt            // If then, loop body, Defer body
+    els: *Stmt             // If else
+    stmts: List[*Stmt]     // Block
+    arms: List[MatchArm]   // Match
+}
+
+struct Param { name: str, ty: *TypeExpr }
+
+struct FnDecl {
+    name: str
+    type_params: List[str]
+    params: List[Param]
+    ret: *TypeExpr          // null = void
+    body: *Stmt             // null for extern
+    is_extern: bool
+    is_export: bool
+    variadic: bool
+    line: i64
+    file: str
+    receiver: str           // "" = free function
+    receiver_params: List[str]
+}
+
+struct Field { name: str, ty: *TypeExpr }
+
+struct StructDecl {
+    name: str
+    type_params: List[str]
+    fields: List[Field]
+    line: i64
+    is_union: bool
+}
+
+struct EnumDecl { name: str, variants: List[str], line: i64 }
+
+struct ConstDecl {
+    name: str
+    ty: *TypeExpr
+    value: *Expr
+    mutable: bool
+    line: i64
+}
+
+enum DK { Func, Struct, Enum, Const, Import, Alias }
+
+struct Decl {
+    k: DK
+    f: *FnDecl
+    s: *StructDecl
+    en: *EnumDecl
+    c: *ConstDecl
+    path: str               // Import path / Alias name
+    ty: *TypeExpr           // Alias target
+    line: i64
+}

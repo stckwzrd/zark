@@ -1,0 +1,11 @@
+// declarations for the C / C++ side
+extern fn c_gcd(a: i64, b: i64) i64
+extern fn c_sum_squares(n: i64) i64
+extern fn engine_new(name: *u8) *u8
+extern fn engine_push(e: *u8, x: f64)
+extern fn engine_median(e: *u8) f64
+extern fn engine_hello(e: *u8)
+extern fn engine_free(e: *u8)
+
+struct Vec3 { x: f64, y: f64, z: f64 }   // same layout as the C struct
+extern fn vec3_dot(a: *Vec3, b: *Vec3) f64

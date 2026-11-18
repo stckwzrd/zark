@@ -1,0 +1,2 @@
+extern fn puts(s: *u8) i32
+fn main() { let s = "hi"; puts(s) }

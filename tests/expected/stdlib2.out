@@ -1,0 +1,5 @@
+arena total 762016 bytes in chunks, parts 5000
+hex ff DEADBEEF pad [   42] [ab  ] f 3.142 c A
+bits 3FF0000000000000 back 1 h=42
+radix 255 10 float 2500
+rfind 3 bad -1

@@ -1,0 +1,45 @@
+struct Point { x: f64, y: f64 }
+
+impl Point {
+    fn len(self) f64 { return sqrt(self.x * self.x + self.y * self.y) }
+    fn scale(self, k: f64) { self.x *= k; self.y *= k }
+}
+
+enum Color { Red, Green, Blue }
+
+fn div(a: i64, b: i64) !i64 {
+    if b == 0 { return error.DivByZero }
+    return a / b
+}
+
+fn main() !void {
+    defer println("bye!")
+    var p = Point{ x: 3.0, y: 4.0 }
+    println("p = {p}, len = {p.len()}")
+    p.scale(2.0)
+    println("scaled: {p}")
+
+    var sum = 0
+    for i in 0..10 { sum += i }
+    println("sum = {sum}")
+
+    let q = div(10, 2)?
+    let r = div(1, 0) catch |e| {
+        println("caught {e}")
+        -1
+    }
+    println("q={q} r={r}")
+
+    let c = Color.Green
+    match c {
+        .Red => println("red")
+        .Green, .Blue => println("not red: {c}")
+    }
+
+    var xs = List[i64].init(c_allocator())
+    defer xs.deinit()
+    for i in 0..5 { xs.push(i * i)? }
+    println("xs = {xs.slice()}, max = {max(3, 7)}")
+    let arr = [5, 1, 4]
+    println(arr, arr.len)
+}

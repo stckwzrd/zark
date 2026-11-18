@@ -1,0 +1,229 @@
+// A compiler-shaped workload: tokenizer -> recursive-descent parser -> AST (unions) -> interpreter.
+// Language:  let x = expr;  print expr;  fn name(a, b) = expr;   expressions: + - * / ( ) calls, if c then a else b
+
+union Node {
+    Num: i64
+    Var: str
+    Bin: BinOp
+    Call: CallNode
+    If: IfNode
+}
+struct BinOp { op: u8, l: *Node, r: *Node }
+struct CallNode { name: str, args: List[*Node] }
+struct IfNode { cond: *Node, then: *Node, els: *Node }
+
+struct FnDef { params: List[str], body: *Node }
+
+struct P {
+    src: str
+    i: i64
+    a: Allocator
+}
+
+impl P {
+    fn skip_ws(self) {
+        while self.i < self.src.len && (self.src[self.i] == ' ' || self.src[self.i] == '\n') { self.i += 1 }
+    }
+    fn peek(self) u8 {
+        self.skip_ws()
+        if self.i < self.src.len { return self.src[self.i] }
+        return 0
+    }
+    fn eat(self, c: u8) bool {
+        if self.peek() == c { self.i += 1; return true }
+        return false
+    }
+    fn expect(self, c: u8) !void {
+        if !self.eat(c) {
+            eprintln("parse error at {self.i}: expected '{c as i64}'")
+            return error.Parse
+        }
+    }
+    fn ident(self) !str {
+        self.skip_ws()
+        let start = self.i
+        while self.i < self.src.len && (is_alnum(self.src[self.i]) || self.src[self.i] == '_') { self.i += 1 }
+        if start == self.i { return error.Parse }
+        return self.src[start..self.i]
+    }
+    fn keyword(self, kw: str) bool {
+        self.skip_ws()
+        if str_starts_with(self.src[self.i..], kw) {
+            self.i += kw.len
+            return true
+        }
+        return false
+    }
+    fn node(self, n: Node) !*Node {
+        let p = self.a.create[Node]()?
+        *p = n
+        return p
+    }
+
+    fn primary(self) !*Node {
+        let c = self.peek()
+        if c == '(' {
+            self.i += 1
+            let e = self.expr()?
+            self.expect(')')?
+            return e
+        }
+        if is_digit(c) {
+            var v = 0
+            while self.i < self.src.len && is_digit(self.src[self.i]) {
+                v = v * 10 + (self.src[self.i] - '0') as i64
+                self.i += 1
+            }
+            return self.node(.Num(v))
+        }
+        if self.keyword("if ") {
+            let cond = self.expr()?
+            if !self.keyword("then") { return error.Parse }
+            let t = self.expr()?
+            if !self.keyword("else") { return error.Parse }
+            let e = self.expr()?
+            return self.node(.If(IfNode{ cond: cond, then: t, els: e }))
+        }
+        let name = self.ident()?
+        if self.eat('(') {
+            var args = List[*Node].init(self.a)
+            if !self.eat(')') {
+                while true {
+                    args.push(self.expr()?)?
+                    if self.eat(')') { break }
+                    self.expect(',')?
+                }
+            }
+            return self.node(.Call(CallNode{ name: name, args: args }))
+        }
+        return self.node(.Var(name))
+    }
+
+    fn term(self) !*Node {
+        var l = self.primary()?
+        while self.peek() == '*' || self.peek() == '/' {
+            let op = self.src[self.i]
+            self.i += 1
+            let r = self.primary()?
+            l = self.node(.Bin(BinOp{ op: op, l: l, r: r }))?
+        }
+        return l
+    }
+
+    fn expr(self) !*Node {
+        var l = self.term()?
+        while self.peek() == '+' || self.peek() == '-' || self.peek() == '<' {
+            let op = self.src[self.i]
+            self.i += 1
+            let r = self.term()?
+            l = self.node(.Bin(BinOp{ op: op, l: l, r: r }))?
+        }
+        return l
+    }
+}
+
+struct Interp {
+    globals: Map[i64]
+    fns: Map[*FnDef]
+    a: Allocator
+}
+
+impl Interp {
+    fn eval(self, n: *Node, env: *Map[i64]) !i64 {
+        match *n {
+            .Num(v) => return v
+            .Var(name) => {
+                if env.has(name) { return env.get(name) }
+                return self.globals.get(name) catch |e| {
+                    eprintln("undefined variable '{name}'")
+                    return e
+                }
+            }
+            .Bin(b) => {
+                let x = self.eval(b.l, env)?
+                let y = self.eval(b.r, env)?
+                match b.op {
+                    '+' => return x + y
+                    '-' => return x - y
+                    '*' => return x * y
+                    '<' => { if x < y { return 1 } return 0 }
+                    '/' => {
+                        if y == 0 { return error.DivByZero }
+                        return x / y
+                    }
+                }
+                return error.BadOp
+            }
+            .If(f) => {
+                if self.eval(f.cond, env)? != 0 { return self.eval(f.then, env) }
+                return self.eval(f.els, env)
+            }
+            .Call(c) => {
+                let def = self.fns.get(c.name)?
+                if def.params.len != c.args.len { return error.Arity }
+                var local = Map[i64].init(self.a)
+                defer local.deinit()
+                for i, p in def.params { local.put(p, self.eval(c.args.get(i), env)?)? }
+                return self.eval(def.body, &local)
+            }
+        }
+        return error.Unreachable
+    }
+
+    fn run(self, src: str) !void {
+        var p = P{ src: src, i: 0, a: self.a }
+        var empty = Map[i64].init(self.a)
+        while p.peek() != 0 {
+            if p.keyword("let ") {
+                let name = p.ident()?
+                p.expect('=')?
+                let e = p.expr()?
+                self.globals.put(name, self.eval(e, &empty)?)?
+            } else if p.keyword("print ") {
+                let e = p.expr()?
+                println(self.eval(e, &empty)?)
+            } else if p.keyword("fn ") {
+                let name = p.ident()?
+                p.expect('(')?
+                let def = self.a.create[FnDef]()?
+                def.params = List[str].init(self.a)
+                if !p.eat(')') {
+                    while true {
+                        def.params.push(p.ident()?)?
+                        if p.eat(')') { break }
+                        p.expect(',')?
+                    }
+                }
+                p.expect('=')?
+                def.body = p.expr()?
+                self.fns.put(name, def)?
+            } else {
+                eprintln("unknown statement at {p.i}")
+                return error.Parse
+            }
+            p.expect(';')?
+        }
+    }
+}
+
+fn main() !void {
+    var arena_mem: [262144]u8
+    var arena = FixedBuf.init(arena_mem[..])
+    let a = arena.allocator()
+    var it = Interp{ globals: Map[i64].init(a), fns: Map[*FnDef].init(a), a: a }
+    it.run("
+        let x = 6;
+        let y = x * 7;
+        print y;
+        fn sq(n) = n * n;
+        fn fib(n) = if n < 2 then n else fib(n - 1) + fib(n - 2);
+        fn fact(n) = if n < 1 then 1 else n * fact(n - 1);
+        print sq(x) + 1;
+        print fib(20);
+        print fact(10);
+        print (1 + 2) * (3 + 4) - 10 / 2;
+    ")?
+    println("arena used: {arena.used} bytes")
+    it.run("print 1 / 0;") catch |e| println("runtime error: {e}")
+    it.run("print nope;") catch |e| println("runtime error: {e}")
+}

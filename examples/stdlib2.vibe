@@ -1,0 +1,22 @@
+type Bytes = []u8
+type Handler = fn(i64) i64
+fn twice(x: i64) i64 { return x * 2 }
+
+fn main() !void {
+    var ar = Arena.init(c_allocator())
+    defer ar.deinit()
+    let a = ar.allocator()
+    var parts = List[Bytes].init(a)
+    for i in 0..5000 {
+        let b = a.alloc[u8](100)?
+        b[0] = 'x'
+        parts.push(b)?
+    }
+    println("arena total {ar.total} bytes in chunks, parts {parts.len}")
+    let h: Handler = twice
+    let pi = PI
+    println("hex {255:x} {3735928559:08X} pad [{42:5}] [{"ab":-4}] f {pi:.3} c {65 as u8:c}")
+    println("bits {bits_f64(1.0):016X} back {f64_from_bits(4607182418800017408)} h={h(21)}")
+    println("radix {parse_int_radix("0xff", 0)?} {parse_int_radix("1010", 2)?} float {parse_float("2.5e3")?}")
+    println("rfind {str_rfind_byte("a/b/c.vibe", '/')} bad {parse_float("2.x") catch -1.0}")
+}

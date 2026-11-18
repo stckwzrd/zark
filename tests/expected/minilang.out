@@ -1,0 +1,9 @@
+42
+37
+6765
+3628800
+16
+arena used: 5704 bytes
+runtime error: error.DivByZero
+undefined variable 'nope'
+runtime error: error.NotFound

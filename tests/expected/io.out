@@ -1,0 +1,9 @@
+line 0: 0
+line 1: 1
+line 2: 4
+pi=3.14159 ok=true
+exists: true false
+hello from child
+child exit = 3
+read missing: error.FileNotFound
+0 AB

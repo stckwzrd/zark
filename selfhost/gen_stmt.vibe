@@ -1,0 +1,366 @@
+// Statements: let/assign/if/loops/defer/match/return.
+
+import "gen.vibe"
+
+struct UPat { idx: i64, bind: str }
+
+impl Gen {
+    fn gen_stmt(self, s: *Stmt) !void {
+        match s.k {
+            .Block => {
+                self.push_scope()?
+                for st in s.stmts { self.gen_stmt(st)? }
+                self.pop_scope()?
+            }
+            .Let => {
+                var ty: *Type = null
+                if s.ty != null { ty = self.resolve_type_at(s.ty, s.line)? }
+                var has_val = false
+                var val = Value{ ty: null, v: "" }
+                if s.e != null {
+                    var v = self.gen_expr(s.e, ty)?
+                    if ty != null { v = self.coerce(v, ty, s.line)? }
+                    val = v
+                    has_val = true
+                    if ty == null { ty = v.ty }
+                }
+                if ty.k == .Void { self.err(s.line); eprintln("cannot declare variable '{s.name}' of type void"); return error.CompileFailed }
+                if ty.k == .Null { self.err(s.line); eprintln("cannot infer type of '{s.name}' from null; add a type"); return error.CompileFailed }
+                let slot = self.alloca(ty, s.name)?
+                if has_val { self.store(val, slot)? } else { self.zero_fill(ty, slot)? }
+                self.declare_var(s.name, Var{ ptr: slot, ty: ty, mutable: s.mutable }, s.line)?
+            }
+            .Assign => {
+                if s.e2.k == .Ident && s.e2.name == "_" {
+                    _ = self.gen_expr(s.e, null)?
+                    return
+                }
+                let addr = self.gen_addr(s.e2)?
+                if addr.imm { self.err(s.line); eprintln("cannot assign: target is immutable (declare it with 'var')"); return error.CompileFailed }
+                if s.op == .eq {
+                    let v = self.coerce(self.gen_expr(s.e, addr.ty)?, addr.ty, s.line)?
+                    self.store(v, addr.v)?
+                } else {
+                    let cur = self.load(addr.ty, addr.v)?
+                    let rhs = self.coerce(self.gen_expr(s.e, addr.ty)?, addr.ty, s.line)?
+                    var op: Tag = .percent
+                    match s.op {
+                        .plus_eq => op = .plus
+                        .minus_eq => op = .minus
+                        .star_eq => op = .star
+                        .slash_eq => op = .slash
+                    }
+                    let r = self.arith(op, cur, rhs, s.line)?
+                    self.store(r, addr.v)?
+                }
+            }
+            .ExprS => {
+                let v = self.gen_expr(s.e, null)?
+                if v.ty.k == .Errun { self.err(s.line); eprintln("error union is ignored; handle it with '?' or 'catch'"); return error.CompileFailed }
+            }
+            .If => {
+                let c = self.gen_cond(s.e)?
+                let lt = self.new_label("then")?
+                let le = self.new_label("else")?
+                let lend = self.new_label("endif")?
+                var target = lend
+                if s.els != null { target = le }
+                sprint(self.ins()?, "  br i1 {c.v}, label %{lt}, label %{target}\n")?
+                self.terminated = true
+                self.label(lt)?
+                self.gen_stmt(s.body)?
+                if !self.terminated { self.br(lend)? }
+                if s.els != null {
+                    self.label(le)?
+                    self.gen_stmt(s.els)?
+                    if !self.terminated { self.br(lend)? }
+                }
+                self.label(lend)?
+            }
+            .While => {
+                let lc = self.new_label("wcond")?
+                let lb = self.new_label("wbody")?
+                let le = self.new_label("wend")?
+                self.label(lc)?
+                let c = self.gen_cond(s.e)?
+                sprint(self.ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?
+                self.terminated = true
+                self.label(lb)?
+                self.loops.push(Loop{ brk: le, cont: lc, depth: self.scopes.len })?
+                self.gen_stmt(s.body)?
+                self.loops.len -= 1
+                if !self.terminated { self.br(lc)? }
+                self.label(le)?
+            }
+            .ForRange => {
+                self.push_scope()?
+                var lo = Value{ ty: null, v: "" }
+                var hi = Value{ ty: null, v: "" }
+                if is_literal(s.e) && !is_literal(s.e2) {
+                    hi = self.gen_expr(s.e2, null)?
+                    lo = self.coerce(self.gen_expr(s.e, hi.ty)?, hi.ty, s.line)?
+                } else {
+                    lo = self.gen_expr(s.e, null)?
+                    hi = self.coerce(self.gen_expr(s.e2, lo.ty)?, lo.ty, s.line)?
+                }
+                if lo.ty.k != .Int { self.err(s.line); eprintln("range bounds must be integers"); return error.CompileFailed }
+                let lty = self.llty(lo.ty)?
+                let it = self.alloca(lo.ty, s.name)?
+                self.store(lo, it)?
+                let lc = self.new_label("fcond")?
+                let lb = self.new_label("fbody")?
+                let lstep = self.new_label("fstep")?
+                let le = self.new_label("fend")?
+                self.label(lc)?
+                let cur = self.load(lo.ty, it)?
+                let c = self.tmp()?
+                var pred = "ult"
+                if lo.ty.signed { pred = "slt" }
+                sprint(self.ins()?, "  {c} = icmp {pred} {lty} {cur.v}, {hi.v}\n")?
+                sprint(self.ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?
+                self.terminated = true
+                self.label(lb)?
+                self.push_scope()?
+                let slot = self.alloca(lo.ty, s.name)?
+                self.store(cur, slot)?
+                self.declare_var(s.name, Var{ ptr: slot, ty: lo.ty, mutable: false }, s.line)?
+                self.loops.push(Loop{ brk: le, cont: lstep, depth: self.scopes.len })?
+                self.gen_stmt(s.body)?
+                self.loops.len -= 1
+                self.pop_scope()?
+                self.label(lstep)?
+                let cur2 = self.load(lo.ty, it)?
+                let nx = self.tmp()?
+                sprint(self.ins()?, "  {nx} = add {lty} {cur2.v}, 1\n")?
+                self.store(Value{ ty: lo.ty, v: nx }, it)?
+                self.br(lc)?
+                self.label(le)?
+                self.pop_scope()?
+            }
+            .ForEach => self.gen_for_each(s)?
+            .Ret => self.gen_return(s.line, s.e)?
+            .Brk, .Cont => {
+                if self.loops.len == 0 { self.err(s.line); eprintln("break/continue outside of a loop"); return error.CompileFailed }
+                let lp = self.loops.get(self.loops.len - 1)
+                if self.scopes.len > lp.depth { self.run_defers(self.scopes.len - 1, lp.depth, false)? }
+                if s.k == .Brk { self.br(lp.brk)? } else { self.br(lp.cont)? }
+            }
+            .Defer => {
+                let sc = &self.scopes.items[self.scopes.len - 1]
+                sc.defers.push(Defer{ stmt: s.body, is_err: s.is_err })?
+            }
+            .Match => {
+                let v = self.gen_expr(s.e, null)?
+                if is_union(v.ty) {
+                    self.gen_union_match(v, s.arms)?
+                    return
+                }
+                let lend = self.new_label("mend")?
+                for arm in s.arms {
+                    let lbody = self.new_label("arm")?
+                    let lnext = self.new_label("next")?
+                    if arm.pats.len == 0 {
+                        self.br(lbody)?
+                    } else {
+                        for pi, pat in arm.pats {
+                            let pv = self.coerce(self.gen_expr(pat, v.ty)?, v.ty, pat.line)?
+                            let c = self.compare(.eqeq, v, pv, pat.line)?
+                            var lalt = lnext
+                            if pi + 1 < arm.pats.len { lalt = self.new_label("alt")? }
+                            sprint(self.ins()?, "  br i1 {c.v}, label %{lbody}, label %{lalt}\n")?
+                            self.terminated = true
+                            if pi + 1 < arm.pats.len { self.label(lalt)? }
+                        }
+                    }
+                    self.label(lbody)?
+                    self.push_scope()?
+                    self.gen_stmt(arm.body)?
+                    self.pop_scope()?
+                    if !self.terminated { self.br(lend)? }
+                    self.label(lnext)?
+                }
+                self.label(lend)?
+            }
+        }
+    }
+
+    fn union_pattern(self, pat: *Expr, t: *Type) !UPat {
+        let si = t.si
+        var name = ""
+        var bind = ""
+        var head = pat
+        if pat.k == .Call {
+            if pat.args.len != 1 || pat.args.get(0).k != .Ident { self.err(pat.line); eprintln("union pattern takes one binding name: .Variant(x)"); return error.CompileFailed }
+            bind = pat.args.get(0).name
+            head = pat.l
+        }
+        if head.k == .EnumLit || head.k == .Field {
+            name = head.name
+        } else {
+            self.err(pat.line); eprintln("expected a union pattern like .Variant or .Variant(x)")
+            return error.CompileFailed
+        }
+        let idx = field_index(si, name)
+        if idx < 0 { self.err(pat.line); eprintln("union '{si.display}' has no variant '{name}'"); return error.CompileFailed }
+        if bind.len > 0 && si.fields.get(idx).ty.k == .Void { self.err(pat.line); eprintln("variant '{name}' has no payload to bind"); return error.CompileFailed }
+        if bind == "_" { bind = "" }
+        return UPat{ idx: idx, bind: bind }
+    }
+
+    fn gen_union_match(self, v: Value, arms: List[MatchArm]) !void {
+        let slot = self.spill(v)?.v
+        let tp = self.gep_field(v.ty, slot, 0)?
+        let tag = self.load(self.t_i32, tp)?
+        let pp = self.gep_field(v.ty, slot, 1)?
+        let lend = self.new_label("mend")?
+        for arm in arms {
+            let lbody = self.new_label("arm")?
+            let lnext = self.new_label("next")?
+            var bind = UPat{ idx: -1, bind: "" }
+            if arm.pats.len == 0 {
+                self.br(lbody)?
+            } else {
+                for pi, pat in arm.pats {
+                    let up = self.union_pattern(pat, v.ty)?
+                    if up.bind.len > 0 {
+                        if arm.pats.len > 1 { self.err(pat.line); eprintln("bindings are not allowed in multi-pattern arms"); return error.CompileFailed }
+                        bind = up
+                    }
+                    let c = self.tmp()?
+                    sprint(self.ins()?, "  {c} = icmp eq i32 {tag.v}, {up.idx}\n")?
+                    var lalt = lnext
+                    if pi + 1 < arm.pats.len { lalt = self.new_label("alt")? }
+                    sprint(self.ins()?, "  br i1 {c}, label %{lbody}, label %{lalt}\n")?
+                    self.terminated = true
+                    if pi + 1 < arm.pats.len { self.label(lalt)? }
+                }
+            }
+            self.label(lbody)?
+            self.push_scope()?
+            if bind.bind.len > 0 {
+                self.declare_var(bind.bind, Var{ ptr: pp, ty: v.ty.si.fields.get(bind.idx).ty, mutable: false }, arm.body.line)?
+            }
+            self.gen_stmt(arm.body)?
+            self.pop_scope()?
+            if !self.terminated { self.br(lend)? }
+            self.label(lnext)?
+        }
+        self.label(lend)?
+    }
+
+    fn gen_for_each(self, s: *Stmt) !void {
+        self.push_scope()?
+        var a = self.gen_addr(s.e)?
+        if a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct) {
+            let p = self.load(a.ty, a.v)?
+            a = Addr{ ty: a.ty.elem, v: p.v, imm: false }
+        }
+        if a.ty.k == .Strct {
+            var kb = self.sb()
+            sprint(&kb, "{a.ty.si.decl.name}.slice")?
+            if !self.methods.has(kb.slice()) { self.err(s.line); eprintln("cannot iterate over '{self.type_name(a.ty)?}' (no slice() method)"); return error.CompileFailed }
+            let md = self.methods.get(kb.slice())?
+            let sv = self.call_method(md, a, List[*Expr].init(self.a), self.no_types(), null, s.line)?
+            let slot = self.alloca(sv.ty, "it")?
+            self.store(sv, slot)?
+            a = Addr{ ty: sv.ty, v: slot, imm: false }
+        }
+        var elem: *Type = null
+        var len = ""
+        var base = ""
+        if a.ty.k == .Array {
+            elem = a.ty.elem
+            len = self.num(a.ty.len as i64)?
+            base = a.v
+        } else if a.ty.k == .Slice {
+            elem = a.ty.elem
+            let sv = self.load(a.ty, a.v)?
+            base = self.extract(sv, 0, self.t_ptr_u8)?.v
+            len = self.extract(sv, 1, self.t_i64)?.v
+        } else {
+            self.err(s.line); eprintln("cannot iterate over '{self.type_name(a.ty)?}'")
+            return error.CompileFailed
+        }
+        let it = self.alloca(self.t_i64, "idx")?
+        self.store(Value{ ty: self.t_i64, v: "0" }, it)?
+        let lc = self.new_label("ecnd")?
+        let lb = self.new_label("ebody")?
+        let lstep = self.new_label("estep")?
+        let le = self.new_label("eend")?
+        self.label(lc)?
+        let cur = self.load(self.t_i64, it)?
+        let c = self.tmp()?
+        sprint(self.ins()?, "  {c} = icmp slt i64 {cur.v}, {len}\n")?
+        sprint(self.ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?
+        self.terminated = true
+        self.label(lb)?
+        self.push_scope()?
+        let ep = self.tmp()?
+        if a.ty.k == .Array {
+            sprint(self.ins()?, "  {ep} = getelementptr {self.llty(a.ty)?}, ptr {base}, i64 0, i64 {cur.v}\n")?
+        } else {
+            sprint(self.ins()?, "  {ep} = getelementptr {self.llty(elem)?}, ptr {base}, i64 {cur.v}\n")?
+        }
+        let ev = self.load(elem, ep)?
+        let slot = self.alloca(elem, s.name)?
+        self.store(ev, slot)?
+        self.declare_var(s.name, Var{ ptr: slot, ty: elem, mutable: false }, s.line)?
+        if s.has_idx {
+            let islot = self.alloca(self.t_i64, s.idx)?
+            self.store(cur, islot)?
+            self.declare_var(s.idx, Var{ ptr: islot, ty: self.t_i64, mutable: false }, s.line)?
+        }
+        self.loops.push(Loop{ brk: le, cont: lstep, depth: self.scopes.len })?
+        self.gen_stmt(s.body)?
+        self.loops.len -= 1
+        self.pop_scope()?
+        self.label(lstep)?
+        let cur2 = self.load(self.t_i64, it)?
+        let nx = self.tmp()?
+        sprint(self.ins()?, "  {nx} = add i64 {cur2.v}, 1\n")?
+        self.store(Value{ ty: self.t_i64, v: nx }, it)?
+        self.br(lc)?
+        self.label(le)?
+        self.pop_scope()?
+    }
+
+    fn gen_return(self, line: i64, re: *Expr) !void {
+        let rt = self.cur.ret
+        var is_err = false
+        var has_val = false
+        var val = Value{ ty: null, v: "" }
+        if re != null {
+            if rt.k == .Void { self.err(line); eprintln("function returns void but a value was returned"); return error.CompileFailed }
+            is_err = re.k == .ErrorVal
+            val = self.coerce(self.gen_expr(re, rt)?, rt, line)?
+            has_val = true
+        } else if rt.k == .Errun && rt.elem.k == .Void {
+            val = Value{ ty: rt, v: "zeroinitializer" }
+            has_val = true
+        } else if rt.k != .Void {
+            self.err(line); eprintln("missing return value")
+            return error.CompileFailed
+        }
+        if !is_err && rt.k == .Errun && has_val && self.has_err_defers() {
+            let tag = self.extract(val, 0, self.t_i32)?
+            let c = self.tmp()?
+            sprint(self.ins()?, "  {c} = icmp ne i32 {tag.v}, 0\n")?
+            let le = self.new_label("reterr")?
+            let lo = self.new_label("retok")?
+            sprint(self.ins()?, "  br i1 {c}, label %{le}, label %{lo}\n")?
+            self.terminated = true
+            self.label(le)?
+            self.run_defers(self.scopes.len - 1, 0, true)?
+            sprint(self.ins()?, "  ret {self.llty(rt)?} {val.v}\n")?
+            self.terminated = true
+            self.label(lo)?
+            self.run_defers(self.scopes.len - 1, 0, false)?
+            sprint(self.ins()?, "  ret {self.llty(rt)?} {val.v}\n")?
+            self.terminated = true
+            return
+        }
+        self.run_defers(self.scopes.len - 1, 0, is_err)?
+        if has_val { sprint(self.ins()?, "  ret {self.llty(rt)?} {val.v}\n")? } else { sprint(self.ins()?, "  ret void\n")? }
+        self.terminated = true
+    }
+}

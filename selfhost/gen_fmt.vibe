@@ -1,0 +1,473 @@
+// Builtins (print family, bprint, sprint, panic, assert, embed) and value formatting.
+
+import "gen_call.vibe"
+
+fn fmt_lit(b: *FmtB, s: str) !void {
+    for c in s {
+        if c == '%' { b.fmt.append("%%")? } else { b.fmt.push(c)? }
+    }
+}
+
+fn dir_of(path: str) str {
+    let i = str_rfind_byte(path, '/')
+    if i < 0 { return "." }
+    if i == 0 { return "/" }
+    return path[0..i]
+}
+
+impl Gen {
+    fn is_builtin(self, name: str) bool {
+        match name {
+            "print", "println", "eprint", "eprintln", "bprint", "sprint", "panic", "assert", "embed" => return true
+        }
+        return false
+    }
+
+    fn new_fmt(self, string_mode: bool) FmtB {
+        return FmtB{ fmt: self.sb(), args: self.sb(), string_mode: string_mode }
+    }
+
+    fn fmt_arg(self, b: *FmtB, ty: str, v: str) !void {
+        sprint(&b.args, ", {ty} {v}")?
+    }
+
+    fn fmt_args(self, b: *FmtB, args: List[*Expr], from: i64) !void {
+        for i in from..args.len {
+            let x = args.get(i)
+            if i > from { b.fmt.push(' ')? }
+            if x.k == .Interp {
+                self.fmt_parts(b, x.parts, x.line)?
+            } else if x.k == .StrLit {
+                fmt_lit(b, x.name)?
+            } else {
+                self.fmt_value(b, self.gen_expr(x, null)?, x.line, 0)?
+            }
+        }
+    }
+
+    fn exit_call(self) !void {
+        self.declare("exit", "declare void @exit(i32)")?
+        sprint(self.ins()?, "  call void @exit(i32 1)\n")?
+        sprint(self.ins()?, "  unreachable\n")?
+        self.terminated = true
+    }
+
+    fn gen_builtin(self, name: str, args: List[*Expr], line: i64) !Value {
+        let void_v = Value{ ty: self.t_void, v: "" }
+        if name == "embed" {
+            if args.len != 1 || args.get(0).k != .StrLit { self.err(line); eprintln("embed takes one string literal"); return error.CompileFailed }
+            var pb = self.sb()
+            sprint(&pb, "{dir_of(self.file)}/{args.get(0).name}")?
+            let data = read_file(self.a, pb.slice()) catch {
+                self.err(line); eprintln("embed: cannot read '{pb.slice()}'")
+                return error.CompileFailed
+            }
+            let gname = self.str_global(data)?
+            var b = self.sb()
+            sprint(&b, "{{ ptr {gname}, i64 {data.len} }}")?
+            return Value{ ty: self.t_str, v: b.slice() }
+        }
+        if name == "print" || name == "println" || name == "eprint" || name == "eprintln" {
+            var b = self.new_fmt(false)
+            self.fmt_args(&b, args, 0)?
+            if name == "println" || name == "eprintln" { b.fmt.push('\n')? }
+            var fd = 1
+            if name == "eprint" || name == "eprintln" { fd = 2 }
+            self.flush_print(&b, fd)?
+            return void_v
+        }
+        if name == "bprint" {
+            if args.len < 1 { self.err(line); eprintln("bprint(buf, ...) needs a buffer"); return error.CompileFailed }
+            let buf = self.gen_expr(args.get(0), null)?
+            if !is_str(buf.ty) { self.err(line); eprintln("bprint: first argument must be a []u8 buffer, got '{self.type_name(buf.ty)?}'"); return error.CompileFailed }
+            var b = self.new_fmt(true)
+            self.fmt_args(&b, args, 1)?
+            self.declare("snprintf", "declare i32 @snprintf(ptr, i64, ptr, ...)")?
+            let f = self.str_global(b.fmt.slice())?
+            let bp = self.extract(buf, 0, self.t_ptr_u8)?
+            let bl = self.extract(buf, 1, self.t_i64)?
+            let n = self.tmp()?
+            sprint(self.ins()?, "  {n} = call i32 (ptr, i64, ptr, ...) @snprintf(ptr {bp.v}, i64 {bl.v}, ptr {f}{b.args.slice()})\n")?
+            let n64 = self.tmp()?
+            sprint(self.ins()?, "  {n64} = sext i32 {n} to i64\n")?
+            let bad = self.tmp()?
+            sprint(self.ins()?, "  {bad} = icmp uge i64 {n64}, {bl.v}\n")?
+            let tag = self.tmp()?
+            sprint(self.ins()?, "  {tag} = select i1 {bad}, i32 {self.error_id("NoSpace")?}, i32 0\n")?
+            let et = self.mk_elem(.Errun, self.t_str)?
+            let s1 = self.insert(self.t_str, "undef", bp, 0)?
+            let s2 = self.insert(self.t_str, s1, Value{ ty: self.t_i64, v: n64 }, 1)?
+            let r1 = self.insert(et, "undef", Value{ ty: self.t_i32, v: tag }, 0)?
+            let r2 = self.insert(et, r1, Value{ ty: self.t_str, v: s2 }, 1)?
+            return Value{ ty: et, v: r2 }
+        }
+        if name == "sprint" { return self.gen_sprint(args, line) }
+        if name == "panic" {
+            if args.len != 1 { self.err(line); eprintln("panic takes one argument"); return error.CompileFailed }
+            var b = self.new_fmt(false)
+            fmt_lit(&b, "panic: ")?
+            self.fmt_args(&b, args, 0)?
+            sprint(&b.fmt, " ({self.file}:{line})\n")?
+            self.flush_print(&b, 2)?
+            self.exit_call()?
+            return void_v
+        }
+        if name == "assert" {
+            if args.len != 1 { self.err(line); eprintln("assert takes one argument"); return error.CompileFailed }
+            let c = self.gen_cond(args.get(0))?
+            let lbad = self.new_label("afail")?
+            let lok = self.new_label("aok")?
+            sprint(self.ins()?, "  br i1 {c.v}, label %{lok}, label %{lbad}\n")?
+            self.terminated = true
+            self.label(lbad)?
+            var b = self.new_fmt(false)
+            sprint(&b.fmt, "assertion failed ({self.file}:{line})\n")?
+            self.flush_print(&b, 2)?
+            self.exit_call()?
+            self.label(lok)?
+            return void_v
+        }
+        self.err(line); eprintln("unknown builtin '{name}'")
+        return error.CompileFailed
+    }
+
+    // sprint(out: *List[u8], ...) !void
+    fn gen_sprint(self, args: List[*Expr], line: i64) !Value {
+        if args.len < 1 { self.err(line); eprintln("sprint(&list, ...) needs a *List[u8]"); return error.CompileFailed }
+        let out = self.gen_expr(args.get(0), null)?
+        var ok = out.ty.k == .Ptr && out.ty.elem.k == .Strct
+        if ok {
+            let si = out.ty.elem.si
+            ok = si.decl.name == "List" && si.args.len == 1 && si.args.get(0).k == .Int && si.args.get(0).bits == 8
+        }
+        if !ok { self.err(line); eprintln("sprint: first argument must be *List[u8], got '{self.type_name(out.ty)?}'"); return error.CompileFailed }
+        let lt = out.ty.elem
+        var b = self.new_fmt(true)
+        self.fmt_args(&b, args, 1)?
+        self.declare("snprintf", "declare i32 @snprintf(ptr, i64, ptr, ...)")?
+        let f = self.str_global(b.fmt.slice())?
+        let n = self.tmp()?
+        sprint(self.ins()?, "  {n} = call i32 (ptr, i64, ptr, ...) @snprintf(ptr null, i64 0, ptr {f}{b.args.slice()})\n")?
+        let n64 = self.tmp()?
+        sprint(self.ins()?, "  {n64} = sext i32 {n} to i64\n")?
+        // reserve(len + n + 1) through the normal method-call path
+        let rk = "List.reserve"
+        if !self.methods.has(rk) { self.err(line); eprintln("prelude missing List.reserve"); return error.CompileFailed }
+        let md = self.methods.get(rk)?
+        let env = self.recv_env(md, lt)?
+        let fi = self.inst_fn(md, env, self.no_types())?
+        let lp = self.gep_field(lt, out.v, field_index(lt.si, "len"))?
+        let cur0 = self.load(self.t_i64, lp)?
+        let need = self.tmp()?
+        sprint(self.ins()?, "  {need} = add i64 {cur0.v}, {n64}\n")?
+        let need1 = self.tmp()?
+        sprint(self.ins()?, "  {need1} = add i64 {need}, 1\n")?
+        let r = self.tmp()?
+        sprint(self.ins()?, "  {r} = call {{ i32 }} @{fi.llname}(ptr {out.v}, i64 {need1})\n")?
+        let rv = Value{ ty: self.mk_elem(.Errun, self.t_void)?, v: r }
+        let tag = self.extract(rv, 0, self.t_i32)?
+        let c = self.tmp()?
+        sprint(self.ins()?, "  {c} = icmp eq i32 {tag.v}, 0\n")?
+        let lok = self.new_label("spok")?
+        let lend = self.new_label("spend")?
+        sprint(self.ins()?, "  br i1 {c}, label %{lok}, label %{lend}\n")?
+        self.terminated = true
+        self.label(lok)?
+        let ip = self.gep_field(lt, out.v, field_index(lt.si, "items"))?
+        let items = self.load(self.t_str, ip)?
+        let base = self.extract(items, 0, self.t_ptr_u8)?
+        let cur = self.load(self.t_i64, lp)?
+        let dst = self.tmp()?
+        sprint(self.ins()?, "  {dst} = getelementptr i8, ptr {base.v}, i64 {cur.v}\n")?
+        let n1 = self.tmp()?
+        sprint(self.ins()?, "  {n1} = add i64 {n64}, 1\n")?
+        sprint(self.ins()?, "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr {dst}, i64 {n1}, ptr {f}{b.args.slice()})\n")?
+        let nl = self.tmp()?
+        sprint(self.ins()?, "  {nl} = add i64 {cur.v}, {n64}\n")?
+        self.store(Value{ ty: self.t_i64, v: nl }, lp)?
+        self.br(lend)?
+        self.label(lend)?
+        return rv
+    }
+
+    fn fmt_parts(self, b: *FmtB, parts: List[IPart], line: i64) !void {
+        for p in parts {
+            if p.kind == 0 {
+                fmt_lit(b, p.lit)?
+            } else if p.kind == 1 {
+                self.fmt_value(b, self.gen_expr(p.e, null)?, line, 0)?
+            } else {
+                self.fmt_spec(b, self.gen_expr(p.e, null)?, p.spec, line)?
+            }
+        }
+    }
+
+    /// {v:spec}: printf flags/width/precision + optional conversion letter
+    fn fmt_spec(self, b: *FmtB, v: Value, spec: str, line: i64) !void {
+        for ch in spec {
+            if !(is_alnum(ch) || ch == '.' || ch == '-' || ch == '+' || ch == ' ' || ch == '#') { self.err(line); eprintln("bad format spec '{spec}'"); return error.CompileFailed }
+        }
+        var flags = spec
+        var conv: u8 = 0
+        if spec.len > 0 && is_alpha(spec[spec.len - 1]) {
+            conv = spec[spec.len - 1]
+            flags = spec[0..spec.len - 1]
+        }
+        if v.ty.k == .Int {
+            if conv == 'c' {
+                let w = self.cast(v, self.t_i32, line)?
+                sprint(&b.fmt, "%{flags}c")?
+                self.fmt_arg(b, "i32", w.v)?
+                return
+            }
+            if conv == 0 {
+                conv = 'u'
+                if v.ty.signed { conv = 'd' }
+            }
+            if str_find_byte("dixXou", conv) < 0 { self.err(line); eprintln("format '{conv:c}' is not valid for integers"); return error.CompileFailed }
+            var wt = self.t_u64
+            if v.ty.signed { wt = self.t_i64 }
+            let w = self.cast(v, wt, line)?
+            sprint(&b.fmt, "%{flags}ll{conv:c}")?
+            self.fmt_arg(b, "i64", w.v)?
+            return
+        }
+        if v.ty.k == .Float {
+            if conv == 0 { conv = 'f' }
+            if str_find_byte("eEfFgGaA", conv) < 0 { self.err(line); eprintln("format '{conv:c}' is not valid for floats"); return error.CompileFailed }
+            let w = self.cast(v, self.t_f64, line)?
+            sprint(&b.fmt, "%{flags}{conv:c}")?
+            self.fmt_arg(b, "double", w.v)?
+            return
+        }
+        if is_str(v.ty) {
+            let l = self.extract(v, 1, self.t_i64)?
+            let p = self.extract(v, 0, self.t_ptr_u8)?
+            let l32 = self.tmp()?
+            sprint(self.ins()?, "  {l32} = trunc i64 {l.v} to i32\n")?
+            sprint(&b.fmt, "%{flags}.*s")?
+            self.fmt_arg(b, "i32", l32)?
+            self.fmt_arg(b, "ptr", p.v)?
+            return
+        }
+        self.err(line); eprintln("format specs apply to integers, floats and str, not '{self.type_name(v.ty)?}'")
+        return error.CompileFailed
+    }
+
+    fn fmt_value(self, b: *FmtB, v: Value, line: i64, depth: i64) !void {
+        let t = v.ty
+        if is_str(t) {
+            let l = self.extract(v, 1, self.t_i64)?
+            let p = self.extract(v, 0, self.t_ptr_u8)?
+            let l32 = self.tmp()?
+            sprint(self.ins()?, "  {l32} = trunc i64 {l.v} to i32\n")?
+            if depth > 0 { b.fmt.append("\"%.*s\"")? } else { b.fmt.append("%.*s")? }
+            self.fmt_arg(b, "i32", l32)?
+            self.fmt_arg(b, "ptr", p.v)?
+            return
+        }
+        match t.k {
+            .Int => {
+                var wt = self.t_u64
+                if t.signed { wt = self.t_i64 }
+                let w = self.cast(v, wt, line)?
+                if t.signed { b.fmt.append("%lld")? } else { b.fmt.append("%llu")? }
+                self.fmt_arg(b, "i64", w.v)?
+            }
+            .Float => {
+                let w = self.cast(v, self.t_f64, line)?
+                b.fmt.append("%g")?
+                self.fmt_arg(b, "double", w.v)?
+            }
+            .Bool => {
+                let ts = self.str_global("true")?
+                let fs = self.str_global("false")?
+                let x = self.tmp()?
+                sprint(self.ins()?, "  {x} = select i1 {v.v}, ptr {ts}, ptr {fs}\n")?
+                b.fmt.append("%s")?
+                self.fmt_arg(b, "ptr", x)?
+            }
+            .Ptr, .Null => {
+                b.fmt.append("%p")?
+                self.fmt_arg(b, "ptr", v.v)?
+            }
+            .Func => {
+                b.fmt.append("fn@%p")?
+                self.fmt_arg(b, "ptr", v.v)?
+            }
+            .Enm => {
+                let p = self.tmp()?
+                sprint(self.ins()?, "  {p} = getelementptr ptr, ptr {t.ei.names_global}, i32 {v.v}\n")?
+                let n = self.load(self.t_ptr_u8, p)?
+                b.fmt.append(".%s")?
+                self.fmt_arg(b, "ptr", n.v)?
+            }
+            .ErrVal => {
+                let p = self.tmp()?
+                sprint(self.ins()?, "  {p} = getelementptr ptr, ptr @__vibe_errnames, i32 {v.v}\n")?
+                let n = self.load(self.t_ptr_u8, p)?
+                b.fmt.append("error.%s")?
+                self.fmt_arg(b, "ptr", n.v)?
+            }
+            .Void => fmt_lit(b, "void")?
+            .Strct => {
+                if t.si.decl.is_union {
+                    self.fmt_union(b, v, line, depth)?
+                    return
+                }
+                fmt_lit(b, t.si.display)?
+                b.fmt.append("{{ ")?
+                for i, f in t.si.fields {
+                    if i > 0 { b.fmt.append(", ")? }
+                    fmt_lit(b, f.name)?
+                    b.fmt.append(": ")?
+                    if depth > 4 { b.fmt.append("...")? } else { self.fmt_value(b, self.extract(v, i, f.ty)?, line, depth + 1)? }
+                }
+                b.fmt.append(" }")?
+            }
+            .Array => {
+                b.fmt.push('[')?
+                var n = t.len as i64
+                if n > 32 { n = 32 }
+                for i in 0..n {
+                    if i > 0 { b.fmt.append(", ")? }
+                    self.fmt_value(b, self.extract(v, i, t.elem)?, line, depth + 1)?
+                }
+                if t.len as i64 > n { b.fmt.append(", ...")? }
+                b.fmt.push(']')?
+            }
+            .Slice => self.fmt_slice(b, v, line, depth)?
+            .Errun => {
+                let tag = self.extract(v, 0, self.t_i32)?
+                if t.elem.k == .Void || b.string_mode {
+                    self.fmt_value(b, Value{ ty: self.t_errval, v: tag.v }, line, depth)?
+                    return
+                }
+                let c = self.tmp()?
+                sprint(self.ins()?, "  {c} = icmp ne i32 {tag.v}, 0\n")?
+                let lerr = self.new_label("pee")?
+                let lok = self.new_label("peo")?
+                let lend = self.new_label("pend")?
+                self.flush_print(b, 1)?
+                sprint(self.ins()?, "  br i1 {c}, label %{lerr}, label %{lok}\n")?
+                self.terminated = true
+                self.label(lerr)?
+                var b1 = self.new_fmt(false)
+                self.fmt_value(&b1, Value{ ty: self.t_errval, v: tag.v }, line, depth)?
+                self.flush_print(&b1, 1)?
+                self.br(lend)?
+                self.label(lok)?
+                var b2 = self.new_fmt(false)
+                self.fmt_value(&b2, self.extract(v, 1, t.elem)?, line, depth)?
+                self.flush_print(&b2, 1)?
+                self.br(lend)?
+                self.label(lend)?
+            }
+        }
+    }
+
+    fn fmt_union(self, b: *FmtB, v: Value, line: i64, depth: i64) !void {
+        let si = v.ty.si
+        let slot = self.spill(v)?.v
+        let tp = self.gep_field(v.ty, slot, 0)?
+        let tag = self.load(self.t_i32, tp)?
+        if b.string_mode || depth > 0 {
+            let np = self.tmp()?
+            sprint(self.ins()?, "  {np} = getelementptr ptr, ptr {si.names_global}, i32 {tag.v}\n")?
+            let n = self.load(self.t_ptr_u8, np)?
+            fmt_lit(b, si.display)?
+            b.fmt.append(".%s")?
+            self.fmt_arg(b, "ptr", n.v)?
+            return
+        }
+        self.flush_print(b, 1)?
+        let pp = self.gep_field(v.ty, slot, 1)?
+        let lend = self.new_label("pu")?
+        for i, f in si.fields {
+            let lb = self.new_label("puv")?
+            let ln = self.new_label("pun")?
+            let c = self.tmp()?
+            sprint(self.ins()?, "  {c} = icmp eq i32 {tag.v}, {i}\n")?
+            sprint(self.ins()?, "  br i1 {c}, label %{lb}, label %{ln}\n")?
+            self.terminated = true
+            self.label(lb)?
+            var b2 = self.new_fmt(false)
+            fmt_lit(&b2, si.display)?
+            b2.fmt.push('.')?
+            fmt_lit(&b2, f.name)?
+            if f.ty.k != .Void {
+                b2.fmt.push('(')?
+                self.fmt_value(&b2, self.load(f.ty, pp)?, line, depth + 1)?
+                b2.fmt.push(')')?
+            }
+            self.flush_print(&b2, 1)?
+            self.br(lend)?
+            self.label(ln)?
+        }
+        self.label(lend)?
+    }
+
+    fn fmt_slice(self, b: *FmtB, v: Value, line: i64, depth: i64) !void {
+        let el = v.ty.elem
+        if b.string_mode || depth > 0 {
+            let l = self.extract(v, 1, self.t_i64)?
+            b.fmt.append("[]")?
+            fmt_lit(b, self.type_name(el)?)?
+            b.fmt.append("(len=%lld)")?
+            self.fmt_arg(b, "i64", l.v)?
+            return
+        }
+        b.fmt.push('[')?
+        self.flush_print(b, 1)?
+        let p = self.extract(v, 0, self.t_ptr_u8)?
+        let l = self.extract(v, 1, self.t_i64)?
+        let it = self.alloca(self.t_i64, "pi")?
+        self.store(Value{ ty: self.t_i64, v: "0" }, it)?
+        let lc = self.new_label("pc")?
+        let lb = self.new_label("pb")?
+        let le = self.new_label("pe")?
+        self.label(lc)?
+        let cur = self.load(self.t_i64, it)?
+        let c = self.tmp()?
+        sprint(self.ins()?, "  {c} = icmp slt i64 {cur.v}, {l.v}\n")?
+        sprint(self.ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?
+        self.terminated = true
+        self.label(lb)?
+        let isfirst = self.tmp()?
+        sprint(self.ins()?, "  {isfirst} = icmp eq i64 {cur.v}, 0\n")?
+        let es = self.str_global("")?
+        let cs = self.str_global(", ")?
+        let sep = self.tmp()?
+        sprint(self.ins()?, "  {sep} = select i1 {isfirst}, ptr {es}, ptr {cs}\n")?
+        var b2 = self.new_fmt(false)
+        b2.fmt.append("%s")?
+        self.fmt_arg(&b2, "ptr", sep)?
+        let ep = self.tmp()?
+        sprint(self.ins()?, "  {ep} = getelementptr {self.llty(el)?}, ptr {p.v}, i64 {cur.v}\n")?
+        let ev = self.load(el, ep)?
+        self.fmt_value(&b2, ev, line, depth + 1)?
+        self.flush_print(&b2, 1)?
+        let nx = self.tmp()?
+        sprint(self.ins()?, "  {nx} = add i64 {cur.v}, 1\n")?
+        self.store(Value{ ty: self.t_i64, v: nx }, it)?
+        self.br(lc)?
+        self.label(le)?
+        b.fmt.push(']')?
+    }
+
+    fn flush_print(self, b: *FmtB, fd: i64) !void {
+        if b.fmt.len == 0 { return }
+        let f = self.str_global(b.fmt.slice())?
+        if fd == 1 {
+            self.declare("printf", "declare i32 @printf(ptr, ...)")?
+            sprint(self.ins()?, "  call i32 (ptr, ...) @printf(ptr {f}{b.args.slice()})\n")?
+        } else {
+            self.declare("fflush", "declare i32 @fflush(ptr)")?
+            sprint(self.ins()?, "  call i32 @fflush(ptr null)\n")?
+            self.declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?
+            sprint(self.ins()?, "  call i32 (i32, ptr, ...) @dprintf(i32 {fd}, ptr {f}{b.args.slice()})\n")?
+        }
+        b.fmt.clear()
+        b.args.clear()
+    }
+}

@@ -1,0 +1,21 @@
+grid = [0, 1, 4, 9, 16, 25, 36, 49]
+Pair[i64, str]{ first: 42, second: "vibe" } -> Pair[str, i64]{ first: "vibe", second: 42 }
+sorted: [1, 2, 3, 7, 8, 9]
+reversed: [9, 8, 7, 3, 2, 1] contains 7? true
+popped 1, len now 5
+a=3 bb=2 zz=-1
+sb = 'hello, world' len=12 find(world)=7
+trim='hi' starts=true
+  err error.InvalidNumber
+parsed -123, bad -> 0
+  defer: leaving work(hello)
+work ok = 50
+  errdefer: work(bad) failed
+  defer: leaving work(bad)
+work bad = -1
+  errdefer runs for a runtime error too: bad
+1 3 5 | counter=700 bump=701
+count: 5 items 14
+min=2.25 abs=9 pi=3.14159
+u8 -> i64: 260, sizeof(Pair[i64, str]) = 24
+error: Boom
