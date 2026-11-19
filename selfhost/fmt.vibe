@@ -1,0 +1,212 @@
+// vibe fmt: fixes spacing, indentation and blank lines. It works on tokens, keeps every line break
+// and comment where they are, and never changes the token stream.
+
+import "lexer.vibe"
+
+fn value_end(t: Tag) bool {
+    match t {
+        .ident, .int_lit, .float_lit, .str_lit, .char_lit, .rparen, .rbracket, .kw_true, .kw_false, .kw_null, .question => return true
+    }
+    return false
+}
+
+fn is_binary_op(t: Tag) bool {
+    match t {
+        .eq, .eqeq, .neq, .lt, .le, .gt, .ge, .shl, .shr, .andand, .oror, .plus_eq, .minus_eq, .star_eq, .slash_eq,
+        .percent_eq, .fat_arrow, .plus, .slash, .percent, .caret => return true
+    }
+    return false
+}
+
+fn is_closer(t: Tag) bool { return t == .rbrace || t == .rparen || t == .rbracket }
+fn is_opener(t: Tag) bool { return t == .lbrace || t == .lparen || t == .lbracket }
+
+fn token_end(t: Token) i64 {
+    if t.tag == .str_lit || t.tag == .char_lit { return t.off + t.text.len + 1 }
+    return t.off + t.text.len
+}
+
+fn token_start(t: Token) i64 {
+    if t.tag == .str_lit || t.tag == .char_lit { return t.off - 1 }
+    return t.off
+}
+
+struct Fmt {
+    a: Allocator
+    src: str
+    out: List[u8]
+    stack: List[i64]
+    indent: i64
+}
+
+impl Fmt {
+    fn newline(self, n: i64) !void {
+        self.out.push('\n')?
+        if n > 1 { self.out.push('\n')? }
+    }
+
+    fn pad(self, n: i64) !void {
+        for _i in 0..n { self.out.push(' ')? }
+    }
+
+    fn base_indent(self) i64 {
+        if self.stack.len == 0 { return 0 }
+        return self.stack.get(self.stack.len - 1) + 4
+    }
+
+    fn line_indent(self, cur: Token, prev: Token, have_prev: bool) i64 {
+        if is_closer(cur.tag) && self.stack.len > 0 { return self.stack.get(self.stack.len - 1) }
+        var ind = self.base_indent()
+        if have_prev && !ends_statement(prev.tag) && prev.tag != .lbrace && prev.tag != .semi && prev.tag != .comma && prev.tag != .lparen && prev.tag != .lbracket {
+            ind += 4
+        }
+        return ind
+    }
+
+    fn prefix_op(self, prev2: Tag, have2: bool, prev: Tag) bool {
+        match prev {
+            .bang, .tilde => return true
+            .minus, .star, .amp, .question => return !have2 || !value_end(prev2)
+        }
+        return false
+    }
+
+    fn wants_space(self, prev2: Tag, have2: bool, prev: Token, cur: Token, orig: bool) bool {
+        let p = prev.tag
+        let c = cur.tag
+        if c == .rparen || c == .rbracket || c == .comma || c == .semi { return false }
+        if c == .rbrace { return p != .lbrace }
+        if p == .lbrace { return c != .rbrace }
+        if p == .lparen || p == .lbracket || p == .dot { return false }
+        if c == .colon { return false }
+        if p == .colon { return true }
+        if c == .question && value_end(p) { return false }
+        if c == .dot && (value_end(p) || p == .rbracket || p == .kw_error) { return false }
+        if p == .dotdot || c == .dotdot {
+            if p == .comma || p == .lbrace { return true }
+            return false
+        }
+        if self.prefix_op(prev2, have2, p) { return false }
+        if p == .pipe || c == .pipe { return orig }
+        if c == .lbrace {
+            if have2 && (prev2 == .kw_struct || prev2 == .kw_union || prev2 == .kw_enum || prev2 == .kw_impl) { return true }
+            if p == .ident && prev.text.len > 0 && is_upper(prev.text[0]) { return orig }
+            return true
+        }
+        if c == .lparen {
+            if p == .ident || p == .rparen || p == .rbracket || p == .question || p == .kw_fn || p == .kw_sizeof || p == .kw_alignof { return false }
+            return true
+        }
+        if c == .lbracket {
+            if p == .ident || p == .rparen || p == .rbracket || p == .question { return false }
+            return true
+        }
+        if (c == .star || c == .amp || c == .minus) && (p == .rparen || p == .rbracket) { return orig }
+        if (p == .star || p == .amp || p == .minus) && (prev2 == .rparen || prev2 == .rbracket) && have2 { return orig }
+        if p == .rbracket && (c == .ident || c == .star || c == .lbracket || c == .bang || c == .question || c == .kw_fn) { return orig }
+        return true
+    }
+
+    fn gap(self, gap: str, next: Token, prev: Token, have_tok: bool, have_out: bool) !GapOut {
+        var res = GapOut{ nl: 0, comment: false }
+        var have = have_out
+        var i = 0
+        while i < gap.len {
+            let ch = gap[i]
+            if ch == '\n' {
+                res.nl += 1
+                i += 1
+                continue
+            }
+            let line_comment = ch == '/' && i + 1 < gap.len && gap[i + 1] == '/'
+            let block_comment = ch == '/' && i + 1 < gap.len && gap[i + 1] == '*'
+            if !line_comment && !block_comment {
+                i += 1
+                continue
+            }
+            var j = i
+            if line_comment {
+                while j < gap.len && gap[j] != '\n' { j += 1 }
+            } else {
+                j = i + 2
+                while j + 1 < gap.len && !(gap[j] == '*' && gap[j + 1] == '/') { j += 1 }
+                j += 2
+            }
+            var e = j
+            while e > i && (gap[e - 1] == ' ' || gap[e - 1] == '\t' || gap[e - 1] == '\r') { e -= 1 }
+            if res.nl == 0 && have {
+                var k = i
+                while k > 0 && (gap[k - 1] == ' ' || gap[k - 1] == '\t') { k -= 1 }
+                self.pad(max(i - k, 1))?
+            } else {
+                if have { self.newline(res.nl)? }
+                self.indent = self.line_indent(next, prev, have_tok)
+                if is_closer(next.tag) { self.indent = self.base_indent() }
+                self.pad(self.indent)?
+            }
+            self.out.append(gap[i..e])?
+            res.nl = 0
+            res.comment = true
+            have = true
+            i = j
+        }
+        return res
+    }
+}
+
+struct GapOut { nl: i64, comment: bool }
+
+fn format_source(a: Allocator, src: str, file: str) !str {
+    let all = tokenize(a, src, file)?
+    var toks = List[Token].init(a)
+    for t in all {
+        if t.tag == .eof { continue }
+        if t.tag == .semi && (t.text == "\\n" || t.text == "") { continue }
+        toks.push(t)?
+    }
+    var f = Fmt{ a: a, src: src, out: List[u8].init(a), stack: List[i64].init(a), indent: 0 }
+    var prev = Token{ tag: .eof, text: "", line: 0, off: 0 }
+    var prev2 = Tag.eof
+    var have_prev = false
+    var have_out = false
+    var have_prev2 = false
+    var pos = 0
+    for t in toks {
+        let gap = src[pos..token_start(t)]
+        let g = f.gap(gap, t, prev, have_prev, have_out)?
+        if g.comment { have_out = true }
+        if have_out {
+            if g.nl > 0 {
+                var n = g.nl
+                if prev.tag == .lbrace || prev.tag == .lparen || prev.tag == .lbracket || is_closer(t.tag) { n = 1 }
+                f.newline(n)?
+                f.indent = f.line_indent(t, prev, have_prev)
+                f.pad(f.indent)?
+            } else if g.comment || (have_prev && f.wants_space(prev2, have_prev2, prev, t, gap.len > 0)) {
+                f.out.append(" ")?
+            }
+        }
+        if t.tag == .str_lit {
+            f.out.append("\"")?
+            f.out.append(t.text)?
+            f.out.append("\"")?
+        } else if t.tag == .char_lit {
+            f.out.append("'")?
+            f.out.append(t.text)?
+            f.out.append("'")?
+        } else {
+            f.out.append(t.text)?
+        }
+        if is_closer(t.tag) && f.stack.len > 0 { f.stack.len -= 1 }
+        if is_opener(t.tag) { f.stack.push(f.indent)? }
+        prev2 = prev.tag
+        have_prev2 = have_prev
+        prev = t
+        have_prev = true
+        have_out = true
+        pos = token_end(t)
+    }
+    _ = f.gap(src[pos..], Token{ tag: .eof, text: "", line: 0, off: 0 }, prev, have_prev, have_out)?
+    f.out.append("\n")?
+    return f.out.slice()
+}

@@ -3,6 +3,7 @@
 import "gen_fmt.vibe"
 import "native.vibe"
 import "resolve.vibe"
+import "fmt.vibe"
 
 const PRELUDE = embed("../src/std.vibe")
 
@@ -73,6 +74,7 @@ usage:
   vibe run   <file.vibe> [extra.c|.cpp|.o ...] [-O] [-- program args]
   vibe build <file.vibe> [extra.c|.cpp|.o ...] [-o out] [-O] [--release]
   vibe test  <file.vibe> [extra.c|.cpp|.o ...] [-O]   run the test blocks of a file
+  vibe fmt   [--check] <file.vibe ...>  format source files in place
   vibe ir    <file.vibe>            print LLVM IR to stdout
   vibe tokens <file.vibe ...>       dump tokens
 ")
@@ -123,12 +125,40 @@ fn run_tests(a: Allocator, exe: str, tests: List[*FnDecl]) !i32 {
     return 0
 }
 
+fn run_fmt(a: Allocator) !i32 {
+    var check = false
+    var changed = 0
+    for k in 2..arg_count() {
+        let path = arg(k)
+        if path == "--check" {
+            check = true
+            continue
+        }
+        let src = read_file(a, path) catch |e| {
+            eprintln("error: cannot read '{path}': {e}")
+            return 1
+        }
+        let out = format_source(a, src, path) catch return 1
+        if out == src { continue }
+        changed += 1
+        if check {
+            println("would reformat {path}")
+        } else {
+            write_file(path, out)?
+            println("formatted {path}")
+        }
+    }
+    if check && changed > 0 { return 1 }
+    return 0
+}
+
 fn compile(a: Allocator) !i32 {
     if arg_count() < 3 {
         usage()
         return 1
     }
     let cmd = arg(1)
+    if cmd == "fmt" { return run_fmt(a) }
 
     if cmd == "tokens" {
         var out = List[u8].init(a)
