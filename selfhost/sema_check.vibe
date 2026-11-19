@@ -1,0 +1,117 @@
+// Declaration-time checks of generic bodies against the declared constraints.
+
+import "sema_types.vibe";
+
+struct BodyCheck {
+    List<str> names;
+    List<str> cons;
+    Map<i64> vars;
+    str what;
+}
+
+str op_text(Tag t) {
+    match t {
+        .lt => return "<";
+        .le => return "<=";
+        .gt => return ">";
+        .ge => return ">=";
+        .plus => return "+";
+        .minus => return "-";
+        .star => return "*";
+        .slash => return "/";
+        .percent => return "%";
+        .eqeq => return "==";
+        .neq => return "!=";
+    }
+    return "";
+}
+
+i64 op_level(Tag t) {
+    match t {
+        .lt, .le, .gt, .ge => return 2;
+        .plus, .minus, .star, .slash, .percent => return 3;
+        .eqeq, .neq => return 1;
+    }
+    return 0;
+}
+
+i64 constraint_level(str c) {
+    match c {
+        "Eq" => return 1;
+        "Ord" => return 2;
+        "Num", "Int", "Float" => return 3;
+    }
+    return 0;
+}
+
+i64 BodyCheck::tparam_of(TypeExpr* te) {
+    if (te == null || te.k != .Name || te.args.len > 0) { return -1; }
+    for (auto [i, n] : this->names) {
+        if (n == te.name) { return i; }
+    }
+    return -1;
+}
+
+i64 BodyCheck::operand(Expr* e) {
+    if (e.k != .Ident) { return -1; }
+    return this->vars.get(e.name) catch -1;
+}
+
+!void Gen::check_expr(BodyCheck* c, Expr* e) {
+    if (e == null) { return; }
+    if (e.k == .Binary) {
+        const auto need = op_level(e.op);
+        auto k = c.operand(e.l);
+        if (k < 0) { k = c.operand(e.r); }
+        if (need > 0 && k >= 0) {
+            const auto have = c.cons.get(k);
+            if (have.len > 0 && constraint_level(have) < need) {
+                this->err(e.line);
+                eprintln("operator '{op_text(e.op)}' is not allowed for '{c.names.get(k)}: {have}' in '{c.what}'");
+                return error.CompileFailed;
+            }
+        }
+    }
+    this->check_expr(c, e.l)?;
+    this->check_expr(c, e.r)?;
+    this->check_expr(c, e.x)?;
+    for (auto a : e.args) { this->check_expr(c, a)?; }
+    for (auto f : e.fields) { this->check_expr(c, f.value)?; }
+    for (auto p : e.parts) { this->check_expr(c, p.e)?; }
+    if (e.handler != null) { this->check_stmt(c, e.handler)?; }
+    for (auto arm : e.arms) {
+        for (auto p : arm.pats) { this->check_expr(c, p)?; }
+        this->check_stmt(c, arm.body)?;
+    }
+}
+
+!void Gen::check_stmt(BodyCheck* c, Stmt* s) {
+    if (s == null) { return; }
+    if (s.k == .Let) {
+        auto k = c.tparam_of(s.ty);
+        if (k < 0 && s.ty == null && s.e != null) { k = c.operand(s.e); }
+        if (k >= 0) { c.vars.put(s.name, k)?; }
+    }
+    this->check_expr(c, s.e)?;
+    this->check_expr(c, s.e2)?;
+    this->check_stmt(c, s.body)?;
+    this->check_stmt(c, s.els)?;
+    for (auto x : s.stmts) { this->check_stmt(c, x)?; }
+    for (auto arm : s.arms) {
+        for (auto p : arm.pats) { this->check_expr(c, p)?; }
+        this->check_stmt(c, arm.body)?;
+    }
+}
+
+!void Gen::check_generic_body(FnDecl* f) {
+    if (f.body == null || f.type_params.len == 0) { return; }
+    auto any = false;
+    for (auto c : f.constraints) { if (c.len > 0) { any = true; } }
+    if (!any) { return; }
+    auto bc = BodyCheck{ .names = f.type_params, .cons = f.constraints, .vars = Map<i64>::init(this->a), .what = f.name };
+    for (auto p : f.params) {
+        const auto k = bc.tparam_of(p.ty);
+        if (k >= 0) { bc.vars.put(p.name, k)?; }
+    }
+    this->check_stmt(&bc, f.body)?;
+}

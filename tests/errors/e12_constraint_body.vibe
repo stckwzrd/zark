@@ -1,0 +1,2 @@
+template<T: Eq> T biggest(T a, T b) { if (b > a) { return b; } return a; }
+void main() { println(biggest(1, 2)); }

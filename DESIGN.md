@@ -80,7 +80,8 @@ Goal: code that reads like C++ for someone who writes C++ every day, while keepi
 - [ ] delete duplicated logic in `gen*.vibe`
 - [x] several errors per run (up to 10); the column is shown by the caret line, not in the header
 - [x] `const` methods cannot assign fields (and call non-const methods through `this`; calls on const variables are allowed)
-- [ ] constraints `T: Ord` checked at the declaration, interfaces defined in std
+- [x] constraints `T: Ord` checked at the declaration (`sema_check.vibe`: operators on values of type `T` against the declared constraint; unconstrained parameters are still checked at the instantiation)
+- [ ] interfaces defined in std
 - [ ] all tests on three backends, fixed points, compile time within +10%
 
 S1 as built, and where it differs from the plan:
