@@ -2,6 +2,7 @@
 
 import "gen_fmt.vibe"
 import "native.vibe"
+import "resolve.vibe"
 
 const PRELUDE = embed("../src/std.vibe")
 
@@ -10,7 +11,8 @@ extern fn realpath(path: *u8, resolved: *u8) *u8
 struct Loader {
     a: Allocator
     g: *Gen
-    seen: Map[bool]
+    seen: Map[str]
+    prefixes: Map[str]
 }
 
 fn canonical(a: Allocator, path: str) !str {
@@ -29,25 +31,38 @@ fn join_path(a: Allocator, dir: str, rel: str) !str {
 }
 
 impl Loader {
-    fn load_source(self, src: str, path: str) !void {
+    fn load_source(self, src: str, path: str, prefix: str) !void {
         var toks = tokenize(self.a, src, path)?
         var p = new_parser(self.a, toks.slice(), path)
         let decls = p.parse_file()?
         let dir = dir_of(path)
         for d in decls {
-            if d.k == .Import { self.load_file(canonical(self.a, join_path(self.a, dir, d.path)?)?)? }
+            if d.k == .Import { self.load_file(canonical(self.a, join_path(self.a, dir, d.path)?)?, d.alias)? }
         }
+        if prefix.len > 0 { resolve_module(self.a, decls, prefix)? }
         self.g.add_decls(decls, path)?
     }
 
-    fn load_file(self, path: str) !void {
-        if self.seen.has(path) { return }
-        self.seen.put(path, true)?
+    fn load_file(self, path: str, prefix: str) !void {
+        if self.seen.has(path) {
+            let old = self.seen.get(path)?
+            if old != prefix {
+                eprintln("error: '{path}' is imported both as '{old}' and as '{prefix}'; use the same name everywhere")
+                return error.CompileFailed
+            }
+            return
+        }
+        if prefix.len > 0 && self.prefixes.has(prefix) {
+            eprintln("error: the name '{prefix}' is already used for '{self.prefixes.get(prefix)?}'; pick another name for '{path}'")
+            return error.CompileFailed
+        }
+        self.seen.put(path, prefix)?
+        if prefix.len > 0 { self.prefixes.put(prefix, path)? }
         let src = read_file(self.a, path) catch |e| {
             eprintln("error: cannot read '{path}': {e}")
             return error.CompileFailed
         }
-        self.load_source(src, path)?
+        self.load_source(src, path, prefix)?
     }
 }
 
@@ -185,15 +200,15 @@ fn compile(a: Allocator) !i32 {
 
     let t0 = now_ns()
     let g = new_gen(a, safety)?
-    var loader = Loader{ a: a, g: g, seen: Map[bool].init(a) }
+    var loader = Loader{ a: a, g: g, seen: Map[str].init(a), prefixes: Map[str].init(a) }
     diag_prelude = PRELUDE
     g.test_mode = is_test
     g.test_root = src_file
-    loader.load_source(PRELUDE, "<std>") catch {
+    loader.load_source(PRELUDE, "<std>", "") catch {
         g.flush_diag()
         return 1
     }
-    loader.load_file(src_file) catch {
+    loader.load_file(src_file, "") catch {
         g.flush_diag()
         return 1
     }

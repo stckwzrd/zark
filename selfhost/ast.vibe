@@ -118,6 +118,7 @@ struct Decl {
     en: *EnumDecl
     c: *ConstDecl
     path: str               // Import path / Alias name
+    alias: str              // Import `as` name
     ty: *TypeExpr           // Alias target
     line: i64
 }

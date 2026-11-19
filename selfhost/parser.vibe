@@ -8,10 +8,11 @@ struct Parser {
     pos: i64
     file: str
     no_struct: bool
+    aliases: List[str]
 }
 
 fn new_parser(a: Allocator, toks: []Token, file: str) Parser {
-    return Parser{ a: a, toks: toks, pos: 0, file: file, no_struct: false }
+    return Parser{ a: a, toks: toks, pos: 0, file: file, no_struct: false, aliases: List[str].init(a) }
 }
 
 fn prec(t: Tag) i64 {
@@ -37,7 +38,10 @@ fn starts_type(t: Tag) bool {
 }
 
 fn is_type_like(e: *Expr) bool {
-    if e.k == .Ident { return e.name.len > 0 && is_upper(e.name[0]) }
+    if e.k == .Ident {
+        let dot = str_rfind_byte(e.name, '.')
+        return e.name.len > dot + 1 && is_upper(e.name[dot + 1])
+    }
     if e.k == .Index { return is_type_like(e.l) }
     return false
 }
@@ -158,6 +162,10 @@ impl Parser {
             .kw_import => {
                 _ = self.advance()
                 d.path = self.expect(.str_lit)?.text
+                if self.eat(.kw_as) {
+                    d.alias = self.expect(.ident)?.text
+                    self.aliases.push(d.alias)?
+                }
             }
             .kw_type => {
                 _ = self.advance()
@@ -328,7 +336,7 @@ impl Parser {
             t.elem = self.parse_type()?
             return t
         }
-        let t = self.te_name(self.expect(.ident)?.text)?
+        let t = self.te_name(self.qualified(self.expect(.ident)?.text)?)?
         if self.at(.lbracket) {
             _ = self.advance()
             while !self.at(.rbracket) {
@@ -591,6 +599,20 @@ impl Parser {
         return error.ParseFailed
     }
 
+    fn is_alias(self, name: str) bool {
+        for x in self.aliases { if x == name { return true } }
+        return false
+    }
+
+    fn qualified(self, name: str) !str {
+        if !self.is_alias(name) || !self.at(.dot) || self.peek_at(1).tag != .ident { return name }
+        _ = self.advance()
+        let member = self.advance().text
+        var b = List[u8].init(self.a)
+        sprint(&b, "{name}.{member}")?
+        return b.slice()
+    }
+
     fn parse_postfix(self) !*Expr {
         var e = self.parse_primary()?
         while true {
@@ -741,7 +763,7 @@ impl Parser {
             .kw_null => return self.ex(.NullLit, t)
             .ident => {
                 let e = self.ex(.Ident, t)?
-                e.name = t.text
+                e.name = self.qualified(t.text)?
                 return e
             }
             .dot => {
@@ -870,6 +892,7 @@ impl Parser {
                     toks.items[k].off += base
                 }
                 var sub = new_parser(self.a, toks.slice(), self.file)
+                sub.aliases = self.aliases
                 let x = sub.parse_expr()?
                 if !sub.at(.semi) && !sub.at(.eof) {
                     eprintln("{self.file}:{t.line}: error: unexpected tokens in interpolation '{inner}'")
