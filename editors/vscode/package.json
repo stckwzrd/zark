@@ -1,0 +1,64 @@
+{
+  "name": "vibe-lang",
+  "displayName": "Vibe",
+  "description": "Vibe language support: syntax, errors from the compiler, format, run, test, outline",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages", "Snippets", "Formatters"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:vibe"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "vibe",
+        "aliases": ["Vibe", "vibe"],
+        "extensions": [".vibe"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      { "language": "vibe", "scopeName": "source.vibe", "path": "./syntaxes/vibe.tmLanguage.json" }
+    ],
+    "snippets": [{ "language": "vibe", "path": "./snippets/vibe.json" }],
+    "configurationDefaults": {
+      "[vibe]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "local.vibe-lang"
+      }
+    },
+    "configuration": {
+      "title": "Vibe",
+      "properties": {
+        "vibe.path": {
+          "type": "string",
+          "default": "vibe",
+          "description": "Path to the vibe compiler."
+        },
+        "vibe.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the compiler frontend when a file is opened or saved and show its errors in the editor."
+        }
+      }
+    },
+    "commands": [
+      { "command": "vibe.run", "title": "Vibe: Run File", "icon": "$(play)" },
+      { "command": "vibe.test", "title": "Vibe: Test File", "icon": "$(beaker)" },
+      { "command": "vibe.build", "title": "Vibe: Build File" },
+      { "command": "vibe.check", "title": "Vibe: Check File" }
+    ],
+    "menus": {
+      "editor/title/run": [
+        { "command": "vibe.run", "when": "resourceLangId == vibe", "group": "navigation" },
+        { "command": "vibe.test", "when": "resourceLangId == vibe", "group": "navigation" }
+      ]
+    },
+    "keybindings": [
+      { "command": "vibe.run", "key": "ctrl+alt+r", "when": "editorLangId == vibe" },
+      { "command": "vibe.test", "key": "ctrl+alt+t", "when": "editorLangId == vibe" }
+    ]
+  }
+}

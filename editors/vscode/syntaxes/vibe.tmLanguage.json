@@ -1,0 +1,108 @@
+{
+  "name": "Vibe",
+  "scopeName": "source.vibe",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#chars" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#test-block" },
+    { "include": "#keywords" },
+    { "include": "#builtins" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#enum-literal" },
+    { "include": "#calls" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.vibe", "match": "//.*$" },
+        { "name": "comment.block.vibe", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.vibe",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.vibe", "match": "\\\\(x[0-9a-fA-F]{2}|[ntr0e\\\\\"'{}])" },
+        { "name": "constant.character.escape.vibe", "match": "\\{\\{|\\}\\}" },
+        {
+          "name": "meta.interpolation.vibe",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.vibe" } },
+          "endCaptures": { "0": { "name": "punctuation.section.embedded.end.vibe" } },
+          "patterns": [
+            { "name": "constant.other.format-spec.vibe", "match": ":[-+#0-9.a-zA-Z]*(?=\\})" },
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.vibe",
+      "match": "'(\\\\.|[^'\\\\])'"
+    },
+    "numbers": {
+      "name": "constant.numeric.vibe",
+      "match": "\\b(0x[0-9a-fA-F_]+|0b[01_]+|0o[0-7_]+|[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9]+)?)\\b"
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "storage.type.function.vibe" }, "2": { "name": "entity.name.function.vibe" } }
+        },
+        {
+          "match": "\\b(struct|union|enum|impl|type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "storage.type.vibe" }, "2": { "name": "entity.name.type.vibe" } }
+        }
+      ]
+    },
+    "test-block": {
+      "match": "^\\s*(test)\\s+(\"[^\"]*\")",
+      "captures": { "1": { "name": "keyword.other.test.vibe" }, "2": { "name": "entity.name.function.test.vibe" } }
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.vibe", "match": "\\b(if|else|while|for|in|return|break|continue|match|defer|errdefer|catch|orelse|is)\\b" },
+        { "name": "keyword.operator.word.vibe", "match": "\\b(as|sizeof|alignof)\\b" },
+        { "name": "storage.type.vibe", "match": "\\b(fn|let|var|const|struct|enum|union|impl|type)\\b" },
+        { "name": "storage.modifier.vibe", "match": "\\b(extern|export)\\b" },
+        { "name": "keyword.control.import.vibe", "match": "\\bimport\\b" },
+        { "name": "constant.language.vibe", "match": "\\b(true|false|null)\\b" },
+        { "name": "constant.other.error.vibe", "match": "\\berror\\.[A-Za-z_][A-Za-z0-9_]*" }
+      ]
+    },
+    "builtins": {
+      "name": "support.function.builtin.vibe",
+      "match": "\\b(print|println|eprint|eprintln|sprint|bprint|panic|assert|embed)\\b(?=\\s*\\()"
+    },
+    "types": {
+      "patterns": [
+        { "name": "storage.type.primitive.vibe", "match": "\\b(i8|i16|i32|i64|isize|u8|u16|u32|u64|usize|f32|f64|bool|void|str)\\b" },
+        { "name": "entity.name.type.vibe", "match": "\\b[A-Z][A-Za-z0-9_]*[a-z][A-Za-z0-9_]*\\b|\\b[A-Z]\\b|\\b[A-Z][A-Z]\\b" }
+      ]
+    },
+    "constants": {
+      "name": "constant.other.vibe",
+      "match": "\\b[A-Z][A-Z0-9_]{2,}\\b"
+    },
+    "enum-literal": {
+      "name": "constant.other.enum-member.vibe",
+      "match": "(?<![A-Za-z0-9_\\)\\]])\\.[A-Za-z_][A-Za-z0-9_]*"
+    },
+    "calls": {
+      "name": "entity.name.function.call.vibe",
+      "match": "\\b[a-z_][A-Za-z0-9_]*(?=\\s*(\\(|\\[[^\\]]*\\]\\s*\\())"
+    },
+    "operators": {
+      "name": "keyword.operator.vibe",
+      "match": "=>|==|!=|<=|>=|&&|\\|\\||<<=?|>>=?|\\.\\.\\.|\\.\\.|[-+*/%&|^]=?|[~!<>=?]"
+    }
+  }
+}

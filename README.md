@@ -64,6 +64,10 @@ VIBE=build/vibe tests/run.sh              # test suite
 | `-o out` | output binary |
 | `-- a b` | arguments for `vibe run` |
 
+## Editor support
+
+`editors/vscode` is a VS Code / code-oss extension: highlighting, compiler errors in the editor (on open and save), format on save through `vibe fmt`, run and test buttons, outline, go to definition and snippets. Install it with `python3 editors/vscode/pack.py out.vsix && code-oss --install-extension out.vsix`. It calls `vibe` from `PATH` (or `~/.local/bin/vibe`); change it with the `vibe.path` setting.
+
 ## How it differs from Zig
 
 | | Zig | Vibe |
