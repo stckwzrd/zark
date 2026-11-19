@@ -1004,6 +1004,9 @@ struct Native {
             _ = c.eat('=');
         }
         ins.op = c.word();
+        _ = c.eat_word("inbounds");
+        _ = c.eat_word("nsw");
+        _ = c.eat_word("nuw");
         const auto op = ins.op;
         if (op == "alloca") {
             ins.ty = this->ty(&c)?;

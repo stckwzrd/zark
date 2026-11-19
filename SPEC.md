@@ -160,6 +160,7 @@ Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` 
 - `volatile T`: a type qualifier for pointees, fields and variables (`volatile u32* p`, `volatile u32 ctrl;`). Every access through such an lvalue is emitted as a volatile load or store of the exact width of `T`. Type equality ignores `volatile`.
 - `packed struct` and `packed union`: fields without padding, alignment 1.
 - `asm<R>("template", "constraints", args...)` (`R` defaults to `void`): LLVM inline asm with `sideeffect`. Braces in the strings are written `\{` and `\}`. The native backend encodes the templates used by the prelude (`Cpu`, `Port`, `Atomic`) and rejects others with a message; `--llvm` accepts any.
+- `--fast` is `--release` with `nsw` on signed `+ - *`; signed overflow is then undefined. Array and slice indexing is always emitted with `inbounds`.
 - `--freestanding` links with `-nostdlib -static`, disables bounds checks, and accepts `-Wl,...`, `-T...`, `.S`, `.c`, `.o` arguments. An `export` function with a body replaces an `extern` declaration of the same name (for `memset`, `memcpy`).
 - Prelude: `Cpu`, `Port`, `Bits`, `Atomic`, `Spinlock`.
 

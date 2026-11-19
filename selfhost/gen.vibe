@@ -57,6 +57,7 @@ struct FnInst {
 struct Gen {
     Allocator a;
     bool safety;
+    bool fast;
 
     Map<FnDecl*> fns;
     Map<FnDecl*> methods;

@@ -637,7 +637,7 @@ bool has_defaults(Type* t) {
         }
         if (base.ty.k == .Array) {
             this->bounds_check(iv.v, this->num(base.ty.len as i64)?, e.line)?;
-            sprint(this->ins()?, "  {t} = getelementptr {this->llty(base.ty)?}, ptr {base.v}, i64 0, i64 {iv.v}\n")?;
+            sprint(this->ins()?, "  {t} = getelementptr inbounds {this->llty(base.ty)?}, ptr {base.v}, i64 0, i64 {iv.v}\n")?;
             return Addr{ .ty = base.ty.elem, .v = t, .imm = base.imm };
         }
         if (base.ty.k == .Slice) {
@@ -645,7 +645,7 @@ bool has_defaults(Type* t) {
             const auto p = this->extract(sv, 0, this->t_ptr_u8)?;
             const auto l = this->extract(sv, 1, this->t_i64)?;
             this->bounds_check(iv.v, l.v, e.line)?;
-            sprint(this->ins()?, "  {t} = getelementptr {this->llty(base.ty.elem)?}, ptr {p.v}, i64 {iv.v}\n")?;
+            sprint(this->ins()?, "  {t} = getelementptr inbounds {this->llty(base.ty.elem)?}, ptr {p.v}, i64 {iv.v}\n")?;
             return Addr{ .ty = base.ty.elem, .v = t, .imm = false };
         }
         this->err(e.line); eprintln("cannot index '{this->type_name(base.ty)?}'");
@@ -883,9 +883,9 @@ str operator_name(Tag t) {
     if (l.ty.k == .Int) {
         const auto sg = l.ty.signed;
         match op {
-            .plus => ins = "add";
-            .minus => ins = "sub";
-            .star => ins = "mul";
+            .plus => { if (sg && this->fast) { ins = "add nsw"; } else { ins = "add"; } }
+            .minus => { if (sg && this->fast) { ins = "sub nsw"; } else { ins = "sub"; } }
+            .star => { if (sg && this->fast) { ins = "mul nsw"; } else { ins = "mul"; } }
             .slash => { if (sg) { ins = "sdiv"; } else { ins = "udiv"; } }
             .percent => { if (sg) { ins = "srem"; } else { ins = "urem"; } }
             .amp => ins = "and";
