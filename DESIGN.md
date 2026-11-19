@@ -90,10 +90,13 @@ S1 as built, and where it differs from the plan:
 - A designated literal (`Point{ .x = 1 }`) zero-fills the rest, as in C++.
 - `vibe fmt` keeps new-syntax files stable (spacing around `<`, `>`, `::`, `->`, `*` follows the source); a real printer is part of S2.
 
+Migration notes (S2/S3a): the compiler (11.8k lines), std, examples and tests were converted by the script and re-formatted with `vibe fmt`; `bootstrap.sh`, all three backends, both fixed points and the no-magic check pass. Parser additions made on the way: methods and `template` members inside `struct`/`union`/`enum`, out-of-class definitions (`R Type::name(...)`, `template<T> R Type<T>::name(...)`), `for (auto [i, x] : seq)`, function-pointer declarations as statements, generic types in casts, explicit template arguments on method calls (`a.create<T>()`).
+
 ### Phase S checklist
 - [x] S1 parser accepts the new syntax (`selfhost/parser_new.vibe`, example `examples/cpp_style.vibe`, guide page `cpp-style.md`)
-- [ ] S2 `vibe fmt --to-new`
-- [ ] S3 migrate selfhost, std, examples, tests, guide
+- [x] S2 converter: `python3 tools/convert-syntax.py FILE...` rewrites old-syntax files in place (token based, keeps comments; run `vibe fmt` after it). It is a script, not a `vibe fmt` flag, because it is only needed once
+- [x] S3a migrate selfhost, std, examples, tests (done; every method of a struct that lives in another file is an out-of-class definition, `void Gen::gen_expr(...)`)
+- [ ] S3b migrate the guide (code blocks and the prose that explains `fn`/`let`/`var`/`impl`), README, SPEC examples
 - [ ] S4 remove the old syntax
 - [ ] S5 guide, editor grammar and snippets
 

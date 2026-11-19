@@ -34,6 +34,9 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 5. The compiler must not know std names (`tests/no_magic_names.sh`, run by `bootstrap.sh`). The protocol names it may use are listed in `SPEC.md` section 6.
 4. The lexer output must match `tests/tokens/*.tok`. After an intended lexer change, regenerate them with `build/vibe tokens FILE > tests/tokens/NAME.tok` (NAME is the path with `/` replaced by `_`) and review the diff.
 
+## Syntax
+The repository is written in the C++-style syntax (type-first declarations, `template<T>`, methods inside `struct` or out of class as `R Type::name()`, `[&k](T x) -> R {}`). The old `fn`/`let`/`var`/`impl` spelling is still accepted until Phase S4. `python3 tools/convert-syntax.py FILE` converts old code.
+
 ## Gotchas when writing Vibe (the compiler is written in it too)
 - `{` inside a string starts interpolation. For a literal brace write `{{` / `}}`. IR text like `"{{ ptr, i64 }}"` is the usual case.
 - A struct literal must list all fields, or end with `..` to zero the rest. `T{` is only recognized when the type name starts with an uppercase letter.
