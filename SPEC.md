@@ -6,18 +6,18 @@ This file is the contract for the self-hosted compiler: anything written here mu
 
 1. **No hidden allocations.** No language construct and no prelude function touches the heap on its own. Memory is taken only through an `Allocator` that you pass explicitly. String interpolation is a compile-time format string handed to `printf`/`snprintf`.
 2. **No hidden control flow.** The only implicit things are `defer`/`errdefer` (written next to the code they affect), bounds checks (removed with `--release`), and `==` on `str` (an inline `memcmp`).
-3. **One way to do each thing.** `let`/`var` for bindings, `?` to propagate errors, `catch` to handle them, `match` to branch on enums and unions.
-4. **Conversions are visible.** Implicit conversions are limited to lossless int widening, `T` → `!T`, `error.X` → `!T`, `null` → pointer/fn, and `*T` ↔ `*void`. Everything else is `as`.
-5. **What you see is the layout.** Structs are laid out like C structs. A union is `{ i32 tag, payload }`. `str` is `{ *u8, i64 }`.
+3. **One way to do each thing.** `auto`/`const` for bindings, `?` to propagate errors, `catch` to handle them, `match` to branch on enums and unions.
+4. **Conversions are visible.** Implicit conversions are limited to lossless int widening, `T` → `!T`, `error.X` → `!T`, `null` → pointer/fn, and `T*` ↔ `void*`. Everything else is `as`.
+5. **What you see is the layout.** Structs are laid out like C structs. A union is `{ i32 tag, payload }`. `str` is `{ u8*, i64 }`.
 
-## C++-style syntax
+## Syntax overview
 
-Every construct also has a C++-style spelling (type-first declarations, `template<T>`, methods inside `struct`, `[&k](T x) -> R {}`, `for (T i : a..b)`, `::`, `->`, `nullptr`, `++`, `--`, `|= &= ^= <<= >>=`); both spellings produce the same AST. See the guide page `cpp-style` and `DESIGN.md` (Phase S).
+The syntax follows C++: type-first declarations (`i64 x = 1;`, `auto`, `const`), `template<T>` for generic functions, `struct Pair<A, B>` for generic types, methods declared inside the `struct` (or out of class as `R Type::name()`), `[&k](T x) -> R {}` for closures, `for (T x : seq)`, `::` and `->` as aliases of `.`, `nullptr` as `null`, and `++ -- |= &= ^= <<= >>=`. Every statement ends with `;`. See the guide page `cpp-style`.
 
 ## 1. Lexical
 
 - Comments: `// ...` and `/* ... */`.
-- A newline ends a statement when the line ends with an identifier, a literal, `)`, `]`, `}`, `?`, `return`, `break`, `continue`, `true`, `false` or `null`. Inside `(` and `[` newlines are ignored. `;` can also be written explicitly.
+- A statement ends with `;`. It is not written after the `}` that closes a block, a function, a `struct`, an `enum`, a `union`, an `if`, a `while`, a `for` or a `match`. Newlines mean nothing.
 - `} else` may go on the next line.
 - Literals: `42`, `0xff`, `0b101`, `0o17`, `1_000`, `3.14`, `1e9`, `'a'` (a `u8`), `"text"`, `true`, `false`, `null`.
 - Escapes: `\n \t \r \0 \e \\ \" \' \{ \}`.
@@ -32,15 +32,15 @@ Every construct also has a C++-style spelling (type-first declarations, `templat
 | `f32 f64` | floats | `float`/`double` |
 | `bool` | | `i1` |
 | `void` | | |
-| `*T` | pointer, supports arithmetic `p + n` and `p[i]` | `ptr` |
-| `*void` | opaque "any pointer", converts to and from every `*T` | `ptr` |
-| `[]T` | slice `{ptr, len}`, bounds-checked | `{ptr, i64}` |
-| `str` | the same as `[]u8` | `{ptr, i64}` |
-| `[N]T` | fixed array, `N` is a compile-time constant | `[N x T]` |
+| `T*` | pointer, supports arithmetic `p + n` and `p[i]` | `ptr` |
+| `void*` | opaque "any pointer", converts to and from every `T*` | `ptr` |
+| `T[]` | slice `{ptr, len}`, bounds-checked | `{ptr, i64}` |
+| `str` | the same as `u8[]` | `{ptr, i64}` |
+| `T[N]` | fixed array, `N` is a compile-time constant | `[N x T]` |
 | `!T` | error union | `{i32, T}` |
-| `fn(A, B) R` | function pointer (`R` may be omitted for void) | `ptr` |
-| `struct S[T..]` | product type | named struct |
-| `union U[T..]` | tagged union | `{i32, [n x i64]}` |
+| `fn(A, B) -> R` | function pointer | `ptr` |
+| `struct S<T..>` | product type | named struct |
+| `union U<T..>` | tagged union | `{i32, [n x i64]}` |
 | `enum E` | plain tag | `i32` |
 
 Integer literals take their type from context and default to `i64`. Float literals default to `f64`.
@@ -48,35 +48,35 @@ Integer literals take their type from context and default to `i64`. Float litera
 ## 3. Declarations
 
 ```vibe
-import "path.vibe"                   // relative to the current file, loaded once
-import "net.vibe" as net             // namespaced: net.connect(...), net.Conn{ ... }
-type Bytes = []u8                    // type alias (any type expression)
-const N = 4 * 2                      // compile-time constant (inlined)
-var counter: i64 = 0                 // global variable, constant initializer
-struct P[T] { x: T, y: T }
-union Shape { Circle: f64, Rect: P[f64], Empty }
-enum Color { Red, Green }
-fn name[T](a: T, b: i64) !T { ... }  // generic, monomorphized on use
-fn sort[T: Ord](s: []T) { ... }      // constrained generic, checked at the call
-extern fn puts(s: *u8) i32           // C symbol
-extern fn printf(fmt: *u8, ...) i32  // C varargs
-export fn cb(x: i64) i64 { ... }     // emitted under its C name
-impl P[T] {
-    fn new(x: T, y: T) Self { ... }  // static: P[i64].new(1, 2)
-    fn len(self) T { ... }           // `self` alone means `self: *Self`
-    fn by_value(self: Self) T { ... }
+import "path.vibe";                    // relative to the current file, loaded once
+import "net.vibe" as net;              // namespaced: net::connect(...), net::Conn{ ... }
+type Bytes = u8[];                     // type alias (any type expression)
+const auto N = 4 * 2;                  // compile-time constant (inlined)
+i64 counter = 0;                       // global variable, constant initializer
+struct P<T> {
+    T x;
+    T y;
+    static Self make(T x, T y) { ... }  // static: P<i64>::make(1, 2)
+    T len() { ... }                     // `this` is a pointer to the object
 }
+union Shape { f64 Circle; P<f64> Rect; Empty; }
+enum Color { Red, Green }
+template<T> !T name(T a, i64 b) { ... }       // generic, monomorphized on use
+template<T: Ord> void sort(T[] s) { ... }     // constrained generic, checked at the call
+extern i32 puts(u8* s);                // C symbol
+extern i32 printf(u8* fmt, ...);       // C varargs
+export i64 cb(i64 x) { ... }           // emitted under its C name
 ```
 
 Only reachable functions are compiled. Generic code is type-checked when it is instantiated; constraints (`Eq`, `Ord`, `Num`, `Int`, `Float`) are checked at the call or at the type instantiation, before the body is compiled.
 
 ### Modules
 
-`import "file.vibe" as name` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name.`. Inside the file its own names keep working unprefixed. `extern` and `export` names stay global. Rules, all checked by the compiler:
+`import "file.vibe" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. `extern` and `export` names stay global. Rules, all checked by the compiler:
 
 - A file is imported under one name for the whole program, and a name belongs to one file.
 - A plain `import "file.vibe"` still puts everything in the global namespace.
-- The alias is reserved in the importing file: `net.x` always means the module member.
+- The alias is reserved in the importing file: `net::x` always means the module member.
 
 ### Tests
 
@@ -84,9 +84,9 @@ Only reachable functions are compiled. Generic code is type-checked when it is i
 
 ## 4. Statements
 
-`let x = e`, `let x: T = e`, `var x = e`, `var x: T` (zeroed); `x = e` and `x op= e`; `_ = e` discards a value; `if c {} else if d {} else {}`; `while c {}`; `for i in a..b {}` (half-open); `for x in seq {}` and `for i, x in seq {}` over arrays, slices and anything with `slice()`; `break`, `continue`, `return [e]`; `defer stmt`, `errdefer stmt`; `match`.
+`T x = e;`, `auto x = e;`, `const T x = e;`, `T x;` (zeroed); `x = e;` and `x op= e;`; `x++;` and `x--;`; `_ = e;` discards a value; `if (c) {} else if (d) {} else {}`; `while (c) {}`; `for (auto i : a..b) {}` (half-open); `for (auto x : seq) {}` and `for (auto [i, x] : seq) {}` over arrays, slices and anything with `slice()`; `break`, `continue`, `return [e]`; `defer stmt`, `errdefer stmt`; `match`.
 
-`let` forbids reassigning the binding and changing it through fields or array elements. Data reached through a pointer or slice can still be changed.
+`const` forbids reassigning the variable and changing it through fields or array elements. Data reached through a pointer or slice can still be changed. Variables and parameters are mutable by default; a parameter is a copy.
 
 ## 5. Expressions
 
@@ -94,28 +94,28 @@ Precedence, lowest to highest:
 
 `catch` < `||` < `&&` < `== != < <= > >=` < `|` < `^` < `&` < `<< >>` < `+ -` < `* / %` < `as` < unary `- ! ~ & *` < postfix `() [] [a..b] .f ?`
 
-`as` is weaker than prefix operators, as in Rust: `&x as *T` means `(&x) as *T`, and `-a as i64` means `(-a) as i64`.
+`as` is weaker than prefix operators: `&x as *T` means `(&x) as *T`, and `-a as i64` means `(-a) as i64`.
 
-- `T{ f: e, ... }` lists every field. Write `T{ f: e, .. }` to zero the rest, or `T{ .. }` for an all-zero value.
-- `[a, b, c]` gives an array `[3]T`. With an expected `[]T` it becomes a slice over stack storage.
+- `T{ .f = e, ... }` sets the listed fields and zeroes the rest; `T{}` is an all-zero value.
+- `[a, b, c]` gives an array `T[3]`. With an expected `T[]` it becomes a slice over stack storage.
 - `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]` slice arrays, slices and pointers. Pointers need an end index.
-- `e as T` covers int↔int, int↔float, float↔float, ptr↔ptr, ptr↔int, enum↔int and `[]T` → `*T`.
+- `e as T` covers int↔int, int↔float, float↔float, ptr↔ptr, ptr↔int, enum↔int and `T[]` → `T*`.
 - `sizeof(T)` and `alignof(T)` are compile-time `u64` values.
 - `match v { pat => expr, ... }` is also an expression. Arms are expressions or blocks whose last statement is the value, or leave with `return`/`break`/`continue`. All values are converted to one type (the expected type, otherwise the first arm's). An expression `match` must be exhaustive: cover every variant or add `_`.
-- `?T` means `Option[T]`. `null` and a plain `T` convert to `?T` implicitly; `.Some(x)` and `.None` also work. `a orelse b` yields the value of `a`, or `b` when it is empty; `b` can also be `return`, `break` or `continue`.
-- `fn[a, b](x: i64) i64 { ... }` is a closure. The listed variables are captured by reference: the closure keeps pointers to them in a context on the stack of the function that wrote the literal, so it must not outlive that function. Its type is `fn[](i64) i64`. A closure is called like a function and costs one indirect call.
+- `?T` means `Option<T>`. `null` and a plain `T` convert to `?T` implicitly; `.Some(x)` and `.None` also work. `a orelse b` yields the value of `a`, or `b` when it is empty; `b` can also be `return`, `break` or `continue`.
+- `[&a, &b](i64 x) -> i64 { ... }` is a closure. The listed variables are captured by reference: the closure keeps pointers to them in a context on the stack of the function that wrote the literal, so it must not outlive that function. Its type is `fn[](i64) -> i64`. A closure is called like a function and costs one indirect call.
 - `.Name` is an enum value or payload-less union variant, typed by context. `.Name(e)` is a union variant with a payload, also typed by context.
-- `Type.Variant` and `Type.Variant(e)` are the explicit forms.
-- `x is .Variant` (or `x is Type.Variant`) is a `bool` test of an enum value or union tag.
+- `Type::Variant` and `Type::Variant(e)` are the explicit forms.
+- `x is .Variant` (or `x is Type::Variant`) is a `bool` test of an enum value or union tag.
 
 ### Errors
 
 ```vibe
-fn f() !i64 { if bad { return error.Bad } return 1 }
-let a = f()?                           // on error: run errdefers + defers, return the error
-let b = f() catch 0                    // default value
-let c = f() catch |e| { log(e); -1 }   // a block whose last expression is the value
-f() catch |e| { return e }             // or leave
+!i64 f() { if (bad) { return error.Bad; } return 1; }
+auto a = f()?;                          // on error: run errdefers + defers, return the error
+auto b = f() catch 0;                   // default value
+auto c = f() catch |e| { log(e); -1 };  // a block whose last expression is the value
+f() catch |e| { return e; }             // or leave
 ```
 
 Ignoring an error union is a compile error. `errdefer` runs on every error return, whether the error is `return error.X`, `?`, or a `return g()` that turns out to be an error at runtime. When `main` returns `!void`, an unhandled error prints `error: Name` and exits with code 1.
@@ -124,10 +124,10 @@ Ignoring an error union is a compile error. `errdefer` runs on every error retur
 
 ```vibe
 match v {
-    1, 2 => stmt                  // ints, enums, str: equality
-    .Circle(r) => { ... }         // unions: binds the payload (read-only)
+    1, 2 => stmt;                  // ints, enums, str: equality
+    .Circle(r) => { ... }          // unions: binds the payload (read-only)
     .Empty => {}
-    _ => {}                       // anything else
+    _ => {}                        // anything else
 }
 ```
 
@@ -147,9 +147,9 @@ The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic
 
 A call whose callee has a last parameter of type `Fmt` receives **all remaining arguments** as one `Fmt` value: a string literal is parsed for `{expr}` / `{expr:spec}` holes, every other expression becomes one hole, and the pieces are joined by single spaces. A `Fmt` lives on the stack of the caller (no heap, no `printf`); it is only built at call sites. An interpolated string anywhere else is a compile error. If the only remaining argument already is a `Fmt`, it is passed through.
 
-The std defines, in plain Vibe: `print`, `println`, `eprint`, `eprintln`, `bprint(buf: []u8, f: Fmt) !str` (`error.NoSpace` if it does not fit, one byte is kept for a NUL), `sprint(out: *List[u8], f: Fmt) !void`, and `Writer { ctx, write_fn }`. Your own functions can take a `Fmt` too. Arguments are evaluated before the fixed arguments of the same call.
+The std defines, in plain Vibe: `print`, `println`, `eprint`, `eprintln`, `!str bprint(u8[] buf, Fmt f)` (`error.NoSpace` if it does not fit, one byte is kept for a NUL), `!void sprint(List<u8>* out, Fmt f)`, and `Writer { ctx, write_fn }`. Your own functions can take a `Fmt` too. Arguments are evaluated before the fixed arguments of the same call.
 
-Each hole is formatted by a generated thunk that calls the std hooks `__fmt_int`, `__fmt_uint`, `__fmt_float`, `__fmt_bool`, `__fmt_str`, `__fmt_ptr`, `__fmt_lit`. A struct, union or enum that has a method `fmt(self, w: *Writer, spec: str) !void` is formatted by it; otherwise the compiler derives the output below.
+Each hole is formatted by a generated thunk that calls the std hooks `__fmt_int`, `__fmt_uint`, `__fmt_float`, `__fmt_bool`, `__fmt_str`, `__fmt_ptr`, `__fmt_lit`. A struct, union or enum that has a method `!void fmt(Writer* w, str spec)` is formatted by it; otherwise the compiler derives the output below.
 
 Format specs: `{v:x}` `{v:08X}` `{v:5}` `{v:-10}` `{v:+}` `{v:.3}` (string precision truncates) `{v:e}` `{c:c}`: flags `-+ 0#`, width, `.precision`, then an optional conversion letter. A spec that does not fit the type prints `<bad format>` at run time.
 
@@ -159,26 +159,26 @@ Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` 
 
 ```vibe
 struct Allocator {
-    ctx: *void
-    alloc_fn: fn(*void, u64, u64) *void   // (ctx, size, align) -> zeroed memory or null
-    free_fn: fn(*void, *void, u64)        // (ctx, ptr, size)
+    void* ctx;
+    fn(void*, u64, u64) -> void* alloc_fn;   // (ctx, size, align) -> zeroed memory or null
+    fn(void*, void*, u64) free_fn;        // (ctx, ptr, size)
 }
-a.alloc[T](n) ![]T    a.free(slice)    a.create[T]() !*T    a.destroy(p)    a.dup(s) !str
+!T[] a.alloc<T>(i64 n)    void a.free(T[] slice)    !T* a.create<T>()    void a.destroy(T* p)    !str a.dup(str s)
 ```
 
 The prelude provides two allocators:
 - `c_allocator()` uses `calloc`/`free`.
-- `FixedBuf.init(buf).allocator()` is a bump allocator over memory you own. It never uses the heap and has `reset()` and `remaining()`.
-- `Arena.init(parent).allocator()` is a growable bump allocator. Its chunks come from `parent`, and `deinit()` releases everything at once.
+- `FixedBuf::init(buf).allocator()` is a bump allocator over memory you own. It never uses the heap and has `reset()` and `remaining()`.
+- `Arena::init(parent).allocator()` is a growable bump allocator. Its chunks come from `parent`, and `deinit()` releases everything at once.
 
 You can write your own allocator by filling in the two function pointers.
 
-Containers such as `List[T]` and `Map[V]` take the allocator in `init` and release memory in `deinit`. Every growing operation returns `!void`, so running out of memory is an ordinary error you handle.
+Containers such as `List<T>` and `Map<V>` take the allocator in `init` and release memory in `deinit`. Every growing operation returns `!void`, so running out of memory is an ordinary error you handle.
 
 ## 8. C interop
 
-- `extern fn` declares a C function and `export fn` defines one.
-- `*void` is `void*`. String literals pass as `*u8` (they are NUL-terminated). Any other `str` must be passed as `s.ptr` explicitly.
+- `extern` declares a C function and `export` defines one.
+- `void*` is C's `void*`. String literals pass as `u8*` (they are NUL-terminated). Any other `str` must be passed as `s.ptr` explicitly.
 - C varargs follow the usual promotions; slices are rejected.
 - Structs are passed by pointer. By-value passing is not supported yet.
 - `vibe run main.vibe x.c y.cpp lib.o -lfoo` compiles and links everything, using `clang++` if C++ is present.
@@ -188,8 +188,8 @@ Containers such as `List[T]` and `Map[V]` take the allocator in `init` and relea
 | Area | Functions |
 |---|---|
 | Files | `read_file(a, path) !str`, `write_file(path, data) !void`, `file_exists(path)` |
-| Processes | `run(a, argv: []str) !i32` (fork/execvp/waitpid; returns the exit code), `env(name) !str`, `arg_count()`, `arg(i)` |
-| C strings | `to_cstr(buf, s) !*u8` (no allocation), `a.dupz(s) !*u8`, `cstr(p) str` |
+| Processes | `!i32 run(a, str[] argv)` (fork/execvp/waitpid; returns the exit code), `env(name) !str`, `arg_count()`, `arg(i)` |
+| C strings | `!u8* to_cstr(buf, s)` (no allocation), `!u8* a.dupz(s)`, `cstr(p) str` |
 | Numbers | `parse_int`, `parse_int_radix(s, radix) !u64` (radix 0 = auto 0x/0b/0o), `parse_float`, `bits_f64`, `f64_from_bits` |
 | Strings | `str_find`, `str_find_byte`, `str_rfind_byte`, `str_trim`, `str_starts_with`, `str_ends_with`, `is_digit/is_alpha/is_alnum/is_hex/is_upper` |
 

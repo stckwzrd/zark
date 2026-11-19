@@ -2,14 +2,14 @@
 title: Взаимодействие с C и C++
 order: 30
 section: Интероп и инструменты
-description: extern fn, export fn, строки и указатели на границе с C, подключение .c, .cpp и библиотек, структуры, колбэки и фасад extern "C" в Vibe
+description: extern, export, строки и указатели на границе с C, подключение .c, .cpp и библиотек, структуры, колбэки и фасад extern "C" в Vibe
 ---
 
 Vibe не нужен отдельный «слой привязки»: C-функцию объявляют одной строкой, а C-файл передают компилятору в командной строке. Здесь собрано всё, что нужно на границе.
 
-## Вызов C из Vibe: `extern fn`
+## Вызов C из Vibe: `extern`
 
-`extern fn` объявляет функцию, которая живёт снаружи. Сигнатура пишется в терминах Vibe, а соответствие с C простое:
+`extern` объявляет функцию, которая живёт снаружи. Сигнатура пишется в терминах Vibe, а соответствие с C простое:
 
 | C | Vibe |
 |---|---|
@@ -19,48 +19,48 @@ Vibe не нужен отдельный «слой привязки»: C-фун�
 | `size_t`, `uint64_t` | `u64` |
 | `char`, `uint8_t` | `u8` |
 | `double` / `float` | `f64` / `f32` |
-| `char *`, `const char *` | `*u8` |
-| `void *` | `*void` |
-| любой `T *` | `*T` |
+| `char *`, `const char *` | `u8*` |
+| `void *` | `void*` |
+| любой `T *` | `T*` |
 | `void` (результат) | результат не пишется |
 | `...` | `...` |
 
 ```vibe run
-extern fn puts(s: *u8) i32
-extern fn atoi(s: *u8) i32
-extern fn strlen(s: *u8) u64
+extern i32 puts(u8* s);
+extern i32 atoi(u8* s);
+extern u64 strlen(u8* s);
 
-fn main() {
-    puts("привет из C")
-    println(atoi("41") + 1, strlen("abcd"))
+void main() {
+    puts("привет из C");
+    println(atoi("41") + 1, strlen("abcd"));
 }
 ```
 
 Функции libc, которые часто нужны, уже объявлены в прелюдии (`printf`, `malloc`, `calloc`, `free`, `exit`, `memcpy`, `memset`, `strlen`, `sqrt`, `sin`, `cos`, `pow`, `floor`, `fopen`, `fork` и т. д.). Их можно просто вызывать, а объявлять заново не обязательно.
 
-> **Ловушка.** Если вы объявите `extern fn` с именем, которое уже занято **функцией Vibe** из прелюдии (`abs`, `min`, `max`, `sort`), будет ошибка «duplicate function». Выберите другой способ или импортируйте C-версию в обёртку с другим именем.
+> **Ловушка.** Если вы объявите `extern` с именем, которое уже занято **функцией Vibe** из прелюдии (`abs`, `min`, `max`, `sort`), будет ошибка «duplicate function». Выберите другой способ или импортируйте C-версию в обёртку с другим именем.
 
 ## Строки на границе
 
-Литерал `"..."` всегда заканчивается нулевым байтом и поэтому подходит как `*u8` (то есть `const char *`):
+Литерал `"..."` всегда заканчивается нулевым байтом и поэтому подходит как `u8*` (то есть `const char *`):
 
 ```vibe run
-extern fn puts(s: *u8) i32
+extern i32 puts(u8* s);
 
-fn main() {
-    puts("литерал: можно передавать как есть")
+void main() {
+    puts("литерал: можно передавать как есть");
 }
 ```
 
 Любой другой `str` (срез) ни на что не заканчивается и **не годится** как C-строка. Тип `str` — это `{ ptr, len }`, и в C уходит только `s.ptr`, который читается до нулевого байта:
 
 ```vibe run
-extern fn puts(s: *u8) i32
+extern i32 puts(u8* s);
 
-fn main() {
-    let name = "abc"
-    let part = name[0..2]
-    puts(part.ptr)
+void main() {
+    const auto name = "abc";
+    const auto part = name[0..2];
+    puts(part.ptr);
 }
 ```
 
@@ -70,60 +70,60 @@ fn main() {
 - `a.dupz(s)` — копирует в куче через аллокатор.
 
 ```vibe run
-extern fn puts(s: *u8) i32
+extern i32 puts(u8* s);
 
-fn main() !void {
-    let name = "abcdef"
-    let part = name[0..3]
+!void main() {
+    const auto name = "abcdef";
+    const auto part = name[0..3];
 
-    var buf: [16]u8
-    let c1 = to_cstr(buf[..], part)?
-    puts(c1)
+    u8[16] buf;
+    const auto c1 = to_cstr(buf[..], part)?;
+    puts(c1);
 
-    let a = c_allocator()
-    let c2 = a.dupz(part)?
-    defer a.free(c2[0..part.len + 1])
-    puts(c2)
+    const auto a = c_allocator();
+    const auto c2 = a.dupz(part)?;
+    defer a.free(c2[0..part.len + 1]);
+    puts(c2);
 }
 ```
 
-Обратно: `cstr(p)` превращает C-строку `*u8` в `str` (длина считается через `strlen`, копирования нет):
+Обратно: `cstr(p)` превращает C-строку `u8*` в `str` (длина считается через `strlen`, копирования нет):
 
 ```vibe run
-extern fn getenv(name: *u8) *u8
+extern u8* getenv(u8* name);
 
-fn main() {
-    let p = getenv("PATH")
-    if p != null {
-        let s = cstr(p)
-        println(s.len > 0)
+void main() {
+    const auto p = getenv("PATH");
+    if (p != null) {
+        const auto s = cstr(p);
+        println(s.len > 0);
     }
-    let q = getenv("ЭТО_НЕ_ЗАДАНО")
-    println(q == null)
+    const auto q = getenv("ЭТО_НЕ_ЗАДАНО");
+    println(q == null);
 }
 ```
 
 ## Указатели
 
-Любой указатель Vibe приводится к `*void` и обратно **неявно**; к другим типам указателей — через `as`:
+Любой указатель Vibe приводится к `void*` и обратно **неявно**; к другим типам указателей — через `as`:
 
 ```vibe run
-fn main() {
-    var x: i64 = 258
-    let p = &x as *u8
-    println(p[0], p[1])
+void main() {
+    i64 x = 258;
+    const auto p = &x as *u8;
+    println(p[0], p[1]);
 }
 ```
 
-Массив или срез превращается в указатель на первый элемент через `.ptr` (у срезов) или `&a[0]`/`as *T`:
+Массив или срез превращается в указатель на первый элемент через `.ptr` (у срезов) или `&a[0]`/`as T*`:
 
 ```vibe run
-extern fn memset(dst: *void, c: i32, n: u64) *void
+extern void* memset(void* dst, i32 c, u64 n);
 
-fn main() {
-    var buf: [8]u8
-    memset(buf[..].ptr as *void, 65, 4)
-    println(buf)
+void main() {
+    u8[8] buf;
+    memset(buf[..].ptr as *void, 65, 4);
+    println(buf);
 }
 ```
 
@@ -132,10 +132,10 @@ fn main() {
 `...` в `extern` допускает вариативные функции. Типы подтягиваются по обычным правилам C: целые расширяются, `f32` → `f64`. Срезы запрещены.
 
 ```vibe run
-extern fn printf(fmt: *u8, ...) i32
+extern i32 printf(u8* fmt, ...);
 
-fn main() {
-    printf("%d %s %.2f\n", 5, "str", 2.5)
+void main() {
+    printf("%d %s %.2f\n", 5, "str", 2.5);
 }
 ```
 
@@ -162,17 +162,17 @@ void vec3_scale(Vec3 *v, double k) {
 ```
 
 ```vibe run with=vec.c
-struct Vec3 { x: f64, y: f64, z: f64 }
+struct Vec3 { f64 x; f64 y; f64 z; }
 
-extern fn vec3_dot(a: *Vec3, b: *Vec3) f64
-extern fn vec3_scale(v: *Vec3, k: f64)
+extern f64 vec3_dot(Vec3* a, Vec3* b);
+extern void vec3_scale(Vec3* v, f64 k);
 
-fn main() {
-    var a = Vec3{ x: 1.0, y: 2.0, z: 3.0 }
-    var b = Vec3{ x: 4.0, y: 5.0, z: 6.0 }
-    println(vec3_dot(&a, &b))
-    vec3_scale(&a, 10.0)
-    println(a)
+void main() {
+    auto a = Vec3{ .x = 1.0, .y = 2.0, .z = 3.0 };
+    auto b = Vec3{ .x = 4.0, .y = 5.0, .z = 6.0 };
+    println(vec3_dot(&a, &b));
+    vec3_scale(&a, 10.0);
+    println(a);
 }
 ```
 
@@ -190,9 +190,9 @@ vibe build main.vibe lib.o -lm -o app        # готовый объект и б
 
 Подробности режимов — в [инструментах](tooling.md#режимы-компиляции).
 
-## Вызов Vibe из C: `export fn`
+## Вызов Vibe из C: `export`
 
-`export fn` выводит функцию Vibe под её собственным именем. C-код её видит как обычный внешний символ:
+`export` выводит функцию Vibe под её собственным именем. C-код её видит как обычный внешний символ:
 
 ```vibe file=sumsq.c
 #include <stdint.h>
@@ -207,14 +207,14 @@ int64_t c_sum_squares(int64_t n) {
 ```
 
 ```vibe run with=sumsq.c
-extern fn c_sum_squares(n: i64) i64
+extern i64 c_sum_squares(i64 n);
 
-export fn vibe_square(x: i64) i64 {
-    return x * x
+export i64 vibe_square(i64 x) {
+    return x * x;
 }
 
-fn main() {
-    println(c_sum_squares(10))
+void main() {
+    println(c_sum_squares(10));
 }
 ```
 
@@ -222,27 +222,27 @@ fn main() {
 
 ## Колбэки: указатели на функции
 
-Функцию Vibe можно передать в C как `fn(...) R`. Это обычный адрес функции без замыкания:
+Функцию Vibe можно передать в C как `fn(...) -> R`. Это обычный адрес функции без замыкания:
 
 ```vibe run
-extern fn qsort(base: *void, n: u64, size: u64, cmp: fn(*void, *void) i32)
+extern void qsort(void* base, u64 n, u64 size, fn(void*, void*) -> i32 cmp);
 
-fn cmp(a: *void, b: *void) i32 {
-    let x = *(a as *i64)
-    let y = *(b as *i64)
-    if x < y { return -1 }
-    if x > y { return 1 }
-    return 0
+i32 cmp(void* a, void* b) {
+    const auto x = *(a as *i64);
+    const auto y = *(b as *i64);
+    if (x < y) { return -1; }
+    if (x > y) { return 1; }
+    return 0;
 }
 
-fn main() {
-    var xs = [5, 3, 9, 1, 7]
-    qsort(xs[..] as *void, 5, 8, cmp)
-    println(xs)
+void main() {
+    auto xs = [5, 3, 9, 1, 7];
+    qsort(xs[..] as *void, 5, 8, cmp);
+    println(xs);
 }
 ```
 
-Замыкание `fn[...]` в C передавать нельзя: у него есть контекст, а C ждёт простой адрес.
+Замыкание `fn[](...) -> R` в C передавать нельзя: у него есть контекст, а C ждёт простой адрес.
 
 ## C++ через фасад `extern "C"`
 
@@ -268,18 +268,18 @@ extern "C" {
 ```
 
 ```vibe run with=engine.cpp
-extern fn engine_new() *void
-extern fn engine_push(e: *void, x: f64)
-extern fn engine_median(e: *void) f64
-extern fn engine_free(e: *void)
+extern void* engine_new();
+extern void engine_push(void* e, f64 x);
+extern f64 engine_median(void* e);
+extern void engine_free(void* e);
 
-fn main() {
-    let e = engine_new()
-    defer engine_free(e)
-    for x in [5.0, 1.0, 9.0, 3.0, 7.0] {
-        engine_push(e, x)
+void main() {
+    const auto e = engine_new();
+    defer engine_free(e);
+    for (auto x : [5.0, 1.0, 9.0, 3.0, 7.0]) {
+        engine_push(e, x);
     }
-    println(engine_median(e))
+    println(engine_median(e));
 }
 ```
 
@@ -299,13 +299,13 @@ vibe build main.vibe libbar.a -o app
 
 ## Правила и подводные камни
 
-- Нет `@cImport` и разбора заголовков: сигнатуры пишете руками. Это место для ошибок: тип вашего `extern fn` обязан совпадать с C.
+- Нет `@cImport` и разбора заголовков: сигнатуры пишете руками. Это место для ошибок: тип вашего `extern` обязан совпадать с C.
 - Структуры по значению через границу не ходят.
 - `bool` в C — это `_Bool`/`uint8_t`. Используйте `u8` или `i32`, а не `bool`, если сомневаетесь.
-- Не передавайте `str` вместо `*u8`: нужна `s.ptr` (и нулевой байт, см. выше).
+- Не передавайте `str` вместо `u8*`: нужна `s.ptr` (и нулевой байт, см. выше).
 - `size_t` — это `u64`, `ssize_t` — `i64`.
 - Память, которую вернула C-функция (`malloc`), освобождайте C-функцией (`free`), а не аллокатором Vibe.
-- `extern fn` с тем же именем, что и функция из прелюдии Vibe, недопустимо.
+- `extern` с тем же именем, что и функция из прелюдии Vibe, недопустимо.
 
 ## Что дальше
 

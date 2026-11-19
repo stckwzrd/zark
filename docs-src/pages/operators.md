@@ -17,19 +17,19 @@ description: Арифметика, сравнения, логика, побит�
 | `-x` | смена знака |
 
 ```vibe run
-fn main() {
-    println(7 + 3, 7 - 3, 7 * 3)
-    println(7 / 2, -7 / 2, 7.0 / 2.0)
-    println(7 % 3, -7 % 3, 7 % -3)
+void main() {
+    println(7 + 3, 7 - 3, 7 * 3);
+    println(7 / 2, -7 / 2, 7.0 / 2.0);
+    println(7 % 3, -7 % 3, 7 % -3);
 }
 ```
 
 Оба операнда должны быть одного типа. Целое можно неявно расширить, но с дробным смешивать нельзя:
 
 ```vibe error fragment
-let a: i64 = 5
-let b: f64 = 2.0
-println(a + b)
+const i64 a = 5;
+const f64 b = 2.0;
+println(a + b);
 ```
 
 Нужно привести явно: `a as f64 + b`.
@@ -37,7 +37,7 @@ println(a + b)
 Строки операторами не склеиваются:
 
 ```vibe error fragment
-println("a" + "b")
+println("a" + "b");
 ```
 
 Склейка делается интерполяцией и [буфером](strings.md#сборка-строк): `"{a}{b}"`.
@@ -49,23 +49,23 @@ println("a" + "b")
 `==` `!=` `<` `<=` `>` `>=` дают `bool`.
 
 ```vibe run
-fn main() {
-    println(1 == 1, 1 != 2, 3 < 2, 3 >= 3)
-    println(1.5 < 2.5, 'a' < 'b')
-    println("abc" == "abc", "abc" != "abd")
+void main() {
+    println(1 == 1, 1 != 2, 3 < 2, 3 >= 3);
+    println(1.5 < 2.5, 'a' < 'b');
+    println("abc" == "abc", "abc" != "abd");
 }
 ```
 
 Для строк определены только `==` и `!=`. Упорядочивать строки через `<` нельзя:
 
 ```vibe error fragment
-println("abc" < "abd")
+println("abc" < "abd");
 ```
 
 Цепочки сравнений вроде `1 < 2 < 3` не работают: результат `1 < 2` — это `bool`, а не число.
 
 ```vibe error fragment
-println(1 < 2 < 3)
+println(1 < 2 < 3);
 ```
 
 Сравниваются также enum-значения и указатели:
@@ -73,11 +73,11 @@ println(1 < 2 < 3)
 ```vibe run
 enum Color { Red, Green }
 
-fn main() {
-    let c: Color = .Green
-    println(c == .Green, c != .Red)
-    var p: *i64 = null
-    println(p == null)
+void main() {
+    const Color c = .Green;
+    println(c == .Green, c != .Red);
+    i64* p = null;
+    println(p == null);
 }
 ```
 
@@ -90,35 +90,35 @@ fn main() {
 Вычисление **ленивое**: правая часть выполняется, только если нужна для результата.
 
 ```vibe run
-fn noisy(name: str, v: bool) bool {
-    println("вызван {name}")
-    return v
+bool noisy(str name, bool v) {
+    println("вызван {name}");
+    return v;
 }
 
-fn main() {
-    let a = false && noisy("первый", true)
-    let b = true || noisy("второй", true)
-    let c = true && noisy("третий", false)
-    println(a, b, c)
+void main() {
+    const auto a = false && noisy("первый", true);
+    const auto b = true || noisy("второй", true);
+    const auto c = true && noisy("третий", false);
+    println(a, b, c);
 }
 ```
 
 Благодаря этому можно писать защиту и проверку в одном условии:
 
 ```vibe run
-fn main() {
-    let s = "x"
-    var i = 5
-    if i < s.len && s[i] == 'x' {
-        println("нашли")
+void main() {
+    const auto s = "x";
+    auto i = 5;
+    if (i < s.len && s[i] == 'x') {
+        println("нашли");
     } else {
-        println("нет, но и ошибки нет")
+        println("нет, но и ошибки нет");
     }
 }
 ```
 
 ```vibe error fragment
-println(!5)
+println(!5);
 ```
 
 ## Побитовые операторы
@@ -132,10 +132,10 @@ println(!5)
 | `<<` `>>` | сдвиги |
 
 ```vibe run
-fn main() {
-    println(5 & 3, 5 | 3, 5 ^ 3, ~5)
-    println(1 << 4, 0xff >> 4)
-    println(-5 >> 1, 7 as u64 >> 1)
+void main() {
+    println(5 & 3, 5 | 3, 5 ^ 3, ~5);
+    println(1 << 4, 0xff >> 4);
+    println(-5 >> 1, 7 as u64 >> 1);
 }
 ```
 
@@ -144,11 +144,11 @@ fn main() {
 > **Примечание.** В отличие от C, побитовые `&`, `|`, `^` привязаны **сильнее** сравнений. Выражение `x & 1 == 0` читается как `(x & 1) == 0`, скобки не нужны.
 
 ```vibe run
-fn main() {
-    let n = 6
-    if n & 1 == 0 { println("чётное") }
-    let flags = 0b1010
-    println(flags & 0b0010 != 0, flags & 0b0100 != 0)
+void main() {
+    const auto n = 6;
+    if (n & 1 == 0) { println("чётное"); }
+    const auto flags = 0b1010;
+    println(flags & 0b0010 != 0, flags & 0b0100 != 0);
 }
 ```
 
@@ -156,41 +156,42 @@ fn main() {
 
 `=` кладёт значение в переменную, поле, элемент массива или по указателю. Присваивание — оператор, а не выражение: `a = b = 0` написать нельзя.
 
-Составные формы есть только для арифметики: `+=` `-=` `*=` `/=` `%=`.
+Составные формы: `+=` `-=` `*=` `/=` `%=` `|=` `&=` `^=` `<<=` `>>=`.
 
 ```vibe run
-fn main() {
-    var x = 10
-    x += 5
-    x -= 3
-    x *= 2
-    x /= 4
-    x %= 4
-    println(x)
+void main() {
+    auto x = 10;
+    x += 5;
+    x -= 3;
+    x *= 2;
+    x /= 4;
+    x %= 4;
+    x |= 8;
+    x <<= 1;
+    x++;
+    println(x);
 }
 ```
 
-> **Ловушка.** `|=`, `&=`, `^=`, `<<=` и `>>=` в Vibe нет. Пишите полностью: `flags = flags | 4`, `x = x << 2`.
-
-Инкремента `x++` тоже нет — только `x += 1`. Одновременного присваивания `a, b = b, a` нет — используйте временную переменную или `swap`:
+`x++` и `x--` тоже есть, но это оператор, а не выражение: `y = x++` написать нельзя. Одновременного присваивания `a, b = b, a` нет — используйте временную переменную или `swap`:
 
 ```vibe run
-fn main() {
-    var a = 1
-    var b = 2
-    swap(&a, &b)
-    println(a, b)
+void main() {
+    auto a = 1;
+    auto b = 2;
+    swap(&a, &b);
+    println(a, b);
 }
 ```
 
 `_ = выражение` вычисляет выражение и отбрасывает результат. Вызвать функцию, вернувшую число, и не использовать результат можно и без `_`. А вот `!T` без `_` не проходит: `_ =` показывает, что ошибку вы игнорируете сознательно.
 
 ```vibe run
-fn load() !i64 { return 42 }
+!i64 load() { return 42; }
 
-fn main() {
-    _ = load()
-    println("результат отброшен")
+void main() {
+    _ = load();
+    println("результат отброшен");
 }
 ```
 
@@ -206,7 +207,7 @@ fn main() {
 | `&x` | адрес переменной |
 | `*p` | значение по адресу |
 
-`&` берёт адрес только у того, что лежит в памяти: переменной, поля, элемента. Результат `&x` имеет тип `*T`.
+`&` берёт адрес только у того, что лежит в памяти: переменной, поля, элемента. Результат `&x` имеет тип `T*`.
 
 ## Постфиксные формы
 
@@ -217,17 +218,17 @@ fn main() {
 | `f(a, b)` | вызов |
 | `x[i]` | индекс |
 | `x[a..b]` | срез |
-| `x.name` | поле или метод |
+| `x.name` | поле или метод (`->` и `::` значат то же самое) |
 | `x?` | пробросить ошибку |
 
 ```vibe run
-struct Box { items: [3]i64 }
+struct Box { i64[3] items; }
 
-fn main() {
-    var b = Box{ items: [10, 20, 30] }
-    println(b.items[1], b.items[0..2], b.items.len)
-    let p = &b
-    println(p.items[2])
+void main() {
+    auto b = Box{ .items = [10, 20, 30] };
+    println(b.items[1], b.items[0..2], b.items.len);
+    const auto p = &b;
+    println(p.items[2]);
 }
 ```
 
@@ -238,11 +239,11 @@ fn main() {
 `as` приводит значение к другому типу (см. [типы](types.md#преобразования-as)). Он связывает слабее унарных операторов, но сильнее арифметики:
 
 ```vibe run
-fn main() {
-    let a = 5
-    println(-a as f64 / 2 as f64)
-    println(a as f64 / 2 as f64)
-    println(1 + 2 as f64)
+void main() {
+    const auto a = 5;
+    println(-a as f64 / 2 as f64);
+    println(a as f64 / 2 as f64);
+    println(1 + 2 as f64);
 }
 ```
 
@@ -270,17 +271,17 @@ fn main() {
 | 10 | `*` `/` `%` |
 | 11 | `as` |
 | 12 | унарные `-` `!` `~` `&` `*` |
-| 13 (сильнейший) | постфиксные: `()` `[]` `[a..b]` `.f` `?` |
+| 13 (сильнейший) | постфиксные: `()` `[]` `[a..b]` `.f` `->f` `::f` `?` |
 
 Все бинарные операторы левоассоциативны: `10 - 3 - 2` — это `(10 - 3) - 2`.
 
 ```vibe run
-fn main() {
-    println(1 + 2 * 3, (1 + 2) * 3)
-    println(10 - 3 - 2)
-    println(1 << 2 + 1)
-    println(2 * 3 % 4)
-    println(true || false && false)
+void main() {
+    println(1 + 2 * 3, (1 + 2) * 3);
+    println(10 - 3 - 2);
+    println(1 << 2 + 1);
+    println(2 * 3 % 4);
+    println(true || false && false);
 }
 ```
 
@@ -291,20 +292,20 @@ fn main() {
 `catch` и `orelse` — самые слабые операторы, поэтому их правая часть — всё выражение до конца:
 
 ```vibe run
-fn f(n: i64) !i64 {
-    if n < 0 { return error.Neg }
-    return n
+!i64 f(i64 n) {
+    if (n < 0) { return error.Neg; }
+    return n;
 }
 
-fn g(n: i64) ?i64 {
-    if n < 0 { return null }
-    return n
+?i64 g(i64 n) {
+    if (n < 0) { return null; }
+    return n;
 }
 
-fn main() {
-    println(f(5) catch 0 + 100)
-    println(g(5) orelse 0 + 100)
-    println((f(5) catch 0) + 100)
+void main() {
+    println(f(5) catch 0 + 100);
+    println(g(5) orelse 0 + 100);
+    println((f(5) catch 0) + 100);
 }
 ```
 
@@ -318,15 +319,15 @@ fn main() {
 enum State { Idle, Busy }
 
 union Msg {
-    Text: str
-    Quit
+    str Text;
+    Quit;
 }
 
-fn main() {
-    let s: State = .Busy
-    let m: Msg = .Quit
-    println(s is .Busy, s is .Idle)
-    println(m is .Quit, m is .Text)
+void main() {
+    const State s = .Busy;
+    const Msg m = .Quit;
+    println(s is .Busy, s is .Idle);
+    println(m is .Quit, m is .Text);
 }
 ```
 

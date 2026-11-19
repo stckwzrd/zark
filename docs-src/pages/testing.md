@@ -10,16 +10,16 @@ description: Блоки test, assert, vibe test, как тестировать �
 ## Первый тест
 
 ```vibe test
-fn add(a: i64, b: i64) i64 {
-    return a + b
+i64 add(i64 a, i64 b) {
+    return a + b;
 }
 
 test "складывает" {
-    assert(add(2, 3) == 5)
+    assert(add(2, 3) == 5);
 }
 
 test "ноль нейтрален" {
-    assert(add(7, 0) == 7)
+    assert(add(7, 0) == 7);
 }
 ```
 
@@ -46,29 +46,29 @@ vibe test main.vibe
 ## Как выглядят падения
 
 ```vibe test fails
-fn add(a: i64, b: i64) i64 { return a + b }
-fn parse(s: str) !i64 { return parse_int(s) }
+i64 add(i64 a, i64 b) { return a + b; }
+!i64 parse(str s) { return parse_int(s); }
 
 test "проходит" {
-    assert(add(1, 2) == 3)
+    assert(add(1, 2) == 3);
 }
 
 test "ошибка через ?" {
-    let n = parse("zz")?
-    assert(n == 0)
+    const auto n = parse("zz")?;
+    assert(n == 0);
 }
 
 test "ложное утверждение" {
-    assert(add(1, 1) == 3)
+    assert(add(1, 1) == 3);
 }
 
 test "паника" {
-    panic("упало: {1 + 1}")
+    panic("упало: {1 + 1}");
 }
 
 test "вывод виден только у упавшего" {
-    println("эта строка не будет показана")
-    assert(true)
+    println("эта строка не будет показана");
+    assert(true);
 }
 ```
 
@@ -85,22 +85,22 @@ test "вывод виден только у упавшего" {
 `assert(условие)` проверяет `bool`. Если условие ложно, программа завершается с сообщением и местом. Работает не только в тестах, но и в обычном коде:
 
 ```vibe run panic
-fn main() {
-    let xs = [1, 2, 3]
-    assert(xs.len == 3)
-    println("первое утверждение выполнено")
-    assert(xs[0] == 2)
-    println("сюда не дойдём")
+void main() {
+    const auto xs = [1, 2, 3];
+    assert(xs.len == 3);
+    println("первое утверждение выполнено");
+    assert(xs[0] == 2);
+    println("сюда не дойдём");
 }
 ```
 
 У `assert` нет отдельного сообщения. Если нужен контекст, используйте `panic` с форматом:
 
 ```vibe run panic
-fn main() {
-    let got = 41
-    if got != 42 {
-        panic("ожидали 42, получили {got}")
+void main() {
+    const auto got = 41;
+    if (got != 42) {
+        panic("ожидали 42, получили {got}");
     }
 }
 ```
@@ -110,30 +110,30 @@ fn main() {
 Ожидаемая ошибка проверяется через `catch`:
 
 ```vibe test
-fn parse(s: str) !i64 {
-    if s.len == 0 { return error.Empty }
-    return parse_int(s)
+!i64 parse(str s) {
+    if (s.len == 0) { return error.Empty; }
+    return parse_int(s);
 }
 
 test "пустая строка — ошибка Empty" {
-    let r = parse("") catch |e| {
-        assert(e == error.Empty)
-        return
-    }
-    assert(false)
+    const auto r = parse("") catch |e| {
+        assert(e == error.Empty);
+        return;
+    };
+    assert(false);
 }
 
 test "неверное число" {
-    let r = parse("x") catch |e| {
-        assert(e == error.InvalidNumber)
-        return
-    }
-    assert(false)
+    const auto r = parse("x") catch |e| {
+        assert(e == error.InvalidNumber);
+        return;
+    };
+    assert(false);
 }
 
 test "корректное число" {
-    let n = parse(" 42 ")?
-    assert(n == 42)
+    const auto n = parse(" 42 ")?;
+    assert(n == 42);
 }
 ```
 
@@ -145,32 +145,32 @@ test "корректное число" {
 
 ```vibe test
 test "список" {
-    var xs = List[i64].init(c_allocator())
-    defer xs.deinit()
-    xs.push(1)?
-    xs.push(2)?
-    assert(xs.len == 2)
-    assert(xs.get(1) == 2)
+    auto xs = List<i64>::init(c_allocator());
+    defer xs.deinit();
+    xs.push(1)?;
+    xs.push(2)?;
+    assert(xs.len == 2);
+    assert(xs.get(1) == 2);
 }
 
 test "арена и строки" {
-    var arena = Arena.init(c_allocator())
-    defer arena.deinit()
-    let a = arena.allocator()
-    let s = a.dup("hello")?
-    assert(s == "hello")
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
+    const auto s = a.dup("hello")?;
+    assert(s == "hello");
 }
 
 test "нехватка памяти — обычная ошибка" {
-    var mem: [16]u8
-    var fb = FixedBuf.init(mem[..])
-    let a = fb.allocator()
-    _ = a.alloc[u8](10)?
-    let r = a.alloc[u8](10) catch |e| {
-        assert(e == error.OutOfMemory)
-        return
-    }
-    assert(false)
+    u8[16] mem;
+    auto fb = FixedBuf::init(mem[..]);
+    const auto a = fb.allocator();
+    _ = a.alloc<u8>(10)?;
+    const auto r = a.alloc<u8>(10) catch |e| {
+        assert(e == error.OutOfMemory);
+        return;
+    };
+    assert(false);
 }
 ```
 
@@ -183,23 +183,23 @@ test "нехватка памяти — обычная ошибка" {
 Если тестов много, заведите отдельный файл и импортируйте модуль:
 
 ```vibe file=mathx.vibe
-fn clamp(x: i64, lo: i64, hi: i64) i64 {
-    if x < lo { return lo }
-    if x > hi { return hi }
-    return x
+i64 clamp(i64 x, i64 lo, i64 hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
 }
 ```
 
 ```vibe test
-import "mathx.vibe" as m
+import "mathx.vibe" as m;
 
 test "clamp внутри диапазона" {
-    assert(m.clamp(5, 0, 10) == 5)
+    assert(m::clamp(5, 0, 10) == 5);
 }
 
 test "clamp срезает края" {
-    assert(m.clamp(-3, 0, 10) == 0)
-    assert(m.clamp(30, 0, 10) == 10)
+    assert(m::clamp(-3, 0, 10) == 0);
+    assert(m::clamp(30, 0, 10) == 10);
 }
 ```
 

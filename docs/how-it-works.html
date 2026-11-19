@@ -10,16 +10,16 @@
 <body class="">
 <header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Синтаксис в стиле C++</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html" class="current">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html" class="current">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
 <main><article>
 <h1>Как всё устроено</h1>
 <p>Эта страница для тех, кто хочет понимать, что происходит под капотом, или собирается править компилятор. Для написания программ она не обязательна.</p>
 <h2 id="конвейер"><a class="anchor" href="#конвейер">#</a>Конвейер</h2>
-<p>Компилятор — программа на самом Vibe, около 6 тысяч строк в каталоге <code>selfhost/</code>. Работает как конвейер:</p>
+<p>Компилятор — программа на самом Vibe, около 12 тысяч строк в каталоге <code>selfhost/</code>. Работает как конвейер:</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>исходник .vibe</span></span>
 <span class="line"><span>   │</span></span>
-<span class="line"><span>   ▼  lexer.vibe      токены, автоматические «;» в конце строк</span></span>
-<span class="line"><span>   ▼  parser.vibe     рекурсивный спуск → дерево (ast.vibe), интерполяция строк раскрывается здесь</span></span>
+<span class="line"><span>   ▼  lexer.vibe      токены</span></span>
+<span class="line"><span>   ▼  parser.vibe     рекурсивный спуск → дерево (ast.vibe), интерполяция строк разбирается здесь</span></span>
 <span class="line"><span>   ▼  loader.vibe     загрузка import, префиксы модулей (resolve.vibe)</span></span>
 <span class="line"><span>   ▼  gen*.vibe       проверка типов, мономорфизация дженериков, текст LLVM IR</span></span>
 <span class="line"><span>   │</span></span>
@@ -33,7 +33,7 @@
 </tr>
 </thead><tbody><tr>
 <td><code>lexer.vibe</code></td>
-<td>токены; вставляет <code>;</code> по правилу конца строки (см. <a href="lexical.html#конец-оператора">лексику</a>)</td>
+<td>токены (см. <a href="lexical.html">лексику</a>)</td>
 </tr>
 <tr>
 <td><code>ast.vibe</code></td>
@@ -41,7 +41,7 @@
 </tr>
 <tr>
 <td><code>parser.vibe</code></td>
-<td>разбор синтаксиса, раскрытие <code>&quot;{x}&quot;</code> в части формата</td>
+<td>разбор синтаксиса, разбор <code>&quot;{x}&quot;</code> на части</td>
 </tr>
 <tr>
 <td><code>gen.vibe</code></td>
@@ -61,7 +61,7 @@
 </tr>
 <tr>
 <td><code>gen_fmt.vibe</code></td>
-<td><code>print</code>/<code>bprint</code>/<code>sprint</code>/<code>panic</code>/<code>assert</code>/<code>embed</code></td>
+<td>сборка <code>Fmt</code> для вызовов с интерполяцией, <code>panic</code>, <code>assert</code>, <code>embed</code></td>
 </tr>
 <tr>
 <td><code>resolve.vibe</code>, <code>loader.vibe</code></td>
@@ -159,15 +159,15 @@
 <td>один байт</td>
 </tr>
 <tr>
-<td><code>*T</code></td>
+<td><code>T*</code></td>
 <td>указатель, 8 байт</td>
 </tr>
 <tr>
-<td><code>[]T</code>, <code>str</code></td>
+<td><code>T[]</code>, <code>str</code></td>
 <td><code>{ ptr, len }</code>, 16 байт</td>
 </tr>
 <tr>
-<td><code>[N]T</code></td>
+<td><code>T[N]</code></td>
 <td><code>N</code> элементов подряд</td>
 </tr>
 <tr>
@@ -187,18 +187,19 @@
 <td><code>{ i32 код ошибки, T }</code></td>
 </tr>
 <tr>
-<td><code>fn(A) R</code></td>
+<td><code>fn(A) -&gt; R</code></td>
 <td>указатель на функцию</td>
 </tr>
 <tr>
-<td><code>fn[](A) R</code></td>
+<td><code>fn[](A) -&gt; R</code></td>
 <td>пара: указатель на функцию и указатель на контекст</td>
 </tr>
 </tbody></table></div>
 <p>Из этого следует, почему структуры можно передавать в C (по указателю), почему ничего не нужно «упаковывать» при вызове и почему <code>sizeof</code> предсказуем.</p>
 <h2 id="как-раскрывается-интерполяция"><a class="anchor" href="#как-раскрывается-интерполяция">#</a>Как раскрывается интерполяция</h2>
-<p><code>println(&quot;x = {x}, y = {y:.2}&quot;)</code> на стадии разбора превращается в формат и список аргументов, как если бы вы написали <code>printf(&quot;x = %ld, y = %.2f\n&quot;, x, y)</code>. Тип определяет, какой именно спецификатор будет подставлен. Ничего не склеивается во время работы и не выделяется в куче.</p>
-<p>Поэтому интерполяция допустима только там, где есть куда писать: <code>print</code>, <code>println</code>, <code>eprint</code>, <code>eprintln</code>, <code>panic</code>, <code>bprint</code>, <code>sprint</code>.</p>
+<p>Компилятор не знает ни <code>print</code>, ни <code>println</code>. Он знает одно правило: если последний параметр вызываемой функции имеет тип <code>Fmt</code> (он объявлен в <code>std/std.vibe</code>), все оставшиеся аргументы и строки с <code>{...}</code> собираются в значение <code>Fmt</code>.</p>
+<p><code>Fmt</code> — это список кусков: литеральный текст, указатель на значение, функция, которая умеет печатать значение этого типа, и спецификация (<code>:08X</code>, <code>:.2</code> и т. п.). Функции печати для структур, enum, union и массивов компилятор порождает по типу как обычный код на Vibe. Для чисел, строк и указателей используются функции из прелюдии (<code>__fmt_int</code>, <code>__fmt_str</code> и другие).</p>
+<p>Всё лежит на стеке вызывающего, в куче ничего не выделяется. Поэтому интерполяция допустима там, где есть функция с параметром <code>Fmt</code>: <code>print</code>, <code>println</code>, <code>eprint</code>, <code>eprintln</code>, <code>panic</code>, <code>bprint</code>, <code>sprint</code> и ваша собственная.</p>
 <h2 id="как-работают-дженерики"><a class="anchor" href="#как-работают-дженерики">#</a>Как работают дженерики</h2>
 <p>Функции и структуры с параметрами типа <strong>мономорфизируются</strong>: для каждой комбинации аргументов компилятор создаёт отдельную копию. Поэтому нет накладных расходов во время работы, а тело дженерика проверяется при <strong>использовании</strong>. Ограничения (<code>T: Ord</code>) проверяются на вызове, до компиляции тела, чтобы сообщение было понятным.</p>
 <h2 id="как-работают-defer-и-errdefer"><a class="anchor" href="#как-работают-defer-и-errdefer">#</a>Как работают <code>defer</code> и <code>errdefer</code></h2>

@@ -2,7 +2,7 @@
 title: Структуры, union и enum
 order: 16
 section: Язык
-description: struct, impl и методы, enum, tagged union, дженерик-структуры, раскладка в памяти и разбор через match
+description: struct и методы, enum, tagged union, дженерик-структуры, раскладка в памяти и разбор через match
 ---
 
 Три способа описать собственный тип данных:
@@ -17,27 +17,27 @@ description: struct, impl и методы, enum, tagged union, дженерик-
 
 ```vibe run
 struct Point {
-    x: i64
-    y: i64
+    i64 x;
+    i64 y;
 }
 
-fn main() {
-    let p = Point{ x: 3, y: 4 }
-    println(p.x, p.y)
-    println(p)
+void main() {
+    const auto p = Point{ .x = 3, .y = 4 };
+    println(p.x, p.y);
+    println(p);
 }
 ```
 
-Поля пишутся через запятую или с новой строки (запятая в конце строки необязательна). Тип структуры печатается как `Имя{ поле: значение }`.
+Поле объявляется как переменная: тип, имя, `;`. Структура печатается как `Имя{ поле: значение }`.
 
 Все структуры раскладываются в памяти так же, как в C: поля идут по порядку, между ними добавляется выравнивание. Размер можно узнать через `sizeof`:
 
 ```vibe run
-struct Small { a: u8, b: u8, c: u8 }
-struct Padded { a: u8, b: i64, c: u8 }
+struct Small { u8 a; u8 b; u8 c; }
+struct Padded { u8 a; i64 b; u8 c; }
 
-fn main() {
-    println(sizeof(Small), sizeof(Padded), alignof(Padded))
+void main() {
+    println(sizeof(Small), sizeof(Padded), alignof(Padded));
 }
 ```
 
@@ -45,79 +45,71 @@ fn main() {
 
 ### Литерал структуры
 
-Литерал пишется как `Имя{ поле: значение, ... }`. Он распознаётся, только если имя типа начинается с **заглавной** буквы.
+Литерал пишется как `Имя{ .поле = значение, ... }`. Он распознаётся, только если имя типа начинается с **заглавной** буквы.
 
-Должны быть перечислены **все** поля. Чтобы обнулить остальные, добавьте `..`:
+Поля, которых в литерале нет, заполняются нулями. `Имя{}` — все поля нулевые:
 
 ```vibe run
 struct Config {
-    width: i64
-    height: i64
-    title: str
-    visible: bool
+    i64 width;
+    i64 height;
+    str title;
+    bool visible;
 }
 
-fn main() {
-    let a = Config{ width: 800, height: 600, title: "окно", visible: true }
-    let b = Config{ width: 100, .. }
-    let c = Config{ .. }
-    println(a)
-    println(b)
-    println(c.width, c.title.len)
+void main() {
+    const auto a = Config{ .width = 800, .height = 600, .title = "окно", .visible = true };
+    const auto b = Config{ .width = 100 };
+    const auto c = Config{};
+    println(a);
+    println(b);
+    println(c.width, c.title.len);
 }
 ```
 
-Пропуск поля и опечатка в его имени — ошибки компиляции:
+Опечатка в имени поля — ошибка компиляции:
 
 ```vibe error
-struct P { x: i64, y: i64 }
+struct P { i64 x; i64 y; }
 
-fn main() {
-    let p = P{ x: 1 }
+void main() {
+    const auto p = P{ .x = 1, .y = 2, .w = 3 };
 }
 ```
 
-```vibe error
-struct P { x: i64, y: i64 }
-
-fn main() {
-    let p = P{ x: 1, y: 2, w: 3 }
-}
-```
-
-Значений по умолчанию в объявлении поля нет. Если нужны разумные умолчания, пишите функцию `new`.
+Значений по умолчанию в объявлении поля нет: пропущенное поле всегда ноль. Если нужны другие умолчания, пишите функцию `new`.
 
 ### Структуры копируются
 
 Присваивание и передача в функцию копируют все поля:
 
 ```vibe run
-struct P { x: i64, y: i64 }
+struct P { i64 x; i64 y; }
 
-fn main() {
-    var a = P{ x: 1, y: 2 }
-    var b = a
-    b.x = 99
-    println(a.x, b.x)
+void main() {
+    auto a = P{ .x = 1, .y = 2 };
+    auto b = a;
+    b.x = 99;
+    println(a.x, b.x);
 }
 ```
 
-Чтобы работать с одним объектом, передавайте указатель `*P` (поля через него читаются прямо через точку).
+Чтобы работать с одним объектом, передавайте указатель `P*` (поля через него читаются прямо через точку).
 
 ### Вложенные структуры и массивы
 
 ```vibe run
-struct Point { x: i64, y: i64 }
-struct Line { a: Point, b: Point }
-struct Poly { pts: [3]Point, n: i64 }
+struct Point { i64 x; i64 y; }
+struct Line { Point a; Point b; }
+struct Poly { Point[3] pts; i64 n; }
 
-fn main() {
-    let l = Line{ a: Point{ x: 0, y: 0 }, b: Point{ x: 3, y: 4 } }
-    println(l.b.x, l)
-    var poly = Poly{ .. }
-    poly.pts[1].x = 5
-    poly.n = 2
-    println(poly)
+void main() {
+    const auto l = Line{ .a = Point{ .x = 0, .y = 0 }, .b = Point{ .x = 3, .y = 4 } };
+    println(l.b.x, l);
+    auto poly = Poly{};
+    poly.pts[1].x = 5;
+    poly.n = 2;
+    println(poly);
 }
 ```
 
@@ -127,14 +119,14 @@ fn main() {
 
 ```vibe run
 struct Node {
-    val: i64
-    next: *Node
+    i64 val;
+    Node* next;
 }
 
-fn main() {
-    var a = Node{ val: 1, next: null }
-    var b = Node{ val: 2, next: &a }
-    println(b.next.val, a.next == null)
+void main() {
+    auto a = Node{ .val = 1, .next = null };
+    auto b = Node{ .val = 2, .next = &a };
+    println(b.next.val, a.next == null);
 }
 ```
 
@@ -143,71 +135,69 @@ fn main() {
 `==` для структур не определён. Сравнивайте поля:
 
 ```vibe error
-struct A { x: i64 }
+struct A { i64 x; }
 
-fn main() {
-    let a = A{ x: 1 }
-    println(a == a)
+void main() {
+    const auto a = A{ .x = 1 };
+    println(a == a);
 }
 ```
 
-## `impl` — методы
+## Методы
 
-Функции, привязанные к типу, лежат в блоке `impl Тип { ... }`. Блок можно разбить на несколько `impl` для одного типа.
+Функции, привязанные к типу, пишутся прямо внутри `struct`. Поля внутри метода доступны по голому имени, а также через `this`.
 
 ```vibe run
-struct Counter { n: i64 }
-
-impl Counter {
-    fn new() Self {
-        return Self{ n: 0 }
+struct Counter {
+    i64 n;
+    static Self new() {
+        return Self{ .n = 0 };
     }
 
-    fn inc(self) {
-        self.n += 1
+    void inc() {
+        this->n += 1;
     }
 
-    fn get(self) i64 {
-        return self.n
+    i64 get() {
+        return this->n;
     }
 }
 
-fn main() {
-    var c = Counter.new()
-    c.inc()
-    c.inc()
-    println(c.get())
-    let p = &c
-    p.inc()
-    println(p.get(), c.n)
+void main() {
+    auto c = Counter::new();
+    c.inc();
+    c.inc();
+    println(c.get());
+    const auto p = &c;
+    p.inc();
+    println(p.get(), c.n);
 }
 ```
 
-- `Self` внутри `impl` — это сам тип.
-- Функция **без** `self` — статическая: вызывается как `Тип.имя(...)`.
-- `self` без типа означает `self: *Self`: метод получает **указатель** и может менять поля. Вызывать его можно и у значения, и у указателя.
-- `self: Self` — метод получает **копию**; изменения не видны снаружи.
+- `Self` внутри `struct` — это сам тип.
+- Метод с `static` — статический, без `this`: вызывается как `Тип::имя(...)`.
+- Остальные методы получают `this` — **указатель** на объект — и могут менять поля. Вызывать их можно и у значения, и у указателя.
+- Копии вместо указателя нет: если метод не должен менять объект, возьмите копию сами: `auto c = *this;`.
 
 ```vibe run
-struct V { n: i64 }
-
-impl V {
-    fn by_ptr(self) { self.n += 1 }
-    fn by_val(self: Self) i64 {
-        var c = self
-        c.n += 100
-        return c.n
+struct V {
+    i64 n;
+    void by_ptr() { this->n += 1; }
+    i64 by_copy() {
+        auto c = *this;
+        c.n += 100;
+        return c.n;
     }
 }
 
-fn main() {
-    var v = V{ n: 1 }
-    v.by_ptr()
-    println(v.by_val(), v.n)
+void main() {
+    auto v = V{ .n = 1 };
+    v.by_ptr();
+    println(v.by_copy(), v.n);
 }
 ```
 
-> **Ловушка.** Метод с `self` меняет объект даже тогда, когда он объявлен через `let`: компилятор отдаёт методу указатель и не проверяет изменяемость. Проверка срабатывает только на прямом присваивании `p.x = ...`. Если объект не должен меняться, не вызывайте на нём мутирующих методов.
+> **Ловушка.** Метод меняет объект даже тогда, когда он объявлен с `const`: компилятор отдаёт методу указатель и не проверяет изменяемость. `const` после списка параметров тоже пока не проверяется. Проверка срабатывает только на прямом присваивании `p.x = ...`. Если объект не должен меняться, не вызывайте на нём мутирующих методов.
 
 ## `enum`
 
@@ -216,14 +206,14 @@ fn main() {
 ```vibe run
 enum Color { Red, Green, Blue }
 
-fn main() {
-    let c: Color = .Green
-    println(c, Color.Blue, c == .Green, c != .Red)
-    println(Color.Blue as i64, 1 as Color)
+void main() {
+    const Color c = .Green;
+    println(c, Color::Blue, c == .Green, c != .Red);
+    println(Color::Blue as i64, 1 as Color);
 }
 ```
 
-Литерал `.Имя` работает, когда тип известен из контекста: у `let c: Color`, у параметра функции, у `return`, у второго операнда сравнения. Если контекста нет, пишите `Color.Green`.
+Литерал `.Имя` работает, когда тип известен из контекста: у `const Color c`, у параметра функции, у `return`, у второго операнда сравнения. Если контекста нет, пишите `Color::Green`.
 
 Номера варианта задавать (`A = 5`) нельзя: всегда 0, 1, 2 и т. д.
 
@@ -232,10 +222,10 @@ fn main() {
 ```vibe run
 enum Day { Mon, Tue, Wed }
 
-fn main() {
-    for i in 0..3 {
-        let d = i as Day
-        println(i, d)
+void main() {
+    for (auto i : 0..3) {
+        const auto d = i as Day;
+        println(i, d);
     }
 }
 ```
@@ -247,7 +237,7 @@ fn main() {
 ```vibe run
 enum Dir { North, East, South, West }
 
-fn turn(d: Dir) Dir {
+Dir turn(Dir d) {
     return match d {
         .North => .East,
         .East => .South,
@@ -256,11 +246,11 @@ fn turn(d: Dir) Dir {
     }
 }
 
-fn main() {
-    var d: Dir = .North
-    for i in 0..5 {
-        println(d)
-        d = turn(d)
+void main() {
+    Dir d = .North;
+    for (auto i : 0..5) {
+        println(d);
+        d = turn(d);
     }
 }
 ```
@@ -270,31 +260,31 @@ fn main() {
 ### Методы у enum
 
 ```vibe run
-enum Level { Low, High }
+enum Level {
+    Low, High;
 
-impl Level {
-    fn label(self: Self) str {
-        return match self {
+    str label() {
+        return match *this {
             .Low => "низкий",
             .High => "высокий",
-        }
+        };
     }
 
-    fn flip(self: Self) Self {
-        return match self {
+    Level flip() {
+        return match *this {
             .Low => .High,
             .High => .Low,
-        }
+        };
     }
 }
 
-fn main() {
-    let l: Level = .Low
-    println(l.label(), l.flip().label())
+void main() {
+    const Level l = .Low;
+    println(l.label(), l.flip().label());
 }
 ```
 
-Если метод принимает `self` (указатель), внутри разыменовывайте: `match *self { ... }`.
+Внутри метода `this` — указатель, поэтому разыменовывайте: `match *this { ... }`.
 
 ## `union` — тип-сумма (tagged union)
 
@@ -302,26 +292,26 @@ Union хранит **один из вариантов**, и вместе с ни
 
 ```vibe run
 union Shape {
-    Circle: f64
-    Rect: i64
-    Empty
+    f64 Circle;
+    i64 Rect;
+    Empty;
 }
 
-fn main() {
-    let a: Shape = .Circle(2.5)
-    let b = Shape.Rect(4)
-    let c: Shape = .Empty
-    println(a, b, c)
+void main() {
+    const Shape a = .Circle(2.5);
+    const auto b = Shape::Rect(4);
+    const Shape c = .Empty;
+    println(a, b, c);
 }
 ```
 
 Раскладка: `{ i32 tag, payload }`, размер определяется самым большим вариантом.
 
 ```vibe run
-union V { I: i64, F: f64, S: str, N }
+union V { i64 I; f64 F; str S; N; }
 
-fn main() {
-    println(sizeof(V))
+void main() {
+    println(sizeof(V));
 }
 ```
 
@@ -331,12 +321,12 @@ fn main() {
 
 ```vibe run
 union Shape {
-    Circle: f64
-    Rect: i64
-    Empty
+    f64 Circle;
+    i64 Rect;
+    Empty;
 }
 
-fn area(s: Shape) f64 {
+f64 area(Shape s) {
     return match s {
         .Circle(r) => 3.14 * r * r,
         .Rect(w) => w as f64 * w as f64,
@@ -344,19 +334,19 @@ fn area(s: Shape) f64 {
     }
 }
 
-fn main() {
-    println(area(.Circle(1.0)), area(.Rect(3)), area(.Empty))
+void main() {
+    println(area(.Circle(1.0)), area(.Rect(3)), area(.Empty));
 }
 ```
 
 Проверка одного варианта без разбора — `is`:
 
 ```vibe run
-union Msg { Text: str, Quit }
+union Msg { str Text; Quit; }
 
-fn main() {
-    let m: Msg = .Quit
-    println(m is .Quit, m is .Text)
+void main() {
+    const Msg m = .Quit;
+    println(m is .Quit, m is .Text);
 }
 ```
 
@@ -366,105 +356,101 @@ Union удобен там, где значение бывает разных в�
 
 ```vibe run
 union Token {
-    Num: i64
-    Plus
-    Minus
-    End
+    i64 Num;
+    Plus;
+    Minus;
+    End;
 }
 
-fn show(t: Token) {
+void show(Token t) {
     match t {
-        .Num(n) => println("число {n}")
-        .Plus => println("+")
-        .Minus => println("-")
-        .End => println("конец")
+        .Num(n) => println("число {n}");
+        .Plus => println("+");
+        .Minus => println("-");
+        .End => println("конец");
     }
 }
 
-fn main() {
-    let toks = [Token.Num(1), Token.Plus, Token.Num(2), Token.End]
-    for t in toks { show(t) }
+void main() {
+    const auto toks = [Token::Num(1), Token::Plus, Token::Num(2), Token::End];
+    for (auto t : toks) { show(t); }
 }
 ```
 
 ### Методы у union
 
 ```vibe run
-union Shape { Circle: f64, Rect: i64 }
-
-impl Shape {
-    fn circle(r: f64) Self {
-        return Self.Circle(r)
+union Shape {
+    f64 Circle;
+    i64 Rect;
+    static Self circle(f64 r) {
+        return Self::Circle(r);
     }
 
-    fn area(self) f64 {
-        return match *self {
+    f64 area() {
+        return match *this {
             .Circle(r) => r * r * 3.0,
             .Rect(w) => w as f64,
         }
     }
 }
 
-fn main() {
-    let s = Shape.circle(2.0)
-    println(s.area())
+void main() {
+    const auto s = Shape::circle(2.0);
+    println(s.area());
 }
 ```
 
 ## Дженерик-структуры и union
 
-Параметры типа пишутся в квадратных скобках после имени. В `impl` их перечисляют заново.
+Параметры типа пишутся в угловых скобках после имени: `struct Pair<A, B>`. Методы лежат внутри, отдельно перечислять параметры не нужно.
 
 ```vibe run
-struct Pair[A, B] {
-    first: A
-    second: B
-}
+struct Pair<A, B> {
+    A first;
+    B second;
 
-impl Pair[A, B] {
-    fn swap(self) Pair[B, A] {
-        return Pair[B, A]{ first: self.second, second: self.first }
+    Pair<B, A> swap() {
+        return Pair<B, A>{ .first = this->second, .second = this->first };
     }
 }
 
-fn main() {
-    let p = Pair[i64, str]{ first: 1, second: "один" }
-    let q = p.swap()
-    println(p)
-    println(q)
+void main() {
+    const auto p = Pair<i64, str>{ .first = 1, .second = "один" };
+    const auto q = p.swap();
+    println(p);
+    println(q);
 }
 ```
 
-Для каждой комбинации аргументов компилятор делает отдельную копию типа. Так устроены `List[T]`, `Map[V]` и `Option[T]` из [стандартной библиотеки](stdlib.md).
+Для каждой комбинации аргументов компилятор делает отдельную копию типа. Так устроены `List<T>`, `Map<V>` и `Option<T>` из [стандартной библиотеки](stdlib.md).
 
 Структура-стек с массивом фиксированного размера и методами:
 
 ```vibe run
-struct Stack[T] {
-    items: [4]T
-    n: i64
-}
+struct Stack<T> {
+    T[4] items;
+    i64 n;
 
-impl Stack[T] {
-    fn push(self, v: T) {
-        self.items[self.n] = v
-        self.n += 1
+    void push(T v) {
+        this->items[this->n] = v;
+        this->n += 1;
     }
 
-    fn top(self) T {
-        return self.items[self.n - 1]
+    T top() {
+        return this->items[this->n - 1];
     }
 }
 
-fn main() {
-    var s = Stack[i64]{ .. }
-    s.push(3)
-    s.push(4)
-    println(s.top(), s.n)
+void main() {
+    auto s = Stack<i64>{};
+    s.push(3);
+    s.push(4);
+    println(s.top(), s.n);
 }
 ```
 
-Ограничения параметров записываются так же, как у функций: `struct Sorted[T: Ord] { ... }`. Нарушение ловится при создании типа.
+Ограничения параметров записываются так же, как у функций: `struct Sorted<T: Ord> { ... }`. Нарушение ловится при создании типа.
 
 ## Что дальше
 

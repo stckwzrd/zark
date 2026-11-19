@@ -17,25 +17,25 @@ Vibe — язык со статической типизацией. Тип ка�
 | `f32 f64` | числа с плавающей точкой | 4, 8 байт |
 | `bool` | `true` / `false` | 1 байт |
 | `void` | «ничего» | — |
-| `*T` | указатель на `T` | 8 байт |
-| `[]T` | срез: указатель и длина | 16 байт |
-| `str` | то же, что `[]u8` | 16 байт |
-| `[N]T` | массив из `N` элементов | `N * sizeof(T)` |
+| `T*` | указатель на `T` | 8 байт |
+| `T[]` | срез: указатель и длина | 16 байт |
+| `str` | то же, что `u8[]` | 16 байт |
+| `T[N]` | массив из `N` элементов | `N * sizeof(T)` |
 | `!T` | значение `T` или ошибка | зависит от `T` |
 | `?T` | значение `T` или ничего | зависит от `T` |
-| `fn(A, B) R` | указатель на функцию | 8 байт |
+| `fn(A, B) -> R` | указатель на функцию | 8 байт |
 | `struct`, `union`, `enum` | свои типы | см. [структуры](structs-unions-enums.md) |
 
 Размер любого типа можно узнать через `sizeof`, выравнивание — через `alignof`. Оба значения вычисляются при компиляции и имеют тип `u64`.
 
 ```vibe run
-struct Pair { a: u8, b: i64 }
+struct Pair { u8 a; i64 b; }
 
-fn main() {
-    println(sizeof(i8), sizeof(i16), sizeof(i32), sizeof(i64))
-    println(sizeof(f32), sizeof(f64), sizeof(bool))
-    println(sizeof(*u8), sizeof(str), sizeof([4]i32))
-    println(sizeof(Pair), alignof(Pair), alignof(u8))
+void main() {
+    println(sizeof(i8), sizeof(i16), sizeof(i32), sizeof(i64));
+    println(sizeof(f32), sizeof(f64), sizeof(bool));
+    println(sizeof(u8*), sizeof(str), sizeof(i32[4]));
+    println(sizeof(Pair), alignof(Pair), alignof(u8));
 }
 ```
 
@@ -44,24 +44,24 @@ fn main() {
 ## Целые числа
 
 ```vibe run
-fn main() {
-    let a: i8 = -128
-    let b: u8 = 255
-    let c: i64 = 9223372036854775807
-    let d: usize = 1024
-    println(a, b, c, d)
+void main() {
+    const i8 a = -128;
+    const u8 b = 255;
+    const i64 c = 9223372036854775807;
+    const usize d = 1024;
+    println(a, b, c, d);
 }
 ```
 
 Литерал без контекста — `i64`. Литерал с подходящим контекстом принимает его тип:
 
 ```vibe run
-fn takes_u8(x: u8) u8 { return x }
+u8 takes_u8(u8 x) { return x; }
 
-fn main() {
-    println(takes_u8(200))
-    let n = 5
-    println(n * 1000000000000)
+void main() {
+    println(takes_u8(200));
+    const auto n = 5;
+    println(n * 1000000000000);
 }
 ```
 
@@ -70,13 +70,13 @@ fn main() {
 Арифметика над целыми «заворачивается» в пределах типа — без паники, как в C для беззнаковых:
 
 ```vibe run
-fn main() {
-    let u: u8 = 255
-    println(u + 1)
-    let i: i8 = 127
-    println(i + 1)
-    let z: u32 = 0
-    println(z - 1)
+void main() {
+    const u8 u = 255;
+    println(u + 1);
+    const i8 i = 127;
+    println(i + 1);
+    const u32 z = 0;
+    println(z - 1);
 }
 ```
 
@@ -89,25 +89,25 @@ fn main() {
 Целое неявно превращается в более широкое **без потерь**:
 
 ```vibe run
-fn wide(x: i64) i64 { return x * 2 }
+i64 wide(i64 x) { return x * 2; }
 
-fn main() {
-    let a: i8 = 5
-    let b: u16 = 1000
-    println(wide(a), wide(b))
+void main() {
+    const i8 a = 5;
+    const u16 b = 1000;
+    println(wide(a), wide(b));
 }
 ```
 
 А сужение, смена знака и целое → дробное требуют явного `as`:
 
 ```vibe error fragment
-let big: i64 = 5
-let small: i32 = big
+const i64 big = 5;
+const i32 small = big;
 ```
 
 ```vibe error fragment
-let n: i32 = 5
-let u: u32 = n
+const i32 n = 5;
+const u32 u = n;
 ```
 
 Подробно о `as` — ниже, в разделе «Преобразования».
@@ -115,20 +115,20 @@ let u: u32 = n
 ## Дробные числа
 
 ```vibe run
-fn main() {
-    let a: f64 = 0.1 + 0.2
-    let b: f32 = 1.0 / 3.0
-    println(a, b)
-    println(a == 0.3)
+void main() {
+    const f64 a = 0.1 + 0.2;
+    const f32 b = 1.0 / 3.0;
+    println(a, b);
+    println(a == 0.3);
 }
 ```
 
 Печать идёт через `%g`: до шести значащих цифр. Деление дробного на ноль не падает:
 
 ```vibe run
-fn main() {
-    var z: f64 = 0.0
-    println(1.0 / z, -1.0 / z)
+void main() {
+    f64 z = 0.0;
+    println(1.0 / z, -1.0 / z);
 }
 ```
 
@@ -139,11 +139,11 @@ fn main() {
 Только `true` и `false`. Условия в `if` и `while` обязаны быть `bool`: «ненулевое число — истина» не работает.
 
 ```vibe error fragment
-let n = 1
-if n { println("да") }
+const auto n = 1;
+if (n) { println("да"); }
 ```
 
-Пишите явное сравнение: `if n != 0`.
+Пишите явное сравнение: `if (n != 0)`.
 
 ## void
 
@@ -151,105 +151,105 @@ if n { println("да") }
 
 ## Указатели
 
-`*T` — адрес значения типа `T`. Взять адрес — `&x`, прочитать значение по адресу — `*p`.
+`T*` — адрес значения типа `T`. Взять адрес — `&x`, прочитать значение по адресу — `*p`.
 
 ```vibe run
-fn main() {
-    var x = 10
-    let p = &x
-    *p = 42
-    println(x, *p)
+void main() {
+    auto x = 10;
+    const auto p = &x;
+    *p = 42;
+    println(x, *p);
 }
 ```
 
 У указателей есть арифметика: `p + n` сдвигает на `n` **элементов**, а не байтов. Индексация `p[i]` — то же самое, что `*(p + i)`.
 
 ```vibe run
-fn main() {
-    var arr = [10, 20, 30, 40]
-    let p = &arr[0]
-    println(p[0], p[2], *(p + 3))
-    p[1] = 99
-    println(arr)
+void main() {
+    auto arr = [10, 20, 30, 40];
+    const auto p = &arr[0];
+    println(p[0], p[2], *(p + 3));
+    p[1] = 99;
+    println(arr);
 }
 ```
 
 Доступ к полям через указатель — прямо через точку, разыменовывать не нужно:
 
 ```vibe run
-struct Point { x: i64, y: i64 }
+struct Point { i64 x; i64 y; }
 
-fn main() {
-    var pt = Point{ x: 1, y: 2 }
-    let p = &pt
-    p.x = 100
-    println(pt.x, p.y)
+void main() {
+    auto pt = Point{ .x = 1, .y = 2 };
+    const auto p = &pt;
+    p.x = 100;
+    println(pt.x, p.y);
 }
 ```
 
 > **Ловушка.** Указатели не проверяются: выйти за границы или использовать указатель на уже завершённую функцию можно. Для безопасной работы с данными используйте срезы.
 
-### `*void` и `null`
+### `void*` и `null`
 
-`*void` — «любой указатель». Он неявно превращается в `*T` и обратно, что нужно для работы с аллокаторами и C. `null` — нулевой указатель; его можно присвоить любому указателю и функции.
+`void*` — «любой указатель». Он неявно превращается в `T*` и обратно, что нужно для работы с аллокаторами и C. `null` — нулевой указатель; его можно присвоить любому указателю и функции.
 
 ```vibe run
-fn main() {
-    var p: *i64 = null
-    println(p == null)
-    var x = 5
-    p = &x
-    println(p == null, *p)
+void main() {
+    i64* p = null;
+    println(p == null);
+    auto x = 5;
+    p = &x;
+    println(p == null, *p);
 }
 ```
 
-## Массивы `[N]T`
+## Массивы `T[N]`
 
 Размер массива — константа времени компиляции (число или `const`). Это значение: присваивание копирует все элементы.
 
 ```vibe run
-const N = 3
+const auto N = 3;
 
-fn main() {
-    var a: [N]i64
-    println(a)
-    a[0] = 7
-    a[2] = 9
-    let b = a
-    a[1] = 5
-    println(a, b, a.len)
-    let lit = [1, 2, 3, 4]
-    println(lit, lit.len)
+void main() {
+    i64[N] a;
+    println(a);
+    a[0] = 7;
+    a[2] = 9;
+    const auto b = a;
+    a[1] = 5;
+    println(a, b, a.len);
+    const auto lit = [1, 2, 3, 4];
+    println(lit, lit.len);
 }
 ```
 
-`var a: [N]T` без инициализатора заполняется нулями. Литерал `[1, 2, 3]` даёт `[3]i64`, если контекст не подсказывает другое.
+`T[N] a;` без инициализатора заполняется нулями. Литерал `[1, 2, 3]` даёт `i64[3]`, если контекст не подсказывает другое.
 
 Выход за границы — аварийный останов с точным местом. Проверка включена по умолчанию и отключается флагом `--release`:
 
 ```vibe run panic
-fn main() {
-    let a = [1, 2, 3]
-    var i = 3
-    println(a[i])
+void main() {
+    const auto a = [1, 2, 3];
+    auto i = 3;
+    println(a[i]);
 }
 ```
 
-## Срезы `[]T`
+## Срезы `T[]`
 
 Срез — это «окно» в чужую память: указатель и длина. Сам он ничего не владеет и не освобождает.
 
 ```vibe run
-fn main() {
-    var data = [1, 2, 3, 4, 5, 6]
-    let all: []i64 = data[..]
-    let mid = data[1..4]
-    let head = data[..2]
-    let tail = data[4..]
-    println(all, mid, head, tail)
-    println(mid.len)
-    mid[0] = 99
-    println(data)
+void main() {
+    auto data = [1, 2, 3, 4, 5, 6];
+    const i64[] all = data[..];
+    const auto mid = data[1..4];
+    const auto head = data[..2];
+    const auto tail = data[4..];
+    println(all, mid, head, tail);
+    println(mid.len);
+    mid[0] = 99;
+    println(data);
 }
 ```
 
@@ -258,26 +258,26 @@ fn main() {
 Срез можно создать из массива, другого среза или указателя. Для указателя конец обязателен, потому что длина неизвестна:
 
 ```vibe run
-fn main() {
-    var arr = [1, 2, 3, 4]
-    let p = &arr[0]
-    let s = p[0..3]
-    println(s)
+void main() {
+    auto arr = [1, 2, 3, 4];
+    const auto p = &arr[0];
+    const auto s = p[0..3];
+    println(s);
 }
 ```
 
 Литерал массива там, где ожидается срез, превращается в срез поверх памяти на стеке:
 
 ```vibe run
-fn total(xs: []i64) i64 {
-    var t = 0
-    for x in xs { t += x }
-    return t
+i64 total(i64[] xs) {
+    auto t = 0;
+    for (auto x : xs) { t += x; }
+    return t;
 }
 
-fn main() {
-    println(total([1, 2, 3]))
-    println(total([]))
+void main() {
+    println(total([1, 2, 3]));
+    println(total([]));
 }
 ```
 
@@ -285,22 +285,22 @@ fn main() {
 
 ## str
 
-`str` — это то же самое, что `[]u8`: указатель на байты и длина. Строка — не особый тип, а срез байтов, поэтому работают `.len`, индексация и срезы:
+`str` — это то же самое, что `u8[]`: указатель на байты и длина. Строка — не особый тип, а срез байтов, поэтому работают `.len`, индексация и срезы:
 
 ```vibe run
-fn main() {
-    let s = "hello"
-    println(s.len, s[1], s[1..3])
-    println(s == "hello", s == "world")
+void main() {
+    const auto s = "hello";
+    println(s.len, s[1], s[1..3]);
+    println(s == "hello", s == "world");
 }
 ```
 
 Это байты, а не символы Юникода: русская буква занимает два байта.
 
 ```vibe run
-fn main() {
-    let s = "привет"
-    println(s.len)
+void main() {
+    const auto s = "привет";
+    println(s.len);
 }
 ```
 
@@ -311,13 +311,13 @@ fn main() {
 `!T` — либо значение `T`, либо ошибка. Подробно — в [ошибках и опциональных значениях](errors-and-optionals.md).
 
 ```vibe run
-fn half(n: i64) !i64 {
-    if n % 2 != 0 { return error.Odd }
-    return n / 2
+!i64 half(i64 n) {
+    if (n % 2 != 0) { return error.Odd; }
+    return n / 2;
 }
 
-fn main() {
-    println(half(10) catch -1, half(7) catch -1)
+void main() {
+    println(half(10) catch -1, half(7) catch -1);
 }
 ```
 
@@ -325,38 +325,38 @@ fn main() {
 
 ## Опциональный `?T`
 
-`?T` — значение или «ничего». Это `Option[T]` из стандартной библиотеки:
+`?T` — значение или «ничего». Это `Option<T>` из стандартной библиотеки:
 
 ```vibe run
-fn first_even(xs: []i64) ?i64 {
-    for x in xs {
-        if x % 2 == 0 { return x }
+?i64 first_even(i64[] xs) {
+    for (auto x : xs) {
+        if (x % 2 == 0) { return x; }
     }
-    return null
+    return null;
 }
 
-fn main() {
-    println(first_even([3, 5, 6, 8]) orelse -1)
-    println(first_even([3, 5]) orelse -1)
+void main() {
+    println(first_even([3, 5, 6, 8]) orelse -1);
+    println(first_even([3, 5]) orelse -1);
 }
 ```
 
 ## Указатели на функции
 
-Тип `fn(A, B) R` — адрес функции. Если `R` нет, функция возвращает `void`.
+Тип `fn(A, B) -> R` — адрес функции. Для функции без результата пишите `fn(A, B) -> void`.
 
 ```vibe run
-fn double(x: i64) i64 { return x * 2 }
-fn negate(x: i64) i64 { return -x }
+i64 double(i64 x) { return x * 2; }
+i64 negate(i64 x) { return -x; }
 
-fn apply(f: fn(i64) i64, x: i64) i64 { return f(x) }
+i64 apply(fn(i64) -> i64 f, i64 x) { return f(x); }
 
-fn main() {
-    println(apply(double, 21), apply(negate, 5))
-    var op: fn(i64) i64 = double
-    println(op(4))
-    op = negate
-    println(op(4))
+void main() {
+    println(apply(double, 21), apply(negate, 5));
+    fn(i64) -> i64 op = double;
+    println(op(4));
+    op = negate;
+    println(op(4));
 }
 ```
 
@@ -364,22 +364,22 @@ fn main() {
 
 ## Псевдонимы типов
 
-`type Имя = ТипВыражение` даёт новое имя, а не новый тип: они взаимозаменяемы.
+`type Имя = Тип;` даёт новое имя, а не новый тип: они взаимозаменяемы.
 
 ```vibe run
-type Bytes = []u8
-type Callback = fn(i64) i64
-type Grid = [2][3]i64
+type Bytes = u8[];
+type Callback = fn(i64) -> i64;
+type Grid = i64[2][3];
 
-fn call(cb: Callback, n: i64) i64 { return cb(n) }
-fn inc(n: i64) i64 { return n + 1 }
+i64 call(Callback cb, i64 n) { return cb(n); }
+i64 inc(i64 n) { return n + 1; }
 
-fn main() {
-    let b: Bytes = "abc"
-    println(b.len, call(inc, 9))
-    var g: Grid
-    g[1][2] = 7
-    println(g)
+void main() {
+    const Bytes b = "abc";
+    println(b.len, call(inc, 9));
+    Grid g;
+    g[1][2] = 7;
+    println(g);
 }
 ```
 
@@ -391,7 +391,7 @@ fn main() {
 - `T` → `!T` и `T` → `?T`;
 - `error.X` → `!T`;
 - `null` → указатель, функция или `?T`;
-- `*T` ↔ `*void`;
+- `T*` ↔ `void*`;
 - литерал массива → срез.
 
 Остальное делается явно, через `as`:
@@ -405,25 +405,25 @@ fn main() {
 | указатель → указатель | `p as *u8` | тот же адрес |
 | указатель ↔ целое | `p as i64` | адрес как число |
 | enum ↔ целое | `Color.Blue as i64` | порядковый номер |
-| `[]T` → `*T` | `s as *T` | указатель на первый элемент |
+| `T[]` → `T*` | `s as *T` | указатель на первый элемент |
 
 ```vibe run
 enum Color { Red, Green, Blue }
 
-fn main() {
-    let big = 300
-    println(big as u8, -1 as u32, -5 as i8)
-    println(3.99 as i64, -3.99 as i64, 7 as f64 / 2 as f64)
-    println(Color.Blue as i64, 1 as Color)
-    let f: f32 = 0.1
-    println(f as f64)
+void main() {
+    const auto big = 300;
+    println(big as u8, -1 as u32, -5 as i8);
+    println(3.99 as i64, -3.99 as i64, 7 as f64 / 2 as f64);
+    println(Color::Blue as i64, 1 as Color);
+    const f32 f = 0.1;
+    println(f as f64);
 }
 ```
 
-`as` связывает слабее унарных операторов, как в Rust: `-a as i64` значит `(-a) as i64`, а `&x as *u8` — `(&x) as *u8`. Подробнее — на странице [операторов](operators.md#as-и-приоритет).
+`as` связывает слабее унарных операторов, иначе, чем в C++: `-a as i64` значит `(-a) as i64`, а `&x as *u8` — `(&x) as *u8`. Подробнее — на странице [операторов](operators.md#as-и-приоритет).
 
 ## Что дальше
 
-- Как объявлять значения и зачем разделять `let` и `var`: [переменные и константы](variables.md).
+- Как объявлять значения и зачем нужен `const`: [переменные и константы](variables.md).
 - Операторы и приоритет: [операторы](operators.md).
 - Составные типы: [структуры, union и enum](structs-unions-enums.md).

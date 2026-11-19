@@ -12,77 +12,77 @@ description: Как разбить программу на файлы: import, i
 Допустим, рядом лежат два файла. Первый — `shapes.vibe`:
 
 ```vibe file=shapes.vibe
-struct Rect { w: i64, h: i64 }
+struct Rect { i64 w; i64 h; }
 
-fn area(r: Rect) i64 {
-    return r.w * r.h
+i64 area(Rect r) {
+    return r.w * r.h;
 }
 
-const SIDES = 4
+const auto SIDES = 4;
 ```
 
 Второй — главный файл. Импорт пишется в начале:
 
 ```vibe run
-import "shapes.vibe"
+import "shapes.vibe";
 
-fn main() {
-    let r = Rect{ w: 3, h: 4 }
-    println(area(r), SIDES)
+void main() {
+    const auto r = Rect{ .w = 3, .h = 4 };
+    println(area(r), SIDES);
 }
 ```
 
-Простой `import "файл.vibe"` кладёт **все** имена файла (функции, структуры, union, enum, константы, глобальные переменные, псевдонимы типов) в общее пространство имён. Они используются без префикса.
+Простой `import "файл.vibe";` кладёт **все** имена файла (функции, структуры, union, enum, константы, глобальные переменные, псевдонимы типов) в общее пространство имён. Они используются без префикса.
 
 Свойства импорта:
 
 - Путь — строка, **относительно файла, в котором написан `import`**, а не относительно места запуска.
 - Каждый файл загружается **один раз**, сколько бы раз и откуда его ни импортировали.
 - Импорты можно ставить в любом месте верхнего уровня, но по соглашению их пишут в начале.
-- Подкаталоги допустимы: `import "lib/util.vibe"`.
+- Подкаталоги допустимы: `import "lib/util.vibe";`.
 - Циклические импорты допустимы: файл загружается один раз, поэтому цикл просто прекращается.
 
-## `import ... as имя`
+## `import ... as имя;`
 
-Если имена из файла могут пересечься с вашими, импортируйте с псевдонимом. Тогда все его имена получают префикс `имя.`:
+Если имена из файла могут пересечься с вашими, импортируйте с псевдонимом. Тогда все его имена получают префикс `имя::`:
 
 ```vibe file=geometry.vibe
-struct Point { x: i64, y: i64 }
+struct Point {
+    i64 x;
+    i64 y;
+    i64 sum() { return this->x + this->y; }
+}
 
 enum Axis { X, Y }
 
-union Hit { Yes: i64, No }
+union Hit { i64 Yes; No; }
 
-const ORIGIN_X = 0
+const auto ORIGIN_X = 0;
 
-type Coord = i64
+type Coord = i64;
 
-fn dist2(p: Point) i64 {
-    return p.x * p.x + p.y * p.y
-}
-
-impl Point {
-    fn sum(self) i64 { return self.x + self.y }
+i64 dist2(Point p) {
+    return p.x * p.x + p.y * p.y;
 }
 ```
 
 ```vibe run
-import "geometry.vibe" as geo
+import "geometry.vibe" as geo;
 
-fn main() {
-    let p = geo.Point{ x: 3, y: 4 }
-    println(geo.dist2(p), p.sum(), geo.ORIGIN_X)
-    let a: geo.Axis = .Y
-    let b = geo.Axis.X
-    println(a, b)
-    let h: geo.Hit = .Yes(5)
-    println(h)
-    let c: geo.Coord = 7
-    println(c)
+void main() {
+    const auto p = geo::Point{ .x = 3, .y = 4 };
+    println(geo::dist2(p), p.sum(), geo::ORIGIN_X);
+    const geo::Axis a = .Y;
+    const auto b = geo::Axis.X;
+    println(a, b);
+    const geo::Hit h = .Yes(5);
+    println(h);
+    const geo::Coord c = 7;
+    println(c);
 }
 ```
 
-Псевдоним ставится перед любым членом файла: функцией, типом, константой, глобальной переменной. Формат печати типов тоже показывает префикс (`geo.Point{ ... }` в сообщении ошибки или при печати структуры).
+Псевдоним ставится перед любым членом файла: функцией, типом, константой, глобальной переменной. Формат печати типов тоже показывает префикс (`geo::Point{ ... }` в сообщении ошибки или при печати структуры).
 
 Внутри самого файла его имена работают **без префикса**: переименование видят только те, кто импортирует.
 
@@ -96,14 +96,14 @@ fn main() {
 2. Имя принадлежит одному файлу.
 
 ```vibe file=util.vibe
-fn tool() i64 { return 1 }
+i64 tool() { return 1; }
 ```
 
 ```vibe error
-import "util.vibe" as a
-import "util.vibe" as b
+import "util.vibe" as a;
+import "util.vibe" as b;
 
-fn main() {}
+void main() {}
 ```
 
 ## Простой импорт «протекает»
@@ -111,25 +111,25 @@ fn main() {}
 Если файл `util.vibe` сам делает **простой** `import "base.vibe"`, то имена из `base.vibe` оказываются в общем пространстве имён и становятся видны везде, в том числе в главном файле:
 
 ```vibe file=lib/base.vibe
-fn base_val() i64 { return 41 }
+i64 base_val() { return 41; }
 ```
 
 ```vibe file=lib/util.vibe
-import "base.vibe"
+import "base.vibe";
 
-fn helper() i64 { return base_val() + 1 }
+i64 helper() { return base_val() + 1; }
 ```
 
 ```vibe run
-import "lib/util.vibe" as u
+import "lib/util.vibe" as u;
 
-fn main() {
-    println(u.helper())
-    println(base_val())
+void main() {
+    println(u::helper());
+    println(base_val());
 }
 ```
 
-Имена из `util.vibe` получили префикс `u.`, а `base_val` из вложенного простого импорта — нет. Если хотите изолированный модуль, импортируйте всё через `as`, и тогда префикс везде будет явным.
+Имена из `util.vibe` получили префикс `u::`, а `base_val` из вложенного простого импорта — нет. Если хотите изолированный модуль, импортируйте всё через `as`, и тогда префикс везде будет явным.
 
 ## Пути
 
@@ -138,33 +138,33 @@ fn main() {
 Отсутствующий файл — ошибка при компиляции:
 
 ```vibe error
-import "missing.vibe" as m
+import "missing.vibe" as m;
 
-fn main() {}
+void main() {}
 ```
 
 ## `extern` и `export` не получают префикс
 
-Имена `extern fn` и `export fn` — это символы C, у них не может быть префикса. Они всегда глобальные, даже при `import ... as`. Подробнее — на странице [взаимодействие с C](c-interop.md).
+Имена `extern` и `export` — это символы C, у них не может быть префикса. Они всегда глобальные, даже при `import ... as`. Подробнее — на странице [взаимодействие с C](c-interop.md).
 
 ## Конфликты имён
 
 Если два простых импорта определяют одно имя, компилятор останавливается с сообщением о дубликате:
 
 ```vibe file=one.vibe
-fn helper() i64 { return 1 }
+i64 helper() { return 1; }
 ```
 
 ```vibe file=two.vibe
-fn helper() i64 { return 2 }
+i64 helper() { return 2; }
 ```
 
 ```vibe error
-import "one.vibe"
-import "two.vibe"
+import "one.vibe";
+import "two.vibe";
 
-fn main() {
-    println(helper())
+void main() {
+    println(helper());
 }
 ```
 
@@ -199,18 +199,18 @@ import "util.vibe"
 Компилятор берёт из импортированных файлов только те функции, до которых можно добраться из `main`. Лишний импорт не раздувает бинарник, а неиспользуемая функция не проверяется на типы (если это не дженерик, ошибки в нём проявятся при первом использовании).
 
 ```vibe file=maybe.vibe
-fn used() i64 { return 1 }
+i64 used() { return 1; }
 
-fn never_called() i64 {
-    return "это не число"
+i64 never_called() {
+    return "это не число";
 }
 ```
 
 ```vibe run
-import "maybe.vibe"
+import "maybe.vibe";
 
-fn main() {
-    println(used())
+void main() {
+    println(used());
 }
 ```
 

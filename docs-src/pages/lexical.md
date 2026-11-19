@@ -12,17 +12,17 @@ description: Комментарии, литералы, экранировани�
 Исходный файл — обычный UTF-8 текст с расширением `.vibe`. Программа начинается с функции `main`. Она может возвращать ничего, `i32` (код выхода) или `!void` (ошибку, которая завершит программу).
 
 ```vibe run
-fn main() {
-    println("минимальная программа")
+void main() {
+    println("минимальная программа");
 }
 ```
 
 Код выхода можно вернуть числом:
 
 ```vibe run exit
-fn main() i32 {
-    println("выходим с кодом 3")
-    return 3
+i32 main() {
+    println("выходим с кодом 3");
+    return 3;
 }
 ```
 
@@ -31,14 +31,14 @@ fn main() i32 {
 Есть два вида: строчный `//` и блочный `/* ... */`.
 
 ```vibe run
-fn main() {
+void main() {
     // строчный комментарий идёт до конца строки
-    let a = 1 /* блочный можно вставить прямо в выражение */ + 2
+    const auto a = 1 /* блочный можно вставить прямо в выражение */ + 2;
     /*
        блочный может занимать
        несколько строк
     */
-    println(a)
+    println(a);
 }
 ```
 
@@ -46,83 +46,64 @@ fn main() {
 
 ## Конец оператора
 
-Точки с запятой писать не нужно. Лексер сам вставляет `;` в конце строки, если последний токен строки — один из:
+Каждый оператор заканчивается точкой с запятой, как в C++. После закрывающей `}` блока, функции, `struct`, `enum`, `union`, `if`, `while`, `for` и `match` она не нужна.
 
-- идентификатор;
-- литерал (число, строка, символ);
-- `)`, `]`, `}`;
-- `?`;
-- ключевые слова `return`, `break`, `continue`, `true`, `false`, `null`.
-
-Во всех остальных случаях оператор продолжается на следующей строке. Поэтому длинное выражение переносят **после** оператора, а не перед ним:
+Оператор можно переносить как угодно: конец определяется только `;`.
 
 ```vibe run
-fn main() {
-    let total = 1 +
-        2 +
-        3
-    println(total)
-}
-```
+i64 sum3(i64 a, i64 b, i64 c) { return a + b + c; }
 
-Внутри круглых и квадратных скобок переводы строк игнорируются вообще, поэтому аргументы вызова и элементы массива можно переносить как угодно:
-
-```vibe run
-fn sum3(a: i64, b: i64, c: i64) i64 { return a + b + c }
-
-fn main() {
-    let r = sum3(
+void main() {
+    const auto total = 1
+        + 2
+        + 3;
+    const auto r = sum3(
         10,
         20,
         30
-    )
-    let xs = [
+    );
+    const auto xs = [
         1,
         2,
         3
-    ]
-    println(r, xs)
+    ];
+    println(total, r, xs);
 }
 ```
 
-Если перенести оператор **перед** строкой, строка завершится раньше времени и компилятор жалуется на следующую:
+Если забыть `;`, компилятор укажет на токен, где оператор должен был закончиться:
 
 ```vibe error
-fn main() {
-    let total = 1
-        + 2
-    println(total)
+void main() {
+    const auto total = 1
+    println(total);
 }
 ```
 
-Здесь `1` заканчивает оператор `let total = 1`, а строка `+ 2` начинается с оператора, которого в начале выражения быть не может. Правило простое: **оператор оставляйте в конце строки**.
-
-`;` тоже можно написать явно. Это удобно, когда несколько операторов нужно уместить в одну строку:
+Несколько операторов можно уместить в одну строку:
 
 ```vibe run
-fn main() {
-    var x = 1; x += 1; x *= 10
-    println(x)
+void main() {
+    auto x = 1; x += 1; x *= 10;
+    println(x);
 }
 ```
 
-### `else` на следующей строке
-
-Исключение из правила: `} else` можно поставить на следующую строку.
+`else` можно поставить как на одной строке с `}`, так и на следующей:
 
 ```vibe run
-fn main() {
-    let n = 5
-    if n > 3 {
-        println("больше")
+void main() {
+    const auto n = 5;
+    if (n > 3) {
+        println("больше");
     }
     else {
-        println("не больше")
+        println("не больше");
     }
 }
 ```
 
-Однако формат `vibe fmt` всегда пишет `} else {` в одну строку, см. [инструменты](tooling.md#vibe-fmt).
+Формат `vibe fmt` всегда пишет `} else {` в одну строку, см. [инструменты](tooling.md#vibe-fmt).
 
 ## Идентификаторы
 
@@ -131,12 +112,12 @@ fn main() {
 Ключевые слова нельзя использовать как имена:
 
 ```text
-fn let var const struct union enum impl type import as extern export
-if else while for in match return break continue defer errdefer
-test is orelse catch sizeof alignof true false null error
+fn const static template struct union enum type import as extern export
+if else while for match return break continue defer errdefer
+test is orelse catch sizeof alignof true false null nullptr error
 ```
 
-> **Примечание.** `self` и `Self` — не ключевые слова в строгом смысле, но имеют особый смысл внутри [`impl`](structs-unions-enums.md#impl-методы).
+> **Примечание.** `auto`, `this` и `Self` — не ключевые слова в строгом смысле, но имеют особый смысл: `auto` вместо типа, `this` и `Self` внутри [методов](structs-unions-enums.md#методы).
 
 ## Целые литералы
 
@@ -149,31 +130,31 @@ test is orelse catch sizeof alignof true false null error
 | `1_000_000` | `_` — разделитель разрядов, на значение не влияет |
 
 ```vibe run
-fn main() {
-    println(42, 0xff, 0b101, 0o17, 1_000_000)
-    println(0xDEAD_BEEF, 0b1111_0000)
+void main() {
+    println(42, 0xff, 0b101, 0o17, 1_000_000);
+    println(0xDEAD_BEEF, 0b1111_0000);
 }
 ```
 
 Тип целого литерала берётся из контекста; если контекста нет, это `i64`:
 
 ```vibe run
-fn main() {
-    let a = 7
-    let b: u8 = 200
-    let c: i16 = -5
-    var d: u32 = 4000000000
-    println(a, b, c, d)
+void main() {
+    const auto a = 7;
+    const u8 b = 200;
+    const i16 c = -5;
+    u32 d = 4000000000;
+    println(a, b, c, d);
 }
 ```
 
 > **Ловушка.** Компилятор не проверяет, помещается ли литерал в тип. Лишние старшие биты просто отбрасываются:
 
 ```vibe run
-fn main() {
-    let b: u8 = 300
-    let c: i8 = 200
-    println(b, c)
+void main() {
+    const u8 b = 300;
+    const i8 c = 200;
+    println(b, c);
 }
 ```
 
@@ -182,10 +163,10 @@ fn main() {
 ## Дробные литералы
 
 ```vibe run
-fn main() {
-    println(3.14, 1e9, 2.5e-3, 1_000.5)
-    let f: f32 = 0.1
-    println(f)
+void main() {
+    println(3.14, 1e9, 2.5e-3, 1_000.5);
+    const f32 f = 0.1;
+    println(f);
 }
 ```
 
@@ -196,12 +177,12 @@ fn main() {
 Символ в одинарных кавычках — это число типа `u8` (код байта). Юникод-символы вне ASCII в одинарные кавычки не помещаются: они занимают несколько байт.
 
 ```vibe run
-fn main() {
-    let c = 'A'
-    println(c, c + 1, (c + 1) as u8 == 'B')
-    println("{c:c} {'z':c}")
-    let digit = '7' - '0'
-    println(digit)
+void main() {
+    const auto c = 'A';
+    println(c, c + 1, (c + 1) as u8 == 'B');
+    println("{c:c} {'z':c}");
+    const auto digit = '7' - '0';
+    println(digit);
 }
 ```
 
@@ -227,11 +208,11 @@ fn main() {
 | `\}` | литеральная `}` |
 
 ```vibe run
-fn main() {
-    println("строка 1\nстрока 2")
-    println("колонка\tколонка")
-    println("кавычки: \" и \\")
-    println("скобки: \{ и \}")
+void main() {
+    println("строка 1\nстрока 2");
+    println("колонка\tколонка");
+    println("кавычки: \" и \\");
+    println("скобки: \{ и \}");
 }
 ```
 
@@ -240,12 +221,12 @@ fn main() {
 Строковый литерал может содержать настоящий перевод строки. Он попадёт в значение как есть, вместе с отступами:
 
 ```vibe run
-fn main() {
-    let text = "первая
+void main() {
+    const auto text = "первая
 вторая
-третья"
-    println(text)
-    println(text.len)
+третья";
+    println(text);
+    println(text.len);
 }
 ```
 
@@ -254,12 +235,12 @@ fn main() {
 В `"..."` выражение в фигурных скобках вычисляется и подставляется. Скобки — часть формата, поэтому литеральные нужно удваивать: `{{` и `}}` (или экранировать `\{`).
 
 ```vibe run
-fn main() {
-    let a = 6
-    let b = 7
-    println("{a} * {b} = {a * b}")
-    println("{{a}} — это не подстановка")
-    println("{a + b > 10} {a:03}")
+void main() {
+    const auto a = 6;
+    const auto b = 7;
+    println("{a} * {b} = {a * b}");
+    println("{{a}} — это не подстановка");
+    println("{a + b > 10} {a:03}");
 }
 ```
 

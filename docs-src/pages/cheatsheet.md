@@ -10,8 +10,8 @@ description: Весь синтаксис Vibe на одной странице: 
 ## Программа
 
 ```vibe run
-fn main() {
-    println("Привет, Vibe!")
+void main() {
+    println("Привет, Vibe!");
 }
 ```
 
@@ -31,7 +31,7 @@ fn main() {
 | | |
 |---|---|
 | комментарии | `// строка`, `/* блок */` |
-| конец оператора | перевод строки (оператор оставляйте в конце строки), либо `;` |
+| конец оператора | `;` (после `}` блока не нужна) |
 | числа | `42`, `0xff`, `0b101`, `0o17`, `1_000`, `3.14`, `1e9` |
 | символ | `'a'` — это число `u8` |
 | строки | `"text"`, escapes `\n \t \r \0 \e \\ \" \' \{ \}` |
@@ -45,32 +45,32 @@ fn main() {
 |---|---|
 | целые | `i8 i16 i32 i64 isize`, `u8 u16 u32 u64 usize` |
 | дробные | `f32 f64` |
-| прочее | `bool`, `void`, `str` (= `[]u8`) |
-| указатель | `*T`, `*void`, `null` |
-| срез / массив | `[]T`, `[N]T` |
+| прочее | `bool`, `void`, `str` (= `u8[]`) |
+| указатель | `T*`, `void*`, `null` |
+| срез / массив | `T[]`, `T[N]` |
 | ошибка / опционал | `!T`, `?T` |
-| функции | `fn(A, B) R`, замыкание `fn[](A) R` |
-| псевдоним | `type Имя = Тип` |
+| функции | `fn(A, B) -> R`, замыкание `fn[](A) -> R` |
+| псевдоним | `type Имя = Тип;` |
 
 См. [типы](types.md).
 
 ## Переменные
 
 ```vibe run
-const N = 4 * 2
-var counter: i64 = 0
+const auto N = 4 * 2;
+i64 counter = 0;
 
-fn main() {
-    let a = 10
-    var b: i64 = 20
-    b += a
-    var zero: i32
-    counter += 1
-    println(a, b, zero, N, counter)
+void main() {
+    const auto a = 10;
+    i64 b = 20;
+    b += a;
+    i32 zero;
+    counter += 1;
+    println(a, b, zero, N, counter);
 }
 ```
 
-`let` — неизменяемая, `var` — изменяемая, без значения — ноль. См. [переменные](variables.md).
+Переменная изменяема, `const` делает её неизменяемой, `auto` выводит тип, без значения — ноль. См. [переменные](variables.md).
 
 ## Операторы
 
@@ -80,7 +80,7 @@ fn main() {
 | сравнение | `== != < <= > >=` |
 | логика | `&& \|\| !` (ленивые, только `bool`) |
 | биты | `& \| ^ ~ << >>` |
-| присваивание | `= += -= *= /= %=`, `_ = выражение` |
+| присваивание | `= += -= *= /= %= |= &= ^= <<= >>=`, `x++`, `x--`, `_ = выражение` |
 | приведение | `x as T` |
 | указатели | `&x`, `*p`, `p[i]`, `p + n`, `p.поле` |
 | срезы | `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]` |
@@ -92,32 +92,32 @@ fn main() {
 ## Управление потоком
 
 ```vibe run
-fn main() {
-    let n = 7
-    if n > 5 { println("big") } else { println("small") }
+void main() {
+    const auto n = 7;
+    if (n > 5) { println("big"); } else { println("small"); }
 
-    var i = 0
-    while i < 2 { i += 1 }
+    auto i = 0;
+    while (i < 2) { i += 1; }
 
-    for k in 0..3 { print(k, "") }
-    println()
-    for idx, v in [10, 20] { print("{idx}={v}", "") }
-    println()
+    for (auto k : 0..3) { print(k, ""); }
+    println();
+    for (auto [idx, v] : [10, 20]) { print("{idx}={v}", ""); }
+    println();
 
-    let word = match n {
+    const auto word = match n {
         1, 2 => "few",
         _ => "many",
-    }
-    println(word, i)
+    };
+    println(word, i);
 }
 ```
 
 | | |
 |---|---|
-| `if c { } else if c { } else { }` | условие — только `bool`, скобки блока обязательны |
-| `while c { }` | цикл |
-| `for i in a..b { }` | `a` включительно, `b` нет |
-| `for x in seq { }`, `for i, x in seq { }` | массив, срез, `List` |
+| `if (c) { } else if (c) { } else { }` | условие — только `bool`, скобки блока обязательны |
+| `while (c) { }` | цикл |
+| `for (auto i : a..b) { }` | `a` включительно, `b` нет |
+| `for (auto x : seq) { }`, `for (auto [i, x] : seq) { }` | массив, срез, `List` |
 | `break`, `continue`, `return [e]` | выходы |
 | `match v { pat => e, ... }` | значения, enum, строки, union; `_` — остальное |
 | `defer stmt`, `errdefer stmt` | выполнить при выходе из блока (`errdefer` — только при ошибке) |
@@ -127,45 +127,45 @@ fn main() {
 ## Функции
 
 ```vibe run
-fn add(a: i64, b: i64) i64 { return a + b }
-fn largest[T: Ord](a: T, b: T) T { if a > b { return a } return b }
+i64 add(i64 a, i64 b) { return a + b; }
+template<T: Ord> T largest(T a, T b) { if (a > b) { return a; } return b; }
 
-fn main() {
-    let k = 10
-    let plus = fn[k](x: i64) i64 { return x + k }
-    println(add(1, 2), largest(3, 9), plus(5))
+void main() {
+    const auto k = 10;
+    const auto plus = [&k](i64 x) -> i64 { return x + k; };
+    println(add(1, 2), largest(3, 9), plus(5));
 }
 ```
 
 | | |
 |---|---|
-| объявление | `fn имя(п: Т) Результат { }` |
-| дженерик | `fn имя[T](x: T) T`, ограничения `Eq Ord Num Int Float` |
-| явный тип | `имя[i64](...)` |
-| замыкание | `fn[захват](x: i64) i64 { }`, живёт только вниз по стеку |
-| C | `extern fn f(x: i64) i64`, `export fn g() { }` |
+| объявление | `Результат имя(Тип п) { }` |
+| дженерик | `template<T: Ord> T имя(T x)`, ограничения `Eq Ord Num Int Float` |
+| явный тип | `имя<i64>(...)` |
+| замыкание | `[&захват](i64 x) -> i64 { }`, живёт только вниз по стеку |
+| C | `extern i64 f(i64 x);`, `export void g() { }` |
 
 См. [функции](functions.md).
 
 ## Структуры, union, enum
 
 ```vibe run
-struct Point { x: i64, y: i64 }
-enum Color { Red, Green }
-union Shape { Circle: f64, Empty }
-
-impl Point {
-    fn new(x: i64, y: i64) Self { return Self{ x: x, y: y } }
-    fn sum(self) i64 { return self.x + self.y }
+struct Point {
+    i64 x;
+    i64 y;
+    static Self new(i64 x, i64 y) { return Self{ .x = x, .y = y }; }
+    i64 sum() { return this->x + this->y; }
 }
+enum Color { Red, Green }
+union Shape { f64 Circle; Empty; }
 
-fn main() {
-    let p = Point.new(1, 2)
-    let c: Color = .Green
-    let s: Shape = .Circle(2.0)
-    println(p.sum(), c, s)
+void main() {
+    const auto p = Point::new(1, 2);
+    const Color c = .Green;
+    const Shape s = .Circle(2.0);
+    println(p.sum(), c, s);
     match s {
-        .Circle(r) => println("r = {r}")
+        .Circle(r) => println("r = {r}");
         .Empty => {}
     }
 }
@@ -173,31 +173,31 @@ fn main() {
 
 | | |
 |---|---|
-| литерал | `P{ x: 1, y: 2 }`, `P{ x: 1, .. }` (остальное нулями), `P{ .. }` |
-| метод | `impl P { fn m(self) ... }`, `self` = `*Self`, `self: Self` — копия |
-| статический | `fn new() Self`, вызов `P.new()` |
-| enum | `.Имя` (по контексту) или `Color.Red`; `as i64` |
+| литерал | `P{ .x = 1, .y = 2 }`, `P{ .x = 1 }` (остальное нулями), `P{}` |
+| метод | внутри `struct`: `void m() { ... }`, `this` — указатель |
+| статический | `static Self new() { ... }`, вызов `P::new()` |
+| enum | `.Имя` (по контексту) или `Color::Red`; `as i64` |
 | union | `.Имя(payload)`, `.Имя`; `match` с привязкой |
-| дженерик | `struct Pair[A, B] { ... }`, `impl Pair[A, B] { ... }` |
+| дженерик | `struct Pair<A, B> { ... }`, `Pair<i64, str>{ ... }` |
 
 См. [структуры, union и enum](structs-unions-enums.md).
 
 ## Ошибки и опционалы
 
 ```vibe run
-fn half(n: i64) !i64 {
-    if n % 2 != 0 { return error.Odd }
-    return n / 2
+!i64 half(i64 n) {
+    if (n % 2 != 0) { return error.Odd; }
+    return n / 2;
 }
 
-fn find(xs: []i64, v: i64) ?i64 {
-    for i, x in xs { if x == v { return i } }
-    return null
+?i64 find(i64[] xs, i64 v) {
+    for (auto [i, x] : xs) { if (x == v) { return i; } }
+    return null;
 }
 
-fn main() {
-    println(half(8) catch 0, half(7) catch 0)
-    println(find([4, 5], 5) orelse -1)
+void main() {
+    println(half(8) catch 0, half(7) catch 0);
+    println(find([4, 5], 5) orelse -1);
 }
 ```
 
@@ -207,28 +207,28 @@ fn main() {
 
 | | |
 |---|---|
-| аллокаторы | `c_allocator()`, `FixedBuf.init(buf).allocator()`, `Arena.init(parent).allocator()` |
-| выделить | `a.alloc[T](n)?`, `a.create[T]()?`, `a.dup(s)?` |
+| аллокаторы | `c_allocator()`, `FixedBuf::init(buf).allocator()`, `Arena::init(parent).allocator()` |
+| выделить | `a.alloc<T>(n)?`, `a.create<T>()?`, `a.dup(s)?` |
 | освободить | `a.free(s)`, `a.destroy(p)`, `arena.deinit()` |
-| шаблон | `let x = a.alloc[T](n)?` и сразу `defer a.free(x)` |
+| шаблон | `auto x = a.alloc<T>(n)?;` и сразу `defer a.free(x)` |
 
 См. [память](memory.md).
 
 ## Коллекции
 
 ```vibe run
-fn main() !void {
-    var xs = List[i64].init(c_allocator())
-    defer xs.deinit()
-    xs.push(3)?
-    xs.push(1)?
-    xs.sort()
-    println(xs.slice())
+!void main() {
+    auto xs = List<i64>::init(c_allocator());
+    defer xs.deinit();
+    xs.push(3)?;
+    xs.push(1)?;
+    xs.sort();
+    println(xs.slice());
 
-    var m = Map[i64].init(c_allocator())
-    defer m.deinit()
-    m.put("a", 1)?
-    println(m.get("a")?, m.has("b"))
+    auto m = Map<i64>::init(c_allocator());
+    defer m.deinit();
+    m.put("a", 1)?;
+    println(m.get("a")?, m.has("b"));
 }
 ```
 
@@ -249,8 +249,8 @@ fn main() !void {
 ## Модули и C
 
 ```text
-import "util.vibe"                  имена в общее пространство
-import "util.vibe" as u             u.имя
+import "util.vibe";                 имена в общее пространство
+import "util.vibe" as u;            u::имя
 vibe run main.vibe lib.c x.cpp -lm  C и C++ вместе
 ```
 
@@ -260,7 +260,7 @@ vibe run main.vibe lib.c x.cpp -lm  C и C++ вместе
 
 ```vibe test
 test "арифметика" {
-    assert(1 + 1 == 2)
+    assert(1 + 1 == 2);
 }
 ```
 

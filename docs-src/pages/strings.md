@@ -7,7 +7,7 @@ description: Тип str, срезы и сравнение строк, интер
 
 ## Что такое `str`
 
-`str` — это срез байтов: указатель на данные и длина (`{ ptr, len }`, 16 байт). Это то же самое, что `[]u8`. Отсюда всё поведение:
+`str` — это срез байтов: указатель на данные и длина (`{ ptr, len }`, 16 байт). Это то же самое, что `u8[]`. Отсюда всё поведение:
 
 - Строка **не владеет** памятью. Литерал `"..."` лежит в памяти программы, копирование `str` копирует только указатель и длину.
 - Строка не обязана заканчиваться нулём (но литерал заканчивается, см. [C](c-interop.md)).
@@ -15,11 +15,11 @@ description: Тип str, срезы и сравнение строк, интер
 - Это **байты**, а не символы. Русская буква занимает 2 байта.
 
 ```vibe run
-fn main() {
-    let s = "hello"
-    println(s.len, s[0], s[1..4], s[..2], s[3..])
-    let ru = "héllo"
-    println(ru.len, ru[1], ru[2])
+void main() {
+    const auto s = "hello";
+    println(s.len, s[0], s[1..4], s[..2], s[3..]);
+    const auto ru = "héllo";
+    println(ru.len, ru[1], ru[2]);
 }
 ```
 
@@ -30,20 +30,20 @@ fn main() {
 Содержимое литерала менять нельзя. Попытка записать в него аварийно завершает программу, потому что память литералов защищена от записи:
 
 ```vibe run exit
-fn main() {
-    var s = "abc"
-    s[0] = 65
+void main() {
+    auto s = "abc";
+    s[0] = 65;
 }
 ```
 
 Чтобы получить изменяемую строку, скопируйте её в свой буфер:
 
 ```vibe run
-fn main() {
-    var buf: [3]u8 = [97, 98, 99]
-    let s: str = buf[..]
-    buf[0] = 90
-    println(s)
+void main() {
+    u8[3] buf = [97, 98, 99];
+    const str s = buf[..];
+    buf[0] = 90;
+    println(s);
 }
 ```
 
@@ -52,11 +52,11 @@ fn main() {
 `==` и `!=` сравнивают **содержимое** (внутри — `memcmp`). Порядка (`<`) нет.
 
 ```vibe run
-fn main() {
-    let a = "abc"
-    let b = "ab"
-    println(a == "abc", a != b, a == "ABC")
-    println("" == "")
+void main() {
+    const auto a = "abc";
+    const auto b = "ab";
+    println(a == "abc", a != b, a == "ABC");
+    println("" == "");
 }
 ```
 
@@ -67,36 +67,36 @@ fn main() {
 В строковом литерале `{выражение}` вычисляется и вставляется. Можно любое выражение, в том числе вызовы, индексы, арифметику, сравнения и приведения.
 
 ```vibe run
-fn double(x: i64) i64 { return x * 2 }
+i64 double(i64 x) { return x * 2; }
 
-fn main() {
-    let a = 6
-    let name = "мир"
-    let xs = [10, 20, 30]
-    println("привет, {name}")
-    println("{a} * 2 = {double(a)}")
-    println("сумма {xs[0] + xs[1]}, длина {xs.len}")
-    println("срез {xs[1..]}")
-    println("{a > 3 && a < 9}, {a as f64 / 4.0}")
+void main() {
+    const auto a = 6;
+    const auto name = "мир";
+    const auto xs = [10, 20, 30];
+    println("привет, {name}");
+    println("{a} * 2 = {double(a)}");
+    println("сумма {xs[0] + xs[1]}, длина {xs.len}");
+    println("срез {xs[1..]}");
+    println("{a > 3 && a < 9}, {a as f64 / 4.0}");
 }
 ```
 
 Литеральные фигурные скобки — `{{` и `}}` (или `\{` и `\}`):
 
 ```vibe run
-fn main() {
-    let v = 3
-    println("{{\"v\": {v}}}")
-    println("множество {{1, 2}}")
+void main() {
+    const auto v = 3;
+    println("{{\"v\": {v}}}");
+    println("множество {{1, 2}}");
 }
 ```
 
-**Важно:** интерполяция — это **не** выделение строки. Компилятор разворачивает её в формат для `printf`, значения печатаются сразу, ничего не выделяется в куче. Поэтому `"..{x}.."` без вызова функции печати **не создаёт значения типа `str`**. Интерполяция допустима только в аргументах `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint`:
+**Важно:** интерполяция — это **не** выделение строки. Компилятор разворачивает её в формат для `printf`, значения печатаются сразу, ничего не выделяется в куче. Поэтому `"..{x}.."` без вызова функции печати **не создаёт значения типа `str`**. Интерполяция допустима только в аргументах функции, у которой последний параметр имеет тип `Fmt`: это `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` и ваши собственные (см. [Свои функции вывода](#свои-функции-вывода)):
 
 ```vibe error fragment
-let n = 5
-let s = "n = {n}"
-println(s)
+const auto n = 5;
+const auto s = "n = {n}";
+println(s);
 ```
 
 Если нужна строка-значение, соберите её в буфер: `bprint` или `sprint` (см. [Сборка строк](#сборка-строк)).
@@ -113,19 +113,19 @@ println(s)
 Аргументы можно перечислять через запятую: они выводятся через пробел. Печатается **любой** тип:
 
 ```vibe run
-struct P { x: i64, y: f64 }
+struct P { i64 x; f64 y; }
 enum Color { Red, Green }
-union U { A: i64, B }
+union U { i64 A; B; }
 
-fn main() {
-    let p = P{ x: 1, y: 2.5 }
-    println(1, "два", 3.5, true, 'x')
-    println(p, [1, 2, 3], "строка")
-    println(Color.Green, U.A(7), U.B)
-    println(&p == &p)
-    print("без перевода, ")
-    print("продолжение\n")
-    eprintln("это в stderr")
+void main() {
+    const auto p = P{ .x = 1, .y = 2.5 };
+    println(1, "два", 3.5, true, 'x');
+    println(p, [1, 2, 3], "строка");
+    println(Color::Green, U::A(7), U::B);
+    println(&p == &p);
+    print("без перевода, ");
+    print("продолжение\n");
+    eprintln("это в stderr");
 }
 ```
 
@@ -168,13 +168,13 @@ fn main() {
 | `{c:c}` | `A` для 65 | число как символ |
 
 ```vibe run
-fn main() {
-    let n = 255
-    println("[{n}] [{n:x}] [{n:X}] [{n:08X}]")
-    println("[{n:6}] [{n:-6}] [{n:06}] [{n:+}]")
-    println("[{65:c}] [{'z':c}]")
-    let h: u8 = 7
-    println("{h:02x}")
+void main() {
+    const auto n = 255;
+    println("[{n}] [{n:x}] [{n:X}] [{n:08X}]");
+    println("[{n:6}] [{n:-6}] [{n:06}] [{n:+}]");
+    println("[{65:c}] [{'z':c}]");
+    const u8 h = 7;
+    println("{h:02x}");
 }
 ```
 
@@ -191,10 +191,10 @@ fn main() {
 | `{f:e}` | `3.141593e+00` | экспоненциальная запись |
 
 ```vibe run
-fn main() {
-    let f = 3.14159265
-    println("[{f}] [{f:.2}] [{f:8.3}] [{f:-8.1}] [{f:e}]")
-    println(1.0 / 3.0, 100000.0, 1000000.0, 1e-5, 2.0)
+void main() {
+    const auto f = 3.14159265;
+    println("[{f}] [{f:.2}] [{f:8.3}] [{f:-8.1}] [{f:e}]");
+    println(1.0 / 3.0, 100000.0, 1000000.0, 1e-5, 2.0);
 }
 ```
 
@@ -205,10 +205,10 @@ fn main() {
 Ширина работает и со строками:
 
 ```vibe run
-fn main() {
-    let name = "hi"
-    println("[{name:6}] [{name:-6}]")
-    println("{name:-10}|")
+void main() {
+    const auto name = "hi";
+    println("[{name:6}] [{name:-6}]");
+    println("{name:-10}|");
 }
 ```
 
@@ -225,17 +225,17 @@ fn main() {
 `bprint(buf, ...)` форматирует в ваш массив и возвращает `!str`, срез этого буфера. Не влезло — `error.NoSpace`. Ничего не выделяется.
 
 ```vibe run
-fn main() !void {
-    var buf: [32]u8
-    let s = bprint(buf[..], "x = {1 + 2}, y = {2.5:.1}")?
-    println(s, s.len)
+!void main() {
+    u8[32] buf;
+    const auto s = bprint(buf[..], "x = {1 + 2}, y = {2.5:.1}")?;
+    println(s, s.len);
 
-    var tiny: [4]u8
-    let r = bprint(tiny[..], "слишком длинная строка") catch |e| {
-        println("не влезло: {e}")
-        "?"
-    }
-    println(r)
+    u8[4] tiny;
+    const auto r = bprint(tiny[..], "слишком длинная строка") catch |e| {
+        println("не влезло: {e}");
+        "?";
+    };
+    println(r);
 }
 ```
 
@@ -246,52 +246,68 @@ fn main() !void {
 `sprint(&list, ...)` дописывает текст в `List[u8]`. Рост идёт через аллокатор списка. Идеально для сборки по частям:
 
 ```vibe run
-fn main() !void {
-    var out = List[u8].init(c_allocator())
-    defer out.deinit()
-    for i in 0..4 {
-        sprint(&out, "{i}")?
-        if i < 3 { sprint(&out, ", ")? }
+!void main() {
+    auto out = List<u8>::init(c_allocator());
+    defer out.deinit();
+    for (auto i : 0..4) {
+        sprint(&out, "{i}")?;
+        if (i < 3) { sprint(&out, ", ")?; }
     }
-    sprint(&out, " end")?
-    let s = out.slice()
-    println(s, s.len)
+    sprint(&out, " end")?;
+    const auto s = out.slice();
+    println(s, s.len);
 }
 ```
 
-`out.slice()` — это `[]u8`, и его можно передать как `str`.
+`out.slice()` — это `u8[]`, и его можно передать как `str`.
+
+## Свои функции вывода
+
+Если последний параметр функции — `Fmt`, то строка с `{...}` и все остальные аргументы вызова собираются в него. Передать `Fmt` дальше в `print` или `println` можно как есть:
+
+```vibe run
+void note(str tag, Fmt f) {
+    print("[{tag}] ");
+    println(f);
+}
+
+void main() {
+    note("info", "x = {1 + 2}, y = {2.5:.1}");
+    note("warn", "без значений");
+}
+```
 
 ## Функции стандартной библиотеки
 
 | Функция | Что делает |
 |---|---|
-| `str_find(s, needle) i64` | позиция подстроки или `-1` |
-| `str_find_byte(s, c) i64` | первая позиция байта или `-1` |
-| `str_rfind_byte(s, c) i64` | последняя позиция байта или `-1` |
-| `str_starts_with(s, p) bool` | начинается с |
-| `str_ends_with(s, p) bool` | заканчивается на |
-| `str_trim(s) str` | убрать пробелы по краям |
-| `parse_int(s) !i64` | число из строки (пробелы по краям разрешены) |
-| `parse_int_radix(s, r) !u64` | число по основанию (0 — автоопределение `0x`, `0b`, `0o`) |
-| `parse_float(s) !f64` | дробное число |
+| `i64 str_find(s, needle)` | позиция подстроки или `-1` |
+| `i64 str_find_byte(s, c)` | первая позиция байта или `-1` |
+| `i64 str_rfind_byte(s, c)` | последняя позиция байта или `-1` |
+| `bool str_starts_with(s, p)` | начинается с |
+| `bool str_ends_with(s, p)` | заканчивается на |
+| `str str_trim(s)` | убрать пробелы по краям |
+| `!i64 parse_int(s)` | число из строки (пробелы по краям разрешены) |
+| `!u64 parse_int_radix(s, r)` | число по основанию (0 — автоопределение `0x`, `0b`, `0o`) |
+| `!f64 parse_float(s)` | дробное число |
 | `is_digit`, `is_alpha`, `is_alnum`, `is_upper`, `is_hex` | классы символов (`u8`) |
-| `a.dup(s) !str` | копия в куче |
-| `cstr(p) str` | `str` из C-строки |
-| `to_cstr(buf, s) !*u8` | C-строка в вашем буфере |
-| `a.dupz(s) !*u8` | C-строка в куче |
+| `!str a.dup(s)` | копия в куче |
+| `str cstr(p)` | `str` из C-строки |
+| `!u8* to_cstr(buf, s)` | C-строка в вашем буфере |
+| `!u8* a.dupz(s)` | C-строка в куче |
 
 ```vibe run
-fn main() !void {
-    let s = "  Hello, Vibe!  "
-    let t = str_trim(s)
-    println("[{t}]")
-    println(str_find(t, "Vibe"), str_find(t, "nope"), str_find_byte(t, ','), str_rfind_byte(t, 'l'))
-    println(str_starts_with(t, "Hello"), str_ends_with(t, "!"))
-    println(t[0..5], t[7..])
-    println(parse_int("42") catch -1, parse_int("12x") catch -1)
-    println(parse_float("2.5") catch 0.0)
-    println(parse_int_radix("ff", 16) catch 0, parse_int_radix("0x1f", 0) catch 0)
-    println(is_digit('5'), is_alpha('x'), is_alnum('_'), is_upper('A'), is_hex('f'))
+!void main() {
+    const auto s = "  Hello, Vibe!  ";
+    const auto t = str_trim(s);
+    println("[{t}]");
+    println(str_find(t, "Vibe"), str_find(t, "nope"), str_find_byte(t, ','), str_rfind_byte(t, 'l'));
+    println(str_starts_with(t, "Hello"), str_ends_with(t, "!"));
+    println(t[0..5], t[7..]);
+    println(parse_int("42") catch -1, parse_int("12x") catch -1);
+    println(parse_float("2.5") catch 0.0);
+    println(parse_int_radix("ff", 16) catch 0, parse_int_radix("0x1f", 0) catch 0);
+    println(is_digit('5'), is_alpha('x'), is_alnum('_'), is_upper('A'), is_hex('f'));
 }
 ```
 
@@ -300,22 +316,22 @@ fn main() !void {
 ### Разбить по разделителю
 
 ```vibe run
-fn main() !void {
-    var arena = Arena.init(c_allocator())
-    defer arena.deinit()
-    let a = arena.allocator()
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
 
-    let csv = "a,b,,c"
-    var parts = List[str].init(a)
-    var start = 0
-    for i, c in csv {
-        if c == ',' {
-            parts.push(csv[start..i])?
-            start = i + 1
+    const auto csv = "a,b,,c";
+    auto parts = List<str>::init(a);
+    auto start = 0;
+    for (auto [i, c] : csv) {
+        if (c == ',') {
+            parts.push(csv[start..i])?;
+            start = i + 1;
         }
     }
-    parts.push(csv[start..])?
-    println(parts.slice(), parts.len)
+    parts.push(csv[start..])?;
+    println(parts.slice(), parts.len);
 }
 ```
 
@@ -326,21 +342,21 @@ fn main() !void {
 Для изменения нужна своя память:
 
 ```vibe run
-fn main() !void {
-    var arena = Arena.init(c_allocator())
-    defer arena.deinit()
-    let a = arena.allocator()
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
 
-    let src = "Hello, Vibe!"
-    let up = a.alloc[u8](src.len)?
-    for i, c in src {
-        if c >= 'a' && c <= 'z' {
-            up[i] = c - 32
+    const auto src = "Hello, Vibe!";
+    const auto up = a.alloc<u8>(src.len)?;
+    for (auto [i, c] : src) {
+        if (c >= 'a' && c <= 'z') {
+            up[i] = c - 32;
         } else {
-            up[i] = c
+            up[i] = c;
         }
     }
-    println(up)
+    println(up);
 }
 ```
 
@@ -349,13 +365,13 @@ fn main() !void {
 `read_line(buf)` читает строку из stdin (без перевода строки) или возвращает `error.EndOfFile`:
 
 ```vibe run with=allow-fail
-fn main() {
-    var buf: [128]u8
-    let line = read_line(buf[..]) catch {
-        println("ввода нет")
-        return
-    }
-    println("прочитано: {line}")
+void main() {
+    u8[128] buf;
+    const auto line = read_line(buf[..]) catch {
+        println("ввода нет");
+        return;
+    };
+    println("прочитано: {line}");
 }
 ```
 

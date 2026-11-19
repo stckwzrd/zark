@@ -19,14 +19,14 @@ description: Тип !T, error.Имя, ?, catch, errdefer, тип ?T и orelse в
 Функция объявляет, что может завершиться ошибкой, добавив `!` перед типом результата. Вернуть ошибку — `return error.Имя`.
 
 ```vibe run
-fn safe_div(a: i64, b: i64) !i64 {
-    if b == 0 { return error.DivByZero }
-    return a / b
+!i64 safe_div(i64 a, i64 b) {
+    if (b == 0) { return error.DivByZero; }
+    return a / b;
 }
 
-fn main() {
-    println(safe_div(10, 2) catch -1)
-    println(safe_div(1, 0) catch -1)
+void main() {
+    println(safe_div(10, 2) catch -1);
+    println(safe_div(1, 0) catch -1);
 }
 ```
 
@@ -37,38 +37,38 @@ fn main() {
 Если результат не нужен, а ошибка возможна, пишите `!void`:
 
 ```vibe run
-fn check(n: i64) !void {
-    if n < 0 { return error.Negative }
+!void check(i64 n) {
+    if (n < 0) { return error.Negative; }
 }
 
-fn main() {
-    check(5) catch println("плохо")
-    check(-5) catch println("плохо")
+void main() {
+    check(5) catch println("плохо");
+    check(-5) catch println("плохо");
 }
 ```
 
 Значение `!T` можно положить в переменную и напечатать. Оно печатается как значение или как `error.Имя`:
 
 ```vibe run
-fn f(n: i64) !i64 {
-    if n == 0 { return error.Zero }
-    return n
+!i64 f(i64 n) {
+    if (n == 0) { return error.Zero; }
+    return n;
 }
 
-fn main() {
-    let a = f(0)
-    let b = f(2)
-    println(a, b)
+void main() {
+    const auto a = f(0);
+    const auto b = f(2);
+    println(a, b);
 }
 ```
 
 Использовать такое значение как обычное число нельзя, оно должно быть сначала «распаковано»:
 
 ```vibe error
-fn f() !i64 { return 1 }
+!i64 f() { return 1; }
 
-fn main() {
-    let x: i64 = f()
+void main() {
+    const i64 x = f();
 }
 ```
 
@@ -77,11 +77,11 @@ fn main() {
 Если вызвать функцию с `!T` и ничего не сделать с результатом, это ошибка компиляции. Забыть про отказ нельзя:
 
 ```vibe error
-fn f() !i64 { return 1 }
+!i64 f() { return 1; }
 
-fn main() {
-    f()
-    println("дальше")
+void main() {
+    f();
+    println("дальше");
 }
 ```
 
@@ -92,32 +92,32 @@ fn main() {
 `выражение?` — если внутри ошибка, функция **немедленно возвращает её же** вызывающему (выполнив `defer` и `errdefer`). Если значение — оно извлекается.
 
 ```vibe run
-fn parse(s: str) !i64 {
-    if s.len == 0 { return error.Empty }
-    return parse_int(s)
+!i64 parse(str s) {
+    if (s.len == 0) { return error.Empty; }
+    return parse_int(s);
 }
 
-fn sum(a: str, b: str) !i64 {
-    let x = parse(a)?
-    let y = parse(b)?
-    return x + y
+!i64 sum(str a, str b) {
+    const auto x = parse(a)?;
+    const auto y = parse(b)?;
+    return x + y;
 }
 
-fn main() {
-    println(sum("10", "32") catch -1)
-    println(sum("10", "") catch -1)
-    println(sum("10", "x") catch -1)
+void main() {
+    println(sum("10", "32") catch -1);
+    println(sum("10", "") catch -1);
+    println(sum("10", "x") catch -1);
 }
 ```
 
 `?` можно ставить только в функции, которая сама возвращает `!T`. Иначе непонятно, куда пробрасывать:
 
 ```vibe error
-fn f() !i64 { return 1 }
-fn g() i64 { return f()? }
+!i64 f() { return 1; }
+i64 g() { return f()?; }
 
-fn main() {
-    println(g())
+void main() {
+    println(g());
 }
 ```
 
@@ -128,14 +128,14 @@ fn main() {
 Если `main` возвращает `!void`, непойманная ошибка завершает программу кодом 1 и печатает `error: Имя`:
 
 ```vibe run exit
-fn load() !void {
-    return error.FileMissing
+!void load() {
+    return error.FileMissing;
 }
 
-fn main() !void {
-    println("старт")
-    load()?
-    println("сюда не дойдём")
+!void main() {
+    println("старт");
+    load()?;
+    println("сюда не дойдём");
 }
 ```
 
@@ -144,14 +144,14 @@ fn main() !void {
 `выражение catch запасное` — результат успешного выражения, а при ошибке — `запасное`.
 
 ```vibe run
-fn f(n: i64) !i64 {
-    if n == 0 { return error.Zero }
-    return n * 10
+!i64 f(i64 n) {
+    if (n == 0) { return error.Zero; }
+    return n * 10;
 }
 
-fn main() {
-    println(f(3) catch 0, f(0) catch 0)
-    println(parse_int("12") catch -1, parse_int("12x") catch -1)
+void main() {
+    println(f(3) catch 0, f(0) catch 0);
+    println(parse_int("12") catch -1, parse_int("12x") catch -1);
 }
 ```
 
@@ -160,56 +160,56 @@ fn main() {
 `catch |e| { ... }` даёт доступ к ошибке. Блок должен **дать значение** (последнее выражение блока) или **выйти** из функции/цикла через `return`, `break`, `continue`, `panic`.
 
 ```vibe run
-fn f(n: i64) !i64 {
-    if n == 0 { return error.Zero }
-    if n < 0 { return error.Negative }
-    return n
+!i64 f(i64 n) {
+    if (n == 0) { return error.Zero; }
+    if (n < 0) { return error.Negative; }
+    return n;
 }
 
-fn main() {
-    let r = f(-1) catch |e| {
-        println("ошибка: {e}")
-        -1
-    }
-    println(r)
+void main() {
+    const auto r = f(-1) catch |e| {
+        println("ошибка: {e}");
+        -1;
+    };
+    println(r);
 }
 ```
 
 Выбрать значение по виду ошибки можно через сравнение. `if` — оператор, поэтому значение заводится заранее:
 
 ```vibe run
-fn f(n: i64) !i64 {
-    if n == 0 { return error.Zero }
-    return error.Other
+!i64 f(i64 n) {
+    if (n == 0) { return error.Zero; }
+    return error.Other;
 }
 
-fn main() {
-    let r = f(0) catch |e| {
-        var v = 200
-        if e == error.Zero { v = 100 }
-        v
-    }
-    println(r)
+void main() {
+    const auto r = f(0) catch |e| {
+        auto v = 200;
+        if (e == error.Zero) { v = 100 };
+        v;
+    };
+    println(r);
 
-    let r2 = f(1) catch |e| {
-        let m = match e {
+    const auto r2 = f(1) catch |e| {
+        const auto m = match e {
             error.Zero => 1,
             _ => 2,
-        }
-        m
-    }
-    println(r2)
+        };
+        m;
+    };
+    println(r2);
 }
 ```
 
 Блок, который не даёт значения, — ошибка. Последним должно стоять выражение:
 
 ```vibe error
-fn f() !i64 { return error.X }
+!i64 f() { return error.X; }
 
-fn main() {
-    let v = f() catch |e| {
-        println(e)
+void main() {
+    const auto v = f() catch |e| {
+        println(e);
     }
 }
 ```
@@ -219,21 +219,21 @@ fn main() {
 В ветке `catch` можно выйти из текущей функции или цикла:
 
 ```vibe run
-fn f(n: i64) !i64 {
-    if n == 0 { return error.Zero }
-    return n
+!i64 f(i64 n) {
+    if (n == 0) { return error.Zero; }
+    return n;
 }
 
-fn twice(n: i64) i64 {
-    let v = f(n) catch return -1
-    return v * 2
+i64 twice(i64 n) {
+    const auto v = f(n) catch return -1;
+    return v * 2;
 }
 
-fn main() {
-    println(twice(0), twice(4))
-    for i in 0..3 {
-        let v = f(i) catch continue
-        println("v = {v}")
+void main() {
+    println(twice(0), twice(4));
+    for (auto i : 0..3) {
+        const auto v = f(i) catch continue;
+        println("v = {v}");
     }
 }
 ```
@@ -243,23 +243,23 @@ fn main() {
 Если выражение ничего не возвращает, после `catch` стоит просто действие:
 
 ```vibe run
-fn f() !void { return error.Boom }
+!void f() { return error.Boom; }
 
-fn main() {
-    f() catch println("обработано")
-    f() catch |e| println("поймано {e}")
-    println("конец")
+void main() {
+    f() catch println("обработано");
+    f() catch |e| println("поймано {e}");
+    println("конец");
 }
 ```
 
 ### Сознательно отбросить: `_ =`
 
 ```vibe run
-fn risky() !i64 { return error.Fail }
+!i64 risky() { return error.Fail; }
 
-fn main() {
-    _ = risky()
-    println("ошибка проигнорирована явно")
+void main() {
+    _ = risky();
+    println("ошибка проигнорирована явно");
 }
 ```
 
@@ -270,32 +270,32 @@ fn main() {
 `errdefer` выполняется только тогда, когда функция выходит **с ошибкой**. Он нужен для отката частично созданного состояния. Обычный `defer` выполняется всегда (см. [управление потоком](control-flow.md#defer-и-errdefer)).
 
 ```vibe run
-fn make(n: i64) !i64 {
-    errdefer println("откат: make({n}) не удался")
-    defer println("в любом случае: закончили make({n})")
-    if n < 0 { return error.Negative }
-    return n * 2
+!i64 make(i64 n) {
+    errdefer println("откат: make({n}) не удался");
+    defer println("в любом случае: закончили make({n})");
+    if (n < 0) { return error.Negative; }
+    return n * 2;
 }
 
-fn main() {
-    println(make(5) catch 0)
-    println(make(-1) catch 0)
+void main() {
+    println(make(5) catch 0);
+    println(make(-1) catch 0);
 }
 ```
 
 Правило работает и для ошибки, пришедшей через `?`, и для `return g()`, который оказался ошибкой:
 
 ```vibe run
-fn inner() !void { return error.OutOfRange }
+!void inner() { return error.OutOfRange; }
 
-fn outer() !void {
-    errdefer println("outer: откат")
-    inner()?
-    println("не печатается")
+!void outer() {
+    errdefer println("outer: откат");
+    inner()?;
+    println("не печатается");
 }
 
-fn main() {
-    outer() catch |e| println("main поймал {e}")
+void main() {
+    outer() catch |e| println("main поймал {e}");
 }
 ```
 
@@ -321,35 +321,35 @@ fn main() {
 Полная таблица — в [справочнике](stdlib.md).
 
 ```vibe run
-fn main() {
-    println(parse_int("42") catch -1)
-    let e = parse_int("abc") catch |e| {
-        println("не число: {e}")
-        0
-    }
-    println(e)
+void main() {
+    println(parse_int("42") catch -1);
+    const auto e = parse_int("abc") catch |e| {
+        println("не число: {e}");
+        0;
+    };
+    println(e);
 }
 ```
 
 ## Опциональные значения: `?T`
 
-`?T` — «либо значение, либо ничего». Тип `?T` — то же самое, что `Option[T]` из стандартной библиотеки (union с вариантами `Some` и `None`).
+`?T` — «либо значение, либо ничего». Тип `?T` — то же самое, что `Option<T>` из стандартной библиотеки (union с вариантами `Some` и `None`).
 
 В `?T` неявно превращаются значение `T` и `null`:
 
 ```vibe run
-fn find(xs: []i64, want: i64) ?i64 {
-    for i, x in xs {
-        if x == want { return i }
+?i64 find(i64[] xs, i64 want) {
+    for (auto [i, x] : xs) {
+        if (x == want) { return i; }
     }
-    return null
+    return null;
 }
 
-fn main() {
-    let xs = [5, 8, 13]
-    let a = find(xs[..], 13)
-    let b = find(xs[..], 99)
-    println(a, b)
+void main() {
+    const auto xs = [5, 8, 13];
+    const auto a = find(xs[..], 13);
+    const auto b = find(xs[..], 99);
+    println(a, b);
 }
 ```
 
@@ -358,26 +358,26 @@ fn main() {
 `a orelse b` — значение `a`, а если оно пустое, то `b`. Правая часть может быть выходом: `return`, `break`, `continue`.
 
 ```vibe run
-fn find(xs: []i64, want: i64) ?i64 {
-    for i, x in xs {
-        if x == want { return i }
+?i64 find(i64[] xs, i64 want) {
+    for (auto [i, x] : xs) {
+        if (x == want) { return i; }
     }
-    return null
+    return null;
 }
 
-fn index_or_bust(xs: []i64, v: i64) i64 {
-    let i = find(xs, v) orelse return -7
-    return i * 10
+i64 index_or_bust(i64[] xs, i64 v) {
+    const auto i = find(xs, v) orelse return -7;
+    return i * 10;
 }
 
-fn main() {
-    let xs = [5, 8, 13]
-    println(find(xs[..], 8) orelse -1)
-    println(find(xs[..], 99) orelse -1)
-    println(index_or_bust(xs[..], 13), index_or_bust(xs[..], 0))
-    for i in 0..3 {
-        let v = find(xs[..], i * 4 + 5) orelse continue
-        println("нашли на {v}")
+void main() {
+    const auto xs = [5, 8, 13];
+    println(find(xs[..], 8) orelse -1);
+    println(find(xs[..], 99) orelse -1);
+    println(index_or_bust(xs[..], 13), index_or_bust(xs[..], 0));
+    for (auto i : 0..3) {
+        const auto v = find(xs[..], i * 4 + 5) orelse continue;
+        println("нашли на {v}");
     }
 }
 ```
@@ -387,68 +387,68 @@ fn main() {
 ### Проверка и разбор
 
 ```vibe run
-fn pick(n: i64) ?i64 {
-    if n > 0 { return n }
-    return null
+?i64 pick(i64 n) {
+    if (n > 0) { return n; }
+    return null;
 }
 
-fn main() {
-    let a = pick(5)
-    let b = pick(-5)
-    println(a.is_some(), b.is_some(), b.unwrap_or(9))
-    println(a is .Some, b is .None)
+void main() {
+    const auto a = pick(5);
+    const auto b = pick(-5);
+    println(a.is_some(), b.is_some(), b.unwrap_or(9));
+    println(a is .Some, b is .None);
     match a {
-        .Some(v) => println("значение {v}")
-        .None => println("пусто")
+        .Some(v) => println("значение {v}");
+        .None => println("пусто");
     }
-    let c: ?i64 = .Some(5)
-    let d: ?i64 = .None
-    println(c, d)
+    const ?i64 c = .Some(5);
+    const ?i64 d = .None;
+    println(c, d);
 }
 ```
 
 Методы: `is_some()` и `unwrap_or(запасное)`. Образцы `.Some(v)` и `.None` работают в [`match`](control-flow.md#match-как-выражение), а `is` проверяет вариант.
 
-### Указатель или `?*T`
+### Указатель или `?T*`
 
-Для «указатель, который может отсутствовать» используйте `?*T`. Сравнивать значение типа `?T` с `null` напрямую (`x == null`) нельзя: используйте `orelse`, `is .None` или `match`.
+Для «указатель, который может отсутствовать» используйте `?T*`. Сравнивать значение типа `?T` с `null` напрямую (`x == null`) нельзя: используйте `orelse`, `is .None` или `match`.
 
 ```vibe run
-struct Node { v: i64 }
+struct Node { i64 v; }
 
-fn find(xs: []Node, v: i64) ?*Node {
-    for i in 0..xs.len {
-        if xs[i].v == v { return &xs[i] }
+?Node* find(Node[] xs, i64 v) {
+    for (auto i : 0..xs.len) {
+        if (xs[i].v == v) { return &xs[i]; }
     }
-    return null
+    return null;
 }
 
-fn main() {
-    var xs = [Node{ v: 1 }, Node{ v: 2 }]
-    let p = find(xs[..], 2) orelse return
-    p.v = 20
-    println(xs[1].v)
-    println(find(xs[..], 5) is .None)
+void main() {
+    auto xs = [Node{ .v = 1 }, Node{ .v = 2 }];
+    const auto p = find(xs[..], 2) orelse return;
+    p.v = 20;
+    println(xs[1].v);
+    println(find(xs[..], 5) is .None);
 }
 ```
 
-А обычный указатель `*T` сам может быть `null` и сравнивается с `null` напрямую.
+А обычный указатель `T*` сам может быть `null` и сравнивается с `null` напрямую.
 
 ## Вложенность: `!?T`
 
 Операция, которая может сломаться и ещё вернуть «ничего»: `!?T`. Сначала разворачивается `!`, потом `?`:
 
 ```vibe run
-fn lookup(key: str) !?i64 {
-    if key.len == 0 { return error.EmptyKey }
-    if key == "a" { return 1 }
-    return null
+!?i64 lookup(str key) {
+    if (key.len == 0) { return error.EmptyKey; }
+    if (key == "a") { return 1; }
+    return null;
 }
 
-fn main() {
-    let a = lookup("a") catch return
-    let b = lookup("zz") catch return
-    println(a orelse -1, b orelse -1)
+void main() {
+    const auto a = lookup("a") catch return;
+    const auto b = lookup("zz") catch return;
+    println(a orelse -1, b orelse -1);
 }
 ```
 
@@ -465,12 +465,12 @@ fn main() {
 Для ошибок программиста (нарушенный инвариант) есть `panic("сообщение")` и `assert(условие)`: они печатают место и завершают программу с кодом 1. Они не заменяют `!T`.
 
 ```vibe run panic
-fn main() {
-    let n = 3
-    assert(n > 0)
-    println("первое assert прошло")
-    assert(n > 5)
-    println("не печатается")
+void main() {
+    const auto n = 3;
+    assert(n > 0);
+    println("первое assert прошло");
+    assert(n > 5);
+    println("не печатается");
 }
 ```
 

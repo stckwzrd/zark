@@ -50,7 +50,10 @@ function parseInfo(info) {
 
 function runVibe(page, line, code, mode, extra, withArgs) {
   const key = crypto.createHash("sha1").update(VIBE_STAMP + mode + "\0" + code + "\0" + JSON.stringify(extra) + withArgs.join(" ")).digest("hex")
-  if (cache[key]) return cache[key]
+  if (cache[key]) {
+    if (mode === "error" && cache[key].code === 0) failures.push(`${page}:${line}: example marked 'error' compiled and ran`)
+    return cache[key]
+  }
   const dir = path.join(TMP, key.slice(0, 12))
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
@@ -66,9 +69,6 @@ function runVibe(page, line, code, mode, extra, withArgs) {
   out = out.split(dir + "/").join("").split(dir).join(".").replace(/\n+$/, "")
   const res = { out, code: r.status === null ? -1 : r.status }
   if (mode === "error" && res.code === 0) failures.push(`${page}:${line}: example marked 'error' compiled and ran`)
-  if (mode === "run" && res.code !== 0 && !withArgs.includes("allow-fail")) {
-    // examples that end with a panic or an error exit are fine only when marked
-  }
   cache[key] = res
   return res
 }
@@ -133,7 +133,7 @@ async function main() {
       }
       if (lang === "vibe" && (flags.has("run") || flags.has("error") || flags.has("test"))) {
         let src = code
-        if (flags.has("fragment")) src = "fn main() { " + code.replace(/\n$/, "") + "\n}\n"
+        if (flags.has("fragment")) src = "void main() { " + code.replace(/\n$/, "") + "\n}\n"
         const mode = flags.has("error") ? "error" : flags.has("test") ? "test" : "run"
         const withArgs = opts.with ? opts.with.split(",") : []
         const res = runVibe(p.name, lineNo, src, mode, extraFiles, withArgs.filter((x) => x !== "allow-fail"))

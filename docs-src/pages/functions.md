@@ -8,108 +8,108 @@ description: Объявление функций, параметры, возвр
 ## Объявление и вызов
 
 ```vibe run
-fn add(a: i64, b: i64) i64 {
-    return a + b
+i64 add(i64 a, i64 b) {
+    return a + b;
 }
 
-fn greet(name: str) {
-    println("Привет, {name}!")
+void greet(str name) {
+    println("Привет, {name}!");
 }
 
-fn main() {
-    println(add(2, 3))
-    greet("мир")
+void main() {
+    println(add(2, 3));
+    greet("мир");
 }
 ```
 
-Синтаксис: `fn имя(параметры) ТипРезультата { тело }`. Тип параметров указывается всегда. Если после скобок типа нет, функция ничего не возвращает (`void`).
+Синтаксис: `ТипРезультата имя(Тип параметр, ...) { тело }`. Результат стоит перед именем, как в C++. Функция без результата объявляется как `void`.
 
 Порядок объявлений в файле не важен: можно вызывать функцию, объявленную ниже. Это же позволяет писать взаимную рекурсию:
 
 ```vibe run
-fn even(n: i64) bool {
-    if n == 0 { return true }
-    return odd(n - 1)
+bool even(i64 n) {
+    if (n == 0) { return true; }
+    return odd(n - 1);
 }
 
-fn odd(n: i64) bool {
-    if n == 0 { return false }
-    return even(n - 1)
+bool odd(i64 n) {
+    if (n == 0) { return false; }
+    return even(n - 1);
 }
 
-fn main() {
-    println(even(10), odd(7), even(7))
+void main() {
+    println(even(10), odd(7), even(7));
 }
 ```
 
-Висячая запятая в списке параметров и аргументов допустима, а перенос по строкам внутри скобок не нужно ничем отмечать (см. [лексика](lexical.md#конец-оператора)).
+Висячая запятая в списке параметров и аргументов допустима, а перенос по строкам внутри скобок допустим (см. [лексика](lexical.md#конец-оператора)).
 
 ## Число и типы аргументов
 
 Аргументов должно быть ровно столько, сколько параметров. Значений по умолчанию и перегрузки по числу аргументов нет.
 
 ```vibe error
-fn f(a: i64, b: i64) i64 { return a }
+i64 f(i64 a, i64 b) { return a; }
 
-fn main() {
-    println(f(1))
+void main() {
+    println(f(1));
 }
 ```
 
 Тип аргумента проверяется, но целые неявно расширяются:
 
 ```vibe run
-fn double(x: i64) i64 { return x * 2 }
+i64 double(i64 x) { return x * 2; }
 
-fn main() {
-    let small: u8 = 21
-    println(double(small))
+void main() {
+    const u8 small = 21;
+    println(double(small));
 }
 ```
 
 ```vibe error
-fn double(x: i32) i32 { return x * 2 }
+i32 double(i32 x) { return x * 2; }
 
-fn main() {
-    let big: i64 = 21
-    println(double(big))
+void main() {
+    const i64 big = 21;
+    println(double(big));
 }
 ```
 
 ## Параметры передаются по значению
 
-Функция получает копию. Структуры и массивы копируются целиком. Изменить параметр внутри функции нельзя (он как `let`), а изменения копии вызывающий не увидит.
+Функция получает копию. Структуры и массивы копируются целиком. Параметр можно менять внутри функции, но это изменение копии: вызывающий его не увидит.
 
 Чтобы функция меняла чужие данные, передайте **указатель** или **срез**:
 
 ```vibe run
-fn bump(p: *i64) {
-    *p += 1
+void bump(i64* p) {
+    *p += 1;
 }
 
-fn fill(xs: []i64, v: i64) {
-    for i in 0..xs.len { xs[i] = v }
+void fill(i64[] xs, i64 v) {
+    for (auto i : 0..xs.len) { xs[i] = v; }
 }
 
-fn main() {
-    var n = 1
-    bump(&n)
-    bump(&n)
-    var arr = [0, 0, 0]
-    fill(arr[..], 7)
-    println(n, arr)
+void main() {
+    auto n = 1;
+    bump(&n);
+    bump(&n);
+    auto arr = [0, 0, 0];
+    fill(arr[..], 7);
+    println(n, arr);
 }
 ```
 
-Параметр нельзя присваивать:
+Параметр с `const` присваивать нельзя:
 
 ```vibe error
-fn f(x: i64) {
-    x = 5
+void f(const i64 x) {
+    x = 5;
 }
 
-fn main() {
-    f(1)
+void main() {
+    f(1);
 }
 ```
 
@@ -118,27 +118,27 @@ fn main() {
 `return значение` выходит из функции. В функции без результата достаточно `return` без значения.
 
 ```vibe run
-fn check(x: i64) {
-    if x > 0 {
-        println("положительное")
-        return
+void check(i64 x) {
+    if (x > 0) {
+        println("положительное");
+        return;
     }
-    println("неположительное")
+    println("неположительное");
 }
 
-fn main() {
-    check(1)
-    check(-1)
+void main() {
+    check(1);
+    check(-1);
 }
 ```
 
 Результат функции без значения использовать нельзя:
 
 ```vibe error
-fn f() { println("x") }
+void f() { println("x"); }
 
-fn main() {
-    let r = f()
+void main() {
+    const auto r = f();
 }
 ```
 
@@ -149,15 +149,15 @@ fn main() {
 Кортежей нет. Для нескольких значений заведите маленькую структуру:
 
 ```vibe run
-struct DivMod { q: i64, r: i64 }
+struct DivMod { i64 q; i64 r; }
 
-fn divmod(a: i64, b: i64) DivMod {
-    return DivMod{ q: a / b, r: a % b }
+DivMod divmod(i64 a, i64 b) {
+    return DivMod{ .q = a / b, .r = a % b };
 }
 
-fn main() {
-    let d = divmod(17, 5)
-    println(d.q, d.r)
+void main() {
+    const auto d = divmod(17, 5);
+    println(d.q, d.r);
 }
 ```
 
@@ -166,18 +166,18 @@ fn main() {
 ## Рекурсия
 
 ```vibe run
-fn fact(n: i64) i64 {
-    if n <= 1 { return 1 }
-    return n * fact(n - 1)
+i64 fact(i64 n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
 }
 
-fn fib(n: i64) i64 {
-    if n < 2 { return n }
-    return fib(n - 1) + fib(n - 2)
+i64 fib(i64 n) {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
 }
 
-fn main() {
-    println(fact(10), fib(20))
+void main() {
+    println(fact(10), fib(20));
 }
 ```
 
@@ -188,21 +188,21 @@ fn main() {
 Результат вида `!T` означает «значение или ошибка», `?T` — «значение или ничего»:
 
 ```vibe run
-fn safe_div(a: i64, b: i64) !i64 {
-    if b == 0 { return error.DivByZero }
-    return a / b
+!i64 safe_div(i64 a, i64 b) {
+    if (b == 0) { return error.DivByZero; }
+    return a / b;
 }
 
-fn find(xs: []i64, v: i64) ?i64 {
-    for i, x in xs {
-        if x == v { return i }
+?i64 find(i64[] xs, i64 v) {
+    for (auto [i, x] : xs) {
+        if (x == v) { return i; }
     }
-    return null
+    return null;
 }
 
-fn main() {
-    println(safe_div(10, 2) catch -1, safe_div(1, 0) catch -1)
-    println(find([4, 5, 6], 6) orelse -1, find([4], 9) orelse -1)
+void main() {
+    println(safe_div(10, 2) catch -1, safe_div(1, 0) catch -1);
+    println(find([4, 5, 6], 6) orelse -1, find([4], 9) orelse -1);
 }
 ```
 
@@ -210,43 +210,43 @@ fn main() {
 
 ## Дженерики
 
-Функция с параметрами типа в квадратных скобках создаёт отдельную копию под каждую комбинацию типов (мономорфизация). Накладных расходов во время работы нет.
+Функция с параметрами типа в `template<...>` создаёт отдельную копию под каждую комбинацию типов (мономорфизация). Накладных расходов во время работы нет.
 
 ```vibe run
-fn first[T](xs: []T) T {
-    return xs[0]
+template<T> T first(T[] xs) {
+    return xs[0];
 }
 
-fn pair_size[A, B](a: A, b: B) u64 {
-    return sizeof(A) + sizeof(B)
+template<A, B> u64 pair_size(A a, B b) {
+    return sizeof(A) + sizeof(B);
 }
 
-fn zero[T]() T {
-    var z: T
-    return z
+template<T> T zero() {
+    T z;
+    return z;
 }
 
-fn main() {
-    let nums = [10, 20]
-    let words = ["a", "b"]
-    println(first(nums[..]), first(words[..]))
-    println(first[i64]([7, 8]))
-    println(pair_size(1, 2.0), pair_size[u8, i64](1, 2))
-    println(zero[i64](), zero[f64]())
+void main() {
+    const auto nums = [10, 20];
+    const auto words = ["a", "b"];
+    println(first(nums[..]), first(words[..]));
+    println(first<i64>([7, 8]));
+    println(pair_size(1, 2.0), pair_size<u8, i64>(1, 2));
+    println(zero<i64>(), zero<f64>());
 }
 ```
 
-Тип выводится по аргументам. Литерал массива `[10, 20]` не годится для вывода `[]T`: сначала положите его в переменную и возьмите срез `nums[..]`, либо укажите тип явно. Когда вывести не из чего (как у `zero`) или нужно задать явно, пишите `имя[Тип](...)`.
+Тип выводится по аргументам. Литерал массива `[10, 20]` не годится для вывода `T[]`: сначала положите его в переменную и возьмите срез `nums[..]`, либо укажите тип явно. Когда вывести не из чего (как у `zero`) или нужно задать явно, пишите `имя<Тип>(...)`.
 
 Тело дженерика проверяется при **использовании**, а не при объявлении, и только для реально используемых типов. Поэтому неподходящий тип выдаст ошибку внутри тела:
 
 ```vibe error
-fn add[T](a: T, b: T) T {
-    return a + b
+template<T> T add(T a, T b) {
+    return a + b;
 }
 
-fn main() {
-    println(add("a", "b"))
+void main() {
+    println(add("a", "b"));
 }
 ```
 
@@ -263,35 +263,35 @@ fn main() {
 | `Float` | `f32`, `f64` |
 
 ```vibe run
-fn largest[T: Ord](a: T, b: T) T {
-    if a > b { return a }
-    return b
+template<T: Ord> T largest(T a, T b) {
+    if (a > b) { return a; }
+    return b;
 }
 
-fn sum[T: Num](xs: []T) T {
-    var t: T
-    for x in xs { t = t + x }
-    return t
+template<T: Num> T sum(T[] xs) {
+    T t;
+    for (auto x : xs) { t = t + x; }
+    return t;
 }
 
-fn main() {
-    println(largest(3, 9), largest(2.5, 1.5))
-    let ints = [1, 2, 3]
-    let fs = [0.5, 0.25]
-    println(sum(ints[..]), sum(fs[..]))
+void main() {
+    println(largest(3, 9), largest(2.5, 1.5));
+    const auto ints = [1, 2, 3];
+    const auto fs = [0.5, 0.25];
+    println(sum(ints[..]), sum(fs[..]));
 }
 ```
 
 Нарушение ограничения сообщается в точке вызова:
 
 ```vibe error
-fn largest[T: Ord](a: T, b: T) T {
-    if a > b { return a }
-    return b
+template<T: Ord> T largest(T a, T b) {
+    if (a > b) { return a; }
+    return b;
 }
 
-fn main() {
-    println(largest("a", "b"))
+void main() {
+    println(largest("a", "b"));
 }
 ```
 
@@ -301,31 +301,31 @@ fn main() {
 
 ## Указатели на функции
 
-Имя функции можно передавать как значение. Тип записывается как `fn(Параметры) Результат`.
+Имя функции можно передавать как значение. Тип записывается как `fn(Параметры) -> Результат`.
 
 ```vibe run
-fn inc(x: i64) i64 { return x + 1 }
-fn dbl(x: i64) i64 { return x * 2 }
+i64 inc(i64 x) { return x + 1; }
+i64 dbl(i64 x) { return x * 2; }
 
-fn apply_twice(f: fn(i64) i64, x: i64) i64 {
-    return f(f(x))
+i64 apply_twice(fn(i64) -> i64 f, i64 x) {
+    return f(f(x));
 }
 
-fn main() {
-    println(apply_twice(inc, 5), apply_twice(dbl, 5))
-    var op: fn(i64) i64 = inc
-    println(op(1))
-    op = dbl
-    println(op(1))
+void main() {
+    println(apply_twice(inc, 5), apply_twice(dbl, 5));
+    fn(i64) -> i64 op = inc;
+    println(op(1));
+    op = dbl;
+    println(op(1));
 }
 ```
 
 Такое значение — просто адрес. Оно может быть `null`:
 
 ```vibe run
-fn main() {
-    var f: fn(i64) i64 = null
-    println(f == null)
+void main() {
+    fn(i64) -> i64 f = null;
+    println(f == null);
 }
 ```
 
@@ -334,64 +334,64 @@ fn main() {
 Типичный пример — сравнение в сортировке:
 
 ```vibe run
-fn sort_by(xs: []i64, less: fn(i64, i64) bool) {
-    for i in 0..xs.len {
-        for j in i + 1..xs.len {
-            if less(xs[j], xs[i]) { swap(&xs[i], &xs[j]) }
+void sort_by(i64[] xs, fn(i64, i64) -> bool less) {
+    for (auto i : 0..xs.len) {
+        for (auto j : i + 1..xs.len) {
+            if (less(xs[j], xs[i])) { swap(&xs[i], &xs[j]); }
         }
     }
 }
 
-fn desc(a: i64, b: i64) bool { return a > b }
+bool desc(i64 a, i64 b) { return a > b; }
 
-fn main() {
-    var v = [3, 1, 2]
-    sort_by(v[..], desc)
-    println(v)
+void main() {
+    auto v = [3, 1, 2];
+    sort_by(v[..], desc);
+    println(v);
 }
 ```
 
 ## Замыкания
 
-Обычная функция не знает переменных вокруг. Замыкание запоминает их, но делает это **явно**: список захватываемых переменных пишется в квадратных скобках после `fn`.
+Обычная функция не знает переменных вокруг. Замыкание запоминает их, но делает это **явно**: список захватываемых переменных пишется в квадратных скобках перед параметрами, как в C++: `[&k](i64 x) -> i64 { ... }`.
 
 ```vibe run
-fn apply(f: fn[](i64) i64, x: i64) i64 {
-    return f(x)
+i64 apply(fn[](i64) -> i64 f, i64 x) {
+    return f(x);
 }
 
-fn main() {
-    let k = 10
-    let add = fn[k](x: i64) i64 {
-        return x + k
-    }
-    println(apply(add, 1), apply(add, 2))
+void main() {
+    const auto k = 10;
+    const auto add = [&k](i64 x) -> i64 {
+        return x + k;
+    };
+    println(apply(add, 1), apply(add, 2));
 }
 ```
 
-Тип замыкания — `fn[](A) R` (с пустыми квадратными скобками), он отличается от типа обычной функции `fn(A) R`.
+Тип замыкания — `fn[](A) -> R` (с пустыми квадратными скобками), он отличается от типа обычной функции `fn(A) -> R`.
 
 ### Захват по ссылке
 
 Переменные из списка захватываются **по ссылке**: замыкание хранит указатели на них, поэтому видит актуальные значения и может их менять.
 
 ```vibe run
-fn main() {
-    var total = 0
-    let acc = fn[total](x: i64) {
-        total += x
-    }
-    acc(5)
-    acc(7)
-    println(total)
+void main() {
+    auto total = 0;
+    const auto acc = [&total](i64 x) {
+        total += x;
+    };
+    acc(5);
+    acc(7);
+    println(total);
 
-    var n = 1
-    let show = fn[n]() {
-        println("n = {n}")
-    }
-    show()
-    n = 99
-    show()
+    auto n = 1;
+    const auto show = [&n]() {
+        println("n = {n}");
+    };
+    show();
+    n = 99;
+    show();
 }
 ```
 
@@ -400,9 +400,9 @@ fn main() {
 > **Ловушка.** Замыкание нельзя вернуть из функции: после возврата стек освободится, и замыкание будет ссылаться на мусор. Результат «работает», но печатает случайные числа:
 >
 > ```vibe
-> fn make() fn[](i64) i64 {
->     let k = 5
->     return fn[k](x: i64) i64 { return x + k }
+> fn[](i64) -> i64 make() {
+>     const auto k = 5;
+>     return [&k](i64 x) -> i64 { return x + k; };
 > }
 > ```
 >
@@ -410,45 +410,45 @@ fn main() {
 
 ### Захват без списка не работает
 
-Если забыть переменную в списке `[...]`, получится ошибка. Запись без квадратных скобок — синтаксическая ошибка:
+Если забыть переменную в списке `[...]`, получится ошибка:
 
 ```vibe error fragment
-let k = 3
-let f = fn(x: i64) i64 { return x + k }
+const auto k = 3;
+const auto f = [](i64 x) -> i64 { return x + k; };
 ```
 
 ### Замыкание и обычная функция — разные типы
 
-Параметр типа `fn[](i64) i64` принимает только замыкание. Обычную функцию туда передать нельзя, и наоборот:
+Параметр типа `fn[](i64) -> i64` принимает только замыкание. Обычную функцию туда передать нельзя, и наоборот:
 
 ```vibe error
-fn apply(f: fn[](i64) i64, x: i64) i64 { return f(x) }
-fn dbl(x: i64) i64 { return x * 2 }
+i64 apply(fn[](i64) -> i64 f, i64 x) { return f(x); }
+i64 dbl(i64 x) { return x * 2; }
 
-fn main() {
-    println(apply(dbl, 5))
+void main() {
+    println(apply(dbl, 5));
 }
 ```
 
-Если вашей функции нужны только вызываемые значения без захвата, принимайте `fn(A) R`. Если нужны замыкания — `fn[](A) R`. Замыкание с пустым списком `fn[](x: i64) i64 { ... }` тоже допустимо.
+Если вашей функции нужны только вызываемые значения без захвата, принимайте `fn(A) -> R`. Если нужны замыкания — `fn[](A) -> R`. Замыкание с пустым списком `[](i64 x) -> i64 { ... }` тоже допустимо.
 
 ## Методы
 
-Функция внутри `impl` — метод типа. Они описаны на странице про [структуры](structs-unions-enums.md#impl-методы).
+Функция внутри `struct` — метод типа. Они описаны на странице про [структуры](structs-unions-enums.md#методы).
 
 ## `extern` и `export`
 
-`extern fn` объявляет функцию из C, `export fn` делает функцию Vibe видимой для C под её именем. Подробно — в [взаимодействии с C](c-interop.md).
+`extern` объявляет функцию из C, `export` делает функцию Vibe видимой для C под её именем. Подробно — в [взаимодействии с C](c-interop.md).
 
 ## Имена стандартной библиотеки
 
 Функции стандартной библиотеки живут в одном пространстве имён с вашими. Объявить свою `min`, `max`, `abs`, `sort`, `run`, `env` и т. д. нельзя: вы получите ошибку о дубликате.
 
 ```vibe error
-fn max(a: i64, b: i64) i64 { return a }
+i64 max(i64 a, i64 b) { return a; }
 
-fn main() {
-    println(max(1, 2))
+void main() {
+    println(max(1, 2));
 }
 ```
 

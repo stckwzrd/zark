@@ -12,10 +12,10 @@ description: Стек и куча, явный Allocator, c_allocator, FixedBuf, 
 Обычные переменные, массивы и структуры живут на **стеке** функции и исчезают при выходе из неё. Для данных, которые нужно сохранить дольше или размер которых неизвестен заранее, нужна **куча**, а к ней доступ через аллокатор.
 
 ```vibe run
-fn main() {
-    var local: [4]i64
-    local[0] = 1
-    println(local, sizeof([256]u8))
+void main() {
+    i64[4] local;
+    local[0] = 1;
+    println(local, sizeof(u8[256]));
 }
 ```
 
@@ -27,9 +27,9 @@ fn main() {
 
 ```vibe
 struct Allocator {
-    ctx: *void
-    alloc_fn: fn(*void, u64, u64) *void
-    free_fn: fn(*void, *void, u64)
+    void* ctx;
+    fn(void*, u64, u64) -> void* alloc_fn;
+    fn(void*, void*, u64) free_fn;
 }
 ```
 
@@ -38,33 +38,33 @@ struct Allocator {
 | Аллокатор | Откуда берёт память | Освобождение |
 |---|---|---|
 | `c_allocator()` | `calloc` / `free` из libc | каждый кусок отдельно |
-| `FixedBuf.init(buf)` | ваш готовый буфер, кучи нет | `reset()` для всего сразу |
-| `Arena.init(parent)` | кусками у родительского аллокатора | `deinit()` для всего сразу |
+| `FixedBuf::init(buf)` | ваш готовый буфер, кучи нет | `reset()` для всего сразу |
+| `Arena::init(parent)` | кусками у родительского аллокатора | `deinit()` для всего сразу |
 
 И методы любого аллокатора `a`:
 
 | Метод | Что делает |
 |---|---|
-| `a.alloc[T](n) ![]T` | `n` элементов, заполненных **нулями** |
+| `!T[] a.alloc<T>(n)` | `n` элементов, заполненных **нулями** |
 | `a.free(slice)` | освобождает срез, полученный из `alloc` |
-| `a.create[T]() !*T` | один `T` в куче, нули |
+| `!T* a.create<T>()` | один `T` в куче, нули |
 | `a.destroy(p)` | освобождает `create` |
-| `a.dup(s) !str` | копия строки |
-| `a.dupz(s) !*u8` | копия с нулевым байтом в конце, для C |
+| `!str a.dup(s)` | копия строки |
+| `!u8* a.dupz(s)` | копия с нулевым байтом в конце, для C |
 
 Каждая операция выделения возвращает `!...`: когда память кончилась, вы получаете обычную ошибку `error.OutOfMemory`, а не падение.
 
 ### `alloc` и `free`
 
 ```vibe run
-fn main() !void {
-    let a = c_allocator()
-    let xs = a.alloc[i64](4)?
-    defer a.free(xs)
-    println(xs, xs.len)
-    xs[0] = 10
-    xs[3] = 40
-    println(xs)
+!void main() {
+    const auto a = c_allocator();
+    const auto xs = a.alloc<i64>(4)?;
+    defer a.free(xs);
+    println(xs, xs.len);
+    xs[0] = 10;
+    xs[3] = 40;
+    println(xs);
 }
 ```
 
@@ -78,33 +78,33 @@ fn main() !void {
 
 ```vibe run
 struct Node {
-    val: i64
-    next: *Node
+    i64 val;
+    Node* next;
 }
 
-fn main() !void {
-    let a = c_allocator()
-    let n1 = a.create[Node]()?
-    defer a.destroy(n1)
-    let n2 = a.create[Node]()?
-    defer a.destroy(n2)
-    n1.val = 1
-    n1.next = n2
-    n2.val = 2
-    println(n1.val, n1.next.val, n2.next == null)
+!void main() {
+    const auto a = c_allocator();
+    const auto n1 = a.create<Node>()?;
+    defer a.destroy(n1);
+    const auto n2 = a.create<Node>()?;
+    defer a.destroy(n2);
+    n1.val = 1;
+    n1.next = n2;
+    n2.val = 2;
+    println(n1.val, n1.next.val, n2.next == null);
 }
 ```
 
 ### `dup`
 
 ```vibe run
-fn main() !void {
-    let a = c_allocator()
-    var src: [3]u8 = [104, 105, 33]
-    let copy = a.dup(src[..])?
-    defer a.free(copy)
-    src[0] = 72
-    println(copy, src[..])
+!void main() {
+    const auto a = c_allocator();
+    u8[3] src = [104, 105, 33];
+    const auto copy = a.dup(src[..])?;
+    defer a.free(copy);
+    src[0] = 72;
+    println(copy, src[..]);
 }
 ```
 
@@ -113,18 +113,18 @@ fn main() !void {
 В Vibe нехватка памяти — не катастрофа, а значение, которое обрабатывается. Это особенно важно для `FixedBuf`, у которого память ограничена:
 
 ```vibe run
-fn main() {
-    var mem: [64]u8
-    var fb = FixedBuf.init(mem[..])
-    let a = fb.allocator()
-    println(fb.remaining())
-    let first = a.alloc[u8](40) catch return
-    println(first.len, fb.remaining())
-    let second = a.alloc[u8](40) catch |e| {
-        println("не хватило: {e}")
-        return
-    }
-    println(second.len)
+void main() {
+    u8[64] mem;
+    auto fb = FixedBuf::init(mem[..]);
+    const auto a = fb.allocator();
+    println(fb.remaining());
+    const auto first = a.alloc<u8>(40) catch return;
+    println(first.len, fb.remaining());
+    const auto second = a.alloc<u8>(40) catch |e| {
+        println("не хватило: {e}");
+        return;
+    };
+    println(second.len);
 }
 ```
 
@@ -133,17 +133,17 @@ fn main() {
 `FixedBuf` раздаёт память из вашего массива «по возрастающей». Отдельные куски освобождать не нужно: `free` возвращает память, только если это самое последнее выделение, иначе ничего не делает. Весь буфер возвращается одним вызовом `reset()`. Аллокатор хранит указатель на `fb`, поэтому переменная `fb` должна жить, пока вы пользуетесь аллокатором.
 
 ```vibe run
-fn main() !void {
-    var mem: [256]u8
-    var fb = FixedBuf.init(mem[..])
-    let a = fb.allocator()
+!void main() {
+    u8[256] mem;
+    auto fb = FixedBuf::init(mem[..]);
+    const auto a = fb.allocator();
 
-    var list = List[i64].init(a)
-    for i in 0..5 { list.push(i * i)? }
-    println(list.slice(), fb.remaining())
+    auto list = List<i64>::init(a);
+    for (auto i : 0..5) { list.push(i * i)?; }
+    println(list.slice(), fb.remaining());
 
-    fb.reset()
-    println(fb.remaining())
+    fb.reset();
+    println(fb.remaining());
 }
 ```
 
@@ -156,22 +156,22 @@ fn main() !void {
 `Arena` берёт крупные куски у родительского аллокатора и раздаёт из них маленькие. Куски берутся порциями от 64 КБ. Отдельные `free` ничего не делают, а `deinit()` освобождает **всё** сразу. Идеальна для данных с общим временем жизни: разбор файла, обработка одного запроса, построение дерева.
 
 ```vibe run
-fn main() !void {
-    var arena = Arena.init(c_allocator())
-    defer arena.deinit()
-    let a = arena.allocator()
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
 
-    var words = List[str].init(a)
-    let w1 = a.dup("alpha")?
-    let w2 = a.dup("beta")?
-    words.push(w1)?
-    words.push(w2)?
-    println(words.slice())
+    auto words = List<str>::init(a);
+    const auto w1 = a.dup("alpha")?;
+    const auto w2 = a.dup("beta")?;
+    words.push(w1)?;
+    words.push(w2)?;
+    println(words.slice());
 
-    for i in 0..1000 {
-        _ = a.alloc[i64](100)?
+    for (auto i : 0..1000) {
+        _ = a.alloc<i64>(100)?;
     }
-    println("тысяча массивов выделена и ни одного free")
+    println("тысяча массивов выделена и ни одного free");
 }
 ```
 
@@ -181,21 +181,21 @@ fn main() !void {
 
 ```vibe run
 struct Config {
-    name: str
-    values: List[i64]
+    str name;
+    List<i64> values;
 }
 
-fn load(a: Allocator) !Config {
-    var cfg = Config{ name: a.dup("config")?, values: List[i64].init(a) }
-    for i in 1..4 { cfg.values.push(i * 10)? }
-    return cfg
+!Config load(Allocator a) {
+    auto cfg = Config{ .name = a.dup("config")?, .values = List<i64>::init(a) };
+    for (auto i : 1..4) { cfg.values.push(i * 10)?; }
+    return cfg;
 }
 
-fn main() !void {
-    var arena = Arena.init(c_allocator())
-    defer arena.deinit()
-    let cfg = load(arena.allocator())?
-    println(cfg.name, cfg.values.slice())
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto cfg = load(arena.allocator())?;
+    println(cfg.name, cfg.values.slice());
 }
 ```
 
@@ -207,31 +207,31 @@ fn main() !void {
 
 ```vibe run
 struct Counting {
-    count: i64
-    bytes: i64
-    parent: Allocator
+    i64 count;
+    i64 bytes;
+    Allocator parent;
 }
 
-fn count_alloc(ctx: *void, size: u64, align: u64) *void {
-    let c = ctx as *Counting
-    c.count += 1
-    c.bytes += size as i64
-    return c.parent.alloc_fn(c.parent.ctx, size, align)
+void* count_alloc(void* ctx, u64 size, u64 align) {
+    const auto c = ctx as *Counting;
+    c.count += 1;
+    c.bytes += size as i64;
+    return c.parent.alloc_fn(c.parent.ctx, size, align);
 }
 
-fn count_free(ctx: *void, p: *void, size: u64) {
-    let c = ctx as *Counting
-    c.parent.free_fn(c.parent.ctx, p, size)
+void count_free(void* ctx, void* p, u64 size) {
+    const auto c = ctx as *Counting;
+    c.parent.free_fn(c.parent.ctx, p, size);
 }
 
-fn main() !void {
-    var stats = Counting{ count: 0, bytes: 0, parent: c_allocator() }
-    let a = Allocator{ ctx: &stats as *void, alloc_fn: count_alloc, free_fn: count_free }
+!void main() {
+    auto stats = Counting{ .count = 0, .bytes = 0, .parent = c_allocator() };
+    const auto a = Allocator{ .ctx = &stats as *void, .alloc_fn = count_alloc, .free_fn = count_free };
 
-    var list = List[i64].init(a)
-    defer list.deinit()
-    for i in 0..20 { list.push(i)? }
-    println(list.len, stats.count, stats.bytes)
+    auto list = List<i64>::init(a);
+    defer list.deinit();
+    for (auto i : 0..20) { list.push(i)?; }
+    println(list.len, stats.count, stats.bytes);
 }
 ```
 
@@ -244,9 +244,9 @@ fn main() !void {
 Указатель на локальную переменную нельзя возвращать:
 
 ```vibe
-fn bad() *i64 {
-    var x = 5
-    return &x
+i64* bad() {
+    auto x = 5;
+    return &x;
 }
 ```
 
@@ -255,14 +255,14 @@ fn bad() *i64 {
 Правило: данные, переживающие функцию, должны лежать в памяти, которой владеет вызывающий (параметр-срез, указатель, аллокатор).
 
 ```vibe run
-fn fill(out: []i64) {
-    for i in 0..out.len { out[i] = i * i }
+void fill(i64[] out) {
+    for (auto i : 0..out.len) { out[i] = i * i; }
 }
 
-fn main() {
-    var buf: [5]i64
-    fill(buf[..])
-    println(buf)
+void main() {
+    i64[5] buf;
+    fill(buf[..]);
+    println(buf);
 }
 ```
 
