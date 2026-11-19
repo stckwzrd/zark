@@ -79,7 +79,7 @@ Goal: code that reads like C++ for someone who writes C++ every day, while keepi
 - [ ] statements
 - [ ] delete duplicated logic in `gen*.vibe`
 - [x] several errors per run (up to 10); the column is shown by the caret line, not in the header
-- [x] `const` methods cannot assign fields (calls of non-const methods are not checked yet)
+- [x] `const` methods cannot assign fields (and call non-const methods through `this`; calls on const variables are allowed)
 - [ ] constraints `T: Ord` checked at the declaration, interfaces defined in std
 - [ ] all tests on three backends, fixed points, compile time within +10%
 

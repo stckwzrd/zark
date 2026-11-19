@@ -1,0 +1,2 @@
+struct C { i64 n; void bump() { n += 1; } void look() const { this->bump(); } }
+void main() { auto c = C{}; c.look(); }
