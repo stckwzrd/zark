@@ -89,6 +89,9 @@ struct Gen {
     terminated: bool
     cur_label: str
     file: str
+    tests: List[*FnDecl]
+    test_root: str
+    test_mode: bool
     at_line: i64
     at_off: i64
     pend_file: str
@@ -125,6 +128,7 @@ fn new_gen(a: Allocator, safety: bool) !*Gen {
     g.struct_insts = Map[*StructInst].init(a)
     g.fn_insts = Map[*FnInst].init(a)
     g.pending = List[*FnInst].init(a)
+    g.tests = List[*FnDecl].init(a)
     g.declared = Map[bool].init(a)
     g.errors = Map[i64].init(a)
     g.error_names = List[str].init(a)
@@ -268,6 +272,15 @@ impl Gen {
             match d.k {
                 .Func => {
                     let f = d.f
+                    if f.is_test {
+                        if file == self.test_root {
+                            var nb = self.sb()
+                            sprint(&nb, "__test_{self.tests.len}")?
+                            f.name = nb.slice()
+                            self.tests.push(f)?
+                        }
+                        continue
+                    }
                     if f.receiver.len > 0 {
                         var kb = self.sb()
                         sprint(&kb, "{f.receiver}.{f.name}")?
@@ -898,7 +911,10 @@ impl Gen {
     fn generate(self) !void {
         for c in self.const_order { if c.mutable { self.emit_global_var(c)? } }
         var main_inst: *FnInst = null
-        if self.fns.has("main") {
+        var test_insts = List[*FnInst].init(self.a)
+        if self.test_mode {
+            for f in self.tests { test_insts.push(self.inst_fn(f, self.new_env()?, self.no_types())?)? }
+        } else if self.fns.has("main") {
             let m = self.fns.get("main")?
             if m.type_params.len > 0 || m.params.len > 0 { self.err(m.line); eprintln("main takes no parameters"); return error.CompileFailed }
             main_inst = self.inst_fn(m, self.new_env()?, self.no_types())?
@@ -910,7 +926,11 @@ impl Gen {
             fi.generated = true
             self.gen_function(fi)?
         }
-        if main_inst != null { self.gen_main_wrapper(main_inst)? }
+        if self.test_mode {
+            self.gen_test_main(test_insts)?
+        } else if main_inst != null {
+            self.gen_main_wrapper(main_inst)?
+        }
         var refs = self.sb()
         for i, n in self.error_names {
             let s = self.str_global(n)?
@@ -929,6 +949,25 @@ impl Gen {
         out.append(self.decls_out.slice())?
         out.append("\n")?
         out.append(self.funcs_out.slice())?
+    }
+
+    fn gen_test_main(self, insts: List[*FnInst]) !void {
+        let w = &self.funcs_out
+        self.declare("atoi", "declare i32 @atoi(ptr)")?
+        self.declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?
+        self.declare("fflush", "declare i32 @fflush(ptr)")?
+        let f = self.str_global("error: %s\n")?
+        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?
+        w.append("  %has = icmp sgt i32 %argc, 1\n  br i1 %has, label %go, label %none\nnone:\n  ret i32 2\ngo:\n")?
+        w.append("  %ap = getelementptr ptr, ptr %argv, i64 1\n  %as = load ptr, ptr %ap\n  %i = call i32 @atoi(ptr %as)\n  br label %c0\n")?
+        for k, fi in insts {
+            sprint(w, "c{k}:\n  %k{k} = icmp eq i32 %i, {k}\n  br i1 %k{k}, label %t{k}, label %c{k + 1}\n")?
+            sprint(w, "t{k}:\n  %r{k} = call {{ i32 }} @{fi.llname}()\n  %g{k} = extractvalue {{ i32 }} %r{k}, 0\n")?
+            sprint(w, "  %b{k} = icmp ne i32 %g{k}, 0\n  br i1 %b{k}, label %e{k}, label %o{k}\no{k}:\n  ret i32 0\ne{k}:\n  call i32 @fflush(ptr null)\n")?
+            sprint(w, "  %np{k} = getelementptr ptr, ptr @__vibe_errnames, i32 %g{k}\n  %n{k} = load ptr, ptr %np{k}\n")?
+            sprint(w, "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n{k})\n  ret i32 1\n")?
+        }
+        sprint(w, "c{insts.len}:\n  ret i32 2\n}}\n")?
     }
 
     fn gen_main_wrapper(self, mi: *FnInst) !void {

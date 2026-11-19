@@ -139,6 +139,20 @@ impl Parser {
     fn parse_decl(self, out: *List[Decl]) !void {
         let t = self.peek()
         var d = Decl{ k: .Import, line: t.line, .. }
+        if t.tag == .ident && t.text == "test" && self.peek_at(1).tag == .str_lit {
+            _ = self.advance()
+            let name = self.advance().text
+            let ret = self.te(.Errun)?
+            ret.elem = self.te_name("void")?
+            let f = self.a.create[FnDecl]()?
+            *f = FnDecl{
+                name: "test", type_params: self.strs(), params: List[Param].init(self.a), ret: ret,
+                body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(),
+                is_test: true, test_name: name, ..
+            }
+            out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
+            return
+        }
         match t.tag {
             .kw_import => {
                 _ = self.advance()
@@ -269,7 +283,7 @@ impl Parser {
         *f = FnDecl{
             name: name, type_params: tps, params: params, ret: ret, body: body,
             is_extern: is_extern, is_export: is_export, variadic: variadic, line: line,
-            file: self.file, receiver: receiver, receiver_params: recv_params,
+            file: self.file, receiver: receiver, receiver_params: recv_params, ..
         }
         return f
     }

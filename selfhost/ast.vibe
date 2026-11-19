@@ -84,6 +84,8 @@ struct FnDecl {
     file: str
     receiver: str           // "" = free function
     receiver_params: List[str]
+    is_test: bool
+    test_name: str
 }
 
 struct Field { name: str, ty: *TypeExpr }
