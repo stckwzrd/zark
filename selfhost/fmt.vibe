@@ -90,6 +90,7 @@ impl Fmt {
         if p == .pipe || c == .pipe { return orig }
         if c == .lbrace {
             if have2 && (prev2 == .kw_struct || prev2 == .kw_union || prev2 == .kw_enum || prev2 == .kw_impl) { return true }
+            if p == .rbracket { return orig }
             if p == .ident && prev.text.len > 0 && is_upper(prev.text[0]) { return orig }
             return true
         }
@@ -98,7 +99,8 @@ impl Fmt {
             return true
         }
         if c == .lbracket {
-            if p == .ident || p == .rparen || p == .rbracket || p == .question { return false }
+            if p == .rparen { return orig }
+            if p == .ident || p == .rbracket || p == .question { return false }
             return true
         }
         if (c == .star || c == .amp || c == .minus) && (p == .rparen || p == .rbracket) { return orig }
@@ -200,7 +202,7 @@ fn format_source(a: Allocator, src: str, file: str) !str {
         if is_closer(t.tag) && f.stack.len > 0 { f.stack.len -= 1 }
         if is_opener(t.tag) { f.stack.push(f.indent)? }
         prev2 = prev.tag
-        have_prev2 = have_prev
+        have_prev2 = have_prev && g.nl == 0
         prev = t
         have_prev = true
         have_out = true

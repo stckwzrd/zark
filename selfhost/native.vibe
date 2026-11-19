@@ -1696,7 +1696,7 @@ impl Native {
         for k in 0..nargs {
             if kind.get(k) != 2 { continue }
             let ar = ins.args.get(k)
-            if is_agg(ar.ty) { asm.lea(R10, RBP, locs.get(k))? } else { self.load_op(R10, ar.ty, ar.v, ar.ty.k == .I) ? }
+            if is_agg(ar.ty) { asm.lea(R10, RBP, locs.get(k))? } else { self.load_op(R10, ar.ty, ar.v, ar.ty.k == .I)? }
             asm.st(R10, RSP, 8 * regno.get(k), 8)?
         }
         for k in 0..nargs {
