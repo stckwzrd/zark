@@ -1,26 +1,48 @@
 {
   "name": "vibe-lang",
   "displayName": "Vibe",
-  "description": "Vibe language support: syntax, errors from the compiler, format, run, test, outline",
-  "version": "0.1.0",
+  "description": "Vibe language support through the vibe language server",
+  "version": "0.2.0",
   "publisher": "local",
-  "engines": { "vscode": "^1.80.0" },
-  "categories": ["Programming Languages", "Snippets", "Formatters"],
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Formatters"
+  ],
   "main": "./extension.js",
-  "activationEvents": ["onLanguage:vibe"],
+  "activationEvents": [
+    "onLanguage:vibe"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "vibe",
-        "aliases": ["Vibe", "vibe"],
-        "extensions": [".vibe"],
+        "aliases": [
+          "Vibe",
+          "vibe"
+        ],
+        "extensions": [
+          ".vibe"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
-      { "language": "vibe", "scopeName": "source.vibe", "path": "./syntaxes/vibe.tmLanguage.json" }
+      {
+        "language": "vibe",
+        "scopeName": "source.vibe",
+        "path": "./syntaxes/vibe.tmLanguage.json"
+      }
     ],
-    "snippets": [{ "language": "vibe", "path": "./snippets/vibe.json" }],
+    "snippets": [
+      {
+        "language": "vibe",
+        "path": "./snippets/vibe.json"
+      }
+    ],
     "configurationDefaults": {
       "[vibe]": {
         "editor.tabSize": 4,
@@ -37,28 +59,66 @@
           "default": "vibe",
           "description": "Path to the vibe compiler."
         },
-        "vibe.checkOnSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run the compiler frontend when a file is opened or saved and show its errors in the editor."
+        "vibe.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the communication with the language server."
         }
       }
     },
     "commands": [
-      { "command": "vibe.run", "title": "Vibe: Run File", "icon": "$(play)" },
-      { "command": "vibe.test", "title": "Vibe: Test File", "icon": "$(beaker)" },
-      { "command": "vibe.build", "title": "Vibe: Build File" },
-      { "command": "vibe.check", "title": "Vibe: Check File" }
+      {
+        "command": "vibe.run",
+        "title": "Vibe: Run File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "vibe.test",
+        "title": "Vibe: Test File",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "vibe.build",
+        "title": "Vibe: Build File"
+      },
+      {
+        "command": "vibe.restartServer",
+        "title": "Vibe: Restart Language Server"
+      }
     ],
     "menus": {
       "editor/title/run": [
-        { "command": "vibe.run", "when": "resourceLangId == vibe", "group": "navigation" },
-        { "command": "vibe.test", "when": "resourceLangId == vibe", "group": "navigation" }
+        {
+          "command": "vibe.run",
+          "when": "resourceLangId == vibe",
+          "group": "navigation"
+        },
+        {
+          "command": "vibe.test",
+          "when": "resourceLangId == vibe",
+          "group": "navigation"
+        }
       ]
     },
     "keybindings": [
-      { "command": "vibe.run", "key": "ctrl+alt+r", "when": "editorLangId == vibe" },
-      { "command": "vibe.test", "key": "ctrl+alt+t", "when": "editorLangId == vibe" }
+      {
+        "command": "vibe.run",
+        "key": "ctrl+alt+r",
+        "when": "editorLangId == vibe"
+      },
+      {
+        "command": "vibe.test",
+        "key": "ctrl+alt+t",
+        "when": "editorLangId == vibe"
+      }
     ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
   }
 }

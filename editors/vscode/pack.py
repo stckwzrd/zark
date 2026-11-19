@@ -7,6 +7,14 @@ here = os.path.dirname(os.path.abspath(__file__))
 pkg = json.load(open(os.path.join(here, "package.json")))
 name = "%s-%s.vsix" % (pkg["name"], pkg["version"])
 files = ["package.json", "extension.js", "language-configuration.json", "syntaxes/vibe.tmLanguage.json", "snippets/vibe.json"]
+for root, dirs, names in os.walk(os.path.join(here, "node_modules")):
+    dirs[:] = [d for d in dirs if d not in (".bin", "test", "tests", "docs")]
+    for n in names:
+        if n.endswith((".md", ".map", ".ts", ".txt")) and not n.endswith(".d.ts") and n not in ("LICENSE.txt",):
+            continue
+        if n.endswith((".d.ts", ".map")):
+            continue
+        files.append(os.path.relpath(os.path.join(root, n), here))
 
 manifest = """<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
@@ -25,6 +33,7 @@ types = """<?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension=".json" ContentType="application/json"/>
   <Default Extension=".js" ContentType="application/javascript"/>
+  <Default Extension=".txt" ContentType="text/plain"/>
   <Default Extension=".vsixmanifest" ContentType="text/xml"/>
 </Types>
 """
