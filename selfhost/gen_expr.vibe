@@ -14,6 +14,11 @@ fn lit_target(t: *Type) *Type {
     return t
 }
 
+fn variant_target(t: *Type, name: str) *Type {
+    if t != null && is_option(t) && field_index(t.si, name) < 0 { return t.si.fields.get(0).ty }
+    return t
+}
+
 fn num_target(t: *Type) *Type {
     let lt = lit_target(t)
     if lt != null && is_option(lt) { return lt.si.fields.get(0).ty }
@@ -121,7 +126,7 @@ impl Gen {
                 return error.CompileFailed
             }
             .EnumLit => {
-                let t = lit_target(expected)
+                let t = variant_target(lit_target(expected), e.name)
                 if t == null { self.err(e.line); eprintln("cannot infer enum type for '.{e.name}'"); return error.CompileFailed }
                 if is_union(t) { return self.make_union(t, e.name, null, e.line) }
                 if t.k != .Enm { self.err(e.line); eprintln("'.{e.name}' used where '{self.type_name(t)?}' is expected"); return error.CompileFailed }

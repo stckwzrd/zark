@@ -212,23 +212,30 @@ impl Gen {
             self.gen_stmt(body)?
             return
         }
-        if body.k == .ExprS {
-            self.arm_value(body.e, body.line, res)?
-            return
-        }
         let n = body.stmts.len
-        if body.k == .Block && n > 0 && body.stmts.get(n - 1).k == .ExprS {
+        if body.k == .Block && n > 0 {
             self.push_scope()?
             for i in 0..n - 1 { self.gen_stmt(body.stmts.get(i))? }
-            if !self.terminated {
-                let last = body.stmts.get(n - 1)
-                self.arm_value(last.e, last.line, res)?
-            }
+            if !self.terminated { self.arm_tail(body.stmts.get(n - 1), res)? }
             self.pop_scope()?
             return
         }
-        self.gen_stmt(body)?
-        if !self.terminated { self.err(body.line); eprintln("a match arm in an expression must produce a value or leave (return/break/continue)"); return error.CompileFailed }
+        self.arm_tail(body, res)?
+    }
+
+    fn arm_tail(self, s: *Stmt, res: *MatchRes) !void {
+        if s.k == .ExprS {
+            self.arm_value(s.e, s.line, res)?
+            return
+        }
+        if s.k == .Match {
+            let v = self.gen_expr(s.e, null)?
+            self.check_exhaustive(v, s.arms, s.line)?
+            self.gen_match(v, s.arms, res)?
+            return
+        }
+        self.gen_stmt(s)?
+        if !self.terminated { self.err(s.line); eprintln("a match arm in an expression must produce a value or leave (return/break/continue)"); return error.CompileFailed }
     }
 
     fn arm_value(self, e: *Expr, line: i64, res: *MatchRes) !void {
@@ -245,6 +252,17 @@ impl Gen {
 
     fn check_exhaustive(self, v: Value, arms: List[MatchArm], line: i64) !void {
         for arm in arms { if arm.pats.len == 0 { return } }
+        if v.ty.k == .Bool {
+            var seen_true = false
+            var seen_false = false
+            for arm in arms {
+                for pat in arm.pats {
+                    if pat.k == .BoolLit && pat.bval { seen_true = true }
+                    if pat.k == .BoolLit && !pat.bval { seen_false = true }
+                }
+            }
+            if seen_true && seen_false { return }
+        }
         var names = List[str].init(self.a)
         for arm in arms {
             for pat in arm.pats {

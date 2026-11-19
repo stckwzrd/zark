@@ -10,12 +10,21 @@ fn value_end(t: Tag) bool {
     return false
 }
 
+fn ends_value(t: Token) bool {
+    if t.tag == .ident && t.text == "orelse" { return false }
+    return value_end(t.tag)
+}
+
 fn is_binary_op(t: Tag) bool {
     match t {
         .eq, .eqeq, .neq, .lt, .le, .gt, .ge, .shl, .shr, .andand, .oror, .plus_eq, .minus_eq, .star_eq, .slash_eq,
         .percent_eq, .fat_arrow, .plus, .slash, .percent, .caret => return true
     }
     return false
+}
+
+fn type_start(t: Tag) bool {
+    return t == .ident || t == .star || t == .bang || t == .question || t == .lbracket || t == .kw_fn
 }
 
 fn is_closer(t: Tag) bool { return t == .rbrace || t == .rparen || t == .rbracket }
@@ -63,33 +72,39 @@ impl Fmt {
         return ind
     }
 
-    fn prefix_op(self, prev2: Tag, have2: bool, prev: Tag) bool {
-        match prev {
+    fn prefix_op(self, prev2: Token, have2: bool, prev: Token, cur: Token, prev_orig: bool, orig: bool, prev2_pq: bool) bool {
+        let before = !have2 || !ends_value(prev2) || prev2_pq
+        match prev.tag {
             .bang, .tilde => return true
-            .minus, .star, .amp, .question => return !have2 || !value_end(prev2)
+            .minus, .star, .amp => return before
+            .question => return before || prev_orig || (!orig && type_start(cur.tag))
         }
         return false
     }
 
-    fn wants_space(self, prev2: Tag, have2: bool, prev: Token, cur: Token, orig: bool) bool {
+    fn wants_space(self, prev2: Token, have2: bool, prev: Token, cur: Token, prev_orig: bool, orig: bool, prev2_pq: bool) bool {
         let p = prev.tag
         let c = cur.tag
+        let p2 = prev2.tag
         if c == .rparen || c == .rbracket || c == .comma || c == .semi { return false }
         if c == .rbrace { return p != .lbrace }
         if p == .lbrace { return c != .rbrace }
         if p == .lparen || p == .lbracket || p == .dot { return false }
         if c == .colon { return false }
         if p == .colon { return true }
-        if c == .question && value_end(p) { return false }
-        if c == .dot && (value_end(p) || p == .rbracket || p == .kw_error) { return false }
+        if c == .question && ends_value(prev) {
+            if p == .rparen || p == .rbracket { return orig }
+            return false
+        }
+        if c == .dot && (ends_value(prev) || p == .rbracket || p == .kw_error) { return false }
         if p == .dotdot || c == .dotdot {
             if p == .comma || p == .lbrace { return true }
             return false
         }
-        if self.prefix_op(prev2, have2, p) { return false }
+        if self.prefix_op(prev2, have2, prev, cur, prev_orig, orig, prev2_pq) { return false }
         if p == .pipe || c == .pipe { return orig }
         if c == .lbrace {
-            if have2 && (prev2 == .kw_struct || prev2 == .kw_union || prev2 == .kw_enum || prev2 == .kw_impl) { return true }
+            if have2 && (p2 == .kw_struct || p2 == .kw_union || p2 == .kw_enum || p2 == .kw_impl) { return true }
             if p == .rbracket { return orig }
             if p == .ident && prev.text.len > 0 && is_upper(prev.text[0]) { return orig }
             return true
@@ -100,11 +115,11 @@ impl Fmt {
         }
         if c == .lbracket {
             if p == .rparen { return orig }
-            if p == .ident || p == .rbracket || p == .question { return false }
+            if p == .ident || p == .rbracket || p == .question || p == .kw_fn { return false }
             return true
         }
         if (c == .star || c == .amp || c == .minus) && (p == .rparen || p == .rbracket) { return orig }
-        if (p == .star || p == .amp || p == .minus) && (prev2 == .rparen || prev2 == .rbracket) && have2 { return orig }
+        if (p == .star || p == .amp || p == .minus) && (p2 == .rparen || p2 == .rbracket) && have2 { return orig }
         if p == .rbracket && (c == .ident || c == .star || c == .lbracket || c == .bang || c == .question || c == .kw_fn) { return orig }
         return true
     }
@@ -168,7 +183,9 @@ fn format_source(a: Allocator, src: str, file: str) !str {
     }
     var f = Fmt{ a: a, src: src, out: List[u8].init(a), stack: List[i64].init(a), indent: 0 }
     var prev = Token{ tag: .eof, text: "", line: 0, off: 0 }
-    var prev2 = Tag.eof
+    var prev2 = Token{ tag: .eof, text: "", line: 0, off: 0 }
+    var prev_orig = false
+    var last_pq = false
     var have_prev = false
     var have_out = false
     var have_prev2 = false
@@ -176,6 +193,7 @@ fn format_source(a: Allocator, src: str, file: str) !str {
     for t in toks {
         let gap = src[pos..token_start(t)]
         let g = f.gap(gap, t, prev, have_prev, have_out)?
+        let pq = prev.tag == .question && have_prev && f.prefix_op(prev2, have_prev2, prev, t, prev_orig, gap.len > 0, last_pq)
         if g.comment { have_out = true }
         if have_out {
             if g.nl > 0 {
@@ -184,7 +202,7 @@ fn format_source(a: Allocator, src: str, file: str) !str {
                 f.newline(n)?
                 f.indent = f.line_indent(t, prev, have_prev)
                 f.pad(f.indent)?
-            } else if g.comment || (have_prev && f.wants_space(prev2, have_prev2, prev, t, gap.len > 0)) {
+            } else if g.comment || (have_prev && f.wants_space(prev2, have_prev2, prev, t, prev_orig, gap.len > 0, last_pq)) {
                 f.out.append(" ")?
             }
         }
@@ -201,7 +219,9 @@ fn format_source(a: Allocator, src: str, file: str) !str {
         }
         if is_closer(t.tag) && f.stack.len > 0 { f.stack.len -= 1 }
         if is_opener(t.tag) { f.stack.push(f.indent)? }
-        prev2 = prev.tag
+        prev2 = prev
+        prev_orig = gap.len > 0
+        last_pq = pq
         have_prev2 = have_prev && g.nl == 0
         prev = t
         have_prev = true
@@ -209,6 +229,7 @@ fn format_source(a: Allocator, src: str, file: str) !str {
         pos = token_end(t)
     }
     _ = f.gap(src[pos..], Token{ tag: .eof, text: "", line: 0, off: 0 }, prev, have_prev, have_out)?
+    if toks.len == 0 && f.out.len == 0 { return "" }
     f.out.append("\n")?
     return f.out.slice()
 }

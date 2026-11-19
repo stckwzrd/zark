@@ -107,7 +107,7 @@ impl Gen {
         }
         if callee.k == .Field { return self.gen_field_call(callee, e.args, self.no_types(), expected, e.line) }
         if callee.k == .EnumLit {
-            let t = lit_target(expected)
+            let t = variant_target(lit_target(expected), callee.name)
             if t == null { self.err(e.line); eprintln("cannot infer union type for '.{callee.name}(...)'"); return error.CompileFailed }
             if !is_union(t) { self.err(e.line); eprintln("'.{callee.name}(...)' used where '{self.type_name(t)?}' is expected"); return error.CompileFailed }
             if e.args.len != 1 { self.err(e.line); eprintln("a union variant takes exactly one payload"); return error.CompileFailed }
