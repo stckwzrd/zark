@@ -35,11 +35,10 @@ Done: closures with explicit captures, `T: Ord` constraints (checked at the call
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
 
 ## 7. Tooling
-Done: `vibe test`, `vibe fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
+Done: `vibe lsp` (language server), `vibe test`, `vibe fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
 - `vibe fmt`: the parser already exists; add a printer for the AST.
 - `vibe test`: `test "name" { ... }` blocks collected and run by the driver.
 - DWARF line tables from the native backend, so gdb/lldb work: we know the source line of every instruction.
-- LSP: diagnostics + go-to-definition on top of the frontend (it is fast enough to re-run on every keystroke).
 
 ## 8. Platforms
 An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.vibe` stays the same; only the encoder and the ABI change.

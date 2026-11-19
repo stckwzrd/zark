@@ -66,7 +66,9 @@ VIBE=build/vibe tests/run.sh              # test suite
 
 ## Editor support
 
-`editors/vscode` is a VS Code / code-oss extension: highlighting, compiler errors in the editor (on open and save), format on save through `vibe fmt`, run and test buttons, outline, go to definition and snippets. Install it with `python3 editors/vscode/pack.py out.vsix && code-oss --install-extension out.vsix`. It calls `vibe` from `PATH` (or `~/.local/bin/vibe`); change it with the `vibe.path` setting.
+`vibe lsp` is a language server over stdio, built on the compiler frontend: compiler errors as you type (also in unsaved buffers), hover, completion (members, modules, enum variants, struct literal fields, types), signature help, go to definition (also into imported files), references and rename across the workspace, outline, workspace symbols, highlights, format, and quick fixes for "did you mean". Any LSP client can use it.
+
+`editors/vscode` is a VS Code / code-oss extension that starts the server and adds highlighting, snippets and run/test buttons. Build and install it with `cd editors/vscode && npm install && python3 pack.py out.vsix && code-oss --install-extension out.vsix`. It calls `vibe` from `PATH` (or `~/.local/bin/vibe`); change that with the `vibe.path` setting.
 
 ## How it differs from Zig
 
