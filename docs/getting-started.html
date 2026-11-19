@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Установка и первая программа · Vibe</title>
+<meta name="description" content="Как собрать компилятор Vibe, запустить первую программу и понять основные команды">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="">
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<div class="layout">
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html" class="current">Установка и первая программа</a><a href="tour.html">Быстрый тур</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<main><article>
+<h1>Установка и первая программа</h1>
+<p>Vibe распространяется как исходный код: компилятор написан на самом Vibe, поэтому его нужно один раз собрать с помощью цепочки начальной загрузки. Дальше он собирает сам себя и дорабатывается на себе же.</p>
+<h2 id="что-понадобится"><a class="anchor" href="#что-понадобится">#</a>Что понадобится</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>Что</th>
+<th>Зачем</th>
+<th>Версия</th>
+</tr>
+</thead><tbody><tr>
+<td><code>clang</code></td>
+<td>линковка готовых бинарников, сборка <code>.c</code>/<code>.cpp</code> файлов, режимы <code>-O</code>/<code>--release</code></td>
+<td>18 или новее</td>
+</tr>
+<tr>
+<td><code>git</code></td>
+<td>получить исходники</td>
+<td>любой</td>
+</tr>
+<tr>
+<td>Zig</td>
+<td>только для первой сборки (stage0)</td>
+<td><strong>ровно 0.13</strong></td>
+</tr>
+<tr>
+<td><code>bash</code>, <code>python3</code></td>
+<td>скрипт <code>bootstrap.sh</code></td>
+<td>любые</td>
+</tr>
+</tbody></table></div>
+<p>Zig нужен лишь для того, чтобы собрать самый первый компилятор: он умеет читать Vibe и написан на Zig. После этого компилятор Vibe собирает себя сам. Более новые версии Zig (например 0.17) <strong>не подходят</strong>: в них изменилось <code>build.zig</code>.</p>
+<blockquote class="callout tip"><p><strong>Совет:</strong> если в системе стоит другой Zig, поставьте 0.13 в отдельное виртуальное окружение, не трогая системные пакеты:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">python3</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -m</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> venv</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/venv</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">~</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">/.cache/zig013/venv/bin/pip install ziglang</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">=0.13.0</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">mkdir</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -p</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/bin</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">printf</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> '#!/bin/sh\nexec %s/.cache/zig013/venv/bin/python -m ziglang "$@"\n'</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$HOME</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/bin/zig</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">chmod</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> +x</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/bin/zig</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">export</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> PATH</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$HOME/.cache/zig013/bin:$PATH   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D"># только для этого терминала</span></span></code></pre></div><p>Скрипт <code>bootstrap.sh</code> берёт <code>zig</code> из <code>PATH</code>, а если его нет, пробует <code>python3 -m ziglang</code>.</p>
+</blockquote>
+<h2 id="сборка-компилятора"><a class="anchor" href="#сборка-компилятора">#</a>Сборка компилятора</h2>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">git</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> clone</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> https://github.com/stckwzrd/vibe.git</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">./bootstrap.sh</span></span></code></pre></div><p>Скрипт выполняет всю цепочку и проверяет результат:</p>
+<ol>
+<li>собирает Zig-компилятор stage0 и строит им <code>stage1</code> (компилятор Vibe, собранный stage0);</li>
+<li>строит <code>stage2</code> — компилятор, собранный предыдущим, и <code>stage3</code> — ещё раз; проверяет, что <code>stage2</code> и <code>stage3</code> побайтно совпадают (неподвижная точка);</li>
+<li>строит цепочку без LLVM: <code>native1</code>, <code>native2</code>, <code>native3</code> и проверяет, что <code>native2 == native3</code>;</li>
+<li>прогоняет тесты (21 штука) собственным компилятором;</li>
+<li>копирует результат в <code>build/vibe</code>.</li>
+</ol>
+<p>Занимает около минуты. В конце вы увидите строку <code>== done: build/vibe is the self-hosted compiler</code>.</p>
+<blockquote class="callout warning"><p><strong>Важно:</strong> если в скрипте что-то не сошлось (неподвижная точка нарушена, тест упал), он останавливается с кодом 1 и ничего не копирует в <code>build/vibe</code>. Такой компилятор использовать нельзя.</p>
+</blockquote>
+<h2 id="положить-vibe-в-path"><a class="anchor" href="#положить-vibe-в-path">#</a>Положить <code>vibe</code> в PATH</h2>
+<p>Самое простое — ссылка в каталог, который уже есть в <code>PATH</code>:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">mkdir</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -p</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.local/bin</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ln</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -sf</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$PWD</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">/build/vibe"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.local/bin/vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        # покажет справку</span></span></code></pre></div><p>Ссылка указывает на файл <code>build/vibe</code>, поэтому после каждого <code>./bootstrap.sh</code> новая версия подхватывается сама.</p>
+<h2 id="первая-программа"><a class="anchor" href="#первая-программа">#</a>Первая программа</h2>
+<p>Создайте файл <code>hello.vibe</code>:</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">fn</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Hello, Vibe!"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>Hello, Vibe!</code></pre></div></div>
+<p>Запустите: <code>vibe run hello.vibe</code>. Компилятор прочитает файл, сгенерирует машинный код, слинкует исполняемый файл в <code>.vibe-cache/hello</code> и сразу его запустит.</p>
+<p>Что тут важно:</p>
+<ul>
+<li>программа начинается с функции <code>main</code>; если её нет, получится библиотека, которую нельзя запустить;</li>
+<li><code>println</code> печатает аргументы и перевод строки; внутри строки <code>{...}</code> вычисляется выражение (<strong>интерполяция</strong>: см. <a href="strings.html">строки</a>);</li>
+<li>точки с запятой не нужны: конец оператора определяется концом строки (<a href="lexical.html#конец-оператора">лексика</a>).</li>
+</ul>
+<h2 id="команды"><a class="anchor" href="#команды">#</a>Команды</h2>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   file.vibe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [extra.c</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">.cpp</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">.o</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ...]</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [-O] [-- аргументы программы]</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> build</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> file.vibe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [extra.c</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">.cpp</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">.o</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ...]</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [-o </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">выход]</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [-O] [--release]</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> test</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">  file.vibe</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [extra.c</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">.cpp</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">.o</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ...]</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [-O]</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">   [--check] file.vibe ...</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ir</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">    file.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> tokens</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> file.vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ...</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> lsp</span></span></code></pre></div><div class="table-wrap"><table><thead><tr>
+<th>Команда</th>
+<th>Что делает</th>
+</tr>
+</thead><tbody><tr>
+<td><code>run</code></td>
+<td>компилирует и сразу запускает; всё после <code>--</code> уходит программе как аргументы</td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td>компилирует и оставляет исполняемый файл в текущем каталоге (по умолчанию имя файла без <code>.vibe</code>)</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>запускает блоки <code>test &quot;...&quot; { }</code> (<a href="testing.html">тесты</a>)</td>
+</tr>
+<tr>
+<td><code>fmt</code></td>
+<td>приводит файлы к единому стилю (<a href="tooling.html#vibe-fmt">инструменты</a>)</td>
+</tr>
+<tr>
+<td><code>ir</code></td>
+<td>печатает LLVM IR, который сгенерировал фронтенд</td>
+</tr>
+<tr>
+<td><code>tokens</code></td>
+<td>печатает токены (удобно при отладке лексера)</td>
+</tr>
+<tr>
+<td><code>lsp</code></td>
+<td>запускает языковой сервер для редактора</td>
+</tr>
+</tbody></table></div>
+<h3 id="аргументы-программы"><a class="anchor" href="#аргументы-программы">#</a>Аргументы программы</h3>
+<p>Всё после <code>--</code> попадёт в программу. Внутри доступны <code>arg_count()</code> и <code>arg(i)</code>. Нулевой аргумент — путь к самой программе, как в C:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> args.vibe</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> a</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b c"</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">hello,</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> args</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">arg</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 0:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> .vibe-cache/args</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">arg</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 1:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> a</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">arg</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 2:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> b</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> c</span></span></code></pre></div><p>(<code>args.vibe</code> — программа, которая печатает <code>arg_count()</code> и все <code>arg(i)</code>.)</p>
+<h3 id="код-выхода"><a class="anchor" href="#код-выхода">#</a>Код выхода</h3>
+<ul>
+<li><code>fn main() { ... }</code> — код 0;</li>
+<li><code>fn main() i32 { return 7 }</code> — код 7 (<code>vibe run</code> возвращает код программы);</li>
+<li><code>fn main() !void { return error.Boom }</code> — печатает <code>error: Boom</code> в stderr и возвращает 1;</li>
+<li><code>panic(&quot;...&quot;)</code> и выход за границы массива — печатают сообщение вида <code>panic: ... (файл:строка)</code> и возвращают 1.</li>
+</ul>
+<h2 id="флаги-компилятора"><a class="anchor" href="#флаги-компилятора">#</a>Флаги компилятора</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>Флаг</th>
+<th>Что значит</th>
+</tr>
+</thead><tbody><tr>
+<td>(по умолчанию)</td>
+<td>собственный x86-64 бэкенд без LLVM: самая быстрая сборка</td>
+</tr>
+<tr>
+<td><code>--native</code></td>
+<td>выбрать собственный бэкенд, даже если указан <code>-O</code> (тогда <code>-O</code> не действует)</td>
+</tr>
+<tr>
+<td><code>--llvm</code></td>
+<td>LLVM-бэкенд без оптимизаций</td>
+</tr>
+<tr>
+<td><code>-O</code></td>
+<td>LLVM <code>-O2</code>; проверки границ остаются</td>
+</tr>
+<tr>
+<td><code>--release</code></td>
+<td><code>-O2</code> и проверки границ убраны</td>
+</tr>
+<tr>
+<td><code>--no-safety</code></td>
+<td>убрать проверки границ, не включая оптимизации</td>
+</tr>
+<tr>
+<td><code>--time</code></td>
+<td>напечатать время фронтенда, бэкенда и линковки</td>
+</tr>
+<tr>
+<td><code>-o имя</code></td>
+<td>имя выходного файла</td>
+</tr>
+<tr>
+<td><code>-- ...</code></td>
+<td>аргументы для <code>vibe run</code></td>
+</tr>
+</tbody></table></div>
+<p>Время сборки маленькой программы выглядит так (значения зависят от машины):</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> build</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> hello.vibe</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --time</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -o</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> t1</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">time: frontend 2.9 ms, native backend 0.3 ms, link 98.9 ms</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> build</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> hello.vibe</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --llvm</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --time</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -o</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> t2</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">time: frontend 3.0 ms, llvm backend 0.1 ms, link 156.6 ms</span></span></code></pre></div><p>Почти всё время уходит на линковку <code>clang</code>. Подробнее про выбор режима: <a href="tooling.html#режимы-компиляции">инструменты</a>.</p>
+<h2 id="что-появляется-на-диске"><a class="anchor" href="#что-появляется-на-диске">#</a>Что появляется на диске</h2>
+<ul>
+<li><code>.vibe-cache/</code> в текущем каталоге: объектные файлы (<code>имя.o</code> для своего бэкенда, <code>имя.ll</code> для LLVM), <code>.o</code> внешних C-файлов и исполняемый файл для <code>vibe run</code>. Каталог можно удалять в любой момент. Добавьте его в <code>.gitignore</code>.</li>
+<li>при <code>vibe build</code> исполняемый файл создаётся в <strong>текущем каталоге</strong> (имя файла без <code>.vibe</code>, либо то, что задано через <code>-o</code>).</li>
+</ul>
+<h2 id="структура-проекта"><a class="anchor" href="#структура-проекта">#</a>Структура проекта</h2>
+<p>Для небольшой программы достаточно одного файла. Когда он вырос, разделите его на модули (<a href="modules.html">модули</a>):</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>проект/</span></span>
+<span class="line"><span>  main.vibe        # fn main, import "geometry.vibe"</span></span>
+<span class="line"><span>  geometry.vibe</span></span>
+<span class="line"><span>  util/</span></span>
+<span class="line"><span>    strings.vibe</span></span></code></pre></div><p>Пути в <code>import</code> считаются от каталога файла, в котором написан <code>import</code>.</p>
+<h2 id="редактор"><a class="anchor" href="#редактор">#</a>Редактор</h2>
+<p>Для VS Code / code-oss есть расширение с подсветкой, ошибками прямо в редакторе, автодополнением и переходом к определению. Установка и настройка других редакторов описаны на странице <a href="tooling.html#языковой-сервер-и-редактор">инструменты</a>.</p>
+<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<p>Откройте <a href="tour.html">быстрый тур</a>: за несколько минут вы увидите весь язык. Затем идите по разделу «Язык» по порядку: каждая страница подробно разбирает одну тему.</p>
+
+<div class="pager"><a class="prev" href="index.html"><small>Назад</small>Руководство по Vibe</a><a class="next" href="tour.html"><small>Дальше</small>Быстрый тур</a></div>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#что-понадобится">Что понадобится</a><a class="l2" href="#сборка-компилятора">Сборка компилятора</a><a class="l2" href="#положить-vibe-в-path">Положить vibe в PATH</a><a class="l2" href="#первая-программа">Первая программа</a><a class="l2" href="#команды">Команды</a><a class="l3" href="#аргументы-программы">Аргументы программы</a><a class="l3" href="#код-выхода">Код выхода</a><a class="l2" href="#флаги-компилятора">Флаги компилятора</a><a class="l2" href="#что-появляется-на-диске">Что появляется на диске</a><a class="l2" href="#структура-проекта">Структура проекта</a><a class="l2" href="#редактор">Редактор</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

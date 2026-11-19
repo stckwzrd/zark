@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Инструменты: fmt, lsp, флаги · Vibe</title>
+<meta name="description" content="Форматтер, языковой сервер, режимы компиляции, диагностика и отладка в Vibe">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="">
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<div class="layout">
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="testing.html">Тестирование</a><a href="tooling.html" class="current">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<main><article>
+<h1>Инструменты: fmt, lsp, флаги</h1>
+<p>Все инструменты — это подкоманды одного исполняемого файла <code>vibe</code>. Отдельно ничего ставить не нужно.</p>
+<h2 id="диагностика-компилятора"><a class="anchor" href="#диагностика-компилятора">#</a>Диагностика компилятора</h2>
+<p>Любая ошибка печатается в формате <code>файл:строка: error: сообщение</code>, под ним показана строка исходника и указатель <code>^</code> на место ошибки:</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">fn</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    let</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> count </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"{cuont}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:3: error: unknown identifier 'cuont' (did you mean 'count'?)
+    3 |     println(&quot;{cuont}&quot;)
+      |               ^</code></pre></div></div>
+<p>Когда в программе есть похожее имя, компилятор подсказывает его (для имён короче трёх символов подсказки не показываются, они были бы случайными):</p>
+<ul>
+<li>неизвестная переменная или функция;</li>
+<li>поле структуры, вариант enum или union, имя в списке захвата замыкания;</li>
+<li>имя ограничения дженерика (<code>T: Orb</code> → <code>Ord</code>).</li>
+</ul>
+<p>Типичные сообщения и их причины разобраны на странице <a href="gotchas.html">ловушки и FAQ</a>.</p>
+<blockquote class="callout note"><p><strong>Примечание:</strong> компилятор останавливается на <strong>первой</strong> ошибке парсера. Ошибки типов он тоже сообщает по одной за запуск, но <a href="#языковой-сервер-и-редактор">языковой сервер</a> проверяет каждую функцию отдельно и показывает по одной ошибке на функцию.</p>
+</blockquote>
+<h2 id="vibe-fmt"><a class="anchor" href="#vibe-fmt">#</a>vibe fmt</h2>
+<p><code>vibe fmt файл.vibe ...</code> переписывает файлы на месте. Форматтер работает по токенам: он правит пробелы, отступы и пустые строки, <strong>никогда не переносит и не склеивает строки</strong> и не трогает комментарии.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> cat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   header</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> comment</span></span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x.vibe"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   //</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> trailing</span></span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">struct</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> P{x:i64,y</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64}</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fn</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">( </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">a:i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ,b</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> :</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> )  </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">i64{</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> a+b</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   //</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> sum</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fn</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()  </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">{</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   p=P{x:1,y:2}</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> p.x</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">==1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&#x26;&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">p.y</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">0{</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">println(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"ok {p.x}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }else{</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    println(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"no"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">in</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 0..10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{total</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">i*2-1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">match</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> total</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">1,2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">),</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">_</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> =</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">( </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ) </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> r=-q+</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (add(q,1)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">2)</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> z:</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">*</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">P=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">p</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> w:!i64=add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">1,2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">formatted</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> cat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   header</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> comment</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x.vibe"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   //</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> trailing</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">struct</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> P</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> x:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> y:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> }</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fn</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">a:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> b:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> a</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> +</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> b</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   //</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> sum</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fn</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">{</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> p</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> P{</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> x:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 1,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> y:</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> }</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> p.x</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> &#x26;&#x26; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">p.y</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ></span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        println(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"ok {p.x}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    } </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        println(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"no"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">in</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 0..10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">total</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> +=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> }</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    match</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> total</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        1,</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> =</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">,</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">        _</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> =</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">"b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> r</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -q</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> +</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (add(q, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">2)</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> z:</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> *</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">P</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> &#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">p</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    let</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> w:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> !i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">1,</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Что именно делает форматтер:</p>
+<ul>
+<li>отступы — 4 пробела на уровень вложенности скобок; продолжение выражения на следующей строке получает ещё один уровень;</li>
+<li>пробелы вокруг бинарных операторов, после запятых и двоеточий, внутри <code>{ }</code> на одной строке; нет пробелов внутри <code>()</code> и <code>[]</code>;</li>
+<li>серии пустых строк сворачиваются в одну, пустые строки сразу после <code>{</code> и перед <code>}</code> убираются;</li>
+<li>пробелы в конце строк удаляются, файл заканчивается ровно одним переводом строки;</li>
+<li>расстояние между кодом и комментарием в конце строки сохраняется как есть.</li>
+</ul>
+<p>Чего форматтер <strong>не</strong> делает: не ломает длинные строки, не выравнивает комментарии по колонке, не меняет порядок объявлений, не переименовывает ничего. Пробелы вокруг <code>*</code> и <code>&amp;</code>, когда по соседним токенам не понять, умножение это или указатель (<code>(add(q, 1)*2)</code> в примере выше), он оставляет такими, какими они были.</p>
+<p><code>--check</code> ничего не меняет, а печатает <code>would reformat файл</code> для каждого файла, который был бы изменён, и завершается с кодом 1 — удобно для CI:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --check</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">would</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> reformat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> echo</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> $?</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">1</span></span></code></pre></div><p>Форматтер идемпотентен: повторный запуск на уже отформатированном файле ничего не меняет. Он гарантированно сохраняет поток токенов: смысл программы измениться не может.</p>
+<blockquote class="callout note"><p><strong>Примечание:</strong> файлы с переводами строк <code>\r\n</code> форматтер превращает в <code>\n</code>.</p>
+</blockquote>
+<h2 id="режимы-компиляции"><a class="anchor" href="#режимы-компиляции">#</a>Режимы компиляции</h2>
+<p>У Vibe два бэкенда:</p>
+<ul>
+<li><strong>собственный x86-64 бэкенд</strong> (по умолчанию). Компилятор сам превращает промежуточное представление в машинный код и пишет ELF-объект. Сборка очень быстрая; код заметно быстрее «наивного», потому что есть распределение регистров, но медленнее оптимизированного LLVM;</li>
+<li><strong>LLVM</strong> (<code>--llvm</code>, <code>-O</code>, <code>--release</code>): компилятор печатает LLVM IR, а <code>clang</code> его оптимизирует и компилирует.</li>
+</ul>
+<div class="table-wrap"><table><thead><tr>
+<th>Команда</th>
+<th>Бэкенд</th>
+<th>Оптимизация</th>
+<th>Проверки границ</th>
+</tr>
+</thead><tbody><tr>
+<td><code>vibe run x.vibe</code></td>
+<td>свой</td>
+<td>нет</td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>vibe run x.vibe --llvm</code></td>
+<td>LLVM</td>
+<td><code>-O0</code></td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>vibe run x.vibe -O</code></td>
+<td>LLVM</td>
+<td><code>-O2</code></td>
+<td>да</td>
+</tr>
+<tr>
+<td><code>vibe run x.vibe --release</code></td>
+<td>LLVM</td>
+<td><code>-O2</code></td>
+<td><strong>нет</strong></td>
+</tr>
+<tr>
+<td><code>vibe run x.vibe --no-safety</code></td>
+<td>свой</td>
+<td>нет</td>
+<td><strong>нет</strong></td>
+</tr>
+</tbody></table></div>
+<p>Проверка границ — это то, что превращает выход за массив в понятную панику. Без неё это <strong>неопределённое поведение</strong>: пример ниже падает с <code>panic</code> при обычной сборке и молча читает мусор при <code>--release</code>:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> oob.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">panic:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> index</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> out</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> of</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> bounds</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (len </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) at oob.vibe:4</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> oob.vibe</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --release</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">140735146892504</span></span></code></pre></div><p>(<code>oob.vibe</code> читает <code>a[5]</code> у массива из трёх элементов.) Отладочные сборки держите с проверками, <code>--release</code> включайте для готовых программ, когда уверены в корректности индексов.</p>
+<p>Для разработки используйте режим по умолчанию: он собирает сам компилятор (около 6 тысяч строк Vibe) примерно за десятую долю секунды, не считая линковки.</p>
+<h2 id="промежуточные-представления"><a class="anchor" href="#промежуточные-представления">#</a>Промежуточные представления</h2>
+<p><code>vibe ir file.vibe</code> печатает LLVM IR, который сгенерировал фронтенд. Это тот же текст, который читает собственный бэкенд. Для функции</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">fn</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> fib</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n: </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n }</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> fib</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> fib</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>получается (локальные переменные лежат в <code>alloca</code>, имена <code>%tN</code> — временные значения):</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>define internal i64 @vb.fib(i64 %a.0) {</span></span>
+<span class="line"><span>entry:</span></span>
+<span class="line"><span>  %v.n.1 = alloca i64</span></span>
+<span class="line"><span>  store i64 %a.0, ptr %v.n.1</span></span>
+<span class="line"><span>  %t2 = load i64, ptr %v.n.1</span></span>
+<span class="line"><span>  %t3 = icmp slt i64 %t2, 2</span></span>
+<span class="line"><span>  br i1 %t3, label %then1, label %endif3</span></span>
+<span class="line"><span>then1:</span></span>
+<span class="line"><span>  %t4 = load i64, ptr %v.n.1</span></span>
+<span class="line"><span>  ret i64 %t4</span></span>
+<span class="line"><span>endif3:</span></span>
+<span class="line"><span>  %t5 = load i64, ptr %v.n.1</span></span>
+<span class="line"><span>  %t6 = sub i64 %t5, 1</span></span>
+<span class="line"><span>  %t7 = call i64 @vb.fib(i64 %t6)</span></span>
+<span class="line"><span>  %t8 = load i64, ptr %v.n.1</span></span>
+<span class="line"><span>  %t9 = sub i64 %t8, 2</span></span>
+<span class="line"><span>  %t10 = call i64 @vb.fib(i64 %t9)</span></span>
+<span class="line"><span>  %t11 = add i64 %t7, %t10</span></span>
+<span class="line"><span>  ret i64 %t11</span></span>
+<span class="line"><span>}</span></span></code></pre></div><p><code>vibe tokens file.vibe</code> печатает токены: номер строки, вид токена и текст. Полезно, когда непонятно, как лексер разобрал строку (особенно с кавычками и фигурными скобками):</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>1 .kw_fn fn</span></span>
+<span class="line"><span>1 .ident fib</span></span>
+<span class="line"><span>1 .lparen (</span></span>
+<span class="line"><span>1 .ident n</span></span>
+<span class="line"><span>1 .colon :</span></span>
+<span class="line"><span>1 .ident i64</span></span></code></pre></div><p>Как устроено всё остальное — на странице <a href="how-it-works.html">как устроен компилятор</a>.</p>
+<h2 id="языковой-сервер-и-редактор"><a class="anchor" href="#языковой-сервер-и-редактор">#</a>Языковой сервер и редактор</h2>
+<p><code>vibe lsp</code> — языковой сервер по протоколу LSP на стандартных вводе/выводе. Он построен на том же парсере и генераторе, что и компилятор, поэтому сообщения те же, что при <code>vibe build</code>, и они относятся и к несохранённым изменениям. Возможности:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Возможность</th>
+<th>Что умеет</th>
+</tr>
+</thead><tbody><tr>
+<td>Диагностика</td>
+<td>ошибки с точным диапазоном по ходу набора, подсказки «did you mean», быстрые исправления</td>
+</tr>
+<tr>
+<td>Подсказка при наведении</td>
+<td>сигнатура символа и комментарии <code>///</code> над объявлением</td>
+</tr>
+<tr>
+<td>Автодополнение</td>
+<td>члены структур и методы (по выведенному типу), имена модулей после <code>alias.</code>, варианты enum после <code>.</code>, поля структурного литерала, типы после <code>:</code>, локальные переменные, глобальные имена, ключевые слова</td>
+</tr>
+<tr>
+<td>Подсказка по параметрам</td>
+<td>при вводе <code>(</code> и <code>,</code>: сигнатура вызываемой функции или метода</td>
+</tr>
+<tr>
+<td>Переход к определению</td>
+<td>в том числе в импортированные файлы и по пути внутри <code>import &quot;...&quot;</code></td>
+</tr>
+<tr>
+<td>Ссылки и переименование</td>
+<td>по всему рабочему каталогу, включая файлы, которые импортируют ваш файл</td>
+</tr>
+<tr>
+<td>Структура файла</td>
+<td>дерево структур, перечислений, функций, методов и тестов</td>
+</tr>
+<tr>
+<td>Поиск символов</td>
+<td><code>Ctrl+T</code> по всем <code>.vibe</code>-файлам рабочего каталога</td>
+</tr>
+<tr>
+<td>Подсветка вхождений</td>
+<td>все использования символа под курсором</td>
+</tr>
+<tr>
+<td>Форматирование</td>
+<td>то же, что <code>vibe fmt</code></td>
+</tr>
+</tbody></table></div>
+<blockquote class="callout note"><p><strong>Примечание:</strong> диагностика работает так: сервер запускает фронтенд компилятора по каждой функции файла (кроме обобщённых, они проверяются только когда вызываются) и собирает по одной ошибке на функцию. Парсер останавливается на первой синтаксической ошибке в файле.</p>
+</blockquote>
+<p>Что сервер <strong>не</strong> делает: не показывает типы выражений, не умеет рефакторинг, кроме переименования, и не выводит типы в сложных дженерик-выражениях (там подсказок просто не будет).</p>
+<h3 id="vs-code-и-code-oss"><a class="anchor" href="#vs-code-и-code-oss">#</a>VS Code и code-oss</h3>
+<p>В репозитории лежит расширение <code>editors/vscode</code>. Оно запускает <code>vibe lsp</code> и добавляет подсветку синтаксиса, сниппеты, кнопки запуска и тестов, команду «Vibe: Restart Language Server».</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> editors/vscode</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">npm</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> install</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">python3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> pack.py</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe-lang.vsix</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">code-oss</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --install-extension</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe-lang.vsix</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">      # или: code --install-extension vibe-lang.vsix</span></span></code></pre></div><p>После установки перезагрузите окно (<code>Ctrl+Shift+P</code> → «Developer: Reload Window») и откройте любой <code>.vibe</code>-файл. Настройки:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Настройка</th>
+<th>Значение</th>
+</tr>
+</thead><tbody><tr>
+<td><code>vibe.path</code></td>
+<td>путь к <code>vibe</code>; по умолчанию ищется в <code>PATH</code>, затем в <code>~/.local/bin</code></td>
+</tr>
+<tr>
+<td><code>vibe.trace.server</code></td>
+<td><code>off</code>, <code>messages</code> или <code>verbose</code>: журнал обмена с сервером на вкладке вывода</td>
+</tr>
+</tbody></table></div>
+<p>Горячие клавиши: <code>Ctrl+Alt+R</code> — запустить файл, <code>Ctrl+Alt+T</code> — запустить тесты. Над <code>fn main</code> и над каждым <code>test</code> появляются ссылки «Run». Форматирование при сохранении включено для <code>.vibe</code> по умолчанию.</p>
+<h3 id="другие-редакторы"><a class="anchor" href="#другие-редакторы">#</a>Другие редакторы</h3>
+<p>Любой клиент LSP подойдёт: команда запуска <code>vibe lsp</code>, транспорт stdio, расширение файлов <code>.vibe</code>. Ниже типичные настройки; я не проверял их в каждом редакторе, поэтому считайте их отправной точкой.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>-- Neovim (0.11+)</span></span>
+<span class="line"><span>vim.filetype.add({ extension = { vibe = "vibe" } })</span></span>
+<span class="line"><span>vim.lsp.config("vibe", { cmd = { "vibe", "lsp" }, filetypes = { "vibe" }, root_markers = { ".git" } })</span></span>
+<span class="line"><span>vim.lsp.enable("vibe")</span></span></code></pre></div><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span># Helix: languages.toml</span></span>
+<span class="line"><span>[language-server.vibe]</span></span>
+<span class="line"><span>command = "vibe"</span></span>
+<span class="line"><span>args = ["lsp"]</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>[[language]]</span></span>
+<span class="line"><span>name = "vibe"</span></span>
+<span class="line"><span>scope = "source.vibe"</span></span>
+<span class="line"><span>file-types = ["vibe"]</span></span>
+<span class="line"><span>language-servers = ["vibe"]</span></span>
+<span class="line"><span>comment-token = "//"</span></span>
+<span class="line"><span>indent = { tab-width = 4, unit = "    " }</span></span></code></pre></div><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>;; Emacs (eglot)</span></span>
+<span class="line"><span>(add-to-list 'auto-mode-alist '("\\.vibe\\'" . prog-mode))</span></span>
+<span class="line"><span>(add-to-list 'eglot-server-programs '(prog-mode . ("vibe" "lsp")))</span></span></code></pre></div><p>Подсветка для Zed, Sublime и других редакторов может использовать грамматику TextMate из <code>editors/vscode/syntaxes/vibe.tmLanguage.json</code>.</p>
+<h2 id="отладка"><a class="anchor" href="#отладка">#</a>Отладка</h2>
+<ul>
+<li><strong><code>println</code></strong> — основной инструмент. Вывод идёт сразу, <code>eprintln</code> пишет в stderr.</li>
+<li><strong><code>panic(&quot;сообщение {x}&quot;)</code></strong> печатает сообщение с файлом и строкой и завершает программу с кодом 1.</li>
+<li><strong><code>assert(условие)</code></strong> паникует с файлом и строкой, если условие ложно.</li>
+<li><strong><code>vibe ir</code></strong> позволяет увидеть, как компилятор понял программу, и найти, например, лишние копии агрегатов.</li>
+<li><strong>gdb</strong>: бинарники собранного кода содержат символы функций (<code>vb.main</code>, <code>vb.fib</code>, ...), но не отладочную информацию DWARF: номеров строк и имён локальных переменных там нет. Точки останова по имени функции работают (<code>break vb.fib</code>), в трассировке функции выглядят как <code>vb[fib]</code>, <code>vb[main]</code>, но имена переменных не видны.</li>
+<li><strong><code>vibe tokens</code></strong> помогает, когда подозреваете проблему лексера: незакрытая кавычка, фигурная скобка внутри строки и т. п.</li>
+</ul>
+<h2 id="кэш-и-временные-файлы"><a class="anchor" href="#кэш-и-временные-файлы">#</a>Кэш и временные файлы</h2>
+<p>Весь мусор сборки лежит в <code>.vibe-cache/</code> в текущем каталоге: объектные файлы, <code>.ll</code> (для LLVM-режима), объекты внешних C/C++ файлов и исполняемый файл <code>vibe run</code>. Каталог безопасно удалять целиком. Тесты (<code>vibe test</code>) создают там <code>имя.test</code> и <code>test.out</code>.</p>
+<h2 id="переменные-окружения-и-версия"><a class="anchor" href="#переменные-окружения-и-версия">#</a>Переменные окружения и версия</h2>
+<p>У компилятора нет переменных окружения для настройки. Он вызывает <code>clang</code> (и <code>clang++</code>, если среди дополнительных файлов есть C++) из <code>PATH</code>.</p>
+
+<div class="pager"><a class="prev" href="testing.html"><small>Назад</small>Тестирование</a><a class="next" href="stdlib.html"><small>Дальше</small>Справочник стандартной библиотеки</a></div>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#диагностика-компилятора">Диагностика компилятора</a><a class="l2" href="#vibe-fmt">vibe fmt</a><a class="l2" href="#режимы-компиляции">Режимы компиляции</a><a class="l2" href="#промежуточные-представления">Промежуточные представления</a><a class="l2" href="#языковой-сервер-и-редактор">Языковой сервер и редактор</a><a class="l3" href="#vs-code-и-code-oss">VS Code и code-oss</a><a class="l3" href="#другие-редакторы">Другие редакторы</a><a class="l2" href="#отладка">Отладка</a><a class="l2" href="#кэш-и-временные-файлы">Кэш и временные файлы</a><a class="l2" href="#переменные-окружения-и-версия">Переменные окружения и версия</a></aside></main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

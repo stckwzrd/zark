@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Как всё устроено · Vibe</title>
+<meta name="description" content="Устройство компилятора Vibe: конвейер, бэкенды, самосборка, раскладка типов в памяти и планы развития">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="">
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<div class="layout">
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html" class="current">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<main><article>
+<h1>Как всё устроено</h1>
+<p>Эта страница для тех, кто хочет понимать, что происходит под капотом, или собирается править компилятор. Для написания программ она не обязательна.</p>
+<h2 id="конвейер"><a class="anchor" href="#конвейер">#</a>Конвейер</h2>
+<p>Компилятор — программа на самом Vibe, около 6 тысяч строк в каталоге <code>selfhost/</code>. Работает как конвейер:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>исходник .vibe</span></span>
+<span class="line"><span>   │</span></span>
+<span class="line"><span>   ▼  lexer.vibe      токены, автоматические «;» в конце строк</span></span>
+<span class="line"><span>   ▼  parser.vibe     рекурсивный спуск → дерево (ast.vibe), интерполяция строк раскрывается здесь</span></span>
+<span class="line"><span>   ▼  loader.vibe     загрузка import, префиксы модулей (resolve.vibe)</span></span>
+<span class="line"><span>   ▼  gen*.vibe       проверка типов, мономорфизация дженериков, текст LLVM IR</span></span>
+<span class="line"><span>   │</span></span>
+<span class="line"><span>   ├── по умолчанию:  native.vibe + x64.vibe   IR → машинный код x86-64 → ELF .o</span></span>
+<span class="line"><span>   └── -O / --release / --llvm:                IR → clang (LLVM) → .o</span></span>
+<span class="line"><span>   ▼</span></span>
+<span class="line"><span>линковка через clang (вместе с .c, .cpp, .o) → исполняемый файл</span></span></code></pre></div><p>Что делает каждый файл:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Файл</th>
+<th>Роль</th>
+</tr>
+</thead><tbody><tr>
+<td><code>lexer.vibe</code></td>
+<td>токены; вставляет <code>;</code> по правилу конца строки (см. <a href="lexical.html#конец-оператора">лексику</a>)</td>
+</tr>
+<tr>
+<td><code>ast.vibe</code></td>
+<td>«толстые» узлы дерева с тегом вида</td>
+</tr>
+<tr>
+<td><code>parser.vibe</code></td>
+<td>разбор синтаксиса, раскрытие <code>&quot;{x}&quot;</code> в части формата</td>
+</tr>
+<tr>
+<td><code>gen.vibe</code></td>
+<td>типы, инстанцирование дженериков, функции, диагностики</td>
+</tr>
+<tr>
+<td><code>gen_stmt.vibe</code></td>
+<td>операторы, <code>defer</code>/<code>errdefer</code>, <code>match</code></td>
+</tr>
+<tr>
+<td><code>gen_expr.vibe</code></td>
+<td>выражения, адреса, операторы, приведения</td>
+</tr>
+<tr>
+<td><code>gen_call.vibe</code></td>
+<td>вызовы, вывод параметров типа, методы, указатели на функции</td>
+</tr>
+<tr>
+<td><code>gen_fmt.vibe</code></td>
+<td><code>print</code>/<code>bprint</code>/<code>sprint</code>/<code>panic</code>/<code>assert</code>/<code>embed</code></td>
+</tr>
+<tr>
+<td><code>resolve.vibe</code>, <code>loader.vibe</code></td>
+<td>импорты и префиксы модулей</td>
+</tr>
+<tr>
+<td><code>native.vibe</code></td>
+<td>свой бэкенд: IR → x86-64 (System V ABI), распределение регистров</td>
+</tr>
+<tr>
+<td><code>x64.vibe</code></td>
+<td>кодировщик инструкций и запись ELF64-объекта</td>
+</tr>
+<tr>
+<td><code>fmt.vibe</code></td>
+<td>форматтер <code>vibe fmt</code></td>
+</tr>
+<tr>
+<td><code>lsp.vibe</code>, <code>ide.vibe</code>, <code>analysis.vibe</code>, <code>json.vibe</code>, <code>textpos.vibe</code></td>
+<td>языковой сервер</td>
+</tr>
+<tr>
+<td><code>diag.vibe</code></td>
+<td>красивые сообщения об ошибках, «возможно, вы имели в виду»</td>
+</tr>
+<tr>
+<td><code>main.vibe</code></td>
+<td>драйвер командной строки</td>
+</tr>
+</tbody></table></div>
+<p>Посмотреть промежуточные результаты можно прямо из CLI: <code>vibe tokens file.vibe</code> (токены) и <code>vibe ir file.vibe</code> (LLVM IR). Подробнее — в <a href="tooling.html#промежуточные-представления">инструментах</a>.</p>
+<p>Прелюдия (<code>src/std.vibe</code>) вшита в компилятор через <code>embed</code>, поэтому <code>vibe</code> — один исполняемый файл без внешних данных.</p>
+<h2 id="два-бэкенда"><a class="anchor" href="#два-бэкенда">#</a>Два бэкенда</h2>
+<p><strong>Свой (по умолчанию).</strong> Парсит текстовый LLVM IR, который сгенерировал фронтенд, и превращает его в машинный код x86-64. Использует линейное распределение регистров (linear scan), слияние сравнения с ветвлением, константы в операндах, ленивую загрузку составных значений. Ни одной строки LLVM внутри нет. Назначение — быстрая сборка: типичный проект собирается за доли секунды.</p>
+<p><strong>LLVM (<code>-O</code>, <code>--release</code>, <code>--llvm</code>).</strong> Тот же IR отдаётся <code>clang</code>, который делает полную оптимизацию. Нужен для скорости в рабочих сборках.</p>
+<p>Сравнение для программы на 10 тысяч строк, от исходника до исполняемого файла (замеры автора):</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Сборщик</th>
+<th>Время</th>
+</tr>
+</thead><tbody><tr>
+<td>vibe, свой бэкенд</td>
+<td>около 95 мс</td>
+</tr>
+<tr>
+<td>clang -O0</td>
+<td>около 220 мс</td>
+</tr>
+<tr>
+<td>gcc -O0</td>
+<td>около 670 мс</td>
+</tr>
+</tbody></table></div>
+<p>А быстродействие результата (рекурсивный <code>fib(38)</code> и решето 50 млн):</p>
+<div class="table-wrap"><table><thead><tr>
+<th></th>
+<th>fib(38)</th>
+<th>решето 50M</th>
+</tr>
+</thead><tbody><tr>
+<td>C (<code>clang -O2</code>)</td>
+<td>97 мс</td>
+<td>369 мс</td>
+</tr>
+<tr>
+<td>Vibe <code>--release</code></td>
+<td>95 мс</td>
+<td>345 мс</td>
+</tr>
+<tr>
+<td>Vibe, свой бэкенд</td>
+<td>около 290 мс</td>
+<td>около 820 мс</td>
+</tr>
+</tbody></table></div>
+<p>То есть <code>--release</code> не уступает C, а отладочная сборка выигрывает в скорости компиляции.</p>
+<h2 id="самосборка-и-неподвижная-точка"><a class="anchor" href="#самосборка-и-неподвижная-точка">#</a>Самосборка и неподвижная точка</h2>
+<p>Компилятор собирает сам себя. Чтобы начать с нуля, есть «стартовый» компилятор на Zig (<code>src/*.zig</code>), его называют <strong>stage0</strong>.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>stage0 (Zig)  →  stage1 (Vibe, собран stage0)</span></span>
+<span class="line"><span>              →  stage2 (Vibe, собран stage1)</span></span>
+<span class="line"><span>              →  stage3 (Vibe, собран stage2)</span></span></code></pre></div><p>Проверка: <strong>stage2 и stage3 совпадают побайтно</strong> (неподвижная точка). То же делается для цепочки со своим бэкендом без LLVM (native2 == native3). Скрипт <code>bootstrap.sh</code> запускает всё, затем прогоняет набор тестов и кладёт результат в <code>build/vibe</code>.</p>
+<p>Следствие для разработки: <strong>новый синтаксис, который использует сам компилятор, должен быть добавлен и в stage0</strong>, иначе stage0 не сможет собрать stage1. Обратный выход — собирать из предыдущего <code>build/vibe</code>.</p>
+<h2 id="раскладка-типов-в-памяти"><a class="anchor" href="#раскладка-типов-в-памяти">#</a>Раскладка типов в памяти</h2>
+<p>Принцип «что видите, то и лежит»:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Тип</th>
+<th>В памяти</th>
+</tr>
+</thead><tbody><tr>
+<td><code>i8..i64</code>, <code>u8..u64</code></td>
+<td>целое соответствующего размера</td>
+</tr>
+<tr>
+<td><code>bool</code></td>
+<td>один байт</td>
+</tr>
+<tr>
+<td><code>*T</code></td>
+<td>указатель, 8 байт</td>
+</tr>
+<tr>
+<td><code>[]T</code>, <code>str</code></td>
+<td><code>{ ptr, len }</code>, 16 байт</td>
+</tr>
+<tr>
+<td><code>[N]T</code></td>
+<td><code>N</code> элементов подряд</td>
+</tr>
+<tr>
+<td><code>struct</code></td>
+<td>поля по порядку, выравнивание как в C</td>
+</tr>
+<tr>
+<td><code>enum</code></td>
+<td>32-битное целое</td>
+</tr>
+<tr>
+<td><code>union</code></td>
+<td><code>{ i32 tag, payload }</code>, payload по размеру самого большого варианта</td>
+</tr>
+<tr>
+<td><code>!T</code></td>
+<td><code>{ i32 код ошибки, T }</code></td>
+</tr>
+<tr>
+<td><code>fn(A) R</code></td>
+<td>указатель на функцию</td>
+</tr>
+<tr>
+<td><code>fn[](A) R</code></td>
+<td>пара: указатель на функцию и указатель на контекст</td>
+</tr>
+</tbody></table></div>
+<p>Из этого следует, почему структуры можно передавать в C (по указателю), почему ничего не нужно «упаковывать» при вызове и почему <code>sizeof</code> предсказуем.</p>
+<h2 id="как-раскрывается-интерполяция"><a class="anchor" href="#как-раскрывается-интерполяция">#</a>Как раскрывается интерполяция</h2>
+<p><code>println(&quot;x = {x}, y = {y:.2}&quot;)</code> на стадии разбора превращается в формат и список аргументов, как если бы вы написали <code>printf(&quot;x = %ld, y = %.2f\n&quot;, x, y)</code>. Тип определяет, какой именно спецификатор будет подставлен. Ничего не склеивается во время работы и не выделяется в куче.</p>
+<p>Поэтому интерполяция допустима только там, где есть куда писать: <code>print</code>, <code>println</code>, <code>eprint</code>, <code>eprintln</code>, <code>panic</code>, <code>bprint</code>, <code>sprint</code>.</p>
+<h2 id="как-работают-дженерики"><a class="anchor" href="#как-работают-дженерики">#</a>Как работают дженерики</h2>
+<p>Функции и структуры с параметрами типа <strong>мономорфизируются</strong>: для каждой комбинации аргументов компилятор создаёт отдельную копию. Поэтому нет накладных расходов во время работы, а тело дженерика проверяется при <strong>использовании</strong>. Ограничения (<code>T: Ord</code>) проверяются на вызове, до компиляции тела, чтобы сообщение было понятным.</p>
+<h2 id="как-работают-defer-и-errdefer"><a class="anchor" href="#как-работают-defer-и-errdefer">#</a>Как работают <code>defer</code> и <code>errdefer</code></h2>
+<p>Компилятор разворачивает <code>defer</code> в код <strong>на каждом пути выхода</strong> из блока: перед <code>return</code>, <code>break</code>, <code>continue</code> и в конце блока. Для <code>errdefer</code> код добавляется только на путях, где возвращается ошибка. Никакого времени выполнения для этого нет.</p>
+<h2 id="как-работает-и-catch"><a class="anchor" href="#как-работает-и-catch">#</a>Как работает <code>?</code> и <code>catch</code></h2>
+<p><code>f()?</code> превращается в проверку кода ошибки: если он не нулевой, выполняются <code>defer</code> и <code>errdefer</code> и возвращается такой же <code>!T</code>. <code>catch</code> — та же проверка, но вместо возврата идёт ветка с запасным значением.</p>
+<h2 id="ленивая-компиляция"><a class="anchor" href="#ленивая-компиляция">#</a>Ленивая компиляция</h2>
+<p>Компилируются только функции, <strong>достижимые из <code>main</code></strong>. Лишний импорт не раздувает файл, а ошибки в мёртвом коде не видны, пока его не вызовут (если это не дженерик — тогда ошибка проявится в первом использовании).</p>
+<h2 id="хранилище-сборки"><a class="anchor" href="#хранилище-сборки">#</a>Хранилище сборки</h2>
+<p>Промежуточные файлы лежат в <code>.vibe-cache/</code> рядом с местом запуска: <code>.o</code>, <code>.ll</code> и тестовые бинарники. Каталог можно удалять в любой момент.</p>
+<h2 id="тесты-самого-компилятора"><a class="anchor" href="#тесты-самого-компилятора">#</a>Тесты самого компилятора</h2>
+<p>В <code>tests/</code>:</p>
+<ul>
+<li><code>tests/run.sh</code> прогоняет примеры из <code>examples/</code> и сравнивает вывод с <code>tests/expected/</code>;</li>
+<li><code>tests/errors/</code> — программы, которые <strong>обязаны</strong> не компилироваться;</li>
+<li>проверка, что токены собственного лексера совпадают с лексером на Zig (тысячи токенов);</li>
+<li>проверка неподвижной точки.</li>
+</ul>
+<p>Режимы сборки проверяются теми же тестами: <code>FLAGS=--llvm</code> и <code>FLAGS=-O</code> прогоняют их через LLVM.</p>
+<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<p>Известные направления развития (подробнее в <code>ROADMAP.md</code>):</p>
+<ul>
+<li><strong>Качество кода бэкенда.</strong> Отладочные сборки примерно втрое медленнее gcc -O0. Дальше: SSA без <code>alloca</code> во фронтенде и внутреннее представление в памяти вместо текстового IR.</li>
+<li><strong>Свой компоновщик</strong> и среда выполнения без libc на системных вызовах Linux: чтобы чистые программы на Vibe собирались без внешних инструментов.</li>
+<li><strong><code>comptime</code>:</strong> выполнение Vibe во время компиляции для таблиц и генерации кода; <code>inline for</code>.</li>
+<li><strong><code>@cImport</code>:</strong> разбор C-заголовков и передача структур по значению через границу C.</li>
+<li><strong>SIMD-типы</strong> (<code>v4f32</code>, <code>v8f32</code>).</li>
+<li><strong>Проверка переполнения</strong> в безопасном режиме.</li>
+<li><strong>Метки у <code>break</code>.</strong></li>
+<li><strong>Новые платформы:</strong> aarch64 и Windows.</li>
+<li><strong>Инструменты:</strong> отладочная информация DWARF для gdb/lldb.</li>
+</ul>
+<p>Это планы, а не обещания: язык растёт под нужды его автора.</p>
+
+<div class="pager"><a class="prev" href="gotchas.html"><small>Назад</small>Ловушки и FAQ</a><a class="next" href="cheatsheet.html"><small>Дальше</small>Шпаргалка</a></div>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#конвейер">Конвейер</a><a class="l2" href="#два-бэкенда">Два бэкенда</a><a class="l2" href="#самосборка-и-неподвижная-точка">Самосборка и неподвижная точка</a><a class="l2" href="#раскладка-типов-в-памяти">Раскладка типов в памяти</a><a class="l2" href="#как-раскрывается-интерполяция">Как раскрывается интерполяция</a><a class="l2" href="#как-работают-дженерики">Как работают дженерики</a><a class="l2" href="#как-работают-defer-и-errdefer">Как работают defer и errdefer</a><a class="l2" href="#как-работает-и-catch">Как работает ? и catch</a><a class="l2" href="#ленивая-компиляция">Ленивая компиляция</a><a class="l2" href="#хранилище-сборки">Хранилище сборки</a><a class="l2" href="#тесты-самого-компилятора">Тесты самого компилятора</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
