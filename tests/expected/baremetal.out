@@ -2,3 +2,5 @@ Hello from Vibe on bare metal!
 protected mode = 1, paging = 1
 page table aligned = true, 4 * 5 = 20
 fib = [0, 1, 1, 2, 3, 5, 8, 13]
+interrupt 3, error code 0, back in the kernel
+after int3
