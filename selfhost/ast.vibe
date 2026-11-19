@@ -28,6 +28,7 @@ struct IPart { kind: i64, lit: str, e: *Expr, spec: str }
 struct Expr {
     k: EK
     line: i64
+    off: i64
     ival: u64
     fval: f64
     bval: bool
@@ -52,6 +53,7 @@ struct MatchArm { pats: List[*Expr], body: *Stmt }
 struct Stmt {
     k: SK
     line: i64
+    off: i64
     name: str              // Let/For var name
     idx: str               // ForEach index name
     has_idx: bool

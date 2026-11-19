@@ -1,5 +1,7 @@
 // Vibe lexer, written in Vibe. Mirrors src/lexer.zig token for token.
 
+import "diag.vibe"
+
 enum Tag {
     eof, ident, int_lit, float_lit, str_lit, char_lit,
     semi, lparen, rparen, lbrace, rbrace, lbracket, rbracket,
@@ -17,6 +19,7 @@ struct Token {
     tag: Tag
     text: str
     line: i64
+    off: i64
 }
 
 fn keyword(s: str) Tag {
@@ -130,11 +133,16 @@ struct Lexer {
 
 impl Lexer {
     fn emit(self, tag: Tag, text: str) !void {
-        self.toks.push(Token{ tag: tag, text: text, line: self.line })?
+        var off = self.i
+        let base = self.src.ptr as u64
+        let p = text.ptr as u64
+        if p >= base && p < base + (self.src.len as u64) { off = (p - base) as i64 }
+        self.toks.push(Token{ tag: tag, text: text, line: self.line, off: off })?
     }
 
     fn fail(self, msg: str) !void {
         eprintln("{self.file}:{self.line}: error: {msg}")
+        show_source(self.file, self.line, self.i)
         return error.LexFailed
     }
 
@@ -256,6 +264,7 @@ impl Lexer {
             let op = operator(src[self.i..])
             if op.tag == .eof {
                 eprintln("{self.file}:{self.line}: error: unexpected character '{src[self.i..self.i + 1]}'")
+                show_source(self.file, self.line, self.i)
                 return error.LexFailed
             }
             self.emit(op.tag, src[self.i..self.i + op.len])?

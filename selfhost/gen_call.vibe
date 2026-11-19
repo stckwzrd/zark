@@ -93,7 +93,7 @@ impl Gen {
             let name = callee.name
             if self.is_builtin(name) && !self.fns.has(name) { return self.gen_builtin(name, e.args, e.line) }
             if self.fns.has(name) { return self.call_decl(self.fns.get(name)?, self.new_env()?, null, e.args, self.no_types(), expected, e.line) }
-            if !self.consts.has(name) { self.err(e.line); eprintln("unknown function '{name}'"); return error.CompileFailed }
+            if !self.consts.has(name) { self.err(e.line); eprintln("unknown function '{name}'{self.hint(name, self.visible_names())}"); return error.CompileFailed }
         }
         if callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field) {
             if callee.l.k == .Field {

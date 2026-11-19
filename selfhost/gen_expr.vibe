@@ -42,6 +42,17 @@ impl Gen {
     }
 
     fn gen_expr(self, e: *Expr, expected: *Type) !Value {
+        let saved_line = self.at_line
+        let saved_off = self.at_off
+        self.at_line = e.line
+        self.at_off = e.off
+        let v = self.gen_expr_at(e, expected)?
+        self.at_line = saved_line
+        self.at_off = saved_off
+        return v
+    }
+
+    fn gen_expr_at(self, e: *Expr, expected: *Type) !Value {
         match e.k {
             .IntLit => {
                 let t = lit_target(expected)
@@ -97,7 +108,7 @@ impl Gen {
                     sprint(&b, "@{fi.llname}")?
                     return Value{ ty: t, v: b.slice() }
                 }
-                self.err(e.line); eprintln("unknown identifier '{n}'")
+                self.err(e.line); eprintln("unknown identifier '{n}'{self.hint(n, self.visible_names())}")
                 return error.CompileFailed
             }
             .EnumLit => {
@@ -184,7 +195,7 @@ impl Gen {
                 }
                 if !is_union(v.ty) { self.err(e.line); eprintln("'is' needs an enum or union, got '{self.type_name(v.ty)?}'"); return error.CompileFailed }
                 let idx = field_index(v.ty.si, e.name)
-                if idx < 0 { self.err(e.line); eprintln("union '{v.ty.si.display}' has no variant '{e.name}'"); return error.CompileFailed }
+                if idx < 0 { self.err(e.line); eprintln("union '{v.ty.si.display}' has no variant '{e.name}'{self.hint(e.name, self.field_names(v.ty.si))}"); return error.CompileFailed }
                 let tag = self.extract(v, 0, self.t_i32)?
                 sprint(self.ins()?, "  {t} = icmp eq i32 {tag.v}, {idx}\n")?
                 return Value{ ty: self.t_bool, v: t }
@@ -253,7 +264,7 @@ impl Gen {
         for _i in 0..si.fields.len { given.push(false)? }
         for fi in e.fields {
             let idx = field_index(si, fi.name)
-            if idx < 0 { self.err(e.line); eprintln("struct '{si.display}' has no field '{fi.name}'"); return error.CompileFailed }
+            if idx < 0 { self.err(e.line); eprintln("struct '{si.display}' has no field '{fi.name}'{self.hint(fi.name, self.field_names(si))}"); return error.CompileFailed }
             if given.get(idx) { self.err(e.line); eprintln("field '{fi.name}' given twice"); return error.CompileFailed }
             given.set(idx, true)
             let fty = si.fields.get(idx).ty
@@ -319,7 +330,7 @@ impl Gen {
     fn make_union(self, t: *Type, variant: str, payload: *Expr, line: i64) !Value {
         let si = t.si
         let idx = field_index(si, variant)
-        if idx < 0 { self.err(line); eprintln("union '{si.display}' has no variant '{variant}'"); return error.CompileFailed }
+        if idx < 0 { self.err(line); eprintln("union '{si.display}' has no variant '{variant}'{self.hint(variant, self.field_names(si))}"); return error.CompileFailed }
         let pty = si.fields.get(idx).ty
         if pty.k != .Void && payload == null { self.err(line); eprintln("'{si.display}.{variant}' needs a payload of type '{self.type_name(pty)?}'"); return error.CompileFailed }
         if pty.k == .Void && payload != null { self.err(line); eprintln("'{si.display}.{variant}' has no payload"); return error.CompileFailed }
@@ -338,7 +349,7 @@ impl Gen {
         for i, v in t.ei.decl.variants {
             if v == name { return Value{ ty: t, v: self.num(i)? } }
         }
-        self.err(line); eprintln("enum '{t.ei.decl.name}' has no variant '{name}'")
+        self.err(line); eprintln("enum '{t.ei.decl.name}' has no variant '{name}'{self.hint(name, t.ei.decl.variants)}")
         return error.CompileFailed
     }
 
@@ -423,7 +434,7 @@ impl Gen {
             if base.ty.k == .Strct {
                 let si = base.ty.si
                 let idx = field_index(si, e.name)
-                if idx < 0 { self.err(e.line); eprintln("'{si.display}' has no field '{e.name}'"); return error.CompileFailed }
+                if idx < 0 { self.err(e.line); eprintln("'{si.display}' has no field '{e.name}'{self.hint(e.name, self.field_names(si))}"); return error.CompileFailed }
                 let t = self.gep_field(base.ty, base.v, idx)?
                 return Addr{ ty: si.fields.get(idx).ty, v: t, imm: base.imm }
             }

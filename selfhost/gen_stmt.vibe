@@ -6,6 +6,16 @@ struct UPat { idx: i64, bind: str }
 
 impl Gen {
     fn gen_stmt(self, s: *Stmt) !void {
+        let saved_line = self.at_line
+        let saved_off = self.at_off
+        self.at_line = s.line
+        self.at_off = s.off
+        self.gen_stmt_at(s)?
+        self.at_line = saved_line
+        self.at_off = saved_off
+    }
+
+    fn gen_stmt_at(self, s: *Stmt) !void {
         match s.k {
             .Block => {
                 self.push_scope()?
@@ -201,7 +211,7 @@ impl Gen {
             return error.CompileFailed
         }
         let idx = field_index(si, name)
-        if idx < 0 { self.err(pat.line); eprintln("union '{si.display}' has no variant '{name}'"); return error.CompileFailed }
+        if idx < 0 { self.err(pat.line); eprintln("union '{si.display}' has no variant '{name}'{self.hint(name, self.field_names(si))}"); return error.CompileFailed }
         if bind.len > 0 && si.fields.get(idx).ty.k == .Void { self.err(pat.line); eprintln("variant '{name}' has no payload to bind"); return error.CompileFailed }
         if bind == "_" { bind = "" }
         return UPat{ idx: idx, bind: bind }

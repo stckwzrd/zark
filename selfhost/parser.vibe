@@ -66,12 +66,14 @@ impl Parser {
     fn fail(self, msg: str) !void {
         let t = self.peek()
         eprintln("{self.file}:{t.line}: error: {msg} (near '{t.text}')")
+        show_source(self.file, t.line, t.off)
         return error.ParseFailed
     }
     fn expect(self, t: Tag) !Token {
         if !self.at(t) {
             let cur = self.peek()
             eprintln("{self.file}:{cur.line}: error: expected {t} (near '{cur.text}')")
+            show_source(self.file, cur.line, cur.off)
             return error.ParseFailed
         }
         return self.advance()
@@ -79,19 +81,21 @@ impl Parser {
     fn skip_semis(self) { while self.at(.semi) { _ = self.advance() } }
 
     // ---------------------------------------------------------------- node helpers
-    fn ex(self, k: EK, line: i64) !*Expr {
+    fn ex(self, k: EK, t: Token) !*Expr {
         let e = self.a.create[Expr]()?
         e.k = k
-        e.line = line
+        e.line = t.line
+        e.off = t.off
         e.args = List[*Expr].init(self.a)
         e.fields = List[FieldInit].init(self.a)
         e.parts = List[IPart].init(self.a)
         return e
     }
-    fn st(self, k: SK, line: i64) !*Stmt {
+    fn st(self, k: SK, t: Token) !*Stmt {
         let s = self.a.create[Stmt]()?
         s.k = k
-        s.line = line
+        s.line = t.line
+        s.off = t.off
         s.stmts = List[*Stmt].init(self.a)
         s.arms = List[MatchArm].init(self.a)
         return s
@@ -250,6 +254,7 @@ impl Parser {
                 pty.elem = self.te_name("Self")?
             } else {
                 eprintln("{self.file}:{line}: error: parameter '{pname}' needs a type")
+                show_source(self.file, line, -1)
                 return error.ParseFailed
             }
             params.push(Param{ name: pname, ty: pty })?
@@ -317,8 +322,8 @@ impl Parser {
 
     // ---------------------------------------------------------------- statements
     fn parse_block(self) !*Stmt {
-        let line = self.expect(.lbrace)?.line
-        let b = self.st(.Block, line)?
+        let lb = self.expect(.lbrace)?
+        let b = self.st(.Block, lb)?
         let saved = self.no_struct
         self.no_struct = false
         self.skip_semis()
@@ -345,13 +350,14 @@ impl Parser {
             .lbrace => return self.parse_block()
             .kw_let, .kw_var => {
                 _ = self.advance()
-                let s = self.st(.Let, t.line)?
+                let s = self.st(.Let, t)?
                 s.name = self.expect(.ident)?.text
                 s.mutable = t.tag == .kw_var
                 if self.eat(.colon) { s.ty = self.parse_type()? }
                 if self.eat(.eq) { s.e = self.parse_expr()? }
                 if s.ty == null && s.e == null {
                     eprintln("{self.file}:{t.line}: error: '{s.name}' needs a type or initializer")
+                    show_source(self.file, t.line, t.off)
                     return error.ParseFailed
                 }
                 return s
@@ -359,7 +365,7 @@ impl Parser {
             .kw_if => return self.parse_if()
             .kw_while => {
                 _ = self.advance()
-                let s = self.st(.While, t.line)?
+                let s = self.st(.While, t)?
                 s.e = self.parse_cond()?
                 s.body = self.parse_block()?
                 return s
@@ -377,14 +383,14 @@ impl Parser {
                 let e = self.parse_cond()?
                 if self.eat(.dotdot) {
                     if has2 { self.fail("range loop takes a single variable")? }
-                    let s = self.st(.ForRange, t.line)?
+                    let s = self.st(.ForRange, t)?
                     s.name = n1
                     s.e = e
                     s.e2 = self.parse_cond()?
                     s.body = self.parse_block()?
                     return s
                 }
-                let s = self.st(.ForEach, t.line)?
+                let s = self.st(.ForEach, t)?
                 s.e = e
                 s.body = self.parse_block()?
                 if has2 {
@@ -398,28 +404,28 @@ impl Parser {
             }
             .kw_return => {
                 _ = self.advance()
-                let s = self.st(.Ret, t.line)?
+                let s = self.st(.Ret, t)?
                 if !self.at(.semi) && !self.at(.rbrace) { s.e = self.parse_expr()? }
                 return s
             }
             .kw_break => {
                 _ = self.advance()
-                return self.st(.Brk, t.line)
+                return self.st(.Brk, t)
             }
             .kw_continue => {
                 _ = self.advance()
-                return self.st(.Cont, t.line)
+                return self.st(.Cont, t)
             }
             .kw_defer, .kw_errdefer => {
                 _ = self.advance()
-                let s = self.st(.Defer, t.line)?
+                let s = self.st(.Defer, t)?
                 s.is_err = t.tag == .kw_errdefer
                 s.body = self.parse_stmt()?
                 return s
             }
             .kw_match => {
                 _ = self.advance()
-                let s = self.st(.Match, t.line)?
+                let s = self.st(.Match, t)?
                 s.e = self.parse_cond()?
                 _ = self.expect(.lbrace)?
                 self.skip_semis()
@@ -449,21 +455,21 @@ impl Parser {
         match op {
             .eq, .plus_eq, .minus_eq, .star_eq, .slash_eq, .percent_eq => {
                 _ = self.advance()
-                let s = self.st(.Assign, t.line)?
+                let s = self.st(.Assign, t)?
                 s.op = op
                 s.e2 = e
                 s.e = self.parse_expr()?
                 return s
             }
         }
-        let s = self.st(.ExprS, t.line)?
+        let s = self.st(.ExprS, t)?
         s.e = e
         return s
     }
 
     fn parse_if(self) !*Stmt {
-        let line = self.expect(.kw_if)?.line
-        let s = self.st(.If, line)?
+        let kw = self.expect(.kw_if)?
+        let s = self.st(.If, kw)?
         s.e = self.parse_cond()?
         s.body = self.parse_block()?
         if self.at(.semi) && self.peek_at(1).tag == .kw_else { _ = self.advance() }
@@ -477,8 +483,8 @@ impl Parser {
     fn parse_expr(self) !*Expr {
         var l = self.parse_bin(0)?
         while self.at(.kw_catch) {
-            let line = self.advance().line
-            let c = self.ex(.Catch, line)?
+            let kw = self.advance()
+            let c = self.ex(.Catch, kw)?
             c.l = l
             if self.eat(.pipe) {
                 c.name = self.expect(.ident)?.text
@@ -490,7 +496,7 @@ impl Parser {
             } else if self.at(.kw_return) {
                 c.handler = self.parse_stmt()?
             } else {
-                let h = self.st(.ExprS, line)?
+                let h = self.st(.ExprS, kw)?
                 h.e = self.parse_bin(0)?
                 c.handler = h
             }
@@ -507,7 +513,7 @@ impl Parser {
             if pr < 0 || pr < min { break }
             _ = self.advance()
             let r = self.parse_bin(pr + 1)?
-            let b = self.ex(.Binary, op.line)?
+            let b = self.ex(.Binary, op)?
             b.op = op.tag
             b.l = l
             b.r = r
@@ -521,7 +527,7 @@ impl Parser {
         match t.tag {
             .minus, .bang, .tilde, .amp, .star => {
                 _ = self.advance()
-                let u = self.ex(.Unary, t.line)?
+                let u = self.ex(.Unary, t)?
                 u.op = t.tag
                 u.l = self.parse_prefix()?
                 return u
@@ -533,8 +539,8 @@ impl Parser {
     fn parse_unary(self) !*Expr {
         var e = self.parse_prefix()?
         while self.at(.kw_as) {
-            let line = self.advance().line
-            let c = self.ex(.Cast, line)?
+            let kw = self.advance()
+            let c = self.ex(.Cast, kw)?
             c.l = e
             c.ty = self.parse_type()?
             e = c
@@ -555,6 +561,7 @@ impl Parser {
             return t
         }
         eprintln("{self.file}:{e.line}: error: expected a type")
+        show_source(self.file, e.line, e.off)
         return error.ParseFailed
     }
 
@@ -564,7 +571,7 @@ impl Parser {
             let t = self.peek()
             if t.tag == .lparen {
                 _ = self.advance()
-                let c = self.ex(.Call, t.line)?
+                let c = self.ex(.Call, t)?
                 c.l = e
                 let saved = self.no_struct
                 self.no_struct = false
@@ -580,7 +587,7 @@ impl Parser {
                 let saved = self.no_struct
                 self.no_struct = false
                 if self.eat(.dotdot) {
-                    let s = self.ex(.Slice, t.line)?
+                    let s = self.ex(.Slice, t)?
                     s.l = e
                     if !self.at(.rbracket) { s.x = self.parse_expr()? }
                     _ = self.expect(.rbracket)?
@@ -590,7 +597,7 @@ impl Parser {
                 }
                 let first = self.parse_expr()?
                 if self.eat(.dotdot) {
-                    let s = self.ex(.Slice, t.line)?
+                    let s = self.ex(.Slice, t)?
                     s.l = e
                     s.r = first
                     if !self.at(.rbracket) { s.x = self.parse_expr()? }
@@ -599,7 +606,7 @@ impl Parser {
                     e = s
                     continue
                 }
-                let ix = self.ex(.Index, t.line)?
+                let ix = self.ex(.Index, t)?
                 ix.l = e
                 ix.args.push(first)?
                 while self.eat(.comma) { ix.args.push(self.parse_expr()?)? }
@@ -608,13 +615,13 @@ impl Parser {
                 e = ix
             } else if t.tag == .dot {
                 _ = self.advance()
-                let f = self.ex(.Field, t.line)?
+                let f = self.ex(.Field, t)?
                 f.l = e
                 f.name = self.expect(.ident)?.text
                 e = f
             } else if t.tag == .question {
                 _ = self.advance()
-                let q = self.ex(.Try, t.line)?
+                let q = self.ex(.Try, t)?
                 q.l = e
                 e = q
             } else if t.tag == .kw_is {
@@ -623,14 +630,14 @@ impl Parser {
                     _ = self.expect(.ident)?
                     _ = self.expect(.dot)?
                 }
-                let x = self.ex(.Is, t.line)?
+                let x = self.ex(.Is, t)?
                 x.l = e
                 x.name = self.expect(.ident)?.text
                 e = x
             } else if t.tag == .lbrace {
                 if self.no_struct || !is_type_like(e) { break }
                 _ = self.advance()
-                let sl = self.ex(.StructLit, t.line)?
+                let sl = self.ex(.StructLit, t)?
                 sl.ty = self.expr_to_type(e)?
                 self.skip_semis()
                 while !self.at(.rbrace) {
@@ -665,17 +672,19 @@ impl Parser {
         let t = self.advance()
         match t.tag {
             .int_lit => {
-                let e = self.ex(.IntLit, t.line)?
+                let e = self.ex(.IntLit, t)?
                 e.ival = parse_int_radix(t.text, 0) catch {
                     eprintln("{self.file}:{t.line}: error: bad integer literal '{t.text}'")
+                    show_source(self.file, t.line, t.off)
                     return error.ParseFailed
                 }
                 return e
             }
             .float_lit => {
-                let e = self.ex(.FloatLit, t.line)?
+                let e = self.ex(.FloatLit, t)?
                 e.fval = parse_float(self.clean_digits(t.text)?) catch {
                     eprintln("{self.file}:{t.line}: error: bad float literal")
+                    show_source(self.file, t.line, t.off)
                     return error.ParseFailed
                 }
                 return e
@@ -684,32 +693,33 @@ impl Parser {
                 let s = self.unescape(t.text)?
                 if s.len != 1 {
                     eprintln("{self.file}:{t.line}: error: char literal must be one byte")
+                    show_source(self.file, t.line, t.off)
                     return error.ParseFailed
                 }
-                let e = self.ex(.IntLit, t.line)?
+                let e = self.ex(.IntLit, t)?
                 e.ival = s[0] as u64
                 return e
             }
             .str_lit => return self.parse_string(t)
             .kw_true, .kw_false => {
-                let e = self.ex(.BoolLit, t.line)?
+                let e = self.ex(.BoolLit, t)?
                 e.bval = t.tag == .kw_true
                 return e
             }
-            .kw_null => return self.ex(.NullLit, t.line)
+            .kw_null => return self.ex(.NullLit, t)
             .ident => {
-                let e = self.ex(.Ident, t.line)?
+                let e = self.ex(.Ident, t)?
                 e.name = t.text
                 return e
             }
             .dot => {
-                let e = self.ex(.EnumLit, t.line)?
+                let e = self.ex(.EnumLit, t)?
                 e.name = self.expect(.ident)?.text
                 return e
             }
             .kw_error => {
                 _ = self.expect(.dot)?
-                let e = self.ex(.ErrorVal, t.line)?
+                let e = self.ex(.ErrorVal, t)?
                 e.name = self.expect(.ident)?.text
                 return e
             }
@@ -717,7 +727,7 @@ impl Parser {
                 _ = self.expect(.lparen)?
                 var k: EK = .Sizeof
                 if t.tag == .kw_alignof { k = .Alignof }
-                let e = self.ex(k, t.line)?
+                let e = self.ex(k, t)?
                 e.ty = self.parse_type()?
                 _ = self.expect(.rparen)?
                 return e
@@ -731,7 +741,7 @@ impl Parser {
                 return e
             }
             .lbracket => {
-                let e = self.ex(.ArrayLit, t.line)?
+                let e = self.ex(.ArrayLit, t)?
                 while !self.at(.rbracket) {
                     e.args.push(self.parse_expr()?)?
                     if !self.eat(.comma) { break }
@@ -780,11 +790,11 @@ impl Parser {
     fn parse_string(self, t: Token) !*Expr {
         let raw = t.text
         if str_find_byte(raw, '{') < 0 {
-            let e = self.ex(.StrLit, t.line)?
+            let e = self.ex(.StrLit, t)?
             e.name = self.unescape(raw)?
             return e
         }
-        let e = self.ex(.Interp, t.line)?
+        let e = self.ex(.Interp, t)?
         var lit = List[u8].init(self.a)
         var i = 0
         var has_expr = false
@@ -822,11 +832,16 @@ impl Parser {
                     has_spec = true
                 }
                 var toks = tokenize(self.a, inner, self.file)?
-                for k in 0..toks.len { toks.items[k].line = t.line }
+                let base = t.off + ((inner.ptr as u64) - (t.text.ptr as u64)) as i64
+                for k in 0..toks.len {
+                    toks.items[k].line = t.line
+                    toks.items[k].off += base
+                }
                 var sub = new_parser(self.a, toks.slice(), self.file)
                 let x = sub.parse_expr()?
                 if !sub.at(.semi) && !sub.at(.eof) {
                     eprintln("{self.file}:{t.line}: error: unexpected tokens in interpolation '{inner}'")
+                    show_source(self.file, t.line, t.off)
                     return error.ParseFailed
                 }
                 if has_spec {
@@ -845,7 +860,7 @@ impl Parser {
         if !has_expr {
             var all = List[u8].init(self.a)
             for p in e.parts { all.append(p.lit)? }
-            let s = self.ex(.StrLit, t.line)?
+            let s = self.ex(.StrLit, t)?
             s.name = all.slice()
             return s
         }

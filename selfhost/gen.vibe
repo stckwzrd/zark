@@ -89,6 +89,12 @@ struct Gen {
     terminated: bool
     cur_label: str
     file: str
+    at_line: i64
+    at_off: i64
+    pend_file: str
+    pend_line: i64
+    pend_off: i64
+    has_pend: bool
 
     t_i64: *Type
     t_i32: *Type
@@ -217,6 +223,42 @@ impl Gen {
 
     fn err(self, line: i64) {
         eprint("{self.file}:{line}: error: ")
+        self.pend_file = self.file
+        self.pend_line = line
+        self.pend_off = -1
+        if line == self.at_line { self.pend_off = self.at_off }
+        self.has_pend = true
+    }
+
+    fn hint(self, name: str, cands: List[str]) str {
+        let c = closest(name, cands)
+        if c.len == 0 { return "" }
+        var b = self.sb()
+        sprint(&b, " (did you mean '{c}'?)") catch return ""
+        return b.slice()
+    }
+
+    fn visible_names(self) List[str] {
+        var out = List[str].init(self.a)
+        for sc in self.scopes {
+            for e in sc.vars.entries { if e.used { out.push(e.key) catch return out } }
+        }
+        for e in self.globals.entries { if e.used { out.push(e.key) catch return out } }
+        for e in self.fns.entries { if e.used { out.push(e.key) catch return out } }
+        for e in self.consts.entries { if e.used { out.push(e.key) catch return out } }
+        return out
+    }
+
+    fn field_names(self, si: *StructInst) List[str] {
+        var out = List[str].init(self.a)
+        for f in si.fields { out.push(f.name) catch return out }
+        return out
+    }
+
+    fn flush_diag(self) {
+        if !self.has_pend { return }
+        self.has_pend = false
+        show_source(self.pend_file, self.pend_line, self.pend_off)
     }
 
     // ------------------------------------------------------------------ registration
