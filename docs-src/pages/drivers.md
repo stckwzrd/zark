@@ -162,6 +162,68 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 
 Собственный бэкенд сам кодирует только шаблоны, которые использует прелюдия (они перечислены выше). Для остальных он остановится с понятным сообщением, а сборка с `--llvm` примет любой шаблон.
 
+## Драйверы в пространстве пользователя (Linux)
+
+Большинство «драйверов для чтения памяти и железа» на Linux работает без ядра: через `/dev/mem`, файлы PCI в sysfs, `/dev/cpu/N/msr` и системные вызовы. В прелюдии для этого есть всё, и libc не нужна: `Sys` вызывает ядро инструкцией `syscall` напрямую, а ошибки возвращаются как `!T` (`error.PermissionDenied`, `error.NotFound`, `error.NoProcess`, `error.BadAddress`, `error.InvalidArgument`).
+
+| Что | Как |
+|---|---|
+| системный вызов | `Sys::call(номер, a1..a6)`, обёртки `Sys::read`, `write`, `open`, `close`, `pread`, `pwrite`, `mmap`, `munmap`, `ioctl`, `getpid`, `slurp(a, путь)` |
+| память страницы, регистры устройства | `Mapping::anonymous(len)`, `Mapping::file(путь, смещение, len, запись)`; `read8/16/32/64(off)`, `write8/16/32/64(off, v)`, `read_into(off, буфер)` |
+| физическая память | `Mapping::file("/dev/mem", адрес, len, false)` (нужен root, ядро может запрещать обычную память) |
+| чужой процесс | `Proc::read(pid, адрес, буфер)`, `Proc::write(pid, адрес, данные)`, `Proc::maps(a, pid)` |
+| PCI | `Pci::list(a)`, `Pci::config32(устройство, смещение)`, `Pci::bar(устройство, n, запись)` |
+| MSR | `Msr::read(cpu, номер)` (нужны root и модуль `msr`) |
+
+Чтение и запись через `Mapping` идут через `volatile` и проверяют границы: выход за страницу — `error.OutOfRange`, а не падение.
+
+```vibe run
+!void main() {
+    auto page = Mapping::anonymous(4096)?;
+    defer _ = page.unmap();
+    page.write32(0, 0xCAFEBABE)?;
+    println(page.read32(0)?, page.read16(2)?);
+    println(page.read32(4094) catch 0);
+}
+```
+
+Чтение памяти процесса (своего или того, на который есть право по `ptrace_scope`):
+
+```vibe run
+!void main() {
+    u32[4] secret = [11, 22, 33, 44];
+    u8[16] copy;
+    const auto n = Proc::read(Sys::getpid(), &secret[0] as u64, copy[..])?;
+    println(n, copy[0], copy[4], copy[8], copy[12]);
+}
+```
+
+Список карт памяти и поиск области:
+
+```vibe run
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto maps = Proc::maps(arena.allocator(), Sys::getpid())?;
+    println(str_find(maps, "[stack]") >= 0);
+}
+```
+
+Идентификаторы PCI-устройств (читаются без root):
+
+```vibe
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    for (auto d : Pci::list(arena.allocator())?) {
+        const auto id = Pci::config32(d, 0)?;
+        println(d, "vendor {id & 0xFFFF:#x} device {id >> 16:#x}");
+    }
+}
+```
+
+Такие программы собираются в один небольшой исполняемый файл. Обычные права действуют как всегда: доступ к `/dev/mem` и BAR устройств требует root, а чужие процессы читаются только при разрешении `ptrace`.
+
 ## Сборка без libc: `--freestanding`
 
 `vibe build ядро.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` компонует с `-nostdlib -static` и отключает проверки границ (их сообщения требуют libc). В режиме можно использовать всё, что не вызывает libc: `Fmt` и `Writer` работают без выделений, `println` не нужен, потому что вывод вы пишете сами.
@@ -222,6 +284,7 @@ after int3
 
 ## Чего пока нет
 
+- Модулей ядра Linux: для них нужны заголовки ядра (`linux-headers`), сторонний C-файл с `module_init` и проверка в виртуальной машине. Объектный файл из `--freestanding` можно подключить в Kbuild, но готового примера пока нет.
 - Атрибута `interrupt`: обработчики прерываний пишутся как заглушки на ассемблере (см. `boot.S`) и вызывают функцию на Vibe.
 - `align(N)` для структур и переменных.
 - Битовых полей в `struct`: используйте `Bits`.
