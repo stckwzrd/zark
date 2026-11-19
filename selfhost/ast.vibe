@@ -13,6 +13,7 @@ struct TypeExpr {
     Expr* len;               // Array length
     TypeExpr* ret;           // Func return (null = void)
     bool closure;            // Func written as fn[](...)
+    bool vol;                // volatile pointee / field / variable
     i64 off;                 // Name position, -1 when synthesized
 }
 

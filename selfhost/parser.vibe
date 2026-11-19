@@ -249,6 +249,14 @@ struct Parser {
     }
 
     !TypeExpr* parse_type() {
+        if (this->at(.ident) && this->peek().text == "volatile" && this->peek_at(1).tag != .eq && this->peek_at(1).tag != .semi) {
+            _ = this->advance();
+            const auto t = this->parse_type()?;
+            auto x = t;
+            while ((x.k == .Ptr || x.k == .Slice || x.k == .Array) && x.elem != null) { x = x.elem; }
+            x.vol = true;
+            return t;
+        }
         if (this->eat(.kw_fn)) {
             const auto t = this->te(.Func)?;
             if (this->eat(.lbracket)) {

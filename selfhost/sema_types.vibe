@@ -106,6 +106,7 @@ bool Gen::satisfies(Type* t, str name) {
 !str Gen::type_name(Type* t) {
     if (is_str(t)) { return "str"; }
     auto b = this->sb();
+    if (t.vol) { b.append("volatile ")?; }
     match t.k {
         .Int => return this->int_name(t);
         .Float => sprint(&b, "f{t.bits}")?;
@@ -158,6 +159,15 @@ bool Gen::satisfies(Type* t, str name) {
 }
 
 !Type* Gen::resolve_type(TypeExpr* te, Env env) {
+    const auto t = this->resolve_type_core(te, env)?;
+    if (!te.vol) { return t; }
+    const auto v = this->a.create<Type>()?;
+    *v = *t;
+    v.vol = true;
+    return v;
+}
+
+!Type* Gen::resolve_type_core(TypeExpr* te, Env env) {
     match te.k {
         .Ptr => return this->mk_elem(.Ptr, this->resolve_type(te.elem, env)?);
         .Slice => return this->mk_elem(.Slice, this->resolve_type(te.elem, env)?);

@@ -981,11 +981,13 @@ struct Native {
         if (op == "alloca") {
             ins.ty = this->ty(&c)?;
         } else if (op == "load") {
+            _ = c.eat_word("volatile");
             ins.ty = this->ty(&c)?;
             _ = c.eat(',');
             _ = this->ty(&c)?;
             ins.a = c.value();
         } else if (op == "store") {
+            _ = c.eat_word("volatile");
             ins.ty2 = this->ty(&c)?;
             ins.b = c.value();
             _ = c.eat(',');

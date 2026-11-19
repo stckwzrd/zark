@@ -15,6 +15,7 @@ struct Type {
     EnumInfo* ei;
     List<Type*> params; // Func
     Type* ret;          // Func
+    bool vol;           // lives in volatile storage when reached through an lvalue
 }
 
 struct FieldInfo { str name; Type* ty; }
@@ -366,8 +367,24 @@ struct Gen {
 
     !Value load(Type* ty, str ptr) {
         const auto t = this->tmp()?;
+        if (ty.vol) {
+            sprint(this->ins()?, "  {t} = load volatile {this->llty(ty)?}, ptr {ptr}\n")?;
+            const auto plain = this->a.create<Type>()?;
+            *plain = *ty;
+            plain.vol = false;
+            return Value{ .ty = plain, .v = t };
+        }
         sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}\n")?;
         return Value{ .ty = ty, .v = t };
+    }
+
+    !void store_to(Value v, Addr a) {
+        if (v.ty.k == .Void) { return };
+        if (a.ty.vol) {
+            sprint(this->ins()?, "  store volatile {this->llty(v.ty)?} {v.v}, ptr {a.v}\n")?;
+            return;
+        }
+        this->store(v, a.v)?;
     }
 
     !void store(Value v, str ptr) {
