@@ -580,7 +580,7 @@ void add_all_variants(Items* it, Project* p) {
     }
 }
 
-const auto KEYWORDS = ["auto", "const", "static", "template", "if", "else", "while", "for", "return", "break", "continue", "struct", "enum", "union", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "nullptr", "this", "test"];
+const auto KEYWORDS = ["auto", "const", "static", "template", "if", "else", "while", "for", "return", "break", "continue", "struct", "enum", "union", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "nullptr", "this", "volatile", "packed", "test"];
 const auto PRIMS = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "void", "str"];
 const auto BUILTINS = ["panic", "assert", "embed", "asm"];
 

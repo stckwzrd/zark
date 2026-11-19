@@ -72,7 +72,7 @@
         { "name": "keyword.control.vibe", "match": "\\b(if|else|while|for|return|break|continue|match|defer|errdefer|catch|orelse|is)\\b" },
         { "name": "keyword.operator.word.vibe", "match": "\\b(as|sizeof|alignof)\\b" },
         { "name": "storage.type.vibe", "match": "\\b(fn|auto|const|static|template|struct|enum|union|type)\\b" },
-        { "name": "storage.modifier.vibe", "match": "\\b(extern|export)\\b" },
+        { "name": "storage.modifier.vibe", "match": "\\b(extern|export|volatile|packed)\\b" },
         { "name": "keyword.control.import.vibe", "match": "\\bimport\\b" },
         { "name": "constant.language.vibe", "match": "\\b(true|false|null|nullptr|this)\\b" },
         { "name": "constant.other.error.vibe", "match": "\\berror\\.[A-Za-z_][A-Za-z0-9_]*" }
@@ -80,7 +80,7 @@
     },
     "builtins": {
       "name": "support.function.builtin.vibe",
-      "match": "\\b(print|println|eprint|eprintln|sprint|bprint|panic|assert|embed)\\b(?=\\s*\\()"
+      "match": "\\b(print|println|eprint|eprintln|sprint|bprint|panic|assert|embed|asm)\\b(?=\\s*\\()"
     },
     "types": {
       "patterns": [
