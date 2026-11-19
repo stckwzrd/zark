@@ -136,6 +136,7 @@ str base_of(str path) {
     auto force_llvm = false;
     auto force_native = false;
     auto timing = false;
+    auto freestanding = false;
     auto i = 2;
     while (i < arg_count()) {
         const auto x = arg(i);
@@ -151,6 +152,9 @@ str base_of(str path) {
             force_llvm = true;
         } else if (x == "--native") {
             force_native = true;
+        } else if (x == "--freestanding") {
+            freestanding = true;
+            safety = false;
         } else if (x == "--time") {
             timing = true;
         } else if (x == "--no-safety") {
@@ -231,7 +235,7 @@ str base_of(str path) {
     auto objs = List<str>::init(a);
     auto needs_cxx = false;
     for (auto x : extras) {
-        if (str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L")) {
+        if (str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L") || str_starts_with(x, "-Wl,") || str_starts_with(x, "-T") || x == "-nostdlib" || x == "-static") {
             objs.push(x)?;
             continue;
         }
@@ -248,13 +252,15 @@ str base_of(str path) {
 
     auto link = List<str>::init(a);
     if (needs_cxx) { link.push("clang++")?; } else { link.push("clang")?; }
+    if (freestanding) { link.append(["-nostdlib", "-static", "-ffreestanding"])?; }
     if (use_native) {
         link.append(["-no-pie", ll_path])?;
     } else {
         link.append([olevel, "-Wno-override-module", ll_path])?;
     }
     link.append(objs.slice())?;
-    link.append(["-o", exe, "-lm"])?;
+    link.append(["-o", exe])?;
+    if (!freestanding) { link.push("-lm")?; }
     const auto lc = run(a, link.slice())?;
     if (lc != 0) {
         eprintln("error: link failed (input kept at {ll_path})");

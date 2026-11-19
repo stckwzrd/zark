@@ -227,6 +227,11 @@ struct Gen {
                         if (this->fns.has(f.name)) {
                             const auto old = this->fns.get(f.name)?;
                             if (old.is_extern && f.is_extern) { continue; }
+                            if (old.is_extern && f.is_export && f.body != null) {
+                                this->fns.put(f.name, f)?;
+                                this->fn_order.push(f)?;
+                                continue;
+                            }
                             this->err(f.line); eprintln("duplicate function '{f.name}'"); return error.CompileFailed;
                         }
                         this->fns.put(f.name, f)?;
