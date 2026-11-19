@@ -14,8 +14,17 @@ fn lit_target(t: *Type) *Type {
     return t
 }
 
+fn num_target(t: *Type) *Type {
+    let lt = lit_target(t)
+    if lt != null && is_option(lt) { return lt.si.fields.get(0).ty }
+    return lt
+}
+
+fn is_option(t: *Type) bool { return is_union(t) && t.si.decl.name == "Option" }
+
 fn can_coerce(from: *Type, to: *Type) bool {
     if type_eq(from, to) { return true }
+    if is_option(to) { return from.k == .Null || can_coerce(from, to.si.fields.get(0).ty) }
     if from.k == .Int && to.k == .Int {
         if from.signed == to.signed { return to.bits >= from.bits }
         if !from.signed && to.signed { return to.bits > from.bits }
@@ -55,13 +64,13 @@ impl Gen {
     fn gen_expr_at(self, e: *Expr, expected: *Type) !Value {
         match e.k {
             .IntLit => {
-                let t = lit_target(expected)
+                let t = num_target(expected)
                 if t != null && t.k == .Int { return Value{ ty: t, v: self.unum(e.ival)? } }
                 if t != null && t.k == .Float { return Value{ ty: t, v: self.float_const(e.ival as f64, t.bits)? } }
                 return Value{ ty: self.t_i64, v: self.unum(e.ival)? }
             }
             .FloatLit => {
-                let t = lit_target(expected)
+                let t = num_target(expected)
                 if t != null && t.k == .Float { return Value{ ty: t, v: self.float_const(e.fval, t.bits)? } }
                 return Value{ ty: self.t_f64, v: self.float_const(e.fval, 64)? }
             }
@@ -175,7 +184,8 @@ impl Gen {
                 if v.ty.elem.k == .Void { return Value{ ty: self.t_void, v: "" } }
                 return self.extract(v, 1, v.ty.elem)
             }
-            .Catch => return self.gen_catch(e, expected)
+            .Catch, .Orelse => return self.gen_catch(e, expected)
+            .Match => return self.gen_match_expr(e, expected)
             .Sizeof, .Alignof => {
                 let t = self.resolve_type_at(e.ty, e.line)?
                 var n: u64 = 0
@@ -214,7 +224,7 @@ impl Gen {
         match e.op {
             .minus => {
                 if e.l.k == .IntLit {
-                    let lt = lit_target(expected)
+                    let lt = num_target(expected)
                     if lt != null && lt.k == .Float { return Value{ ty: lt, v: self.float_const(0.0 - (e.l.ival as f64), lt.bits)? } }
                 }
                 let v = self.gen_expr(e.l, expected)?
@@ -327,6 +337,23 @@ impl Gen {
         return self.resolve_type_at(te, line)
     }
 
+    fn union_of(self, t: *Type, idx: i64, payload: Value) !Value {
+        let slot = self.alloca(t, "u")?
+        let tp = self.gep_field(t, slot, 0)?
+        sprint(self.ins()?, "  store i32 {idx}, ptr {tp}\n")?
+        if payload.ty != null {
+            let pp = self.gep_field(t, slot, 1)?
+            self.store(payload, pp)?
+        }
+        return self.load(t, slot)
+    }
+
+    fn union_payload(self, v: Value, vt: *Type) !Value {
+        let slot = self.spill(v)?.v
+        let pp = self.gep_field(v.ty, slot, 1)?
+        return self.load(vt, pp)
+    }
+
     fn make_union(self, t: *Type, variant: str, payload: *Expr, line: i64) !Value {
         let si = t.si
         let idx = field_index(si, variant)
@@ -355,10 +382,16 @@ impl Gen {
 
     fn gen_catch(self, e: *Expr, expected: *Type) !Value {
         var ex: *Type = null
-        if expected != null { ex = self.mk_elem(.Errun, expected)? }
+        if expected != null && e.k == .Catch { ex = self.mk_elem(.Errun, expected)? }
         let v = self.gen_expr(e.l, ex)?
-        if v.ty.k != .Errun { self.err(e.line); eprintln("'catch' needs an error union, got '{self.type_name(v.ty)?}'"); return error.CompileFailed }
-        let vt = v.ty.elem
+        var vt: *Type = null
+        if e.k == .Orelse {
+            if !is_option(v.ty) { self.err(e.line); eprintln("'orelse' needs an optional value (?T), got '{self.type_name(v.ty)?}'"); return error.CompileFailed }
+            vt = v.ty.si.fields.get(0).ty
+        } else {
+            if v.ty.k != .Errun { self.err(e.line); eprintln("'catch' needs an error union, got '{self.type_name(v.ty)?}'"); return error.CompileFailed }
+            vt = v.ty.elem
+        }
         let tag = self.extract(v, 0, self.t_i32)?
         let c = self.tmp()?
         sprint(self.ins()?, "  {c} = icmp ne i32 {tag.v}, 0\n")?
@@ -369,12 +402,14 @@ impl Gen {
         self.terminated = true
         self.label(lok)?
         var okv = Value{ ty: self.t_void, v: "" }
-        if vt.k != .Void { okv = self.extract(v, 1, vt)? }
+        if vt.k != .Void {
+            if e.k == .Orelse { okv = self.union_payload(v, vt)? } else { okv = self.extract(v, 1, vt)? }
+        }
         let ok_lbl = self.cur_label
         self.br(lend)?
         self.label(lerr)?
         self.push_scope()?
-        if e.has_name {
+        if e.has_name && e.k == .Catch {
             let slot = self.alloca(self.t_errval, e.name)?
             self.store(Value{ ty: self.t_errval, v: tag.v }, slot)?
             self.declare_var(e.name, Var{ ptr: slot, ty: self.t_errval, mutable: false }, e.line)?
@@ -662,6 +697,10 @@ impl Gen {
         }
         if to.k == .Func { return Value{ ty: to, v: "null" } }
         if to.k == .Ptr { return Value{ ty: to, v: v.v } }
+        if is_option(to) {
+            if v.ty.k == .Null { return self.union_of(to, 1, Value{ ty: null, v: "" }) }
+            return self.union_of(to, 0, self.coerce(v, to.si.fields.get(0).ty, line)?)
+        }
         if to.k == .Errun {
             if v.ty.k == .ErrVal {
                 return Value{ ty: to, v: self.insert(to, "zeroinitializer", Value{ ty: self.t_i32, v: v.v }, 0)? }

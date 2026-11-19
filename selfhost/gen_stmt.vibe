@@ -3,6 +3,7 @@
 import "gen.vibe"
 
 struct UPat { idx: i64, bind: str }
+struct MatchRes { ty: *Type, slot: str }
 
 impl Gen {
     fn gen_stmt(self, s: *Stmt) !void {
@@ -161,37 +162,125 @@ impl Gen {
             }
             .Match => {
                 let v = self.gen_expr(s.e, null)?
-                if is_union(v.ty) {
-                    self.gen_union_match(v, s.arms)?
-                    return
-                }
-                let lend = self.new_label("mend")?
-                for arm in s.arms {
-                    let lbody = self.new_label("arm")?
-                    let lnext = self.new_label("next")?
-                    if arm.pats.len == 0 {
-                        self.br(lbody)?
-                    } else {
-                        for pi, pat in arm.pats {
-                            let pv = self.coerce(self.gen_expr(pat, v.ty)?, v.ty, pat.line)?
-                            let c = self.compare(.eqeq, v, pv, pat.line)?
-                            var lalt = lnext
-                            if pi + 1 < arm.pats.len { lalt = self.new_label("alt")? }
-                            sprint(self.ins()?, "  br i1 {c.v}, label %{lbody}, label %{lalt}\n")?
-                            self.terminated = true
-                            if pi + 1 < arm.pats.len { self.label(lalt)? }
-                        }
-                    }
-                    self.label(lbody)?
-                    self.push_scope()?
-                    self.gen_stmt(arm.body)?
-                    self.pop_scope()?
-                    if !self.terminated { self.br(lend)? }
-                    self.label(lnext)?
-                }
-                self.label(lend)?
+                self.gen_match(v, s.arms, null)?
             }
         }
+    }
+
+    fn gen_match(self, v: Value, arms: List[MatchArm], res: *MatchRes) !void {
+        if is_union(v.ty) {
+            self.gen_union_match(v, arms, res)?
+            return
+        }
+        let lend = self.new_label("mend")?
+        for arm in arms {
+            let lbody = self.new_label("arm")?
+            let lnext = self.new_label("next")?
+            if arm.pats.len == 0 {
+                self.br(lbody)?
+            } else {
+                for pi, pat in arm.pats {
+                    let pv = self.coerce(self.gen_expr(pat, v.ty)?, v.ty, pat.line)?
+                    let c = self.compare(.eqeq, v, pv, pat.line)?
+                    var lalt = lnext
+                    if pi + 1 < arm.pats.len { lalt = self.new_label("alt")? }
+                    sprint(self.ins()?, "  br i1 {c.v}, label %{lbody}, label %{lalt}\n")?
+                    self.terminated = true
+                    if pi + 1 < arm.pats.len { self.label(lalt)? }
+                }
+            }
+            self.label(lbody)?
+            self.push_scope()?
+            self.gen_arm(arm.body, res)?
+            self.pop_scope()?
+            if !self.terminated { self.br(lend)? }
+            self.label(lnext)?
+        }
+        self.end_match(lend, res)?
+    }
+
+    fn end_match(self, lend: str, res: *MatchRes) !void {
+        if res != null {
+            sprint(self.ins()?, "  unreachable\n")?
+            self.terminated = true
+        }
+        self.label(lend)?
+    }
+
+    fn gen_arm(self, body: *Stmt, res: *MatchRes) !void {
+        if res == null {
+            self.gen_stmt(body)?
+            return
+        }
+        if body.k == .ExprS {
+            self.arm_value(body.e, body.line, res)?
+            return
+        }
+        let n = body.stmts.len
+        if body.k == .Block && n > 0 && body.stmts.get(n - 1).k == .ExprS {
+            self.push_scope()?
+            for i in 0..n - 1 { self.gen_stmt(body.stmts.get(i))? }
+            if !self.terminated {
+                let last = body.stmts.get(n - 1)
+                self.arm_value(last.e, last.line, res)?
+            }
+            self.pop_scope()?
+            return
+        }
+        self.gen_stmt(body)?
+        if !self.terminated { self.err(body.line); eprintln("a match arm in an expression must produce a value or leave (return/break/continue)"); return error.CompileFailed }
+    }
+
+    fn arm_value(self, e: *Expr, line: i64, res: *MatchRes) !void {
+        var v = self.gen_expr(e, res.ty)?
+        if res.ty == null {
+            if v.ty.k == .Void { self.err(line); eprintln("a match arm in an expression must produce a value"); return error.CompileFailed }
+            res.ty = v.ty
+            res.slot = self.alloca(v.ty, "m")?
+        } else {
+            v = self.coerce(v, res.ty, line)?
+        }
+        self.store(v, res.slot)?
+    }
+
+    fn check_exhaustive(self, v: Value, arms: List[MatchArm], line: i64) !void {
+        for arm in arms { if arm.pats.len == 0 { return } }
+        var names = List[str].init(self.a)
+        for arm in arms {
+            for pat in arm.pats {
+                var head = pat
+                if pat.k == .Call { head = pat.l }
+                names.push(head.name)?
+            }
+        }
+        var all = List[str].init(self.a)
+        if v.ty.k == .Enm {
+            all = v.ty.ei.decl.variants
+        } else if is_union(v.ty) {
+            all = self.field_names(v.ty.si)
+        } else {
+            self.err(line); eprintln("a match expression on '{self.type_name(v.ty)?}' needs a '_' arm")
+            return error.CompileFailed
+        }
+        for name in all {
+            if !contains_str(names, name) {
+                self.err(line); eprintln("match is not exhaustive: missing '.{name}' (add the arm or a '_' arm)")
+                return error.CompileFailed
+            }
+        }
+    }
+
+    fn gen_match_expr(self, e: *Expr, expected: *Type) !Value {
+        let v = self.gen_expr(e.l, null)?
+        self.check_exhaustive(v, e.arms, e.line)?
+        var res = MatchRes{ ty: null, slot: "" }
+        if expected != null && expected.k != .Void && expected.k != .Null {
+            res.ty = expected
+            res.slot = self.alloca(expected, "m")?
+        }
+        self.gen_match(v, e.arms, &res)?
+        if res.ty == null { self.err(e.line); eprintln("no arm of this match produces a value"); return error.CompileFailed }
+        return self.load(res.ty, res.slot)
     }
 
     fn union_pattern(self, pat: *Expr, t: *Type) !UPat {
@@ -217,7 +306,7 @@ impl Gen {
         return UPat{ idx: idx, bind: bind }
     }
 
-    fn gen_union_match(self, v: Value, arms: List[MatchArm]) !void {
+    fn gen_union_match(self, v: Value, arms: List[MatchArm], res: *MatchRes) !void {
         let slot = self.spill(v)?.v
         let tp = self.gep_field(v.ty, slot, 0)?
         let tag = self.load(self.t_i32, tp)?
@@ -250,12 +339,12 @@ impl Gen {
             if bind.bind.len > 0 {
                 self.declare_var(bind.bind, Var{ ptr: pp, ty: v.ty.si.fields.get(bind.idx).ty, mutable: false }, arm.body.line)?
             }
-            self.gen_stmt(arm.body)?
+            self.gen_arm(arm.body, res)?
             self.pop_scope()?
             if !self.terminated { self.br(lend)? }
             self.label(lnext)?
         }
-        self.label(lend)?
+        self.end_match(lend, res)?
     }
 
     fn gen_for_each(self, s: *Stmt) !void {

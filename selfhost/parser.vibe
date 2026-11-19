@@ -31,7 +31,7 @@ fn prec(t: Tag) i64 {
 
 fn starts_type(t: Tag) bool {
     match t {
-        .ident, .star, .bang, .lbracket, .kw_fn => return true
+        .ident, .star, .bang, .question, .lbracket, .kw_fn => return true
     }
     return false
 }
@@ -89,6 +89,7 @@ impl Parser {
         e.args = List[*Expr].init(self.a)
         e.fields = List[FieldInit].init(self.a)
         e.parts = List[IPart].init(self.a)
+        e.arms = List[MatchArm].init(self.a)
         return e
     }
     fn st(self, k: SK, t: Token) !*Stmt {
@@ -310,6 +311,11 @@ impl Parser {
             t.elem = self.parse_type()?
             return t
         }
+        if self.eat(.question) {
+            let t = self.te_name("Option")?
+            t.args.push(self.parse_type()?)?
+            return t
+        }
         if self.eat(.lbracket) {
             if self.eat(.rbracket) {
                 let t = self.te(.Slice)?
@@ -441,26 +447,7 @@ impl Parser {
                 _ = self.advance()
                 let s = self.st(.Match, t)?
                 s.e = self.parse_cond()?
-                _ = self.expect(.lbrace)?
-                self.skip_semis()
-                while !self.at(.rbrace) {
-                    var pats = List[*Expr].init(self.a)
-                    if self.at(.ident) && self.peek().text == "_" {
-                        _ = self.advance()
-                    } else {
-                        while true {
-                            pats.push(self.parse_expr()?)?
-                            if !self.eat(.comma) { break }
-                            self.skip_semis()
-                        }
-                    }
-                    _ = self.expect(.fat_arrow)?
-                    let body = self.parse_stmt()?
-                    s.arms.push(MatchArm{ pats: pats, body: body })?
-                    _ = self.eat(.comma)
-                    self.skip_semis()
-                }
-                _ = self.expect(.rbrace)?
+                self.parse_match_arms(&s.arms)?
                 return s
             }
         }
@@ -481,6 +468,29 @@ impl Parser {
         return s
     }
 
+    fn parse_match_arms(self, arms: *List[MatchArm]) !void {
+        _ = self.expect(.lbrace)?
+        self.skip_semis()
+        while !self.at(.rbrace) {
+            var pats = List[*Expr].init(self.a)
+            if self.at(.ident) && self.peek().text == "_" {
+                _ = self.advance()
+            } else {
+                while true {
+                    pats.push(self.parse_expr()?)?
+                    if !self.eat(.comma) { break }
+                    self.skip_semis()
+                }
+            }
+            _ = self.expect(.fat_arrow)?
+            let body = self.parse_stmt()?
+            arms.push(MatchArm{ pats: pats, body: body })?
+            _ = self.eat(.comma)
+            self.skip_semis()
+        }
+        _ = self.expect(.rbrace)?
+    }
+
     fn parse_if(self) !*Stmt {
         let kw = self.expect(.kw_if)?
         let s = self.st(.If, kw)?
@@ -496,18 +506,20 @@ impl Parser {
     // ---------------------------------------------------------------- expressions
     fn parse_expr(self) !*Expr {
         var l = self.parse_bin(0)?
-        while self.at(.kw_catch) {
+        while self.at(.kw_catch) || (self.at(.ident) && self.peek().text == "orelse") {
             let kw = self.advance()
-            let c = self.ex(.Catch, kw)?
+            var kind: EK = .Catch
+            if kw.tag == .ident { kind = .Orelse }
+            let c = self.ex(kind, kw)?
             c.l = l
-            if self.eat(.pipe) {
+            if kind == .Catch && self.eat(.pipe) {
                 c.name = self.expect(.ident)?.text
                 c.has_name = true
                 _ = self.expect(.pipe)?
             }
             if self.at(.lbrace) {
                 c.handler = self.parse_block()?
-            } else if self.at(.kw_return) {
+            } else if self.at(.kw_return) || self.at(.kw_break) || self.at(.kw_continue) {
                 c.handler = self.parse_stmt()?
             } else {
                 let h = self.st(.ExprS, kw)?
@@ -685,6 +697,12 @@ impl Parser {
     fn parse_primary(self) !*Expr {
         let t = self.advance()
         match t.tag {
+            .kw_match => {
+                let e = self.ex(.Match, t)?
+                e.l = self.parse_cond()?
+                self.parse_match_arms(&e.arms)?
+                return e
+            }
             .int_lit => {
                 let e = self.ex(.IntLit, t)?
                 e.ival = parse_int_radix(t.text, 0) catch {
