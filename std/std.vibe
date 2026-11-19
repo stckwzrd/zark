@@ -6,6 +6,7 @@
 extern i32 printf(u8* fmt, ...);
 extern void* malloc(u64 n);
 extern void* calloc(u64 n, u64 size);
+extern void* realloc(void* p, u64 n);
 extern void free(void* p);
 extern void exit(i32 code);
 extern i32 memcmp(void* a, void* b, u64 n);
@@ -69,6 +70,17 @@ struct Allocator {
     template<T> !T[] alloc(i64 n) {
         if (n == 0) { return (null as *T)[0..0]; }
         const auto p = this->alloc_fn(this->ctx, (n as u64) * sizeof(T), alignof(T));
+        if (p == null) { return error.OutOfMemory; }
+        return (p as *T)[0..n];
+    }
+    template<T> !T[] grow(T[] old, i64 n) {
+        if (this->alloc_fn != __c_alloc || old.len == 0) {
+            const auto fresh = this->alloc<T>(n)?;
+            if (old.len > 0) { memcpy(fresh.ptr, old.ptr, (old.len as u64) * sizeof(T)); }
+            this->free(old);
+            return fresh;
+        }
+        const auto p = realloc(old.ptr, (n as u64) * sizeof(T));
         if (p == null) { return error.OutOfMemory; }
         return (p as *T)[0..n];
     }
@@ -243,10 +255,7 @@ struct List<T> {
         auto cap = this->items.len * 2;
         if (cap < 8) { cap = 8; }
         if (cap < n) { cap = n; }
-        const auto fresh = this->a.alloc<T>(cap)?;
-        if (this->len > 0) { memcpy(fresh.ptr, this->items.ptr, (this->len as u64) * sizeof(T)); }
-        this->a.free(this->items);
-        this->items = fresh;
+        this->items = this->a.grow<T>(this->items, cap)?;
     }
 
     !void push(T v) {
