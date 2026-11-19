@@ -254,7 +254,14 @@ impl Parser {
                 var vs = self.strs()
                 var voffs = List[i64].init(self.a)
                 self.skip_semis()
+                var no_fields = List[Field].init(self.a)
                 while !self.at(.rbrace) {
+                    let nx = self.peek_at(1).tag
+                    if !(self.at(.ident) && (nx == .comma || nx == .semi || nx == .rbrace)) {
+                        self.parse_member_new(name, self.strs(), false, &no_fields, out)?
+                        self.skip_semis()
+                        continue
+                    }
                     let vt = self.expect(.ident)?
                     vs.push(vt.text)?
                     voffs.push(vt.off)?
@@ -586,7 +593,7 @@ impl Parser {
                 return s
             }
         }
-        if t.tag == .ident || t.tag == .bang || t.tag == .question {
+        if t.tag == .ident || t.tag == .bang || t.tag == .question || (t.tag == .kw_fn && self.peek_at(1).tag == .lparen) {
             let ds = self.try_decl_stmt(t)?
             if ds != null { return ds }
         }

@@ -96,8 +96,10 @@ impl Formatter {
         if c == .lt || c == .gt || p == .lt || p == .gt { return orig }
         if c == .colon {
             if have2 && p == .ident && p2 == .ident { return orig }
+            if p == .rbracket && orig { return true }
             return false
         }
+        if c == .lbracket && p == .ident && prev.text == "auto" { return true }
         if p == .colon { return true }
         if c == .question && ends_value(prev) {
             if p == .rparen || p == .rbracket { return orig }

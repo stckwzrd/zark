@@ -302,7 +302,7 @@ impl Parser {
 
     /// true when the next struct member is written C++-style (type first)
     fn new_member(self, is_union: bool) bool {
-        if self.at(.kw_static) || self.at(.kw_const) { return true }
+        if self.at(.kw_static) || self.at(.kw_const) || self.at(.kw_template) { return true }
         if self.at(.ident) && self.peek_at(1).tag == .colon { return false }
         if is_union && self.at(.ident) {
             let n = self.peek_at(1).tag
@@ -314,6 +314,12 @@ impl Parser {
     fn parse_member_new(self, sname: str, tps: List[str], is_union: bool, fields: *List[Field], out: *List[Decl]) !void {
         let t = self.peek()
         var is_static = false
+        var mtps = self.strs()
+        var mcons = self.strs()
+        if self.at(.kw_template) {
+            _ = self.advance()
+            mtps = self.parse_type_params(&mcons)?
+        }
         while self.at(.kw_static) || self.at(.kw_const) {
             if self.advance().tag == .kw_static { is_static = true }
         }
@@ -321,7 +327,7 @@ impl Parser {
         if ty == null { self.fail("expected a member declaration")? }
         let nt = self.expect(.ident)?
         if self.at(.lparen) {
-            let f = self.fn_rest(self.strs(), self.strs(), 0, ty, nt, sname, tps, t.off, is_static)?
+            let f = self.fn_rest(mtps, mcons, 0, ty, nt, sname, tps, t.off, is_static)?
             out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
             return
         }
@@ -382,6 +388,25 @@ impl Parser {
     fn parse_for_new(self, t: Token) !*Stmt {
         _ = self.expect(.lparen)?
         let save = self.pos
+        if self.at(.ident) && self.peek().text == "auto" && self.peek_at(1).tag == .lbracket && self.peek_at(2).tag == .ident && self.peek_at(3).tag == .comma {
+            _ = self.advance()
+            _ = self.advance()
+            let it = self.advance()
+            _ = self.advance()
+            let xt = self.expect(.ident)?
+            _ = self.expect(.rbracket)?
+            _ = self.expect(.colon)?
+            let s = self.st(.ForEach, t)?
+            s.e = self.parse_expr()?
+            _ = self.expect(.rparen)?
+            s.idx = it.text
+            s.idx_off = it.off
+            s.has_idx = true
+            s.name = xt.text
+            s.name_off = xt.off
+            s.body = self.parse_block()?
+            return s
+        }
         let ty = self.try_type()
         if ty == null || !self.at(.ident) {
             self.pos = save
