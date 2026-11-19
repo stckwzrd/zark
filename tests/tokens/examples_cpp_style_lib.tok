@@ -11,6 +11,4 @@
 1 .int_lit 2
 1 .semi ;
 1 .rbrace }
-1 .semi \n
-2 .semi 
 2 .eof 

@@ -52,7 +52,6 @@
 5 .question ?
 5 .semi ;
 5 .rbrace }
-5 .semi \n
 6 .ident sprint
 6 .lparen (
 6 .amp &
@@ -150,7 +149,7 @@
 14 .str_lit 
 14 .semi ;
 14 .rbrace }
-14 .semi \n
+14 .semi ;
 15 .ident println
 15 .lparen (
 15 .ident missing
@@ -161,6 +160,4 @@
 15 .rparen )
 15 .semi ;
 16 .rbrace }
-16 .semi \n
-17 .semi 
 17 .eof 

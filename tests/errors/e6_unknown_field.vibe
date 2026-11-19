@@ -1,0 +1,2 @@
+struct P { i64 x; i64 y; }
+void main() { const auto p = P{ .x = 1, .z = 2 }; }

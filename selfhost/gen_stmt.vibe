@@ -46,7 +46,7 @@ struct MatchRes { Type* ty; str slot; }
                 return;
             }
             const auto addr = this->gen_addr(s.e2)?;
-            if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is immutable (declare it with 'var')"); return error.CompileFailed; }
+            if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
             if (s.op == .eq) {
                 const auto v = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
                 this->store(v, addr.v)?;
@@ -231,13 +231,13 @@ struct MatchRes { Type* ty; str slot; }
     if (s.k == .ExprS) {
         this->arm_value(s.e, s.line, res)?;
         return;
-    };
+    }
     if (s.k == .Match) {
         const auto v = this->gen_expr(s.e, null)?;
         this->check_exhaustive(v, s.arms, s.line)?;
         this->gen_match(v, s.arms, res)?;
         return;
-    };
+    }
     this->gen_stmt(s)?;
     if (!this->terminated) { this->err(s.line); eprintln("a match arm in an expression must produce a value or leave (return/break/continue)"); return error.CompileFailed; }
 }
@@ -266,7 +266,7 @@ struct MatchRes { Type* ty; str slot; }
             }
         }
         if (seen_true && seen_false) { return; }
-    };
+    }
     auto names = List<str>::init(this->a);
     for (auto arm : arms) {
         for (auto pat : arm.pats) {
@@ -299,11 +299,11 @@ struct MatchRes { Type* ty; str slot; }
     if (expected != null && expected.k != .Void && expected.k != .Null) {
         res.ty = expected;
         res.slot = this->alloca(expected, "m")?;
-    };
+    }
     this->gen_match(v, e.arms, &res)?;
     if (res.ty == null) { this->err(e.line); eprintln("no arm of this match produces a value"); return error.CompileFailed; }
     return this->load(res.ty, res.slot);
-};
+}
 
 !UPat Gen::union_pattern(Expr* pat, Type* t) {
     const auto si = t.si;
@@ -314,7 +314,7 @@ struct MatchRes { Type* ty; str slot; }
         if (pat.args.len != 1 || pat.args.get(0).k != .Ident) { this->err(pat.line); eprintln("union pattern takes one binding name: .Variant(x)"); return error.CompileFailed };
         bind = pat.args.get(0).name;
         head = pat.l;
-    };
+    }
     if (head.k == .EnumLit || head.k == .Field) {
         name = head.name;
     } else {
@@ -326,7 +326,7 @@ struct MatchRes { Type* ty; str slot; }
     if (bind.len > 0 && si.fields.get(idx).ty.k == .Void) { this->err(pat.line); eprintln("variant '{name}' has no payload to bind"); return error.CompileFailed };
     if (bind == "_") { bind = ""; }
     return UPat{ .idx = idx, .bind = bind };
-};
+}
 
 !void Gen::gen_union_match(Value v, List<MatchArm> arms, MatchRes* res) {
     const auto slot = this->spill(v)?.v;
@@ -385,7 +385,7 @@ struct MatchRes { Type* ty; str slot; }
         const auto slot = this->alloca(sv.ty, "it")?;
         this->store(sv, slot)?;
         a = Addr{ .ty = sv.ty, .v = slot, .imm = false };
-    };
+    }
     Type* elem = null;
     auto len = "";
     auto base = "";
@@ -461,7 +461,7 @@ struct MatchRes { Type* ty; str slot; }
     } else if (rt.k != .Void) {
         this->err(line); eprintln("missing return value");
         return error.CompileFailed;
-    };
+    }
     if (!is_err && rt.k == .Errun && has_val && this->has_err_defers()) {
         const auto tag = this->extract(val, 0, this->t_i32)?;
         const auto c = this->tmp()?;

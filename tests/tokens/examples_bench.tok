@@ -16,7 +16,6 @@
 2 .ident n
 2 .semi ;
 2 .rbrace }
-2 .semi \n
 3 .kw_return return
 3 .ident fib
 3 .lparen (
@@ -33,7 +32,6 @@
 3 .rparen )
 3 .semi ;
 4 .rbrace }
-4 .semi \n
 6 .bang !
 6 .ident i64
 6 .ident sieve
@@ -126,16 +124,12 @@
 14 .ident i
 14 .semi ;
 14 .rbrace }
-14 .semi \n
 15 .rbrace }
-15 .semi \n
 16 .rbrace }
-16 .semi \n
 17 .kw_return return
 17 .ident count
 17 .semi ;
 18 .rbrace }
-18 .semi \n
 20 .bang !
 20 .ident void
 20 .ident main
@@ -200,6 +194,4 @@
 27 .rparen )
 27 .semi ;
 28 .rbrace }
-28 .semi \n
-29 .semi 
 29 .eof 

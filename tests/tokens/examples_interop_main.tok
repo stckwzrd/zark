@@ -15,7 +15,6 @@
 3 .ident x
 3 .semi ;
 3 .rbrace }
-3 .semi \n
 5 .ident void
 5 .ident main
 5 .lparen (
@@ -72,7 +71,6 @@
 11 .rparen )
 11 .semi ;
 11 .rbrace }
-11 .semi \n
 12 .ident engine_hello
 12 .lparen (
 12 .ident e
@@ -131,6 +129,4 @@
 17 .rparen )
 17 .semi ;
 18 .rbrace }
-18 .semi \n
-19 .semi 
 19 .eof 

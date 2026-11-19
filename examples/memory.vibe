@@ -17,7 +17,7 @@
     println("bprint -> '{s}' ({s.len} bytes)");
 
     u8[4] tiny;
-    const auto r = bprint(tiny[..], "too long for four bytes") catch |e| { println("bprint failed: {e}"); ""; }
+    const auto r = bprint(tiny[..], "too long for four bytes") catch |e| { println("bprint failed: {e}"); ""; };
     println("r.len = {r.len}");
 
     // out of memory is an explicit error, not a crash

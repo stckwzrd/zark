@@ -123,30 +123,30 @@ struct Gen {
         const auto m = this->a.create<Map<Type*>> ()?;
         *m = Map<Type*>::init(this->a);
         return m;
-    };
+    }
 
     !Env copy_env(Env e) {
         const auto m = this->new_env()?;
         for (auto en : e.entries) { if (en.used) { m.put(en.key, en.value)?; } }
         return m;
-    };
+    }
 
     !Type* mk(TK k) {
         const auto t = this->a.create<Type>()?;
         t.k = k;
         return t;
-    };
+    }
     !Type* mk_int(i64 bits, bool signed) {
         const auto t = this->mk(.Int)?;
         t.bits = bits;
         t.signed = signed;
         return t;
-    };
+    }
     !Type* mk_elem(TK k, Type* elem) {
         const auto t = this->mk(k)?;
         t.elem = elem;
         return t;
-    };
+    }
 
     void err(i64 line) {
         eprint("{this->file}:{line}: error: ");
@@ -320,7 +320,7 @@ struct Gen {
             auto f = 0.0;
             if (c.value.k == .FloatLit) { f = c.value.fval } else { f = this->eval_const(c.value)? as f64; }
             init = this->float_const(f, ty.bits)?;
-        };
+        }
         auto nb = this->sb();
         sprint(&nb, "@g.{c.name}")?;
         const auto name = nb.slice();
@@ -406,9 +406,9 @@ struct Gen {
             .Bool => return "bool";
             .Void => return "void";
             .Null => return "null";
-            .Ptr => sprint(&b, "*{this->type_name(t.elem)?}")?;
-            .Slice => sprint(&b, "[]{this->type_name(t.elem)?}")?;
-            .Array => sprint(&b, "[{t.len}]{this->type_name(t.elem)?}")?;
+            .Ptr => sprint(&b, "{this->type_name(t.elem)?}*")?;
+            .Slice => sprint(&b, "{this->type_name(t.elem)?}[]")?;
+            .Array => sprint(&b, "{this->type_name(t.elem)?}[{t.len}]")?;
             .Strct => return t.si.display;
             .Enm => return t.ei.decl.name;
             .Errun => sprint(&b, "!{this->type_name(t.elem)?}")?;
@@ -422,7 +422,7 @@ struct Gen {
                     b.append(this->type_name(p)?)?;
                 }
                 b.append(")")?;
-                if (t.ret.k != .Void) { sprint(&b, " {this->type_name(t.ret)?}")? };
+                if (t.ret.k != .Void) { sprint(&b, " -> {this->type_name(t.ret)?}")?; }
             }
         }
         return b.slice();
@@ -449,7 +449,7 @@ struct Gen {
             "str" => return this->t_str;
         }
         return null;
-    };
+    }
 
     !Type* resolve_type(TypeExpr* te, Env env) {
         match te.k {
@@ -506,7 +506,7 @@ struct Gen {
             }
         }
         return error.CompileFailed;
-    };
+    }
 
     !StructInst* get_struct(StructDecl* sd, List<Type*> args) {
         auto name = this->sb();
@@ -555,7 +555,7 @@ struct Gen {
         }
         this->types_out.append(" }\n")?;
         return inst;
-    };
+    }
 
     !i64 eval_const(Expr* e) {
         match e.k {
@@ -717,7 +717,7 @@ struct Gen {
         const auto t = this->tmp()?;
         sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}\n")?;
         return Value{ .ty = ty, .v = t };
-    };
+    }
 
     !void store(Value v, str ptr) {
         if (v.ty.k == .Void) { return };
@@ -733,7 +733,7 @@ struct Gen {
             sprint(this->ins()?, "  {sz} = ptrtoint ptr {gp} to i64\n")?;
             sprint(this->ins()?, "  call void @llvm.memset.p0.i64(ptr {ptr}, i8 0, i64 {sz}, i1 false)\n")?;
             return;
-        };
+        }
         sprint(this->ins()?, "  store {this->llty(ty)?} zeroinitializer, ptr {ptr}\n")?;
     }
 
@@ -741,7 +741,7 @@ struct Gen {
         const auto t = this->tmp()?;
         sprint(this->ins()?, "  {t} = extractvalue {this->llty(agg.ty)?} {agg.v}, {idx}\n")?;
         return Value{ .ty = ty, .v = t };
-    };
+    }
 
     !str insert(Type* agg_ty, str agg, Value v, i64 idx) {
         const auto t = this->tmp()?;
@@ -824,7 +824,7 @@ struct Gen {
             if (sc.vars.has(name)) { return sc.vars.get(name); }
         }
         return this->globals.get(name);
-    };
+    }
 
     bool has_var(str name) {
         auto i = this->scopes.len;
@@ -878,7 +878,7 @@ struct Gen {
             this->pending.push(fi)?;
         }
         return fi;
-    };
+    }
 
     List<Type*> no_types() { return List<Type*>::init(this->a); }
 
@@ -910,11 +910,11 @@ struct Gen {
             const auto t = this->resolve_type(te, this->new_env()?) catch {
                 this->flush_diag();
                 continue;
-            }
+            };
             const auto env = this->recv_env(m, t) catch {
                 this->flush_diag();
                 continue;
-            }
+            };
             _ = this->inst_fn(m, env, this->no_types()) catch {
                 this->flush_diag();
                 continue;
@@ -1135,7 +1135,7 @@ struct Gen {
     g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?;
     g.error_names.push("ok")?;
     return g;
-};
+}
 
 // ------------------------------------------------------------------ type predicates
 

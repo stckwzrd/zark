@@ -17,6 +17,4 @@
 1 .ident a
 1 .semi ;
 1 .rbrace }
-1 .semi \n
-2 .semi 
 2 .eof 

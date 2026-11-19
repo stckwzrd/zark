@@ -47,12 +47,12 @@ bool Gen::is_builtin(str name) {
     e.line = line;
     e.ival = (this->pre_vals.len - 1) as u64;
     return e;
-};
+}
 
 !Value Gen::call_fn(str name, List<Expr*> args, i64 line) {
     if (!this->fns.has(name)) { this->err(line); eprintln("prelude missing '{name}'"); return error.CompileFailed; }
     return this->call_decl(this->fns.get(name)?, this->new_env()?, null, args, this->no_types(), null, line);
-};
+}
 
 !Value Gen::gen_builtin(str name, List<Expr*> args, i64 line) {
     const auto void_v = Value{ .ty = this->t_void, .v = "" };
@@ -63,7 +63,7 @@ bool Gen::is_builtin(str name) {
         const auto data = read_file(this->a, pb.slice()) catch {
             this->err(line); eprintln("embed: cannot read '{pb.slice()}'");
             return error.CompileFailed;
-        }
+        };
         const auto gname = this->str_global(data)?;
         auto b = this->sb();
         sprint(&b, "{{ ptr {gname}, i64 {data.len} }}")?;
@@ -100,7 +100,7 @@ bool Gen::is_builtin(str name) {
     }
     this->err(line); eprintln("unknown builtin '{name}'");
     return error.CompileFailed;
-};
+}
 
 !void Gen::gen_fail(List<Expr*> args, i64 from, bool is_assert, i64 line) {
     if (!is_assert && args.len != 1) { this->err(line); eprintln("panic takes one argument"); return error.CompileFailed; }
@@ -133,14 +133,14 @@ bool Gen::is_builtin(str name) {
     te.name = "Fmt";
     te.args = List<TypeExpr*>::init(this->a);
     return this->resolve_type(te, this->new_env()?);
-};
+}
 
 !Value Gen::str_value(str s) {
     if (s.len == 0) { return Value{ .ty = this->t_str, .v = "{{ ptr null, i64 0 }}" } }
     auto b = this->sb();
     sprint(&b, "{{ ptr {this->str_global(s)?}, i64 {s.len} }}")?;
     return Value{ .ty = this->t_str, .v = b.slice() };
-};
+}
 
 /// Builds a `Fmt` value on the stack from call arguments `args[from..]`.
 !Value Gen::gen_fmt(List<Expr*> args, i64 from, Value first) {
@@ -190,7 +190,7 @@ bool Gen::is_builtin(str name) {
     const auto f1 = this->insert(ft, "undef", Value{ .ty = sl, .v = slice_v }, 0)?;
     const auto f2 = this->insert(ft, f1, this->str_value(cur.slice())?, 1)?;
     return Value{ .ty = ft, .v = f2 };
-};
+}
 
 !void Gen::fmt_hole(List<FPiece>*pieces, List<u8>*cur, Expr* e, str spec, bool is_first, Value first) {
     auto v = first;
@@ -215,7 +215,7 @@ bool Gen::is_builtin(str name) {
     sprint(&tn, "__ft{id}")?;
     this->rtypes.put(tn.slice(), t)?;
     auto src = this->sb();
-    sprint(&src, "fn __ff{id}(w: *Writer, p: *void, spec: str, d: i64) !void {{\n")?;
+    sprint(&src, "!void __ff{id}(Writer* w, void* p, str spec, i64 d) {{\n")?;
     this->thunk_body(&src, t, tn.slice())?;
     src.append("}\n")?;
     const auto toks = tokenize(this->a, src.slice(), "<fmt>")?;
@@ -240,21 +240,21 @@ bool Gen::user_fmt(Type* t) {
 
 !void Gen::thunk_body(List<u8>*b, Type* t, str tn) {
     if (this->user_fmt(t)) {
-        sprint(b, "    let q = p as *{tn}\n    return q.fmt(w, spec)\n")?;
+        sprint(b, "    auto q = p as *{tn};\n    return q.fmt(w, spec);\n")?;
         return;
     }
     match t.k {
         .Int => {
-            if (t.signed) { sprint(b, "    return __fmt_int(w, *(p as *{tn}) as i64, spec)\n")?; } else { sprint(b, "    return __fmt_uint(w, *(p as *{tn}) as u64, spec)\n")?; }
+            if (t.signed) { sprint(b, "    return __fmt_int(w, *(p as *{tn}) as i64, spec);\n")?; } else { sprint(b, "    return __fmt_uint(w, *(p as *{tn}) as u64, spec);\n")?; }
         }
-        .Float => sprint(b, "    return __fmt_float(w, *(p as *{tn}) as f64, spec)\n")?;
-        .Bool => sprint(b, "    return __fmt_bool(w, *(p as *{tn}), spec)\n")?;
-        .Ptr => sprint(b, "    return __fmt_ptr(w, *(p as *u64), spec)\n")?;
-        .Func => sprint(b, "    __fmt_lit(w, \"fn@\")?\n    return __fmt_ptr(w, *(p as *u64), spec)\n")?;
-        .Closure => sprint(b, "    return __fmt_lit(w, \"closure\")\n")?;
-        .Null => sprint(b, "    return __fmt_lit(w, \"(nil)\")\n")?;
-        .Void => sprint(b, "    return __fmt_lit(w, \"void\")\n")?;
-        .ErrVal => sprint(b, "    __fmt_lit(w, \"error.\")?\n    return __fmt_lit(w, __errname(*(p as *{tn})))\n")?;
+        .Float => sprint(b, "    return __fmt_float(w, *(p as *{tn}) as f64, spec);\n")?;
+        .Bool => sprint(b, "    return __fmt_bool(w, *(p as *{tn}), spec);\n")?;
+        .Ptr => sprint(b, "    return __fmt_ptr(w, *(p as *u64), spec);\n")?;
+        .Func => sprint(b, "    __fmt_lit(w, \"fn@\")?;\n    return __fmt_ptr(w, *(p as *u64), spec);\n")?;
+        .Closure => sprint(b, "    return __fmt_lit(w, \"closure\");\n")?;
+        .Null => sprint(b, "    return __fmt_lit(w, \"(nil)\");\n")?;
+        .Void => sprint(b, "    return __fmt_lit(w, \"void\");\n")?;
+        .ErrVal => sprint(b, "    __fmt_lit(w, \"error.\")?;\n    return __fmt_lit(w, __errname(*(p as *{tn})));\n")?;
         .Enm => {
             sprint(b, "    match *(p as *{tn}) {{\n")?;
             for (auto v : t.ei.decl.variants) {
@@ -263,43 +263,43 @@ bool Gen::user_fmt(Type* t) {
                 lit.push('.')?;
                 lit.append(v)?;
                 src_str(b, lit.slice())?;
-                b.append(")\n")?;
+                b.append(");\n")?;
             }
-            sprint(b, "    }\n    return __fmt_lit(w, \".?\")\n")?;
+            sprint(b, "    }\n    return __fmt_lit(w, \".?\");\n")?;
         }
         .Strct => {
             if (t.si.decl.is_union) { this->union_body(b, t, tn)?; } else { this->struct_body(b, t, tn)?; }
         }
         .Array => {
-            if (t.elem.k == .Void) { sprint(b, "    return __fmt_lit(w, \"[]\")\n")?; return };
+            if (t.elem.k == .Void) { sprint(b, "    return __fmt_lit(w, \"[]\");\n")?; return };
             const auto c = this->fmt_thunk(t.elem)?;
             auto n = t.len as i64;
             if (n > 32) { n = 32; }
-            sprint(b, "    let q = p as *__ft{c}\n    __fmt_lit(w, \"[\")?\n    for i in 0..{n} {{\n        if i > 0 {{ __fmt_lit(w, \", \")? }}\n        __ff{c}(w, &q[i], \"\", d + 1)?\n    }}\n")?;
-            if (t.len as i64 > n) { sprint(b, "    __fmt_lit(w, \", ...\")?\n")?; }
-            sprint(b, "    return __fmt_lit(w, \"]\")\n")?;
+            sprint(b, "    auto q = p as *__ft{c};\n    __fmt_lit(w, \"[\")?;\n    for (auto i : 0..{n}) {{\n        if (i > 0) {{ __fmt_lit(w, \", \")?; }}\n        __ff{c}(w, &q[i], \"\", d + 1)?;\n    }}\n")?;
+            if (t.len as i64 > n) { sprint(b, "    __fmt_lit(w, \", ...\")?;\n")?; }
+            sprint(b, "    return __fmt_lit(w, \"]\");\n")?;
         }
         .Slice => {
             if (is_str(t)) {
-                sprint(b, "    return __fmt_str(w, *(p as *{tn}), spec, d > 0)\n")?;
+                sprint(b, "    return __fmt_str(w, *(p as *{tn}), spec, d > 0);\n")?;
                 return;
             }
             const auto c = this->fmt_thunk(t.elem)?;
             auto head = this->sb();
-            sprint(&head, "[]{this->type_name(t.elem)?}(len=")?;
-            sprint(b, "    let s = *(p as *{tn})\n    if d > 0 {{\n        __fmt_lit(w, ")?;
+            sprint(&head, "{this->type_name(t.elem)?}[](len=")?;
+            sprint(b, "    auto s = *(p as *{tn});\n    if (d > 0) {{\n        __fmt_lit(w, ")?;
             src_str(b, head.slice())?;
-            sprint(b, ")?\n        __fmt_int(w, s.len, \"\")?\n        return __fmt_lit(w, \")\")\n    }\n")?;
-            sprint(b, "    __fmt_lit(w, \"[\")?\n    for i in 0..s.len {{\n        if i > 0 {{ __fmt_lit(w, \", \")? }}\n        __ff{c}(w, &s[i], \"\", d + 1)?\n    }}\n    return __fmt_lit(w, \"]\")\n")?;
+            sprint(b, ")?;\n        __fmt_int(w, s.len, \"\")?;\n        return __fmt_lit(w, \")\");\n    }\n")?;
+            sprint(b, "    __fmt_lit(w, \"[\")?;\n    for (auto i : 0..s.len) {{\n        if (i > 0) {{ __fmt_lit(w, \", \")?; }}\n        __ff{c}(w, &s[i], \"\", d + 1)?;\n    }}\n    return __fmt_lit(w, \"]\");\n")?;
         }
         .Errun => {
-            const auto tail = "    r catch |e| {{\n        __fmt_lit(w, \"error.\")?\n        __fmt_lit(w, __errname(e))?\n        return\n    }}\n";
-            sprint(b, "    let r = *(p as *{tn})\n")?;
+            const auto tail = "    r catch |e| {{\n        __fmt_lit(w, \"error.\")?;\n        __fmt_lit(w, __errname(e))?;\n        return;\n    }};\n";
+            sprint(b, "    auto r = *(p as *{tn});\n")?;
             if (t.elem.k == .Void) {
-                sprint(b, "{tail}    return __fmt_lit(w, \"void\")\n")?;
+                sprint(b, "{tail}    return __fmt_lit(w, \"void\");\n")?;
             } else {
                 const auto c = this->fmt_thunk(t.elem)?;
-                sprint(b, "    var v = r catch |e| {{\n        __fmt_lit(w, \"error.\")?\n        __fmt_lit(w, __errname(e))?\n        return\n    }}\n    return __ff{c}(w, &v, \"\", d)\n")?;
+                sprint(b, "    auto v = r catch |e| {{\n        __fmt_lit(w, \"error.\")?;\n        __fmt_lit(w, __errname(e))?;\n        return;\n    }};\n    return __ff{c}(w, &v, \"\", d);\n")?;
             }
         }
     }
@@ -307,46 +307,46 @@ bool Gen::user_fmt(Type* t) {
 
 !void Gen::struct_body(List<u8>*b, Type* t, str tn) {
     const auto si = t.si;
-    sprint(b, "    let q = p as *{tn}\n    __fmt_lit(w, ")?;
+    sprint(b, "    auto q = p as *{tn};\n    __fmt_lit(w, ")?;
     auto head = this->sb();
     sprint(&head, "{si.display}{{ ")?;
     src_str(b, head.slice())?;
-    b.append(")?\n")?;
+    b.append(")?;\n")?;
     for (auto [i, f] : si.fields) {
         auto lab = this->sb();
         if (i > 0) { lab.append(", ")?; }
         sprint(&lab, "{f.name}: ")?;
         sprint(b, "    __fmt_lit(w, ")?;
         src_str(b, lab.slice())?;
-        b.append(")?\n")?;
+        b.append(")?;\n")?;
         const auto c = this->fmt_thunk(f.ty)?;
-        sprint(b, "    if d > 4 {{ __fmt_lit(w, \"...\")? }} else {{ __ff{c}(w, &q.{f.name}, \"\", d + 1)? }}\n")?;
+        sprint(b, "    if (d > 4) {{ __fmt_lit(w, \"...\")?; }} else {{ __ff{c}(w, &q.{f.name}, \"\", d + 1)?; }}\n")?;
     }
     sprint(b, "    return __fmt_lit(w, ")?;
     src_str(b, " }")?;
-    b.append(")\n")?;
+    b.append(");\n")?;
 }
 
 !void Gen::union_body(List<u8>*b, Type* t, str tn) {
     const auto si = t.si;
-    sprint(b, "    let q = p as *{tn}\n    match *q {{\n")?;
+    sprint(b, "    auto q = p as *{tn};\n    match *q {{\n")?;
     for (auto f : si.fields) {
         auto name = this->sb();
         sprint(&name, "{si.display}.{f.name}")?;
         if (f.ty.k == .Void) {
             sprint(b, "        .{f.name} => return __fmt_lit(w, ")?;
             src_str(b, name.slice())?;
-            b.append(")\n")?;
+            b.append(");\n")?;
         } else {
             const auto c = this->fmt_thunk(f.ty)?;
             auto open = this->sb();
             sprint(&open, "{name.slice()}(")?;
-            sprint(b, "        .{f.name}(v) => {{\n            if d > 0 {{ return __fmt_lit(w, ")?;
+            sprint(b, "        .{f.name}(v) => {{\n            if (d > 0) {{ return __fmt_lit(w, ")?;
             src_str(b, name.slice())?;
-            b.append(") }\n            __fmt_lit(w, ")?;
+            b.append("); }\n            __fmt_lit(w, ")?;
             src_str(b, open.slice())?;
-            sprint(b, ")?\n            var tv = v\n            __ff{c}(w, &tv, \"\", d + 1)?\n            return __fmt_lit(w, \")\")\n        }\n")?;
+            sprint(b, ")?;\n            auto tv = v;\n            __ff{c}(w, &tv, \"\", d + 1)?;\n            return __fmt_lit(w, \")\");\n        }\n")?;
         }
     }
-    sprint(b, "    }\n    return\n")?;
+    sprint(b, "    }\n    return;\n")?;
 }

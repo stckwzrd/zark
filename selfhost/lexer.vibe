@@ -10,8 +10,8 @@ enum Tag {
     eq, eqeq, neq, lt, le, gt, ge, shl, shr, andand, oror,
     plus_eq, minus_eq, star_eq, slash_eq, percent_eq,
     pipe_eq, amp_eq, caret_eq, shl_eq, shr_eq, plusplus, minusminus, coloncolon, arrow,
-    kw_fn, kw_let, kw_var, kw_const, kw_if, kw_else, kw_while, kw_for, kw_in,
-    kw_return, kw_break, kw_continue, kw_struct, kw_enum, kw_impl, kw_extern,
+    kw_fn, kw_const, kw_if, kw_else, kw_while, kw_for,
+    kw_return, kw_break, kw_continue, kw_struct, kw_enum, kw_extern,
     kw_export, kw_defer, kw_errdefer, kw_error, kw_catch, kw_true, kw_false,
     kw_null, kw_as, kw_import, kw_match, kw_sizeof, kw_alignof, kw_union, kw_type, kw_is,
     kw_template, kw_static,
@@ -27,20 +27,16 @@ struct Token {
 Tag keyword(str s) {
     match s {
         "fn" => return .kw_fn;
-        "let" => return .kw_let;
-        "var" => return .kw_var;
         "const" => return .kw_const;
         "if" => return .kw_if;
         "else" => return .kw_else;
         "while" => return .kw_while;
         "for" => return .kw_for;
-        "in" => return .kw_in;
         "return" => return .kw_return;
         "break" => return .kw_break;
         "continue" => return .kw_continue;
         "struct" => return .kw_struct;
         "enum" => return .kw_enum;
-        "impl" => return .kw_impl;
         "extern" => return .kw_extern;
         "export" => return .kw_export;
         "defer" => return .kw_defer;
@@ -62,7 +58,7 @@ Tag keyword(str s) {
         "is" => return .kw_is;
     }
     return .ident;
-};
+}
 
 bool ends_statement(Tag t) {
     match t {
@@ -133,7 +129,7 @@ Op operator(str s) {
         '>' => t = .gt;
     }
     return Op{ .tag = t, .len = 1 };
-};
+}
 
 struct Lexer {
     str src;
@@ -223,9 +219,6 @@ struct Lexer {
         while (this->i < src.len) {
             const auto c = src[this->i];
             if (c == '\n') {
-                if (this->depth == 0 && this->toks.len > 0 && ends_statement(this->toks.get(this->toks.len - 1).tag)) {
-                    this->emit(.semi, "\\n")?;
-                }
                 this->line += 1;
                 this->i += 1;
                 continue;
@@ -287,7 +280,6 @@ struct Lexer {
             }
             this->i += op.len;
         }
-        this->emit(.semi, "")?;
         this->emit(.eof, "")?;
     }
 }

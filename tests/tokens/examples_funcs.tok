@@ -14,7 +14,6 @@
 1 .ident b
 1 .semi ;
 1 .rbrace }
-1 .semi \n
 2 .ident i64
 2 .ident mul
 2 .lparen (
@@ -31,7 +30,6 @@
 2 .ident b
 2 .semi ;
 2 .rbrace }
-2 .semi \n
 4 .ident i64
 4 .ident fold
 4 .lparen (
@@ -77,12 +75,10 @@
 6 .rparen )
 6 .semi ;
 6 .rbrace }
-6 .semi \n
 7 .kw_return return
 7 .ident acc
 7 .semi ;
 8 .rbrace }
-8 .semi \n
 10 .kw_struct struct
 10 .ident Button
 10 .lbrace {
@@ -96,7 +92,6 @@
 12 .ident on_click
 12 .semi ;
 13 .rbrace }
-13 .semi \n
 15 .ident void
 15 .ident hello
 15 .lparen (
@@ -110,7 +105,6 @@
 15 .rparen )
 15 .semi ;
 15 .rbrace }
-15 .semi \n
 18 .kw_extern extern
 18 .ident void
 18 .ident qsort
@@ -186,7 +180,6 @@
 22 .int_lit 1
 22 .semi ;
 22 .rbrace }
-22 .semi \n
 23 .kw_if if
 23 .lparen (
 23 .ident x
@@ -198,12 +191,10 @@
 23 .int_lit 1
 23 .semi ;
 23 .rbrace }
-23 .semi \n
 24 .kw_return return
 24 .int_lit 0
 24 .semi ;
 25 .rbrace }
-25 .semi \n
 27 .ident void
 27 .ident main
 27 .lparen (
@@ -324,6 +315,4 @@
 40 .rparen )
 40 .semi ;
 41 .rbrace }
-41 .semi \n
-42 .semi 
 42 .eof 

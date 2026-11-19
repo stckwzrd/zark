@@ -77,7 +77,7 @@ struct Allocator {
     }
     /// one zeroed T
     template<T> !T* create() {
-        const auto s = this->alloc[T](1)?;
+        const auto s = this->alloc<T>(1)?;
         return s.ptr;
     }
     template<T> void destroy(T* p) { this->free_fn(this->ctx, p, sizeof(T)); }
@@ -100,7 +100,7 @@ void* __c_alloc(void* ctx, u64 n, u64 align) { return calloc(1, n); }
 void __c_free(void* ctx, void* p, u64 n) { free(p); }
 Allocator c_allocator() {
     return Allocator{ .ctx = null, .alloc_fn = __c_alloc, .free_fn = __c_free };
-};
+}
 
 // -- bump allocator over a buffer you own (stack, static, or anything). Never touches the heap.
 struct FixedBuf {
@@ -110,7 +110,7 @@ struct FixedBuf {
     static Self init(u8[] buf) { return Self{ .buf = buf, .used = 0 } };
     Allocator allocator() {
         return Allocator{ .ctx = this, .alloc_fn = __fixed_alloc, .free_fn = __fixed_free };
-    };
+    }
     void reset() { this->used = 0; }
     i64 remaining() { return this->buf.len - this->used; }
 }
@@ -243,7 +243,7 @@ struct List<T> {
         auto cap = this->items.len * 2;
         if (cap < 8) { cap = 8; }
         if (cap < n) { cap = n; }
-        const auto fresh = this->a.alloc[T](cap)?;
+        const auto fresh = this->a.alloc<T>(cap)?;
         if (this->len > 0) { memcpy(fresh.ptr, this->items.ptr, (this->len as u64) * sizeof(T)); }
         this->a.free(this->items);
         this->items = fresh;
@@ -339,7 +339,7 @@ struct Map<V> {
         const auto old = this->entries;
         auto nc = old.len * 2;
         if (nc < 16) { nc = 16; }
-        this->entries = this->a.alloc[MapEntry[V]](nc)?;
+        this->entries = this->a.alloc<MapEntry<V>>(nc)?;
         this->len = 0;
         for (auto e : old) {
             if (e.used) { this->__insert(e.key, e.value); }
@@ -513,7 +513,7 @@ struct Arena {
     static Self init(Allocator parent) { return Self{ .parent = parent } };
     Allocator allocator() {
         return Allocator{ .ctx = this, .alloc_fn = __arena_alloc, .free_fn = __arena_free };
-    };
+    }
     void deinit() {
         auto c = this->head;
         while (c != null) {
@@ -783,7 +783,7 @@ struct FmtSpec {
     }
     if (i != spec.len || s.width > 4096 || s.prec > 4096) { return error.BadFormat; }
     return s;
-};
+}
 
 !void __pad(Writer* w, bool zero, i64 n) {
     const auto blanks = "                                ";

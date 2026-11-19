@@ -46,6 +46,9 @@ struct Formatter {
     List<u8> out;
     List<i64> stack;
     i64 indent;
+    i64 gen;
+    bool cur_gen;
+    bool prev_gen;
 
     !void newline(i64 n) {
         this->out.push('\n')?;
@@ -64,7 +67,7 @@ struct Formatter {
     i64 line_indent(Token cur, Token prev, bool have_prev) {
         if (is_closer(cur.tag) && this->stack.len > 0) { return this->stack.get(this->stack.len - 1); }
         auto ind = this->base_indent();
-        if (have_prev && !ends_statement(prev.tag) && prev.tag != .lbrace && prev.tag != .semi && prev.tag != .comma && prev.tag != .lparen && prev.tag != .lbracket) {
+        if (have_prev && prev.tag != .rbrace && prev.tag != .lbrace && prev.tag != .semi && prev.tag != .comma && prev.tag != .lparen && prev.tag != .lbracket) {
             ind += 4;
         }
         return ind;
@@ -91,7 +94,8 @@ struct Formatter {
         if (c == .coloncolon || p == .coloncolon) { return false; }
         if (c == .arrow || p == .arrow) { return orig; }
         if (c == .plusplus || c == .minusminus || p == .plusplus || p == .minusminus) { return false; }
-        if (c == .lt || c == .gt || p == .lt || p == .gt) { return orig; }
+        if ((c == .lt || c == .gt || c == .shr) && this->cur_gen) { return orig; }
+        if ((p == .lt || p == .gt || p == .shr) && this->prev_gen) { return orig; }
         if (c == .colon) {
             if (have2 && p == .ident && p2 == .ident) { return orig; }
             if (p == .rbracket && orig) { return true; }
@@ -111,7 +115,7 @@ struct Formatter {
         if (this->prefix_op(prev2, have2, prev, cur, prev_orig, orig, prev2_pq)) { return false; }
         if (p == .pipe || c == .pipe) { return orig; }
         if (c == .lbrace) {
-            if (have2 && (p2 == .kw_struct || p2 == .kw_union || p2 == .kw_enum || p2 == .kw_impl)) { return true; }
+            if (have2 && (p2 == .kw_struct || p2 == .kw_union || p2 == .kw_enum)) { return true; }
             if (p == .rbracket) { return orig; }
             if (p == .ident && prev.text.len > 0 && is_upper(prev.text[0])) { return orig; }
             return true;
@@ -177,7 +181,7 @@ struct Formatter {
             i = j;
         }
         return res;
-    };
+    }
 }
 
 struct GapOut { i64 nl; bool comment; }
@@ -190,7 +194,7 @@ struct GapOut { i64 nl; bool comment; }
         if (t.tag == .semi && (t.text == "\\n" || t.text == "")) { continue; }
         toks.push(t)?;
     }
-    auto f = Formatter{ .a = a, .src = src, .out = List<u8>::init(a), .stack = List<i64>::init(a), .indent = 0 };
+    auto f = Formatter{ .a = a, .src = src, .out = List<u8>::init(a), .stack = List<i64>::init(a), .indent = 0, .gen = 0, .cur_gen = false, .prev_gen = false };
     auto prev = Token{ .tag = .eof, .text = "", .line = 0, .off = 0 };
     auto prev2 = Token{ .tag = .eof, .text = "", .line = 0, .off = 0 };
     auto prev_orig = false;
@@ -202,6 +206,10 @@ struct GapOut { i64 nl; bool comment; }
     for (auto t : toks) {
         const auto gap = src[pos..token_start(t)];
         const auto g = f.gap(gap, t, prev, have_prev, have_out)?;
+        auto cur_gen = false;
+        if (t.tag == .lt) { cur_gen = have_prev && (prev.tag == .kw_template || (prev.tag == .ident && gap.len == 0)); }
+        if ((t.tag == .gt || t.tag == .shr) && f.gen > 0) { cur_gen = true; }
+        f.cur_gen = cur_gen;
         const auto pq = prev.tag == .question && have_prev && f.prefix_op(prev2, have_prev2, prev, t, prev_orig, gap.len > 0, last_pq);
         if (g.comment) { have_out = true; }
         if (have_out) {
@@ -226,6 +234,10 @@ struct GapOut { i64 nl; bool comment; }
         } else {
             f.out.append(t.text)?;
         }
+        if (cur_gen && t.tag == .lt) { f.gen += 1; }
+        if (cur_gen && t.tag == .gt) { f.gen -= 1; }
+        if (cur_gen && t.tag == .shr) { f.gen = max(f.gen - 2, 0); }
+        f.prev_gen = cur_gen;
         if (is_closer(t.tag) && f.stack.len > 0) { f.stack.len -= 1; }
         if (is_opener(t.tag)) { f.stack.push(f.indent)?; }
         prev2 = prev;

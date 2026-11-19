@@ -33,7 +33,6 @@
 2 .rparen )
 2 .semi ;
 2 .rbrace }
-2 .semi \n
 3 .ident void
 3 .ident scale
 3 .lparen (
@@ -54,9 +53,7 @@
 3 .ident k
 3 .semi ;
 3 .rbrace }
-3 .semi \n
 4 .rbrace }
-4 .semi \n
 6 .kw_enum enum
 6 .ident Color
 6 .lbrace {
@@ -66,7 +63,6 @@
 6 .comma ,
 6 .ident Blue
 6 .rbrace }
-6 .semi \n
 8 .bang !
 8 .ident i64
 8 .ident div
@@ -91,14 +87,12 @@
 9 .ident DivByZero
 9 .semi ;
 9 .rbrace }
-9 .semi \n
 10 .kw_return return
 10 .ident a
 10 .slash /
 10 .ident b
 10 .semi ;
 11 .rbrace }
-11 .semi \n
 13 .bang !
 13 .ident void
 13 .ident main
@@ -164,7 +158,6 @@
 21 .ident i
 21 .semi ;
 21 .rbrace }
-21 .semi \n
 22 .ident println
 22 .lparen (
 22 .str_lit sum = {sum}
@@ -206,7 +199,7 @@
 27 .int_lit 1
 27 .semi ;
 28 .rbrace }
-28 .semi \n
+28 .semi ;
 29 .ident println
 29 .lparen (
 29 .str_lit q={q} r={r}
@@ -243,7 +236,6 @@
 34 .rparen )
 34 .semi ;
 35 .rbrace }
-35 .semi \n
 37 .ident auto
 37 .ident xs
 37 .eq =
@@ -287,7 +279,6 @@
 39 .question ?
 39 .semi ;
 39 .rbrace }
-39 .semi \n
 40 .ident println
 40 .lparen (
 40 .str_lit xs = {xs.slice()}, max = {max(3, 7)}
@@ -315,6 +306,4 @@
 42 .rparen )
 42 .semi ;
 43 .rbrace }
-43 .semi \n
-44 .semi 
 44 .eof 

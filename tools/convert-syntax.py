@@ -127,7 +127,12 @@ def ends_stmt(t):
     return t.t in (")", "]", "}", "?")
 
 
+DECLARED = set()
+
+
 def camel(s):
+    if s in DECLARED:
+        return True
     return bool(re.match(r"^[A-Z][A-Za-z0-9]*$", s)) and any(ch.islower() for ch in s)
 
 
@@ -138,6 +143,9 @@ class Conv:
     def __init__(self, src, fname="?"):
         self.src = src
         self.T, self.semi_after = lex(src)
+        for k in range(len(self.T) - 1):
+            if self.T[k].t in ("struct", "enum", "union") and self.T[k + 1].k == "id" and re.match(r"^[A-Z][A-Za-z0-9]*$", self.T[k + 1].t):
+                DECLARED.add(self.T[k + 1].t)
         self.edits = []
         self.fname = fname
         self.aliases = set()
@@ -635,11 +643,27 @@ class Conv:
             i += 1
         return len(T) - 1
 
+    def ret_type_end(self, j):
+        T = self.T
+        while j >= 0 and (T[j].k == "id" or T[j].t in ("!", "?", "*", "[", "]", ".") or T[j].k == "num"):
+            if T[j].t == "fn":
+                return False
+            j -= 1
+        if j < 0 or T[j].t != ")" or j not in self.pair:
+            return False
+        o = self.pair[j]
+        k = o - 1
+        if k >= 0 and T[k].t == "]" and k in self.pair:
+            k = self.pair[k] - 1
+        return k >= 1 and T[k].k == "id" and T[k - 1].t == "fn"
+
     def is_literal_open(self, i):
         T = self.T
         if i == 0:
             return False
         p = T[i - 1]
+        if self.ret_type_end(i - 1):
+            return False
         if p.k == "id" and camel(p.t) and not (i >= 2 and T[i - 2].t in ("struct", "union", "enum", "impl")):
             return True
         if p.k == "op" and p.t == ">":
@@ -859,6 +883,7 @@ class Conv:
 
 
 def convert_source(src, fname="?"):
+    DECLARED.clear()
     c = Conv(src, fname)
     return c.convert()
 

@@ -31,7 +31,7 @@ struct JP {
         if (!str_starts_with(this->s[this->i..], w)) { return error.BadJson; }
         this->i += w.len;
         return j;
-    };
+    }
 
     i64 hex4(i64 at) {
         if (at + 4 > this->s.len) { return -1; }
@@ -133,7 +133,7 @@ struct JP {
         const auto j = new_json(this->a, .Num)?;
         j.n = parse_float(this->s[st..this->i]) catch return error.BadJson;
         return j;
-    };
+    }
 
     !Json* arr(i64 depth) {
         if (depth > 64) { return error.BadJson; }
@@ -153,7 +153,7 @@ struct JP {
             if (c != ',') { return error.BadJson; }
         }
         return j;
-    };
+    }
 
     !Json* obj(i64 depth) {
         if (depth > 64) { return error.BadJson; }
@@ -180,7 +180,7 @@ struct JP {
             if (c != ',') { return error.BadJson; }
         }
         return j;
-    };
+    }
 
     !Json* value(i64 depth) {
         this->ws();
@@ -201,7 +201,7 @@ struct JP {
         if (c == 'n') { return this->word("null", new_json(this->a, .Null)?); }
         if (c == '-' || is_digit(c)) { return this->number(); }
         return error.BadJson;
-    };
+    }
 }
 
 !Json* new_json(Allocator a, JK k) {
@@ -210,17 +210,17 @@ struct JP {
     if (k == .Arr || k == .Obj) {
         j.items = List<Json*>::init(a);
         j.keys = List<str>::init(a);
-    };
+    }
     return j;
-};
+}
 
 !Json* json_parse(Allocator a, str s) {
-    auto p = JP{ a: a, s: s, i: 0; }
+    auto p = JP{ .a = a, .s = s, .i = 0 };
     const auto j = p.value(0)?;
     p.ws();
     if (p.i != s.len) { return error.BadJson; }
     return j;
-};
+}
 
 JK jkind(Json* j) {
     if (j == null) { return .Null; }
@@ -235,12 +235,12 @@ Json* jget(Json* j, str key) {
         i -= 1;
     }
     return null;
-};
+}
 
 Json* jat(Json* j, i64 i) {
     if (jkind(j) != .Arr || i < 0 || i >= j.items.len) { return null; }
     return j.items.get(i);
-};
+}
 
 i64 jlen(Json* j) {
     if (jkind(j) == .Arr || jkind(j) == .Obj) { return j.items.len };
@@ -372,5 +372,5 @@ struct JW {
 }
 
 JW new_jw(Allocator a) {
-    return JW{ out: List<u8>::init(a), first: List<bool>::init(a), ends: List<u8>::init(a); }
+    return JW{ .out = List<u8>::init(a), .first = List<bool>::init(a), .ends = List<u8>::init(a) };
 }

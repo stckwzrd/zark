@@ -39,7 +39,6 @@
 10 .ident y
 10 .semi ;
 10 .rbrace }
-10 .semi \n
 11 .ident void
 11 .ident move
 11 .lparen (
@@ -61,7 +60,6 @@
 11 .ident dy
 11 .semi ;
 11 .rbrace }
-11 .semi \n
 12 .kw_static static
 12 .ident Point
 12 .ident origin
@@ -74,9 +72,7 @@
 12 .rbrace }
 12 .semi ;
 12 .rbrace }
-12 .semi \n
 13 .rbrace }
-13 .semi \n
 15 .kw_union union
 15 .ident Shape
 15 .lbrace {
@@ -89,7 +85,6 @@
 18 .ident Empty
 18 .semi ;
 19 .rbrace }
-19 .semi \n
 21 .kw_enum enum
 21 .ident Color
 21 .lbrace {
@@ -97,7 +92,6 @@
 21 .comma ,
 21 .ident Green
 21 .rbrace }
-21 .semi \n
 23 .kw_struct struct
 23 .ident Pair
 23 .lt <
@@ -121,9 +115,7 @@
 26 .ident first
 26 .semi ;
 26 .rbrace }
-26 .semi \n
 27 .rbrace }
-27 .semi \n
 29 .kw_template template
 29 .lt <
 29 .ident T
@@ -151,12 +143,10 @@
 30 .ident a
 30 .semi ;
 30 .rbrace }
-30 .semi \n
 31 .kw_return return
 31 .ident b
 31 .semi ;
 32 .rbrace }
-32 .semi \n
 34 .ident i64
 34 .ident sum
 34 .lparen (
@@ -184,12 +174,10 @@
 36 .ident x
 36 .semi ;
 36 .rbrace }
-36 .semi \n
 37 .kw_return return
 37 .ident total
 37 .semi ;
 38 .rbrace }
-38 .semi \n
 40 .bang !
 40 .ident i64
 40 .ident parse
@@ -213,7 +201,6 @@
 41 .ident Empty
 41 .semi ;
 41 .rbrace }
-41 .semi \n
 42 .kw_return return
 42 .ident parse_int
 42 .lparen (
@@ -221,7 +208,6 @@
 42 .rparen )
 42 .semi ;
 43 .rbrace }
-43 .semi \n
 45 .question ?
 45 .ident i64
 45 .ident find
@@ -266,14 +252,11 @@
 47 .ident i
 47 .semi ;
 47 .rbrace }
-47 .semi \n
 48 .rbrace }
-48 .semi \n
 49 .kw_return return
 49 .kw_null nullptr
 49 .semi ;
 50 .rbrace }
-50 .semi \n
 52 .ident i32
 52 .ident main
 52 .lparen (
@@ -347,13 +330,11 @@
 59 .kw_continue continue
 59 .semi ;
 59 .rbrace }
-59 .semi \n
 60 .ident acc
 60 .plus_eq +=
 60 .ident i
 60 .semi ;
 61 .rbrace }
-61 .semi \n
 62 .ident acc
 62 .shl_eq <<=
 62 .int_lit 1
@@ -556,6 +537,4 @@
 78 .int_lit 0
 78 .semi ;
 79 .rbrace }
-79 .semi \n
-80 .semi 
 80 .eof 

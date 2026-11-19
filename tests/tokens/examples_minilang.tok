@@ -17,7 +17,6 @@
 9 .ident If
 9 .semi ;
 10 .rbrace }
-10 .semi \n
 11 .kw_struct struct
 11 .ident BinOp
 11 .lbrace {
@@ -33,7 +32,6 @@
 11 .ident r
 11 .semi ;
 11 .rbrace }
-11 .semi \n
 12 .kw_struct struct
 12 .ident CallNode
 12 .lbrace {
@@ -48,7 +46,6 @@
 12 .ident args
 12 .semi ;
 12 .rbrace }
-12 .semi \n
 13 .kw_struct struct
 13 .ident IfNode
 13 .lbrace {
@@ -65,7 +62,6 @@
 13 .ident els
 13 .semi ;
 13 .rbrace }
-13 .semi \n
 15 .kw_struct struct
 15 .ident FnDef
 15 .lbrace {
@@ -80,7 +76,6 @@
 15 .ident body
 15 .semi ;
 15 .rbrace }
-15 .semi \n
 17 .kw_struct struct
 17 .ident P
 17 .lbrace {
@@ -142,9 +137,7 @@
 23 .int_lit 1
 23 .semi ;
 23 .rbrace }
-23 .semi \n
 24 .rbrace }
-24 .semi \n
 25 .ident u8
 25 .ident peek
 25 .lparen (
@@ -180,12 +173,10 @@
 27 .rbracket ]
 27 .semi ;
 27 .rbrace }
-27 .semi \n
 28 .kw_return return
 28 .int_lit 0
 28 .semi ;
 29 .rbrace }
-29 .semi \n
 30 .ident bool
 30 .ident eat
 30 .lparen (
@@ -214,12 +205,10 @@
 31 .kw_true true
 31 .semi ;
 31 .rbrace }
-31 .semi \n
 32 .kw_return return
 32 .kw_false false
 32 .semi ;
 33 .rbrace }
-33 .semi \n
 34 .bang !
 34 .ident void
 34 .ident expect
@@ -250,9 +239,7 @@
 37 .ident Parse
 37 .semi ;
 38 .rbrace }
-38 .semi \n
 39 .rbrace }
-39 .semi \n
 40 .bang !
 40 .ident str
 40 .ident ident
@@ -318,7 +305,6 @@
 43 .int_lit 1
 43 .semi ;
 43 .rbrace }
-43 .semi \n
 44 .kw_if if
 44 .lparen (
 44 .ident start
@@ -334,7 +320,6 @@
 44 .ident Parse
 44 .semi ;
 44 .rbrace }
-44 .semi \n
 45 .kw_return return
 45 .ident this
 45 .arrow ->
@@ -348,7 +333,6 @@
 45 .rbracket ]
 45 .semi ;
 46 .rbrace }
-46 .semi \n
 47 .ident bool
 47 .ident keyword
 47 .lparen (
@@ -392,12 +376,10 @@
 51 .kw_true true
 51 .semi ;
 52 .rbrace }
-52 .semi \n
 53 .kw_return return
 53 .kw_false false
 53 .semi ;
 54 .rbrace }
-54 .semi \n
 55 .bang !
 55 .ident Node
 55 .star *
@@ -432,7 +414,6 @@
 58 .ident p
 58 .semi ;
 59 .rbrace }
-59 .semi ;
 61 .bang !
 61 .ident Node
 61 .star *
@@ -486,7 +467,6 @@
 67 .ident e
 67 .semi ;
 68 .rbrace }
-68 .semi \n
 69 .kw_if if
 69 .lparen (
 69 .ident is_digit
@@ -553,7 +533,6 @@
 73 .int_lit 1
 73 .semi ;
 74 .rbrace }
-74 .semi \n
 75 .kw_return return
 75 .ident this
 75 .arrow ->
@@ -567,7 +546,6 @@
 75 .rparen )
 75 .semi ;
 76 .rbrace }
-76 .semi \n
 77 .kw_if if
 77 .lparen (
 77 .ident this
@@ -606,7 +584,6 @@
 79 .ident Parse
 79 .semi ;
 79 .rbrace }
-79 .semi \n
 80 .kw_const const
 80 .ident auto
 80 .ident t
@@ -635,7 +612,6 @@
 81 .ident Parse
 81 .semi ;
 81 .rbrace }
-81 .semi \n
 82 .kw_const const
 82 .ident auto
 82 .ident e
@@ -676,7 +652,6 @@
 83 .rparen )
 83 .semi ;
 84 .rbrace }
-84 .semi \n
 85 .kw_const const
 85 .ident auto
 85 .ident name
@@ -756,7 +731,6 @@
 91 .kw_break break
 91 .semi ;
 91 .rbrace }
-91 .semi \n
 92 .ident this
 92 .arrow ->
 92 .ident expect
@@ -766,9 +740,7 @@
 92 .question ?
 92 .semi ;
 93 .rbrace }
-93 .semi \n
 94 .rbrace }
-94 .semi \n
 95 .kw_return return
 95 .ident this
 95 .arrow ->
@@ -793,7 +765,6 @@
 95 .rparen )
 95 .semi ;
 96 .rbrace }
-96 .semi \n
 97 .kw_return return
 97 .ident this
 97 .arrow ->
@@ -807,7 +778,6 @@
 97 .rparen )
 97 .semi ;
 98 .rbrace }
-98 .semi ;
 100 .bang !
 100 .ident Node
 100 .star *
@@ -905,12 +875,10 @@
 106 .question ?
 106 .semi ;
 107 .rbrace }
-107 .semi \n
 108 .kw_return return
 108 .ident l
 108 .semi ;
 109 .rbrace }
-109 .semi ;
 111 .bang !
 111 .ident Node
 111 .star *
@@ -1016,14 +984,11 @@
 117 .question ?
 117 .semi ;
 118 .rbrace }
-118 .semi \n
 119 .kw_return return
 119 .ident l
 119 .semi ;
 120 .rbrace }
-120 .semi ;
 121 .rbrace }
-121 .semi \n
 123 .kw_struct struct
 123 .ident Interp
 123 .lbrace {
@@ -1098,7 +1063,6 @@
 132 .rparen )
 132 .semi ;
 132 .rbrace }
-132 .semi \n
 133 .kw_return return
 133 .ident this
 133 .arrow ->
@@ -1122,9 +1086,7 @@
 135 .ident e
 135 .semi ;
 136 .rbrace }
-136 .semi \n
 137 .rbrace }
-137 .semi \n
 138 .dot .
 138 .ident Bin
 138 .lparen (
@@ -1208,7 +1170,6 @@
 145 .int_lit 0
 145 .semi ;
 145 .rbrace }
-145 .semi \n
 146 .char_lit /
 146 .fat_arrow =>
 146 .lbrace {
@@ -1225,23 +1186,19 @@
 147 .ident DivByZero
 147 .semi ;
 147 .rbrace }
-147 .semi \n
 148 .kw_return return
 148 .ident x
 148 .slash /
 148 .ident y
 148 .semi ;
 149 .rbrace }
-149 .semi \n
 150 .rbrace }
-150 .semi \n
 151 .kw_return return
 151 .kw_error error
 151 .dot .
 151 .ident BadOp
 151 .semi ;
 152 .rbrace }
-152 .semi \n
 153 .dot .
 153 .ident If
 153 .lparen (
@@ -1279,7 +1236,6 @@
 154 .rparen )
 154 .semi ;
 154 .rbrace }
-154 .semi \n
 155 .kw_return return
 155 .ident this
 155 .arrow ->
@@ -1293,7 +1249,6 @@
 155 .rparen )
 155 .semi ;
 156 .rbrace }
-156 .semi \n
 157 .dot .
 157 .ident Call
 157 .lparen (
@@ -1338,7 +1293,6 @@
 159 .ident Arity
 159 .semi ;
 159 .rbrace }
-159 .semi \n
 160 .ident auto
 160 .ident local
 160 .eq =
@@ -1401,7 +1355,6 @@
 162 .question ?
 162 .semi ;
 162 .rbrace }
-162 .semi \n
 163 .kw_return return
 163 .ident this
 163 .arrow ->
@@ -1416,16 +1369,13 @@
 163 .rparen )
 163 .semi ;
 164 .rbrace }
-164 .semi \n
 165 .rbrace }
-165 .semi \n
 166 .kw_return return
 166 .kw_error error
 166 .dot .
 166 .ident Unreachable
 166 .semi ;
 167 .rbrace }
-167 .semi \n
 169 .bang !
 169 .ident void
 169 .ident run
@@ -1439,22 +1389,24 @@
 170 .eq =
 170 .ident P
 170 .lbrace {
+170 .dot .
 170 .ident src
-170 .colon :
+170 .eq =
 170 .ident src
 170 .comma ,
+170 .dot .
 170 .ident i
-170 .colon :
+170 .eq =
 170 .int_lit 0
 170 .comma ,
+170 .dot .
 170 .ident a
-170 .colon :
+170 .eq =
 170 .ident this
 170 .arrow ->
 170 .ident a
-170 .semi ;
 170 .rbrace }
-170 .semi \n
+170 .semi ;
 171 .ident auto
 171 .ident empty
 171 .eq =
@@ -1686,7 +1638,6 @@
 189 .kw_break break
 189 .semi ;
 189 .rbrace }
-189 .semi \n
 190 .ident p
 190 .dot .
 190 .ident expect
@@ -1696,9 +1647,7 @@
 190 .question ?
 190 .semi ;
 191 .rbrace }
-191 .semi \n
 192 .rbrace }
-192 .semi \n
 193 .ident p
 193 .dot .
 193 .ident expect
@@ -1744,7 +1693,6 @@
 198 .ident Parse
 198 .semi ;
 199 .rbrace }
-199 .semi \n
 200 .ident p
 200 .dot .
 200 .ident expect
@@ -1754,11 +1702,8 @@
 200 .question ?
 200 .semi ;
 201 .rbrace }
-201 .semi \n
 202 .rbrace }
-202 .semi \n
 203 .rbrace }
-203 .semi \n
 205 .bang !
 205 .ident void
 205 .ident main
@@ -1887,6 +1832,4 @@
 224 .rparen )
 224 .semi ;
 225 .rbrace }
-225 .semi \n
-226 .semi 
 226 .eof 

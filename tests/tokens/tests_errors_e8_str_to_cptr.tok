@@ -24,6 +24,4 @@
 2 .rparen )
 2 .semi ;
 2 .rbrace }
-2 .semi \n
-3 .semi 
 3 .eof 

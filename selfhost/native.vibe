@@ -157,7 +157,7 @@ struct Native {
     List<Save> saved;
 
     !LT* basic(LK k, i64 size) {
-        const auto t = this->a.create[LT]()?;
+        const auto t = this->a.create<LT>()?;
         t.k = k;
         t.size = size;
         t.align = max(size, 1);
@@ -177,7 +177,7 @@ struct Native {
         if (ch == '{') {
             c.i += 1;
             const auto t = this->basic(.S, 0)?;
-            t.fields = List[*LT].init(this->a);
+            t.fields = List<LT*>::init(this->a);
             t.offs = List<i64>::init(this->a);
             while (true) {
                 c.ws();
@@ -236,7 +236,7 @@ struct Native {
         auto al = 1;
         for (auto f : t.fields) {
             off = align_up(off, f.align);
-            t.offs.push(off) catch {}
+            t.offs.push(off) catch {};
             off += f.size;
             al = max(al, f.align);
         }
@@ -248,7 +248,7 @@ struct Native {
     Arg elem_at(LT* t, i64 idx) {
         if (t.k == .S) { return Arg{ .ty = t.fields.get(idx), .v = "", .id1 = 0 } }
         return Arg{ .ty = t.elem, .v = "", .id1 = 0 };
-    };
+    }
     i64 elem_off(LT* t, i64 idx) {
         if (t.k == .S) { return t.offs.get(idx); }
         return t.elem.size * idx;
@@ -790,7 +790,7 @@ struct Native {
             const auto ins = this->parse_ins(ln) catch |e| {
                 eprintln("native: cannot parse in {name}: {ln}");
                 return e;
-            }
+            };
             blocks.items[blocks.len - 1].ins.push(ins)?;
             if (ins.op == "phi") {
                 const auto bl = blocks.get(blocks.len - 1).label;
@@ -964,7 +964,7 @@ struct Native {
         i.args = List<Arg>::init(this->a);
         i.phis = List<PhiIn>::init(this->a);
         return i;
-    };
+    }
 
     !Ins* parse_ins(str ln) {
         const auto ins = this->new_ins()?;
@@ -1105,7 +1105,7 @@ struct Native {
             ins.b = c.value();
         }
         return ins;
-    };
+    }
 
     // ------------------------------------------------------------------ operand access
     /// load a scalar operand into `reg` (sign-extended if `sign`)
@@ -1696,7 +1696,7 @@ struct Native {
     const auto n = a.create<Native>()?;
     n.a = a;
     n.obj = new_obj(a);
-    n.named = Map[*LT].init(a);
+    n.named = Map<LT*>::init(a);
     n.t_i1 = n.int_t(1)?;
     n.t_i8 = n.int_t(8)?;
     n.t_i32 = n.int_t(32)?;
@@ -1708,7 +1708,7 @@ struct Native {
     n.t_f32 = n.basic(.F32, 4)?;
     n.t_f64 = n.basic(.F64, 8)?;
     return n;
-};
+}
 
 i64 align_up(i64 x, i64 a) {
     if (a <= 1) { return x; }

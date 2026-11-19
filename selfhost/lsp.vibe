@@ -74,7 +74,7 @@ struct Reader {
 
 !Reader new_reader(Allocator a) {
     return Reader{ .buf = a.alloc<u8>(65536)?, .pos = 0, .len = 0 };
-};
+}
 
 struct Doc {
     str uri;
@@ -154,7 +154,7 @@ struct Server {
     Doc* doc_at(Json* j) {
         const auto uri = jstr(jget(jget(j, "textDocument"), "uri"), "");
         return this->docs.get(uri) catch null;
-    };
+    }
 
     !void set_doc(str uri, str text, i64 version) {
         const auto copy = this->a.dup(text)?;
@@ -266,6 +266,8 @@ bool rename_blocked = false;
     w.key("triggerCharacters")?;
     w.arr()?;
     w.str(".")?;
+    w.str(":")?;
+    w.str(">")?;
     w.end()?;
     w.end()?;
     w.key("signatureHelpProvider")?;
@@ -365,11 +367,11 @@ void run_frontend(Server* s, Allocator a, Doc* d) {
     loader.load_source(PRELUDE, "<std>", "") catch {
         g.flush_diag();
         return;
-    }
+    };
     loader.load_file(d.path, "") catch {
         g.flush_diag();
         return;
-    }
+    };
     g.generate_check(d.path) catch g.flush_diag();
 }
 
@@ -489,7 +491,7 @@ void run_checks(Server* s) {
         const auto a = ar.allocator();
         check_doc(s, a, d) catch |e| {
             eprintln("vibe lsp: check failed: {e}");
-        }
+        };
         ar.deinit();
     }
     for (auto u : uris) { s.a.free(u); }
@@ -540,7 +542,7 @@ struct Node2 {
     const auto n = a.create<Node2>()?;
     *n = Node2{ .kind = kind, .name = name, .from = from, .to = max(to, from), .sel = sel, .sel_len = name.len, .kids = List<Node2*>::init(a) };
     return n;
-};
+}
 
 !void render_node(JW* w, Allocator a, Doc* d, Node2* n) {
     w.obj()?;
@@ -645,7 +647,7 @@ i64 line_start_off(Doc* d, i64 line) {
     const auto toks = tokenize(a, d.text, d.path) catch {
         ok = false;
         List<Token>::init(a);
-    }
+    };
     if (ok) {
         auto p = new_parser(a, toks.slice(), d.path);
         decls = p.parse_file() catch {
@@ -670,7 +672,7 @@ i64 line_start_off(Doc* d, i64 line) {
 
 !Project* analysis_for(Server* s, Allocator a, Doc* d, i64 off) {
     return analysis_with(s, a, d, d.text, off);
-};
+}
 
 !Project* analysis_with(Server* s, Allocator a, Doc* d, str text, i64 off) {
     const auto p = a.create<Project>()?;
@@ -681,10 +683,10 @@ i64 line_start_off(Doc* d, i64 line) {
     ov.put(d.path, text)?;
     *p = new_project(a, ov);
     const auto saved = silence_begin();
-    analyze(p, d.path, d.path, off) catch {}
+    analyze(p, d.path, d.path, off) catch {};
     silence_end(saved);
     return p;
-};
+}
 
 i64 cursor_of(Doc* d, Json* params) {
     const auto pos = jget(params, "position");
@@ -849,16 +851,16 @@ i32 lsp_main() {
         const auto ta = ar.allocator();
         const auto body = s.rd.message(ta) catch {
             break;
-        }
+        };
         const auto msg = json_parse(ta, body) catch {
             ar.deinit();
             continue;
-        }
+        };
         handle(&s, ta, msg) catch |e| {
             eprintln("vibe lsp: {e}");
             const auto rid = jget(msg, "id");
             if (rid != null && jkind(rid) != .Null) { s.fail(ta, rid, -32603, "internal error") catch {} };
-        }
+        };
         ar.deinit();
     }
     return 0;
@@ -926,7 +928,7 @@ u8 lc(u8 c) {
             const auto text = read_file(a, f) catch "";
             if (str_find(text, tname) >= 0) { rename_blocked = true; }
             List<str>::init(a);
-        }
+        };
         imports.put(f, im)?;
     }
     silence_end(saved);
@@ -939,7 +941,7 @@ u8 lc(u8 c) {
             if (contains_str(reach, f)) { continue; }
             const auto im = imports.get(f) catch {
                 continue;
-            }
+            };
             for (auto x : im) {
                 if (contains_str(reach, x)) {
                     reach.push(f)?;
@@ -956,7 +958,7 @@ u8 lc(u8 c) {
             if (g == f) { continue; }
             const auto im = imports.get(g) catch {
                 continue;
-            }
+            };
             if (contains_str(im, f)) { imported = true; }
         }
         if (!imported) { roots.push(f)?; }
@@ -996,7 +998,7 @@ u8 lc(u8 c) {
         const auto q = a.create<Project>()?;
         *q = new_project(a, ov);
         const auto saved = silence_begin();
-        analyze(q, r, r, -1) catch {}
+        analyze(q, r, r, -1) catch {};
         silence_end(saved);
         for (auto f : q.files) { if (!f.ok) { rename_blocked = true; } }
         collect_refs(a, q, sym.file, sym.off, &seen, &out)?;
@@ -1078,14 +1080,14 @@ i64 symbol_kind_of(SymK k) {
         if (count >= 200) { break; }
         const auto src = read_file(a, f) catch {
             continue;
-        }
+        };
         const auto toks = tokenize(a, src, f) catch {
             continue;
-        }
+        };
         auto ps = new_parser(a, toks.slice(), f);
         const auto decls = ps.parse_file() catch {
             continue;
-        }
+        };
         const auto tx = Text{ .text = src, .starts = compute_starts(a, src)? };
         for (auto dc : decls) {
             auto name = "";

@@ -37,29 +37,28 @@
 5 .lbrace {
 5 .kw_return return
 5 .ident Pair
-5 .lbracket [
+5 .lt <
 5 .ident B
 5 .comma ,
 5 .ident A
-5 .rbracket ]
+5 .gt >
 5 .lbrace {
+5 .dot .
 5 .ident first
-5 .colon :
+5 .eq =
 5 .ident this
 5 .arrow ->
 5 .ident second
 5 .comma ,
+5 .dot .
 5 .ident second
-5 .colon :
+5 .eq =
 5 .ident this
 5 .arrow ->
 5 .ident first
-5 .semi ;
 5 .rbrace }
 5 .rbrace }
-5 .semi \n
 6 .rbrace }
-6 .semi \n
 8 .ident i64
 8 .ident bump
 8 .lparen (
@@ -73,7 +72,6 @@
 8 .ident counter
 8 .semi ;
 8 .rbrace }
-8 .semi \n
 10 .bang !
 10 .ident i64
 10 .ident open
@@ -95,14 +93,12 @@
 11 .ident NotFound
 11 .semi ;
 11 .rbrace }
-11 .semi \n
 12 .kw_return return
 12 .ident name
 12 .dot .
 12 .ident len
 12 .semi ;
 13 .rbrace }
-13 .semi \n
 15 .bang !
 15 .ident i64
 15 .ident work
@@ -139,7 +135,6 @@
 19 .int_lit 10
 19 .semi ;
 20 .rbrace }
-20 .semi \n
 22 .bang !
 22 .ident i64
 22 .ident work2
@@ -161,7 +156,6 @@
 24 .rparen )
 24 .semi ;
 25 .rbrace }
-25 .semi \n
 27 .bang !
 27 .ident void
 27 .ident main
@@ -198,7 +192,6 @@
 29 .ident i32
 29 .semi ;
 29 .rbrace }
-29 .semi \n
 30 .ident println
 30 .lparen (
 30 .str_lit grid = {grid}
@@ -288,7 +281,6 @@
 38 .question ?
 38 .semi ;
 38 .rbrace }
-38 .semi \n
 39 .ident xs
 39 .dot .
 39 .ident sort
@@ -393,7 +385,6 @@
 50 .question ?
 50 .semi ;
 51 .rbrace }
-51 .semi \n
 52 .ident println
 52 .lparen (
 52 .str_lit a={m.get("a") catch 0} bb={m.get("bb") catch 0} zz={m.get("zz") catch -1}
@@ -540,7 +531,6 @@
 76 .kw_continue continue
 76 .semi ;
 76 .rbrace }
-76 .semi \n
 77 .kw_if if
 77 .lparen (
 77 .ident i
@@ -551,14 +541,12 @@
 77 .kw_break break
 77 .semi ;
 77 .rbrace }
-77 .semi \n
 78 .ident print
 78 .lparen (
 78 .str_lit {i} 
 78 .rparen )
 78 .semi ;
 79 .rbrace }
-79 .semi \n
 80 .ident println
 80 .lparen (
 80 .str_lit | counter={counter} bump={bump()}
@@ -617,7 +605,7 @@
 87 .semi ;
 88 .ident println
 88 .lparen (
-88 .str_lit u8 -> i64: {w}, sizeof(Pair[i64, str]) = {sizeof(Pair[i64, str])}
+88 .str_lit u8 -> i64: {w}, sizeof(Pair[i64, str]) = {sizeof(Pair<i64, str>)}
 88 .rparen )
 88 .semi ;
 89 .kw_return return
@@ -626,6 +614,4 @@
 89 .ident Boom
 89 .semi ;
 90 .rbrace }
-90 .semi \n
-91 .semi 
 91 .eof 

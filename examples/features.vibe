@@ -2,7 +2,7 @@ const auto N = 4 * 2;
 auto counter = 0;
 
 struct Pair<A, B> { A first; B second;
-    Pair<B, A> swap() { return Pair[B, A]{ first: this->second, second: this->first; } }
+    Pair<B, A> swap() { return Pair<B, A>{ .first = this->second, .second = this->first } }
 }
 
 i64 bump() { counter += 1; return counter; }
@@ -85,6 +85,6 @@ i64 bump() { counter += 1; return counter; }
     println("min={min(3.5, 2.25)} abs={abs(-9)} pi={PI}");
     const u8 u = 250;
     const auto w = u as i64 + 10;
-    println("u8 -> i64: {w}, sizeof(Pair[i64, str]) = {sizeof(Pair[i64, str])}");
+    println("u8 -> i64: {w}, sizeof(Pair[i64, str]) = {sizeof(Pair<i64, str>)}");
     return error.Boom;
 }

@@ -50,7 +50,7 @@ struct Project {
         s.off = off;
         s.len = s.name.len;
         return s;
-    };
+    }
 
     !FileInfo* parse_file(str src, str path) {
         const auto fi = this->a.create<FileInfo>()?;
@@ -61,14 +61,14 @@ struct Project {
         const auto toks = tokenize(this->a, src, path) catch {
             fi.ok = false;
             return fi;
-        }
+        };
         auto p = new_parser(this->a, toks.slice(), path);
         fi.decls = p.parse_file() catch {
             fi.ok = false;
             fi.decls;
-        }
+        };
         return fi;
-    };
+    }
 
     !void load(str path, str prefix) {
         if (this->by_path.has(path)) { return; }
@@ -177,14 +177,14 @@ struct Project {
         t.off = -1;
         t.args = List<TypeExpr*>::init(this->a);
         return t;
-    };
+    }
 
     !TypeExpr* mk_wrap(TEK k, TypeExpr* elem) {
         const auto t = this->mk_name("")?;
         t.k = k;
         t.elem = elem;
         return t;
-    };
+    }
 
     !TypeExpr* subst(TypeExpr* te, List<str> names, List<TypeExpr*> args) {
         if (te == null) { return null; }
@@ -201,13 +201,13 @@ struct Project {
         t.elem = this->subst(te.elem, names, args)?;
         t.ret = this->subst(te.ret, names, args)?;
         return t;
-    };
+    }
 
     !TypeExpr* recv_type(FnDecl* f) {
         const auto t = this->mk_name(f.receiver)?;
         for (auto x : f.receiver_params) { t.args.push(this->mk_name(x)?)?; }
         return t;
-    };
+    }
 }
 
 str last_segment(str name) {
@@ -234,7 +234,7 @@ Project new_project(Allocator a, Map<str> overrides) {
         .members = Map<Symbol*>::init(a), .occs = List<Occ>::init(a), .overrides = overrides, .cursor_file = "", .cursor = -1,
         .snap = false, .near = List<Symbol*>::init(a), .cur_fn = null,
     };
-};
+}
 
 struct Walker {
     Project* p;
@@ -251,7 +251,7 @@ struct Walker {
         }
         for (auto t : this->tps) { if (t.name == name) { return t; } }
         return this->p.flat.get(name) catch null;
-    };
+    }
 
     void occ(i64 off, i64 len, Symbol* s) {
         if (s == null || off < 0) { return; }
@@ -297,7 +297,7 @@ struct Walker {
         const auto s = this->find(name);
         if (s == null) { return null; }
         return s.ty;
-    };
+    }
 
     TypeExpr* peel(TypeExpr* te) {
         auto t = te;
@@ -312,13 +312,13 @@ struct Walker {
             }
         }
         return t;
-    };
+    }
 
     Symbol* member(TypeExpr* owner, str name) {
         const auto t = this->peel(owner);
         if (t == null || t.k != .Name) { return null };
         return this->p.members.get(qname(this->p.a, t.name, name)) catch null;
-    };
+    }
 
     TypeExpr* member_type(TypeExpr* owner, Symbol* ms) {
         const auto t = this->peel(owner);
@@ -335,7 +335,7 @@ struct Walker {
             return r;
         }
         return null;
-    };
+    }
 
     TypeExpr* elem_of(TypeExpr* te) {
         const auto t = this->peel(te);
@@ -344,7 +344,7 @@ struct Walker {
         if (t.k == .Name && t.name == "str") { return this->p.mk_name("u8") catch null; }
         if (t.k == .Name && t.name == "List" && t.args.len == 1) { return t.args.get(0); }
         return null;
-    };
+    }
 
     TypeExpr* infer(Expr* e) {
         if (e == null) { return null; }
@@ -376,7 +376,7 @@ struct Walker {
                     const auto ft = this->infer(e.l);
                     const auto t = this->peel(ft);
                     if (t != null && t.k == .Name && e.args.len > 0 && ft == null) { return null; }
-                };
+                }
                 return this->elem_of(this->infer(e.l));
             }
             .Slice => return this->infer(e.l);
@@ -420,7 +420,7 @@ struct Walker {
             .Call => return this->infer_call(e);
         }
         return null;
-    };
+    }
 
     TypeExpr* infer_call(Expr* e) {
         const auto c = e.l;
@@ -431,7 +431,7 @@ struct Walker {
             if (s.k == .Fn && s.fd != null) { return this->call_ret(s.fd, e); }
             if (s.ty != null && s.ty.k == .Func) { return s.ty.ret };
             return null;
-        };
+        }
         if (c.k == .Field) {
             const auto bt = this->infer(c.l);
             if (bt == null) { return null; }
@@ -439,15 +439,15 @@ struct Walker {
             if (ms == null && c.l.k == .Ident) {
                 const auto ts = this->find(c.l.name);
                 if (ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum)) { ms = this->member(this->p.mk_name(c.l.name) catch null, c.name); }
-            };
+            }
             if (ms == null) { return null; }
             if (ms.k == .Field && ms.ty != null && ms.ty.k == .Func) { return ms.ty.ret };
             const auto r = this->member_type(bt, ms);
             if (r != null && ms.fd != null && mentions(r, ms.fd.type_params)) { return this->call_ret(ms.fd, e); }
             return r;
-        };
+        }
         return null;
-    };
+    }
 
     void bind(TypeExpr* pat, TypeExpr* actual, List<str> names, List<TypeExpr*>*out) {
         if (pat == null || actual == null) { return; }
@@ -474,7 +474,7 @@ struct Walker {
         }
         for (auto x : found) { if (x == null) { return null; } }
         return this->p.subst(fd.ret, fd.type_params, found) catch null;
-    };
+    }
 
     void wtype(TypeExpr* te) {
         if (te == null) { return; }
@@ -500,13 +500,13 @@ struct Walker {
         }
         this->occ(off, name.len, s);
         return s;
-    };
+    }
 
     TypeExpr* payload_type(TypeExpr* owner, str name) {
         const auto ms = this->member(owner, name);
         if (ms == null) { return null; }
         return this->member_type(owner, ms);
-    };
+    }
 
     void warms(List<MatchArm> arms, TypeExpr* scrut) {
         for (auto arm : arms) {
@@ -544,7 +544,7 @@ struct Walker {
                 if (ms == null && e.l.k == .Ident) {
                     const auto ts = this->find(e.l.name);
                     if (ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum)) { ms = this->member(this->p.mk_name(e.l.name) catch null, e.name); }
-                };
+                }
                 this->occ(e.name_off, e.name.len, ms);
                 return;
             }
@@ -622,7 +622,7 @@ struct Walker {
                 auto ty = s.ty;
                 if (ty == null) { ty = this->infer(s.e); }
                 auto k = SymK::Local;
-                this->declare(k, s.name, s.name_off, ty) catch {}
+                this->declare(k, s.name, s.name_off, ty) catch {};
                 const auto d = this->locals.get(this->locals.len - 1);
                 d.mutable = s.mutable;
                 return;
@@ -644,13 +644,13 @@ struct Walker {
             .ForRange => {
                 this->wexpr(s.e);
                 this->wexpr(s.e2);
-                this->declare(.Local, s.name, s.name_off, this->infer(s.e)) catch {}
+                this->declare(.Local, s.name, s.name_off, this->infer(s.e)) catch {};
                 this->wstmt(s.body);
             }
             .ForEach => {
                 this->wexpr(s.e);
                 if (s.has_idx) { this->declare(.Local, s.idx, s.idx_off, this->p.mk_name("i64") catch null) catch {} }
-                this->declare(.Local, s.name, s.name_off, this->elem_of(this->infer(s.e))) catch {}
+                this->declare(.Local, s.name, s.name_off, this->elem_of(this->infer(s.e))) catch {};
                 this->wstmt(s.body);
             }
             .Block => {
@@ -686,7 +686,7 @@ struct Walker {
         if (f.body != null) {
             for (auto p : f.params) {
                 auto ty = p.ty;
-                if (ty != null && this->self_ty != null && p.name == "self" && ty.k == .Ptr) { ty = this->p.mk_wrap(.Ptr, this->self_ty) catch ty };
+                if (ty != null && this->self_ty != null && p.name == "this" && ty.k == .Ptr) { ty = this->p.mk_wrap(.Ptr, this->self_ty) catch ty };
                 this->declare(.Param, p.name, p.off, ty) catch {}
             }
             if (this->p.cursor_file == this->fi.path && f.name_off <= this->p.cursor && this->p.cursor <= f.end_off) { this->p.cur_fn = f; }
@@ -700,7 +700,7 @@ struct Walker {
     Symbol* sym_for_fn(FnDecl* f) {
         if (f.receiver.len > 0) { return this->p.members.get(qname(this->p.a, f.receiver, last_segment(f.name))) catch null; }
         return this->p.flat.get(f.name) catch null;
-    };
+    }
 
     void wdecl(Decl d) {
         match d.k {

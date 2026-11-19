@@ -78,7 +78,7 @@ str base_of(str path) {
         const auto src = read_file(a, path) catch |e| {
             eprintln("error: cannot read '{path}': {e}");
             return 1;
-        }
+        };
         const auto out = format_source(a, src, path) catch return 1;
         if (out == src) { continue; }
         changed += 1;
@@ -179,15 +179,15 @@ str base_of(str path) {
     loader.load_source(PRELUDE, "<std>", "") catch {
         g.flush_diag();
         return 1;
-    }
+    };
     loader.load_file(src_file, "") catch {
         g.flush_diag();
         return 1;
-    }
+    };
     g.generate() catch {
         g.flush_diag();
         return 1;
-    }
+    };
 
     auto ir = List<u8>::init(a);
     g.output(&ir)?;
@@ -289,6 +289,6 @@ i32 main() {
     const auto code = compile(ar.allocator()) catch |e| {
         eprintln("error: {e}");
         1;
-    }
+    };
     return code;
 }

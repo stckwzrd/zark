@@ -1,4 +1,4 @@
-enum Dir { North, East, South, West
+enum Dir { North, East, South, West;
     Dir turn() {
         match *this {
             .North => return .East;
@@ -7,7 +7,7 @@ enum Dir { North, East, South, West
             _ => return .North;
         }
         return .North;
-    };
+    }
 }
 
 struct Stack<T> { List<T> items;
@@ -35,7 +35,7 @@ struct Stack<T> { List<T> items;
     st.push("a")?;
     st.push("b")?;
     println("pop: {st.pop()?} {st.pop()?}");
-    const auto empty = st.pop() catch |e| { println("  empty -> {e}"); "none"; }
+    const auto empty = st.pop() catch |e| { println("  empty -> {e}"); "none"; };
     println(empty);
 
     const str[] words = ["zig", "vibe", "c++"];

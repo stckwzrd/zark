@@ -21,23 +21,24 @@ void put_type(List<u8>*b, TypeExpr* te) {
             }
             put(b, te.name);
             if (te.args.len > 0) {
-                put(b, "[");
+                put(b, "<");
                 for (auto [i, x] : te.args) {
                     if (i > 0) { put(b, ", "); }
                     put_type(b, x);
                 }
-                put(b, "]");
+                put(b, ">");
             }
         }
         .Ptr => {
-            put(b, "*");
             put_type(b, te.elem);
+            put(b, "*");
         }
         .Slice => {
-            put(b, "[]");
             put_type(b, te.elem);
+            put(b, "[]");
         }
         .Array => {
+            put_type(b, te.elem);
             put(b, "[");
             if (te.len != null && te.len.k == .IntLit) {
                 sprint(b, "{te.len.ival}") catch return;
@@ -47,7 +48,6 @@ void put_type(List<u8>*b, TypeExpr* te) {
                 put(b, "N");
             }
             put(b, "]");
-            put_type(b, te.elem);
         }
         .Errun => {
             put(b, "!");
@@ -63,7 +63,7 @@ void put_type(List<u8>*b, TypeExpr* te) {
             }
             put(b, ")");
             if (te.ret != null) {
-                put(b, " ");
+                put(b, " -> ");
                 put_type(b, te.ret);
             }
         }
@@ -79,19 +79,22 @@ str type_str(Allocator a, TypeExpr* te) {
 void put_params(List<u8>*b, FnDecl* f, bool skip_self) {
     auto first = true;
     for (auto p : f.params) {
-        if (skip_self && p.name == "self") { continue; }
+        if (skip_self && p.name == "this") { continue; }
         if (!first) { put(b, ", "); }
         first = false;
-        put(b, p.name);
-        if (p.name == "self" && p.ty != null && p.ty.k == .Ptr && p.ty.elem.k == .Name && p.ty.elem.name == "Self") { continue; }
-        put(b, ": ");
+        if (p.name == "this" && p.ty != null && p.ty.k == .Ptr && p.ty.elem.k == .Name && p.ty.elem.name == "Self") {
+            put(b, "this");
+            continue;
+        }
         put_type(b, p.ty);
+        put(b, " ");
+        put(b, p.name);
     }
 }
 
 void put_generics(List<u8>*b, List<str> names, List<str> cons) {
     if (names.len == 0) { return; }
-    put(b, "[");
+    put(b, "<");
     for (auto [i, n] : names) {
         if (i > 0) { put(b, ", "); }
         put(b, n);
@@ -100,26 +103,27 @@ void put_generics(List<u8>*b, List<str> names, List<str> cons) {
             put(b, cons.get(i));
         }
     }
-    put(b, "]");
+    put(b, ">");
 }
 
 str fn_signature(Allocator a, FnDecl* f, bool skip_self) {
     auto b = List<u8>::init(a);
-    put(&b, "fn ");
+    if (f.type_params.len > 0) {
+        put(&b, "template");
+        put_generics(&b, f.type_params, f.constraints);
+        put(&b, " ");
+    }
+    if (f.ret != null) { put_type(&b, f.ret); } else { put(&b, "void"); }
+    put(&b, " ");
     if (f.receiver.len > 0 && !skip_self) {
         put(&b, last_segment(f.receiver));
-        put(&b, ".");
+        put(&b, "::");
     }
     put(&b, last_segment(f.name));
-    put_generics(&b, f.type_params, f.constraints);
     put(&b, "(");
     put_params(&b, f, skip_self);
     if (f.variadic) { put(&b, ", ..."); }
     put(&b, ")");
-    if (f.ret != null) {
-        put(&b, " ");
-        put_type(&b, f.ret);
-    }
     return b.slice();
 }
 
@@ -137,15 +141,16 @@ str sym_detail(Allocator a, Symbol* s) {
             put(&b, " ");
             for (auto [i, f] : sd.fields) {
                 if (i >= 6) {
-                    put(&b, ", ...");
+                    put(&b, " ...");
                     break;
                 }
-                if (i > 0) { put(&b, ", "); }
-                put(&b, f.name);
+                if (i > 0) { put(&b, " "); }
                 if (!(sd.is_union && f.ty != null && f.ty.k == .Name && f.ty.name == "void")) {
-                    put(&b, ": ");
                     put_type(&b, f.ty);
+                    put(&b, " ");
                 }
+                put(&b, f.name);
+                put(&b, ";");
             }
             put(&b, " ");
             b.push('}') catch return "";
@@ -168,12 +173,10 @@ str sym_detail(Allocator a, Symbol* s) {
             b.push('}') catch return "";
         }
         .Const, .Var => {
-            if (s.k == .Const) { put(&b, "const ") } else { put(&b, "var "); }
+            if (s.k == .Const) { put(&b, "const "); }
+            if (s.ty != null) { put_type(&b, s.ty); } else { put(&b, "auto"); }
+            put(&b, " ");
             put(&b, s.name);
-            if (s.ty != null) {
-                put(&b, ": ");
-                put_type(&b, s.ty);
-            }
         }
         .Alias => {
             put(&b, "type ");
@@ -184,7 +187,7 @@ str sym_detail(Allocator a, Symbol* s) {
         .Field => {
             put(&b, "(field) ");
             put(&b, s.owner);
-            put(&b, ".");
+            put(&b, "::");
             put(&b, s.name);
             put(&b, ": ");
             put_type(&b, s.ty);
@@ -192,24 +195,22 @@ str sym_detail(Allocator a, Symbol* s) {
         .Variant => {
             put(&b, "(variant) ");
             put(&b, s.owner);
-            put(&b, ".");
+            put(&b, "::");
             put(&b, s.name);
         }
         .Param => {
             put(&b, "(parameter) ");
-            put(&b, s.name);
             if (s.ty != null) {
-                put(&b, ": ");
                 put_type(&b, s.ty);
+                put(&b, " ");
             }
+            put(&b, s.name);
         }
         .Local => {
-            if (s.mutable) { put(&b, "var "); } else { put(&b, "let "); }
+            if (!s.mutable) { put(&b, "const "); }
+            if (s.ty != null) { put_type(&b, s.ty); } else { put(&b, "auto"); }
+            put(&b, " ");
             put(&b, s.name);
-            if (s.ty != null) {
-                put(&b, ": ");
-                put_type(&b, s.ty);
-            }
         }
         .TypeParam => {
             put(&b, "(type parameter) ");
@@ -279,7 +280,7 @@ Occ* occ_at(Project* p, str path, i64 off) {
         if (best == null || o.len < best.len) { best = o; }
     }
     return best;
-};
+}
 
 str word_at(str src, i64 off) {
     auto s = off;
@@ -295,12 +296,12 @@ Symbol* sym_for(Project* p, str path, str src, i64 off) {
     const auto w = word_at(src, off);
     if (w.len == 0) { return null; }
     return p.flat.get(w) catch null;
-};
+}
 
 !Text text_of(Allocator a, Project* p, str path) {
     const auto fi = p.by_path.get(path)?;
     return Text{ .text = fi.src, .starts = compute_starts(a, fi.src)? };
-};
+}
 
 !void range_json(Allocator a, JW* w, Project* p, str path, i64 off, i64 len) {
     const auto t = text_of(a, p, path)?;
@@ -493,7 +494,7 @@ Expr* parse_expr_text(Allocator a, Project* p, str text) {
         if (e.used && e.value.k == .Module) { ps.aliases.push(e.key) catch return null };
     }
     return ps.parse_expr() catch null;
-};
+}
 
 struct Cand {
     str label;
@@ -538,7 +539,7 @@ void add_members_of(Items* it, Project* p, str owner, bool with_self_only) {
     for (auto e : p.members.entries) {
         if (!e.used || !str_starts_with(e.key, prefix)) { continue; }
         const auto s = e.value;
-        if (s.k == .Method && with_self_only && (s.fd.params.len == 0 || s.fd.params.get(0).name != "self")) { continue; }
+        if (s.k == .Method && with_self_only && (s.fd.params.len == 0 || s.fd.params.get(0).name != "this")) { continue; }
         add_symbol(it, s, s.name, true);
     }
 }
@@ -579,7 +580,7 @@ void add_all_variants(Items* it, Project* p) {
     }
 }
 
-const auto KEYWORDS = ["fn", "let", "var", "const", "if", "else", "while", "for", "in", "return", "break", "continue", "struct", "enum", "union", "impl", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "test"];
+const auto KEYWORDS = ["auto", "const", "static", "template", "if", "else", "while", "for", "return", "break", "continue", "struct", "enum", "union", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "nullptr", "this", "test"];
 const auto PRIMS = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "void", "str"];
 const auto BUILTINS = ["panic", "assert", "embed"];
 
@@ -654,6 +655,20 @@ bool in_plain_string(str text, i64 off) {
     return quotes % 2 == 1 && brace == 0;
 }
 
+Symbol* this_literal_fields(Project* p, str text, i64 off) {
+    const auto open = enclosing_open(text, off);
+    if (open < 0 || text[open] != '{') { return null; }
+    auto e = open;
+    while (e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t')) { e -= 1; }
+    auto s = e;
+    while (s > 0 && (is_idc(text[s - 1]) || text[s - 1] == '.' || text[s - 1] == ':')) { s -= 1; }
+    const auto tn = text[s..e];
+    if (tn.len == 0 || !is_upper(last_segment(tn)[0])) { return null; }
+    const auto sym = p.flat.get(tn) catch null;
+    if (sym == null || sym.sd == null) { return null; }
+    return sym;
+}
+
 !Items candidates(Allocator a, Project* p, str path, str text, i64 off) {
     auto it = Items{ .list = List<Cand>::init(a), .seen = Map<bool>::init(a), .a = a };
     if (in_line_comment(text, off) || in_plain_string(text, off)) { return it; }
@@ -661,11 +676,21 @@ bool in_plain_string(str text, i64 off) {
     while (ps > 0 && is_idc(text[ps - 1])) { ps -= 1; }
     const auto fi = p.by_path.get(path) catch null;
     auto w = Walker{ .p = p, .fi = fi, .locals = p.near, .tps = List<Symbol*>::init(a), .self_ty = null };
-    if (ps > 0 && text[ps - 1] == '.') {
-        const auto dot = ps - 1;
+    auto trig = 0;
+    if (ps > 0 && text[ps - 1] == '.') { trig = 1; }
+    if (ps > 1 && ((text[ps - 1] == ':' && text[ps - 2] == ':') || (text[ps - 1] == '>' && text[ps - 2] == '-'))) { trig = 2; }
+    if (trig > 0) {
+        const auto dot = ps - trig;
         const auto before = prev_sig(text, dot);
         const auto tight = dot > 0 && (is_idc(text[dot - 1]) || text[dot - 1] == ')' || text[dot - 1] == ']');
-        if (!tight || before == 0 || before == '(' || before == ',' || before == '=' || before == '{') {
+        if (trig == 1 && (before == '{' || before == ',')) {
+            const auto fields = this_literal_fields(p, text, dot);
+            if (fields != null) {
+                for (auto f : fields.sd.fields) { it.add(f.name, 5, type_str(a, f.ty), ""); }
+                return it;
+            }
+        }
+        if (trig == 1 && (!tight || before == 0 || before == '(' || before == ',' || before == '=' || before == '{')) {
             add_all_variants(&it, p);
             return it;
         }
@@ -676,17 +701,17 @@ bool in_plain_string(str text, i64 off) {
             if (s != null && s.k == .Module) {
                 add_module_members(&it, p, e.name);
                 return it;
-            };
+            }
             if (s != null && (s.k == .Struct || s.k == .Union || s.k == .Enum)) {
                 add_static_members(&it, p, e.name);
                 return it;
             }
-        };
+        }
         const auto ty = w.peel(w.infer(e));
         if (ty != null && ty.k == .Name) {
             add_members_of(&it, p, ty.name, true);
             return it;
-        };
+        }
         if (ty != null && (ty.k == .Slice || ty.k == .Array)) {
             it.add("len", 5, "i64", "");
             it.add("ptr", 5, "pointer to the first element", "");
@@ -695,35 +720,11 @@ bool in_plain_string(str text, i64 off) {
         add_user_members(&it, p);
         return it;
     }
-    const auto open = enclosing_open(text, ps);
     const auto prev = prev_sig(text, ps);
-    if (open >= 0 && text[open] == '{' && (prev == '{' || prev == ',')) {
-        auto e = open;
-        while (e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t')) { e -= 1; }
-        auto s = e;
-        while (s > 0 && (is_idc(text[s - 1]) || text[s - 1] == '.')) { s -= 1; }
-        const auto tn = text[s..e];
-        if (tn.len > 0 && is_upper(last_segment(tn)[0])) {
-            const auto sym = p.flat.get(tn) catch null;
-            if (sym != null && sym.sd != null) {
-                for (auto f : sym.sd.fields) { it.add(f.name, 5, type_str(a, f.ty), ""); }
-                return it;
-            }
-        }
-    }
-    auto lit_brace = false;
-    if (open >= 0 && text[open] == '{') {
-        auto e = open;
-        while (e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t')) { e -= 1; }
-        auto st = e;
-        while (st > 0 && (is_idc(text[st - 1]) || text[st - 1] == '.')) { st -= 1; }
-        lit_brace = e > st && is_upper(last_segment(text[st..e])[0]);
-    }
-    const auto in_expr_brace = lit_brace && prev == ':';
-    const auto types_only = (prev == ':' && !in_expr_brace) || prev == '*' || prev == '!' || prev == '?';
+    const auto types_only = prev == '!' || prev == '?';
     add_globals(&it, p, p.near, types_only);
     return it;
-};
+}
 
 !str completion(Allocator a, Project* p, str path, str text, i64 off) {
     const auto it = candidates(a, p, path, text, off)?;
@@ -784,39 +785,38 @@ bool in_plain_string(str text, i64 off) {
         if (e.l.k == .Ident) {
             const auto ts = w.find(e.l.name);
             if (ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum)) { ms = w.member(p.mk_name(e.l.name) catch null, e.name); }
-        };
+        }
         if (ms == null) {
             ms = w.member(w.infer(e.l), e.name);
             skip_self = true;
         }
         if (ms != null && ms.k == .Method) { fd = ms.fd };
-    };
+    }
     if (fd == null) { return "null"; }
-    if (skip_self && (fd.params.len == 0 || fd.params.get(0).name != "self")) { skip_self = false; }
+    if (skip_self && (fd.params.len == 0 || fd.params.get(0).name != "this")) { skip_self = false; }
     auto label = List<u8>::init(a);
-    put(&label, "fn ");
+    if (fd.ret != null) { put_type(&label, fd.ret); } else { put(&label, "void"); }
+    put(&label, " ");
     put(&label, last_segment(fd.name));
     put_generics(&label, fd.type_params, fd.constraints);
     put(&label, "(");
     auto ranges = List<i64>::init(a);
     auto first = true;
     for (auto pr : fd.params) {
-        if (skip_self && pr.name == "self") { continue; }
+        if (skip_self && pr.name == "this") { continue; }
         if (!first) { put(&label, ", "); }
         first = false;
         ranges.push(label.len)?;
-        put(&label, pr.name);
-        if (!(pr.name == "self" && pr.ty != null && pr.ty.k == .Ptr && pr.ty.elem.k == .Name && pr.ty.elem.name == "Self")) {
-            put(&label, ": ");
+        if (pr.name == "this" && pr.ty != null && pr.ty.k == .Ptr && pr.ty.elem.k == .Name && pr.ty.elem.name == "Self") {
+            put(&label, "this");
+        } else {
             put_type(&label, pr.ty);
+            put(&label, " ");
+            put(&label, pr.name);
         }
         ranges.push(label.len)?;
     }
     put(&label, ")");
-    if (fd.ret != null) {
-        put(&label, " ");
-        put_type(&label, fd.ret);
-    }
     auto sw = new_jw(a);
     sw.obj()?;
     sw.key("signatures")?;

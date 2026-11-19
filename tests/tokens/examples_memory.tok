@@ -71,7 +71,6 @@
 8 .question ?
 8 .semi ;
 8 .rbrace }
-8 .semi \n
 9 .ident println
 9 .lparen (
 9 .str_lit xs = {xs.slice()}, buffer used {fb.used}/{mem.len}
@@ -152,7 +151,7 @@
 20 .str_lit 
 20 .semi ;
 20 .rbrace }
-20 .semi \n
+20 .semi ;
 21 .ident println
 21 .lparen (
 21 .str_lit r.len = {r.len}
@@ -200,9 +199,7 @@
 28 .kw_break break
 28 .semi ;
 29 .rbrace }
-29 .semi \n
 30 .rbrace }
-30 .semi \n
 31 .ident fb
 31 .dot .
 31 .ident reset
@@ -215,6 +212,4 @@
 32 .rparen )
 32 .semi ;
 33 .rbrace }
-33 .semi \n
-34 .semi 
 34 .eof 

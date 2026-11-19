@@ -46,7 +46,6 @@ struct Expr {
     Stmt* handler;          // Catch
     List<MatchArm> arms;    // Match
     FnDecl* func;           // Closure
-    bool zero_rest;         // StructLit `..`
     bool has_name;          // Catch |e|
     i64 name_off;           // Catch |e| position
 }

@@ -25,7 +25,7 @@ enum Color { Red, Green, Blue }
     const auto r = div(1, 0) catch |e| {
         println("caught {e}");
         -1;
-    }
+    };
     println("q={q} r={r}");
 
     const auto c = Color::Green;

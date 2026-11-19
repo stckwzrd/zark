@@ -17,7 +17,6 @@
 7 .ident Var
 7 .semi ;
 8 .rbrace }
-8 .semi \n
 10 .kw_struct struct
 10 .ident Bin
 10 .lbrace {
@@ -30,7 +29,6 @@
 10 .ident r
 10 .semi ;
 10 .rbrace }
-10 .semi \n
 12 .ident i64
 12 .ident eval
 12 .lparen (
@@ -127,12 +125,10 @@
 18 .ident x
 18 .semi ;
 19 .rbrace }
-19 .semi \n
 20 .kw_return return
 20 .int_lit 0
 20 .semi ;
 21 .rbrace }
-21 .semi \n
 23 .ident void
 23 .ident show
 23 .lparen (
@@ -182,7 +178,6 @@
 27 .rparen )
 27 .semi ;
 27 .rbrace }
-27 .semi \n
 28 .dot .
 28 .ident Add
 28 .lparen (
@@ -220,7 +215,6 @@
 28 .rparen )
 28 .semi ;
 28 .rbrace }
-28 .semi \n
 29 .dot .
 29 .ident Mul
 29 .lparen (
@@ -248,11 +242,8 @@
 29 .rparen )
 29 .semi ;
 29 .rbrace }
-29 .semi \n
 30 .rbrace }
-30 .semi \n
 31 .rbrace }
-31 .semi \n
 33 .bang !
 33 .ident Expr
 33 .star *
@@ -288,7 +279,6 @@
 36 .ident p
 36 .semi ;
 37 .rbrace }
-37 .semi ;
 39 .bang !
 39 .ident void
 39 .ident main
@@ -470,7 +460,6 @@
 54 .rparen )
 54 .semi ;
 54 .rbrace }
-54 .semi \n
 55 .ident println
 55 .lparen (
 55 .str_lit as value: {*two}
@@ -506,6 +495,4 @@
 59 .rparen )
 59 .semi ;
 60 .rbrace }
-60 .semi \n
-61 .semi 
 61 .eof 

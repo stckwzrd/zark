@@ -252,7 +252,7 @@ struct Asm {
             const auto target = this->labels.get(f.label) catch {
                 eprintln("native: unknown label '{f.label}'");
                 return error.CompileFailed;
-            }
+            };
             patch_u32(&this->code, f.off, target - (f.off + 4));
         }
         this->fixups.clear();
@@ -262,7 +262,7 @@ struct Asm {
 
 Asm new_asm(Allocator a) {
     return Asm{ .code = List<u8>::init(a), .relocs = List<Reloc>::init(a), .fixups = List<Fixup>::init(a), .labels = Map<i64>::init(a) };
-};
+}
 
 !void put_u32(List<u8>*buf, i64 v) {
     buf.push((v & 0xff) as u8)?;
@@ -475,7 +475,7 @@ const auto SEC_DATA = 3;
 
 ObjFile new_obj(Allocator a) {
     return ObjFile{ .a = a, .text = new_asm(a), .rodata = List<u8>::init(a), .data = List<u8>::init(a), .data_relocs = List<Reloc>::init(a), .syms = List<Sym>::init(a), .sym_index = Map<i64>::init(a) };
-};
+}
 
 !void align_buf(List<u8>*buf, i64 al) {
     while (buf.len % al != 0) { buf.push(0)?; }

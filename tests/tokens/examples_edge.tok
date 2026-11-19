@@ -8,7 +8,7 @@
 1 .ident South
 1 .comma ,
 1 .ident West
-1 .semi \n
+1 .semi ;
 2 .ident Dir
 2 .ident turn
 2 .lparen (
@@ -46,15 +46,12 @@
 7 .ident North
 7 .semi ;
 8 .rbrace }
-8 .semi \n
 9 .kw_return return
 9 .dot .
 9 .ident North
 9 .semi ;
 10 .rbrace }
-10 .semi ;
 11 .rbrace }
-11 .semi \n
 13 .kw_struct struct
 13 .ident Stack
 13 .lt <
@@ -86,7 +83,6 @@
 14 .question ?
 14 .semi ;
 14 .rbrace }
-14 .semi \n
 15 .bang !
 15 .ident T
 15 .ident pop
@@ -103,9 +99,7 @@
 15 .rparen )
 15 .semi ;
 15 .rbrace }
-15 .semi \n
 16 .rbrace }
-16 .semi \n
 18 .bang !
 18 .ident void
 18 .ident main
@@ -167,7 +161,6 @@
 23 .rparen )
 23 .semi ;
 23 .rbrace }
-23 .semi \n
 25 .kw_const const
 25 .ident f64
 25 .lbracket [
@@ -228,7 +221,6 @@
 31 .rparen )
 31 .semi ;
 31 .rbrace }
-31 .semi \n
 32 .ident println
 32 .lparen (
 32 .str_lit after 5 turns: {d}
@@ -296,7 +288,7 @@
 38 .str_lit none
 38 .semi ;
 38 .rbrace }
-38 .semi \n
+38 .semi ;
 39 .ident println
 39 .lparen (
 39 .ident empty
@@ -330,7 +322,6 @@
 42 .rparen )
 42 .semi ;
 42 .rbrace }
-42 .semi \n
 43 .ident println
 43 .lparen (
 43 .str_lit 
@@ -361,6 +352,4 @@
 47 .rparen )
 47 .semi ;
 48 .rbrace }
-48 .semi \n
-49 .semi 
 49 .eof 

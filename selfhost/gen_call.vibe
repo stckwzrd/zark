@@ -37,8 +37,9 @@ bool all_bound(List<str> tps, Env env) {
         t.name = e.name;
         t.args = List<TypeExpr*>::init(this->a);
         return t;
-    };
+    }
     if (e.k == .Index) {
+        if (e.op != .lt) { this->err(e.line); eprintln("type arguments are written with '<...>', as in 'List<i64>'"); return error.CompileFailed; }
         const auto base = this->expr_to_type_expr(e.l)?;
         if (base == null) { return null; }
         const auto t = this->a.create<TypeExpr>()?;
@@ -51,7 +52,7 @@ bool all_bound(List<str> tps, Env env) {
             t.args.push(at)?;
         }
         return t;
-    };
+    }
     if (e.k == .Unary && e.op == .star) {
         const auto inner = this->expr_to_type_expr(e.l)?;
         if (inner == null) { return null; }
@@ -62,17 +63,17 @@ bool all_bound(List<str> tps, Env env) {
         return t;
     }
     return null;
-};
+}
 
 /// is `e` syntactically naming a type? (`Point`, `List[i32]`, `Self`)
 bool Gen::names_type(Expr* e) {
     if (e.k == .Ident) {
         if (this->has_var(e.name)) { return false; }
         return this->structs.has(e.name) || this->enums.has(e.name) || this->aliases.has(e.name) || (e.name == "Self" && this->env.has("Self"));
-    };
+    }
     if (e.k == .Index) {
         return e.l.k == .Ident && !this->has_var(e.l.name) && this->structs.has(e.l.name);
-    };
+    }
     return false;
 }
 
@@ -95,10 +96,11 @@ bool Gen::names_type(Expr* e) {
         if (!this->consts.has(name)) { this->err(e.line); eprintln("unknown function '{name}'{this->hint(name, this->visible_names())}"); return error.CompileFailed; }
     }
     if (callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field)) {
+        if (callee.op != .lt) { this->err(e.line); eprintln("type arguments are written with '<...>', as in 'max<i64>(a, b)'"); return error.CompileFailed; }
         if (callee.l.k == .Field) {
             const auto targs = this->type_args(callee.args, e.line)?;
             return this->gen_field_call(callee.l, e.args, targs, expected, e.line);
-        };
+        }
         if (this->fns.has(callee.l.name)) {
             const auto targs = this->type_args(callee.args, e.line)?;
             return this->call_decl(this->fns.get(callee.l.name)?, this->new_env()?, null, e.args, targs, expected, e.line);
@@ -111,10 +113,10 @@ bool Gen::names_type(Expr* e) {
         if (!is_union(t)) { this->err(e.line); eprintln("'.{callee.name}(...)' used where '{this->type_name(t)?}' is expected"); return error.CompileFailed; }
         if (e.args.len != 1) { this->err(e.line); eprintln("a union variant takes exactly one payload"); return error.CompileFailed; }
         return this->make_union(t, callee.name, e.args.get(0), e.line);
-    };
+    }
     const auto fv = this->gen_expr(callee, null)?;
     return this->call_indirect(fv, e.args, e.line);
-};
+}
 
 !Value Gen::gen_field_call(Expr* f, List<Expr*> args, List<Type*> explicit, Type* expected, i64 line) {
     if (this->names_type(f.l)) {
@@ -147,12 +149,12 @@ bool Gen::names_type(Expr* e) {
                 const auto fp = this->gep_field(recv.ty, recv.v, idx)?;
                 const auto fv = this->load(fty, fp)?;
                 return this->call_indirect(fv, args, line);
-            };
+            }
         }
     }
     this->err(line); eprintln("'{this->type_name(recv.ty)?}' has no method '{f.name}'");
     return error.CompileFailed;
-};
+}
 
 !Value Gen::call_indirect(Value fv, List<Expr*> args, i64 line) {
     if (fv.ty.k != .Func && fv.ty.k != .Closure) { this->err(line); eprintln("'{this->type_name(fv.ty)?}' is not callable"); return error.CompileFailed };
@@ -163,7 +165,7 @@ bool Gen::names_type(Expr* e) {
     if (sig.k == .Closure) {
         target = this->extract(fv, 0, this->t_ptr_u8)?.v;
         sprint(&argtxt, "ptr {this->extract(fv, 1, this->t_ptr_u8)?.v}")?;
-    };
+    }
     for (auto [i, x] : args) {
         const auto pt = sig.params.get(i);
         const auto v = this->coerce(this->gen_expr(x, pt)?, pt, x.line)?;
@@ -173,28 +175,28 @@ bool Gen::names_type(Expr* e) {
     if (sig.ret.k == .Void) {
         sprint(this->ins()?, "  call void {target}({argtxt.slice()})\n")?;
         return Value{ .ty = this->t_void, .v = "" };
-    };
+    }
     const auto t = this->tmp()?;
     sprint(this->ins()?, "  {t} = call {this->llty(sig.ret)?} {target}({argtxt.slice()})\n")?;
     return Value{ .ty = sig.ret, .v = t };
-};
+}
 
 !Env Gen::recv_env(FnDecl* md, Type* t) {
     const auto env = this->new_env()?;
     env.put("Self", t)?;
     if (t.k == .Strct) {
         const auto args = t.si.args;
-        if (md.receiver_params.len != args.len) { this->err(md.line); eprintln("impl for '{t.si.decl.name}' must list {args.len} type parameter(s)"); return error.CompileFailed; }
+        if (md.receiver_params.len != args.len) { this->err(md.line); eprintln("out-of-class method of '{t.si.decl.name}' must list {args.len} type parameter(s)"); return error.CompileFailed; }
         for (auto [i, tp] : md.receiver_params) { env.put(tp, args.get(i))?; }
-    };
+    }
     return env;
-};
+}
 
 !Value Gen::call_method(FnDecl* md, Addr recv, List<Expr*> args, List<Type*> explicit, Type* expected, i64 line) {
     const auto env = this->recv_env(md, recv.ty)?;
     if (md.params.len == 0) { this->err(line); eprintln("'{md.name}' is a static method; call it as Type.{md.name}()"); return error.CompileFailed; }
     return this->call_decl(md, env, &recv, args, explicit, expected, line);
-};
+}
 
 !void Gen::unify(TypeExpr* te, Type* actual, List<str> tps, Env env) {
     match te.k {
@@ -238,13 +240,13 @@ bool Gen::names_type(Expr* e) {
             na.push(this->mk_pre(first, line)?)?;
             return this->call_decl_core(decl, base_env, recv, na, explicit, expected, line);
         }
-    };
+    }
     const auto fv = this->gen_fmt(args, nfixed, first)?;
     auto na = List<Expr*>::init(this->a);
     for (auto i : 0..nfixed) { na.push(args.get(i))?; }
     na.push(this->mk_pre(fv, line)?)?;
     return this->call_decl_core(decl, base_env, recv, na, explicit, expected, line);
-};
+}
 
 !Value Gen::call_decl_core(FnDecl* decl, Env base_env, Addr* recv, List<Expr*> args, List<Type*> explicit, Type* expected, i64 line) {
     auto off = 0;
@@ -342,11 +344,11 @@ bool Gen::names_type(Expr* e) {
     if (fi.ret.k == .Void) {
         sprint(this->ins()?, "  call {fnty} @{fi.llname}({argtxt.slice()})\n")?;
         return Value{ .ty = this->t_void, .v = "" };
-    };
+    }
     const auto t = this->tmp()?;
     sprint(this->ins()?, "  {t} = call {fnty} @{fi.llname}({argtxt.slice()})\n")?;
     return Value{ .ty = fi.ret, .v = t };
-};
+}
 
 !Value Gen::c_promote(Value v, i64 line) {
     if (v.ty.k == .Int && v.ty.bits < 32) {
@@ -358,4 +360,4 @@ bool Gen::names_type(Expr* e) {
     if (v.ty.k == .Slice) { this->err(line); eprintln("slices cannot be passed to C varargs; pass .ptr (and .len) explicitly"); return error.CompileFailed };
     if (v.ty.k == .Null) { return Value{ .ty = this->t_ptr_u8, .v = "null" } };
     return v;
-};
+}

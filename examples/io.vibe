@@ -11,6 +11,6 @@
     println("exists: {file_exists(".vibe-cache/vibe_io.txt")} {file_exists("/nope")}");
     const auto code = run(a, ["sh", "-c", "echo hello from child; exit 3"])?;
     println("child exit = {code}");
-    const auto missing = read_file(a, "/nope/x") catch |e| { println("read missing: {e}"); ""; }
+    const auto missing = read_file(a, "/nope/x") catch |e| { println("read missing: {e}"); ""; };
     println(missing.len, "\x41\x42");
 }

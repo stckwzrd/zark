@@ -79,7 +79,6 @@
 10 .ident z
 10 .semi ;
 10 .rbrace }
-10 .semi \n
 11 .kw_extern extern
 11 .ident f64
 11 .ident vec3_dot
@@ -93,5 +92,4 @@
 11 .ident b
 11 .rparen )
 11 .semi ;
-12 .semi 
 12 .eof 

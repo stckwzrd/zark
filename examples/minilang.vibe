@@ -56,7 +56,7 @@ struct P {
         const auto p = this->a.create<Node>()?;
         *p = n;
         return p;
-    };
+    }
 
     !Node* primary() {
         const auto c = this->peek();
@@ -95,7 +95,7 @@ struct P {
             return this->node(.Call(CallNode{ .name = name, .args = args }));
         }
         return this->node(.Var(name));
-    };
+    }
 
     !Node* term() {
         auto l = this->primary()?;
@@ -106,7 +106,7 @@ struct P {
             l = this->node(.Bin(BinOp{ .op = op, .l = l, .r = r }))?;
         }
         return l;
-    };
+    }
 
     !Node* expr() {
         auto l = this->term()?;
@@ -117,7 +117,7 @@ struct P {
             l = this->node(.Bin(BinOp{ .op = op, .l = l, .r = r }))?;
         }
         return l;
-    };
+    }
 }
 
 struct Interp {
@@ -167,7 +167,7 @@ struct Interp {
     }
 
     !void run(str src) {
-        auto p = P{ src: src, i: 0, a: this->a; }
+        auto p = P{ .src = src, .i = 0, .a = this->a };
         auto empty = Map<i64>::init(this->a);
         while (p.peek() != 0) {
             if (p.keyword("let ")) {

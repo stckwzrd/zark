@@ -12,18 +12,18 @@ Type* lit_target(Type* t) {
     if (t == null) { return null; }
     if (t.k == .Errun) { return t.elem };
     return t;
-};
+}
 
 Type* variant_target(Type* t, str name) {
     if (t != null && is_option(t) && field_index(t.si, name) < 0) { return t.si.fields.get(0).ty; }
     return t;
-};
+}
 
 Type* num_target(Type* t) {
     const auto lt = lit_target(t);
     if (lt != null && is_option(lt)) { return lt.si.fields.get(0).ty; }
     return lt;
-};
+}
 
 bool is_option(Type* t) { return is_union(t) && t.si.decl.name == "Option"; }
 
@@ -34,7 +34,7 @@ bool can_coerce(Type* from, Type* to) {
         if (from.signed == to.signed) { return to.bits >= from.bits; }
         if (!from.signed && to.signed) { return to.bits > from.bits; }
         return false;
-    };
+    }
     if (from.k == .Null && (to.k == .Ptr || to.k == .Func)) { return true; }
     if (from.k == .Ptr && to.k == .Ptr) { return from.elem.k == .Void || to.elem.k == .Void };
     if (to.k == .Errun) { return from.k == .ErrVal || can_coerce(from, to.elem) };
@@ -45,14 +45,14 @@ bool can_coerce(Type* from, Type* to) {
     const auto v = this->gen_expr(e, this->t_bool)?;
     if (v.ty.k != .Bool) { this->err(e.line); eprintln("condition must be bool, got '{this->type_name(v.ty)?}'"); return error.CompileFailed };
     return v;
-};
+}
 
 !Type* Gen::resolve_type_at(TypeExpr* te, i64 line) {
     return this->resolve_type(te, this->env) catch |e| {
         eprintln("{this->file}:{line}: note: while resolving this type");
         return e;
     }
-};
+}
 
 !Value Gen::gen_expr(Expr* e, Type* expected) {
     const auto saved_line = this->at_line;
@@ -63,7 +63,7 @@ bool can_coerce(Type* from, Type* to) {
     this->at_line = saved_line;
     this->at_off = saved_off;
     return v;
-};
+}
 
 !Value Gen::gen_expr_at(Expr* e, Type* expected) {
     match e.k {
@@ -210,7 +210,7 @@ bool can_coerce(Type* from, Type* to) {
                 const auto ev = this->enum_value(v.ty, e.name, e.line)?;
                 sprint(this->ins()?, "  {t} = icmp eq i32 {v.v}, {ev.v}\n")?;
                 return Value{ .ty = this->t_bool, .v = t };
-            };
+            }
             if (!is_union(v.ty)) { this->err(e.line); eprintln("'is' needs an enum or union, got '{this->type_name(v.ty)?}'"); return error.CompileFailed; }
             const auto idx = field_index(v.ty.si, e.name);
             if (idx < 0) { this->err(e.line); eprintln("union '{v.ty.si.display}' has no variant '{e.name}'{this->hint(e.name, this->field_names(v.ty.si))}"); return error.CompileFailed; }
@@ -220,7 +220,7 @@ bool can_coerce(Type* from, Type* to) {
         }
     }
     return error.CompileFailed;
-};
+}
 
 !str Gen::unum(u64 n) {
     auto b = this->sb();
@@ -234,7 +234,7 @@ bool can_coerce(Type* from, Type* to) {
             if (e.l.k == .IntLit) {
                 const auto lt = num_target(expected);
                 if (lt != null && lt.k == .Float) { return Value{ .ty = lt, .v = this->float_const(0.0 - (e.l.ival as f64), lt.bits)? } };
-            };
+            }
             const auto v = this->gen_expr(e.l, expected)?;
             const auto t = this->tmp()?;
             if (v.ty.k == .Int) {
@@ -271,7 +271,7 @@ bool can_coerce(Type* from, Type* to) {
         }
     }
     return error.CompileFailed;
-};
+}
 
 !Value Gen::gen_struct_lit(Expr* e) {
     const auto t = this->resolve_type_at(e.ty, e.line)?;
@@ -289,13 +289,8 @@ bool can_coerce(Type* from, Type* to) {
         const auto v = this->coerce(this->gen_expr(fi.value, fty)?, fty, e.line)?;
         cur = this->insert(t, cur, v, idx)?;
     }
-    if (!e.zero_rest) {
-        for (auto [i, gv] : given) {
-            if (!gv) { this->err(e.line); eprintln("missing field '{si.fields.get(i).name}' in '{si.display}' literal (write '..' to zero the remaining fields)"); return error.CompileFailed; }
-        }
-    }
     return Value{ .ty = t, .v = cur };
-};
+}
 
 !Value Gen::gen_array_lit(Expr* e, Type* expected) {
     Type* elem_t = null;
@@ -305,7 +300,7 @@ bool can_coerce(Type* from, Type* to) {
     if (lt != null && lt.k == .Slice) {
         elem_t = lt.elem;
         want_slice = true;
-    };
+    }
     if (e.args.len == 0 && elem_t == null) { this->err(e.line); eprintln("cannot infer type of empty array"); return error.CompileFailed; }
     auto vals = List<Value>::init(this->a);
     for (auto el : e.args) {
@@ -327,7 +322,7 @@ bool can_coerce(Type* from, Type* to) {
         return Value{ .ty = st, .v = s2 };
     }
     return Value{ .ty = at, .v = cur };
-};
+}
 
 /// Resolve a type written in expression position; a bare generic name takes its args from `expected`.
 !Type* Gen::type_from_expr(Expr* te_expr, Type* expected, str member, i64 line) {
@@ -335,7 +330,7 @@ bool can_coerce(Type* from, Type* to) {
         const auto sd = this->structs.get(te_expr.name)?;
         if (sd.type_params.len > 0) {
             const auto ex = lit_target(expected);
-            if (ex == null) { this->err(line); eprintln("cannot infer type arguments for '{sd.name}'; write {sd.name}[T].{member}"); return error.CompileFailed; }
+            if (ex == null) { this->err(line); eprintln("cannot infer type arguments for '{sd.name}'; write {sd.name}<T>::{member}"); return error.CompileFailed; }
             if (ex.k != .Strct || ex.si.decl != sd) { this->err(line); eprintln("cannot infer type arguments for '{sd.name}' from '{this->type_name(ex)?}'"); return error.CompileFailed; }
             return ex;
         }
@@ -343,7 +338,7 @@ bool can_coerce(Type* from, Type* to) {
     const auto te = this->expr_to_type_expr(te_expr)?;
     if (te == null) { this->err(line); eprintln("expected a type"); return error.CompileFailed; }
     return this->resolve_type_at(te, line);
-};
+}
 
 !Value Gen::gen_closure(Expr* e) {
     const auto fd = e.func;
@@ -382,7 +377,7 @@ bool can_coerce(Type* from, Type* to) {
     const auto a = this->insert(t, "zeroinitializer", Value{ .ty = this->t_ptr_u8, .v = fnptr.slice() }, 0)?;
     const auto b = this->insert(t, a, Value{ .ty = this->t_ptr_u8, .v = ctx }, 1)?;
     return Value{ .ty = t, .v = b };
-};
+}
 
 !Value Gen::union_of(Type* t, i64 idx, Value payload) {
     const auto slot = this->alloca(t, "u")?;
@@ -393,13 +388,13 @@ bool can_coerce(Type* from, Type* to) {
         this->store(payload, pp)?;
     }
     return this->load(t, slot);
-};
+}
 
 !Value Gen::union_payload(Value v, Type* vt) {
     const auto slot = this->spill(v)?.v;
     const auto pp = this->gep_field(v.ty, slot, 1)?;
     return this->load(vt, pp);
-};
+}
 
 !Value Gen::make_union(Type* t, str variant, Expr* payload, i64 line) {
     const auto si = t.si;
@@ -417,7 +412,7 @@ bool can_coerce(Type* from, Type* to) {
         this->store(v, pp)?;
     }
     return this->load(t, slot);
-};
+}
 
 !Value Gen::enum_value(Type* t, str name, i64 line) {
     for (auto [i, v] : t.ei.decl.variants) {
@@ -425,7 +420,7 @@ bool can_coerce(Type* from, Type* to) {
     }
     this->err(line); eprintln("enum '{t.ei.decl.name}' has no variant '{name}'{this->hint(name, t.ei.decl.variants)}");
     return error.CompileFailed;
-};
+}
 
 !Value Gen::gen_catch(Expr* e, Type* expected) {
     Type* ex = null;
@@ -451,7 +446,7 @@ bool can_coerce(Type* from, Type* to) {
     auto okv = Value{ .ty = this->t_void, .v = "" };
     if (vt.k != .Void) {
         if (e.k == .Orelse) { okv = this->union_payload(v, vt)? } else { okv = this->extract(v, 1, vt)?; }
-    };
+    }
     const auto ok_lbl = this->cur_label;
     this->br(lend)?;
     this->label(lerr)?;
@@ -460,7 +455,7 @@ bool can_coerce(Type* from, Type* to) {
         const auto slot = this->alloca(this->t_errval, e.name)?;
         this->store(Value{ .ty = this->t_errval, .v = tag.v }, slot)?;
         this->declare_var(e.name, Var{ .ptr = slot, .ty = this->t_errval, .mutable = false }, e.line)?;
-    };
+    }
     const auto h = e.handler;
     auto has_errv = false;
     auto errv = Value{ .ty = null, .v = "" };
@@ -490,16 +485,16 @@ bool can_coerce(Type* from, Type* to) {
     const auto t = this->tmp()?;
     sprint(this->ins()?, "  {t} = phi {this->llty(vt)?} [ {okv.v}, %{ok_lbl} ], [ {errv.v}, %{err_lbl} ]\n")?;
     return Value{ .ty = vt, .v = t };
-};
+}
 
 // ------------------------------------------------------------------ addresses
 !Addr Gen::deref_agg(Addr a) {
     if (a.ty.k == .Ptr) {
         const auto p = this->load(a.ty, a.v)?;
         return Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
-    };
+    }
     return a;
-};
+}
 
 /// a bare field name inside a method of a `this`-style struct means this->name
 !Expr* Gen::member_expr(Expr* e) {
@@ -521,7 +516,7 @@ bool can_coerce(Type* from, Type* to) {
     f.off = e.off;
     f.name_off = e.off;
     return f;
-};
+}
 
 !Addr Gen::gen_addr(Expr* e) {
     if (e.k == .Ident && this->has_var(e.name)) {
@@ -531,7 +526,7 @@ bool can_coerce(Type* from, Type* to) {
     if (e.k == .Ident) {
         const auto mx = this->member_expr(e)?;
         if (mx != null) { return this->gen_addr(mx); }
-    };
+    }
     if (e.k == .Field) {
         if (e.l.k == .Ident && !this->has_var(e.l.name) && this->enums.has(e.l.name)) {
             const auto et = this->mk(.Enm)?;
@@ -545,7 +540,7 @@ bool can_coerce(Type* from, Type* to) {
             if (idx < 0) { this->err(e.line); eprintln("'{si.display}' has no field '{e.name}'{this->hint(e.name, this->field_names(si))}"); return error.CompileFailed; }
             const auto t = this->gep_field(base.ty, base.v, idx)?;
             return Addr{ .ty = si.fields.get(idx).ty, .v = t, .imm = base.imm };
-        };
+        }
         if (base.ty.k == .Slice) {
             auto idx = 0;
             auto ft = this->t_i64;
@@ -560,16 +555,16 @@ bool can_coerce(Type* from, Type* to) {
             const auto t = this->tmp()?;
             sprint(this->ins()?, "  {t} = getelementptr {{ ptr, i64 }}, ptr {base.v}, i32 0, i32 {idx}\n")?;
             return Addr{ .ty = ft, .v = t, .imm = base.imm };
-        };
+        }
         if (base.ty.k == .Array) {
             if (e.name == "len") { return this->spill(Value{ .ty = this->t_i64, .v = this->num(base.ty.len as i64)? }); }
             if (e.name == "ptr") { return this->spill(Value{ .ty = this->mk_elem(.Ptr, base.ty.elem)?, .v = base.v }); }
             this->err(e.line); eprintln("arrays have only .len and .ptr");
             return error.CompileFailed;
-        };
+        }
         this->err(e.line); eprintln("'{this->type_name(base.ty)?}' has no field '{e.name}'");
         return error.CompileFailed;
-    };
+    }
     if (e.k == .Index) {
         if (e.args.len != 1) { this->err(e.line); eprintln("index takes one argument"); return error.CompileFailed; }
         auto base = this->gen_addr(e.l)?;
@@ -578,7 +573,7 @@ bool can_coerce(Type* from, Type* to) {
             const auto p = this->load(base.ty, base.v)?;
             ptr_elem = base.ty.elem;
             base = Addr{ .ty = base.ty, .v = p.v, .imm = false };
-        };
+        }
         const auto iv = this->to_i64(this->gen_expr(e.args.get(0), this->t_i64)?, e.line)?;
         const auto t = this->tmp()?;
         if (ptr_elem != null) {
@@ -589,7 +584,7 @@ bool can_coerce(Type* from, Type* to) {
             this->bounds_check(iv.v, this->num(base.ty.len as i64)?, e.line)?;
             sprint(this->ins()?, "  {t} = getelementptr {this->llty(base.ty)?}, ptr {base.v}, i64 0, i64 {iv.v}\n")?;
             return Addr{ .ty = base.ty.elem, .v = t, .imm = base.imm };
-        };
+        }
         if (base.ty.k == .Slice) {
             const auto sv = this->load(base.ty, base.v)?;
             const auto p = this->extract(sv, 0, this->t_ptr_u8)?;
@@ -597,24 +592,24 @@ bool can_coerce(Type* from, Type* to) {
             this->bounds_check(iv.v, l.v, e.line)?;
             sprint(this->ins()?, "  {t} = getelementptr {this->llty(base.ty.elem)?}, ptr {p.v}, i64 {iv.v}\n")?;
             return Addr{ .ty = base.ty.elem, .v = t, .imm = false };
-        };
+        }
         this->err(e.line); eprintln("cannot index '{this->type_name(base.ty)?}'");
         return error.CompileFailed;
-    };
+    }
     if (e.k == .Unary && e.op == .star) {
         const auto v = this->gen_expr(e.l, null)?;
         if (v.ty.k != .Ptr) { this->err(e.line); eprintln("cannot dereference '{this->type_name(v.ty)?}'"); return error.CompileFailed };
         return Addr{ .ty = v.ty.elem, .v = v.v, .imm = false };
     }
     return this->spill(this->gen_expr(e, null)?);
-};
+}
 
 !Addr Gen::spill(Value v) {
     if (v.ty.k == .Void) { this->err(0); eprintln("void value used"); return error.CompileFailed };
     const auto slot = this->alloca(v.ty, "tmp")?;
     this->store(v, slot)?;
     return Addr{ .ty = v.ty, .v = slot, .imm = true };
-};
+}
 
 !Value Gen::to_i64(Value v, i64 line) {
     if (v.ty.k != .Int) { this->err(line); eprintln("index must be an integer, got '{this->type_name(v.ty)?}'"); return error.CompileFailed };
@@ -624,7 +619,7 @@ bool can_coerce(Type* from, Type* to) {
     if (v.ty.signed) { op = "sext"; }
     sprint(this->ins()?, "  {t} = {op} {this->llty(v.ty)?} {v.v} to i64\n")?;
     return Value{ .ty = this->t_i64, .v = t };
-};
+}
 
 !void Gen::bounds_check(str idx, str len, i64 line) {
     if (!this->safety) { return; }
@@ -692,7 +687,7 @@ bool can_coerce(Type* from, Type* to) {
     const auto s1 = this->insert(st, "undef", Value{ .ty = this->t_ptr_u8, .v = np }, 0)?;
     const auto s2 = this->insert(st, s1, Value{ .ty = this->t_i64, .v = nl }, 1)?;
     return Value{ .ty = st, .v = s2 };
-};
+}
 
 // ------------------------------------------------------------------ operators
 !Value Gen::gen_binary(Tag op, Expr* le, Expr* re, Type* expected, i64 line) {
@@ -756,7 +751,7 @@ bool can_coerce(Type* from, Type* to) {
     }
     if (is_cmp) { return this->compare(op, l, r, line); }
     return this->arith(op, l, r, line);
-};
+}
 
 !Value Gen::coerce(Value v, Type* to, i64 line) {
     if (type_eq(v.ty, to)) { return v; }
@@ -767,7 +762,7 @@ bool can_coerce(Type* from, Type* to) {
         if (v.ty.signed) { op = "sext"; }
         sprint(this->ins()?, "  {t} = {op} {this->llty(v.ty)?} {v.v} to {this->llty(to)?}\n")?;
         return Value{ .ty = to, .v = t };
-    };
+    }
     if (to.k == .Func) { return Value{ .ty = to, .v = "null" } };
     if (to.k == .Ptr) { return Value{ .ty = to, .v = v.v } };
     if (is_option(to)) {
@@ -777,14 +772,14 @@ bool can_coerce(Type* from, Type* to) {
     if (to.k == .Errun) {
         if (v.ty.k == .ErrVal) {
             return Value{ .ty = to, .v = this->insert(to, "zeroinitializer", Value{ .ty = this->t_i32, .v = v.v }, 0)? };
-        };
+        }
         const auto iv = this->coerce(v, to.elem, line)?;
         if (to.elem.k == .Void) { return Value{ .ty = to, .v = "zeroinitializer" } };
         return Value{ .ty = to, .v = this->insert(to, "zeroinitializer", iv, 1)? };
-    };
+    }
     this->err(line); eprintln("type mismatch: expected '{this->type_name(to)?}', got '{this->type_name(v.ty)?}'");
     return error.CompileFailed;
-};
+}
 
 !Value Gen::arith(Tag op, Value l, Value r, i64 line) {
     const auto t = this->tmp()?;
@@ -825,7 +820,7 @@ bool can_coerce(Type* from, Type* to) {
     if (ins.len == 0) { this->err(line); eprintln("bad operator for '{this->type_name(l.ty)?}'"); return error.CompileFailed; }
     sprint(this->ins()?, "  {t} = {ins} {ty} {l.v}, {r.v}\n")?;
     return Value{ .ty = l.ty, .v = t };
-};
+}
 
 !Value Gen::compare(Tag op, Value l, Value r, i64 line) {
     const auto t = this->tmp()?;
@@ -870,7 +865,7 @@ bool can_coerce(Type* from, Type* to) {
         return error.CompileFailed;
     }
     return Value{ .ty = this->t_bool, .v = t };
-};
+}
 
 !Value Gen::cast(Value v, Type* to, i64 line) {
     if (type_eq(v.ty, to)) { return v; }
@@ -902,30 +897,30 @@ bool can_coerce(Type* from, Type* to) {
         if (src.signed) { op = "sitofp"; }
         sprint(this->ins()?, "  {t} = {op} {from} {v.v} to {tt}\n")?;
         return Value{ .ty = to, .v = t };
-    };
+    }
     if (src.k == .Float && to.k == .Int) {
         auto op = "fptoui";
         if (to.signed) { op = "fptosi"; }
         sprint(this->ins()?, "  {t} = {op} {from} {v.v} to {tt}\n")?;
         return Value{ .ty = to, .v = t };
-    };
+    }
     if (src.k == .Float && to.k == .Float) {
         auto op = "fptrunc";
         if (to.bits > src.bits) { op = "fpext"; }
         sprint(this->ins()?, "  {t} = {op} {from} {v.v} to {tt}\n")?;
         return Value{ .ty = to, .v = t };
-    };
+    }
     if ((src.k == .Ptr || src.k == .Null) && to.k == .Ptr) { return Value{ .ty = to, .v = v.v } };
     if (src.k == .Ptr && to.k == .Int) {
         sprint(this->ins()?, "  {t} = ptrtoint ptr {v.v} to {tt}\n")?;
         return Value{ .ty = to, .v = t };
-    };
+    }
     if (src.k == .Int && to.k == .Ptr) {
         sprint(this->ins()?, "  {t} = inttoptr {from} {v.v} to ptr\n")?;
         return Value{ .ty = to, .v = t };
-    };
+    }
     if (src.k == .Slice && to.k == .Ptr) { return this->extract(v, 0, to) };
     if (src.k == .Slice && to.k == .Slice) { return Value{ .ty = to, .v = v.v } };
     this->err(line); eprintln("cannot cast '{this->type_name(src)?}' to '{this->type_name(to)?}'");
     return error.CompileFailed;
-};
+}

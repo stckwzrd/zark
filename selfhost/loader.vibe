@@ -48,7 +48,7 @@ struct Loader {
         const auto src = read_file(this->a, path) catch |e| {
             eprintln("error: cannot read '{path}': {e}");
             return error.CompileFailed;
-        }
+        };
         this->load_source(src, path, prefix)?;
     }
 }
