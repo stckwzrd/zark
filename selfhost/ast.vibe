@@ -13,6 +13,7 @@ struct TypeExpr {
     len: *Expr               // Array length
     ret: *TypeExpr           // Func return (null = void)
     closure: bool            // Func written as fn[](...)
+    off: i64                 // Name position, -1 when synthesized
 }
 
 enum EK {
@@ -21,7 +22,7 @@ enum EK {
     Sizeof, Alignof, Is, Match, Orelse, Closure,
 }
 
-struct FieldInit { name: str, value: *Expr }
+struct FieldInit { name: str, value: *Expr, off: i64 }
 
 // interpolation part: kind 0 = literal text, 1 = expression, 2 = expression with format spec
 struct IPart { kind: i64, lit: str, e: *Expr, spec: str }

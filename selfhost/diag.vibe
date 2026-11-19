@@ -1,6 +1,7 @@
 // Prints the source line of an error with a caret under the offending column.
 
 var diag_prelude: str = ""
+var diag_files: Map[str] = Map[str]{ .. }
 
 fn line_start(src: str, off: i64) i64 {
     var i = off
@@ -21,7 +22,11 @@ fn line_start_of(src: str, line: i64) i64 {
 
 fn show_source(file: str, line: i64, off: i64) {
     var src = diag_prelude
-    if file != "<std>" { src = read_file(c_allocator(), file) catch return }
+    if diag_files.has(file) {
+        src = diag_files.get(file) catch return
+    } else if file != "<std>" {
+        src = read_file(c_allocator(), file) catch return
+    }
     var start = 0
     var shown = line
     if off >= 0 {

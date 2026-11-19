@@ -963,6 +963,52 @@ impl Gen {
 
     fn no_types(self) List[*Type] { return List[*Type].init(self.a) }
 
+    fn generate_check(self, root: str) !void {
+        for c in self.const_order {
+            if c.mutable { self.emit_global_var(c) catch self.flush_diag() }
+        }
+        for f in self.fn_order {
+            if f.file != root || f.type_params.len > 0 || f.is_extern || f.body == null { continue }
+            _ = self.inst_fn(f, self.new_env()?, self.no_types()) catch {
+                self.flush_diag()
+                continue
+            }
+        }
+        for f in self.tests {
+            _ = self.inst_fn(f, self.new_env()?, self.no_types()) catch {
+                self.flush_diag()
+                continue
+            }
+        }
+        for e in self.methods.entries {
+            if !e.used { continue }
+            let m = e.value
+            if m.file != root || m.type_params.len > 0 || m.receiver_params.len > 0 || m.body == null { continue }
+            let te = self.a.create[TypeExpr]()?
+            te.k = .Name
+            te.name = m.receiver
+            te.args = List[*TypeExpr].init(self.a)
+            let t = self.resolve_type(te, self.new_env()?) catch {
+                self.flush_diag()
+                continue
+            }
+            let env = self.recv_env(m, t) catch {
+                self.flush_diag()
+                continue
+            }
+            _ = self.inst_fn(m, env, self.no_types()) catch {
+                self.flush_diag()
+                continue
+            }
+        }
+        while self.pending.len > 0 {
+            let fi = self.pending.pop()?
+            if fi.generated { continue }
+            fi.generated = true
+            self.gen_function(fi) catch self.flush_diag()
+        }
+    }
+
     fn generate(self) !void {
         for c in self.const_order { if c.mutable { self.emit_global_var(c)? } }
         var main_inst: *FnInst = null

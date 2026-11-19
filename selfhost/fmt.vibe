@@ -147,7 +147,7 @@ impl Fmt {
             } else {
                 j = i + 2
                 while j + 1 < gap.len && !(gap[j] == '*' && gap[j + 1] == '/') { j += 1 }
-                j += 2
+                if j + 1 >= gap.len { j = gap.len } else { j += 2 }
             }
             var e = j
             while e > i && (gap[e - 1] == ' ' || gap[e - 1] == '\t' || gap[e - 1] == '\r') { e -= 1 }

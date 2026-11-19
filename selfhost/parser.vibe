@@ -108,6 +108,7 @@ impl Parser {
     fn te(self, k: TEK) !*TypeExpr {
         let t = self.a.create[TypeExpr]()?
         t.k = k
+        t.off = -1
         t.args = List[*TypeExpr].init(self.a)
         return t
     }
@@ -154,7 +155,7 @@ impl Parser {
             *f = FnDecl{
                 name: "test", type_params: self.strs(), params: List[Param].init(self.a), ret: ret,
                 body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(),
-                is_test: true, test_name: name, ..
+                is_test: true, test_name: name, name_off: t.off, ..
             }
             out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
             return
@@ -392,7 +393,9 @@ impl Parser {
             t.elem = self.parse_type()?
             return t
         }
-        let t = self.te_name(self.qualified(self.expect(.ident)?.text)?)?
+        let nt = self.expect(.ident)?
+        let t = self.te_name(self.qualified(nt.text)?)?
+        t.off = nt.off
         if self.at(.lbracket) {
             _ = self.advance()
             while !self.at(.rbracket) {
@@ -652,7 +655,11 @@ impl Parser {
     }
 
     fn expr_to_type(self, e: *Expr) !*TypeExpr {
-        if e.k == .Ident { return self.te_name(e.name) }
+        if e.k == .Ident {
+            let t = self.te_name(e.name)?
+            t.off = e.off
+            return t
+        }
         if e.k == .Index {
             let base = self.expr_to_type(e.l)?
             for a in e.args { base.args.push(self.expr_to_type(a)?)? }
@@ -734,7 +741,9 @@ impl Parser {
                 _ = self.advance()
                 let f = self.ex(.Field, t)?
                 f.l = e
-                f.name = self.expect(.ident)?.text
+                let mt = self.expect(.ident)?
+                f.name = mt.text
+                f.name_off = mt.off
                 e = f
             } else if t.tag == .question {
                 _ = self.advance()
@@ -753,7 +762,9 @@ impl Parser {
                 }
                 let x = self.ex(.Is, t)?
                 x.l = e
-                x.name = self.expect(.ident)?.text
+                let vt = self.expect(.ident)?
+                x.name = vt.text
+                x.name_off = vt.off
                 e = x
             } else if t.tag == .lbrace {
                 if self.no_struct || !is_type_like(e) { break }
@@ -767,10 +778,10 @@ impl Parser {
                         self.skip_semis()
                         break
                     }
-                    let fname = self.expect(.ident)?.text
+                    let fnt = self.expect(.ident)?
                     _ = self.expect(.colon)?
                     let v = self.parse_expr()?
-                    sl.fields.push(FieldInit{ name: fname, value: v })?
+                    sl.fields.push(FieldInit{ name: fnt.text, value: v, off: fnt.off })?
                     _ = self.eat(.comma)
                     self.skip_semis()
                 }
@@ -842,7 +853,9 @@ impl Parser {
             }
             .dot => {
                 let e = self.ex(.EnumLit, t)?
-                e.name = self.expect(.ident)?.text
+                let mt = self.expect(.ident)?
+                e.name = mt.text
+                e.name_off = mt.off
                 return e
             }
             .kw_error => {
