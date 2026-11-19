@@ -276,16 +276,41 @@ impl Parser {
             }
         }
         var flags = 0
+        var out_static = false
         while self.at(.kw_extern) || self.at(.kw_export) || self.at(.kw_static) {
             let k = self.advance().tag
             if k == .kw_extern { flags = 1 }
             if k == .kw_export { flags = 2 }
+            if k == .kw_static { out_static = true }
         }
         let is_const = self.eat(.kw_const)
         let ty = self.try_type()
         if ty == null { self.fail("expected declaration")? }
         if !self.at(.ident) { self.fail("expected a name after the type")? }
-        let nt = self.advance()
+        var nt = self.advance()
+        if self.at(.lt) {
+            var rps = self.strs()
+            var k = 1
+            while self.peek_at(k).tag == .ident && (self.peek_at(k + 1).tag == .comma || self.peek_at(k + 1).tag == .gt) {
+                rps.push(self.peek_at(k).text)?
+                if self.peek_at(k + 1).tag == .gt { break }
+                k += 2
+            }
+            if self.peek_at(k + 1).tag == .gt && self.peek_at(k + 2).tag == .coloncolon && self.peek_at(k + 3).tag == .ident && self.peek_at(k + 4).tag == .lparen {
+                self.pos += k + 3
+                let mt = self.advance()
+                let f = self.fn_rest(self.strs(), self.strs(), flags, ty, mt, nt.text, rps, nt.off, out_static)?
+                out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
+                return
+            }
+        }
+        if self.at(.coloncolon) && self.peek_at(1).tag == .ident && self.peek_at(2).tag == .lparen {
+            _ = self.advance()
+            let mt = self.advance()
+            let f = self.fn_rest(tps, cons, flags, ty, mt, nt.text, self.strs(), nt.off, out_static)?
+            out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
+            return
+        }
         if self.at(.lparen) && !is_const {
             let f = self.fn_rest(tps, cons, flags, ty, nt, "", self.strs(), 0, true)?
             out.push(Decl{ k: .Func, f: f, line: t.line, .. })?

@@ -453,7 +453,7 @@ impl Parser {
                 if !self.eat(.comma) { break }
             }
             _ = self.expect(.rbracket)?
-        } else if self.at(.lt) && !self.no_post {
+        } else if self.at(.lt) && (!self.no_post || is_upper(nt.text[0])) {
             _ = self.advance()
             while !self.at(.gt) && !self.at(.shr) {
                 t.args.push(self.parse_type()?)?
@@ -820,6 +820,10 @@ impl Parser {
                 f.name = mt.text
                 f.name_off = mt.off
                 e = f
+                if self.at(.lt) && !self.no_post {
+                    let g = self.try_generic_args(f)?
+                    if g != null { e = g }
+                }
             } else if t.tag == .question {
                 _ = self.advance()
                 let q = self.ex(.Try, t)?
