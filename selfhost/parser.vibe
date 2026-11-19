@@ -129,11 +129,12 @@ impl Parser {
         return decls
     }
 
-    fn parse_type_params(self) !List[str] {
+    fn parse_type_params(self, cons: *List[str]) !List[str] {
         var list = self.strs()
         if self.eat(.lbracket) {
             while !self.at(.rbracket) {
                 list.push(self.expect(.ident)?.text)?
+                if self.eat(.colon) { cons.push(self.expect(.ident)?.text)? } else { cons.push("")? }
                 if !self.eat(.comma) { break }
             }
             _ = self.expect(.rbracket)?
@@ -181,7 +182,8 @@ impl Parser {
             .kw_struct, .kw_union => {
                 let is_union = self.advance().tag == .kw_union
                 let name = self.expect(.ident)?.text
-                let tps = self.parse_type_params()?
+                var cons = self.strs()
+                let tps = self.parse_type_params(&cons)?
                 _ = self.expect(.lbrace)?
                 var fields = List[Field].init(self.a)
                 self.skip_semis()
@@ -200,7 +202,7 @@ impl Parser {
                 }
                 _ = self.expect(.rbrace)?
                 let sd = self.a.create[StructDecl]()?
-                *sd = StructDecl{ name: name, type_params: tps, fields: fields, line: t.line, is_union: is_union }
+                *sd = StructDecl{ name: name, type_params: tps, constraints: cons, fields: fields, line: t.line, is_union: is_union }
                 d.k = .Struct
                 d.s = sd
             }
@@ -224,7 +226,8 @@ impl Parser {
             .kw_impl => {
                 _ = self.advance()
                 let name = self.expect(.ident)?.text
-                let tps = self.parse_type_params()?
+                var ignored = self.strs()
+                let tps = self.parse_type_params(&ignored)?
                 _ = self.expect(.lbrace)?
                 self.skip_semis()
                 while !self.at(.rbrace) {
@@ -254,18 +257,12 @@ impl Parser {
         out.push(d)?
     }
 
-    fn parse_fn(self, receiver: str, recv_params: List[str]) !*FnDecl {
-        let is_extern = self.eat(.kw_extern)
-        let is_export = self.eat(.kw_export)
-        let line = self.expect(.kw_fn)?.line
-        let name = self.expect(.ident)?.text
-        let tps = self.parse_type_params()?
+    fn parse_param_list(self, line: i64, variadic: *bool) !List[Param] {
         _ = self.expect(.lparen)?
         var params = List[Param].init(self.a)
-        var variadic = false
         while !self.at(.rparen) {
             if self.eat(.ellipsis) {
-                variadic = true
+                *variadic = true
                 break
             }
             let pname = self.expect(.ident)?.text
@@ -284,13 +281,47 @@ impl Parser {
             if !self.eat(.comma) { break }
         }
         _ = self.expect(.rparen)?
+        return params
+    }
+
+    fn parse_closure(self, t: Token) !*Expr {
+        let e = self.ex(.Closure, t)?
+        _ = self.expect(.lbracket)?
+        var caps = self.strs()
+        while !self.at(.rbracket) {
+            caps.push(self.expect(.ident)?.text)?
+            if !self.eat(.comma) { break }
+        }
+        _ = self.expect(.rbracket)?
+        var variadic = false
+        let params = self.parse_param_list(t.line, &variadic)?
+        var ret: *TypeExpr = null
+        if !self.at(.lbrace) { ret = self.parse_type()? }
+        let f = self.a.create[FnDecl]()?
+        *f = FnDecl{
+            name: "closure", type_params: self.strs(), constraints: self.strs(), params: params, ret: ret,
+            body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(), captures: caps, ..
+        }
+        e.func = f
+        return e
+    }
+
+    fn parse_fn(self, receiver: str, recv_params: List[str]) !*FnDecl {
+        let is_extern = self.eat(.kw_extern)
+        let is_export = self.eat(.kw_export)
+        let line = self.expect(.kw_fn)?.line
+        let name = self.expect(.ident)?.text
+        var cons = self.strs()
+        let tps = self.parse_type_params(&cons)?
+        var variadic = false
+        let params = self.parse_param_list(line, &variadic)?
         var ret: *TypeExpr = null
         if !self.at(.lbrace) && !self.at(.semi) && !self.at(.eof) { ret = self.parse_type()? }
         var body: *Stmt = null
         if !is_extern { body = self.parse_block()? }
         let f = self.a.create[FnDecl]()?
         *f = FnDecl{
-            name: name, type_params: tps, params: params, ret: ret, body: body,
+            name: name, type_params: tps, constraints: cons, params: params, ret: ret, body: body,
             is_extern: is_extern, is_export: is_export, variadic: variadic, line: line,
             file: self.file, receiver: receiver, receiver_params: recv_params, ..
         }
@@ -299,8 +330,12 @@ impl Parser {
 
     fn parse_type(self) !*TypeExpr {
         if self.eat(.kw_fn) {
-            _ = self.expect(.lparen)?
             let t = self.te(.Func)?
+            if self.eat(.lbracket) {
+                _ = self.expect(.rbracket)?
+                t.closure = true
+            }
+            _ = self.expect(.lparen)?
             while !self.at(.rparen) {
                 t.args.push(self.parse_type()?)?
                 if !self.eat(.comma) { break }
@@ -719,6 +754,7 @@ impl Parser {
     fn parse_primary(self) !*Expr {
         let t = self.advance()
         match t.tag {
+            .kw_fn => return self.parse_closure(t)
             .kw_match => {
                 let e = self.ex(.Match, t)?
                 e.l = self.parse_cond()?

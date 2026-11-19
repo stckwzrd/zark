@@ -295,6 +295,7 @@ impl Gen {
                 b.fmt.append("fn@%p")?
                 self.fmt_arg(b, "ptr", v.v)?
             }
+            .Closure => b.fmt.append("closure")?
             .Enm => {
                 let p = self.tmp()?
                 sprint(self.ins()?, "  {p} = getelementptr ptr, ptr {t.ei.names_global}, i32 {v.v}\n")?

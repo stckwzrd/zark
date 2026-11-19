@@ -3,7 +3,7 @@
 
 import "parser.vibe"
 
-enum TK { Int, Float, Bool, Void, Ptr, Slice, Array, Strct, Enm, Errun, ErrVal, Null, Func }
+enum TK { Int, Float, Bool, Void, Ptr, Slice, Array, Strct, Enm, Errun, ErrVal, Null, Func, Closure }
 
 struct Type {
     k: TK
@@ -40,6 +40,8 @@ struct Loop { brk: str, cont: str, depth: i64 }
 
 type Env = *Map[*Type]
 
+struct CapInfo { name: str, ty: *Type, mutable: bool }
+
 struct FnInst {
     decl: *FnDecl
     env: Env
@@ -47,6 +49,8 @@ struct FnInst {
     params: List[*Type]
     ret: *Type
     generated: bool
+    is_closure: bool
+    caps: List[CapInfo]
 }
 
 struct FmtB { fmt: List[u8], args: List[u8], string_mode: bool }
@@ -92,6 +96,7 @@ struct Gen {
     tests: List[*FnDecl]
     test_root: str
     test_mode: bool
+    nclos: i64
     at_line: i64
     at_off: i64
     pend_file: str
@@ -170,7 +175,7 @@ fn type_eq(a: *Type, b: *Type) bool {
         .Array => return a.len == b.len && type_eq(a.elem, b.elem)
         .Strct => return a.si == b.si
         .Enm => return a.ei == b.ei
-        .Func => {
+        .Func, .Closure => {
             if a.params.len != b.params.len || !type_eq(a.ret, b.ret) { return false }
             for i in 0..a.params.len { if !type_eq(a.params.get(i), b.params.get(i)) { return false } }
             return true
@@ -253,10 +258,52 @@ impl Gen {
         return out
     }
 
+    fn var_names(self) List[str] {
+        var out = List[str].init(self.a)
+        for sc in self.scopes {
+            for e in sc.vars.entries { if e.used { out.push(e.key) catch return out } }
+        }
+        for e in self.globals.entries { if e.used { out.push(e.key) catch return out } }
+        return out
+    }
+
     fn field_names(self, si: *StructInst) List[str] {
         var out = List[str].init(self.a)
         for f in si.fields { out.push(f.name) catch return out }
         return out
+    }
+
+    fn satisfies(self, t: *Type, name: str) bool {
+        match name {
+            "Eq" => return t.k == .Int || t.k == .Float || t.k == .Bool || t.k == .Enm || t.k == .Ptr || t.k == .Func || is_str(t)
+            "Ord" => return t.k == .Int || t.k == .Float || t.k == .Ptr
+            "Num" => return t.k == .Int || t.k == .Float
+            "Int" => return t.k == .Int
+            "Float" => return t.k == .Float
+        }
+        return false
+    }
+
+    fn check_constraints(self, what: str, names: List[str], cons: List[str], targs: List[*Type], line: i64) !void {
+        for i, c in cons {
+            if c.len == 0 || i >= targs.len { continue }
+            let t = targs.get(i)
+            if !self.satisfies(t, c) {
+                self.err(line); eprintln("type '{self.type_name(t)?}' does not satisfy '{c}', required by '{names.get(i)}' in '{what}'")
+                return error.CompileFailed
+            }
+        }
+    }
+
+    fn check_constraint_names(self, what: str, cons: List[str], line: i64) !void {
+        for c in cons {
+            if c.len > 0 && !self.satisfies(self.t_i64, c) && !self.satisfies(self.t_f64, c) && c != "Eq" {
+                var known = List[str].init(self.a)
+                for k in ["Eq", "Ord", "Num", "Int", "Float"] { known.push(k)? }
+                self.err(line); eprintln("unknown constraint '{c}' on '{what}'{self.hint(c, known)} (known: Eq, Ord, Num, Int, Float)")
+                return error.CompileFailed
+            }
+        }
     }
 
     fn flush_diag(self) {
@@ -281,6 +328,7 @@ impl Gen {
                         }
                         continue
                     }
+                    self.check_constraint_names(f.name, f.constraints, f.line)?
                     if f.receiver.len > 0 {
                         var kb = self.sb()
                         sprint(&kb, "{f.receiver}.{f.name}")?
@@ -298,6 +346,7 @@ impl Gen {
                     }
                 }
                 .Struct => {
+                    self.check_constraint_names(d.s.name, d.s.constraints, d.s.line)?
                     if self.structs.has(d.s.name) { self.err(d.s.line); eprintln("duplicate struct '{d.s.name}'"); return error.CompileFailed }
                     self.structs.put(d.s.name, d.s)?
                 }
@@ -377,6 +426,7 @@ impl Gen {
             .Void => return "void"
             .Ptr, .Null, .Func => return "ptr"
             .Slice => return "{{ ptr, i64 }}"
+            .Closure => return "{{ ptr, ptr }}"
             .Array => {
                 var b = self.sb()
                 sprint(&b, "[{t.len} x {self.llty(t.elem)?}]")?
@@ -419,7 +469,8 @@ impl Gen {
             .Enm => return t.ei.decl.name
             .Errun => sprint(&b, "E{self.mangle(t.elem)?}")?
             .ErrVal => return "error"
-            .Func => {
+            .Func, .Closure => {
+                if t.k == .Closure { b.append("C")? }
                 sprint(&b, "F{t.params.len}")?
                 for p in t.params { sprint(&b, "_{self.mangle(p)?}")? }
                 sprint(&b, "_R{self.mangle(t.ret)?}")?
@@ -444,8 +495,10 @@ impl Gen {
             .Enm => return t.ei.decl.name
             .Errun => sprint(&b, "!{self.type_name(t.elem)?}")?
             .ErrVal => return "error"
-            .Func => {
-                b.append("fn(")?
+            .Func, .Closure => {
+                b.append("fn")?
+                if t.k == .Closure { b.append("[]")? }
+                b.append("(")?
                 for i, p in t.params {
                     if i > 0 { b.append(", ")? }
                     b.append(self.type_name(p)?)?
@@ -487,6 +540,7 @@ impl Gen {
             .Errun => return self.mk_elem(.Errun, self.resolve_type(te.elem, env)?)
             .Func => {
                 let t = self.mk(.Func)?
+                if te.closure { t.k = .Closure }
                 t.params = List[*Type].init(self.a)
                 for p in te.args { t.params.push(self.resolve_type(p, env)?)? }
                 t.ret = self.t_void
@@ -523,6 +577,7 @@ impl Gen {
                     }
                     var args = List[*Type].init(self.a)
                     for x in te.args { args.push(self.resolve_type(x, env)?)? }
+                    self.check_constraints(sd.name, sd.type_params, sd.constraints, args, sd.line)?
                     let t = self.mk(.Strct)?
                     t.si = self.get_struct(sd, args)?
                     return t
@@ -631,7 +686,7 @@ impl Gen {
             .Bool => return 1
             .Void => return 0
             .Ptr, .Null, .Func => return 8
-            .Slice => return 16
+            .Slice, .Closure => return 16
             .Enm, .ErrVal => return 4
             .Array => return t.len * self.size_of(t.elem)?
             .Strct => {
@@ -886,7 +941,7 @@ impl Gen {
         var ret = self.t_void
         if decl.ret != null { ret = self.resolve_type(decl.ret, env)? }
         let fi = self.a.create[FnInst]()?
-        *fi = FnInst{ decl: decl, env: env, llname: key, params: params, ret: ret, generated: false }
+        *fi = FnInst{ decl: decl, env: env, llname: key, params: params, ret: ret, generated: false, .. }
         self.fn_insts.put(key, fi)?
         if decl.is_extern {
             var txt = self.sb()
@@ -1020,9 +1075,10 @@ impl Gen {
         var linkage = "internal "
         if decl.is_export || fi.llname == "vb.main" { linkage = "" }
         sprint(&hdr, "define {linkage}{self.llty(fi.ret)?} @{fi.llname}(")?
+        if fi.is_closure { hdr.append("ptr %ctx")? }
         for i, p in decl.params {
             let pt = fi.params.get(i)
-            if i > 0 { hdr.append(", ")? }
+            if i > 0 || fi.is_closure { hdr.append(", ")? }
             sprint(&hdr, "{self.llty(pt)?} %a.{i}")?
             let slot = self.alloca(pt, p.name)?
             var an = self.sb()
@@ -1031,6 +1087,12 @@ impl Gen {
             self.declare_var(p.name, Var{ ptr: slot, ty: pt, mutable: false }, decl.line)?
         }
         hdr.append(") {{\n")?
+        for i, cap in fi.caps {
+            let cp = self.tmp()?
+            sprint(self.ins()?, "  {cp} = getelementptr ptr, ptr %ctx, i64 {i}\n")?
+            let pv = self.load(self.t_ptr_u8, cp)?
+            self.declare_var(cap.name, Var{ ptr: pv.v, ty: cap.ty, mutable: cap.mutable }, decl.line)?
+        }
 
         self.gen_stmt(decl.body)?
         if !self.terminated {

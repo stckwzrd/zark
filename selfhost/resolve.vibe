@@ -60,6 +60,17 @@ impl Resolver {
                 self.rarms(e.arms)?
                 return
             }
+            .Closure => {
+                let f = e.func
+                let mark = self.locals.len
+                for p in f.params { self.rtype(p.ty)? }
+                self.rtype(f.ret)?
+                for c in f.captures { self.locals.push(c)? }
+                for p in f.params { self.locals.push(p.name)? }
+                self.rstmt(f.body)?
+                self.locals.len = mark
+                return
+            }
         }
         self.rexpr(e.l)?
         self.rexpr(e.r)?

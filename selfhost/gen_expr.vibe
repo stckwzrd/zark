@@ -185,6 +185,7 @@ impl Gen {
                 return self.extract(v, 1, v.ty.elem)
             }
             .Catch, .Orelse => return self.gen_catch(e, expected)
+            .Closure => return self.gen_closure(e)
             .Match => return self.gen_match_expr(e, expected)
             .Sizeof, .Alignof => {
                 let t = self.resolve_type_at(e.ty, e.line)?
@@ -335,6 +336,45 @@ impl Gen {
         let te = self.expr_to_type_expr(te_expr)?
         if te == null { self.err(line); eprintln("expected a type"); return error.CompileFailed }
         return self.resolve_type_at(te, line)
+    }
+
+    fn gen_closure(self, e: *Expr) !Value {
+        let fd = e.func
+        var caps = List[CapInfo].init(self.a)
+        var ctx = "null"
+        if fd.captures.len > 0 {
+            self.ntmp += 1
+            var nb = self.sb()
+            sprint(&nb, "%v.ctx.{self.ntmp}")?
+            ctx = nb.slice()
+            sprint(&self.allocas, "  {ctx} = alloca [{fd.captures.len} x ptr]\n")?
+            for i, cn in fd.captures {
+                if !self.has_var(cn) { self.err(e.line); eprintln("captured variable '{cn}' is not defined{self.hint(cn, self.var_names())}"); return error.CompileFailed }
+                let v = self.lookup_var(cn)?
+                caps.push(CapInfo{ name: cn, ty: v.ty, mutable: v.mutable })?
+                let slot = self.tmp()?
+                sprint(self.ins()?, "  {slot} = getelementptr [{fd.captures.len} x ptr], ptr {ctx}, i64 0, i64 {i}\n")?
+                sprint(self.ins()?, "  store ptr {v.ptr}, ptr {slot}\n")?
+            }
+        }
+        var params = List[*Type].init(self.a)
+        for p in fd.params { params.push(self.resolve_type_at(p.ty, e.line)?)? }
+        var ret = self.t_void
+        if fd.ret != null { ret = self.resolve_type_at(fd.ret, e.line)? }
+        self.nclos += 1
+        var name = self.sb()
+        sprint(&name, "vb.closure.{self.nclos}")?
+        let fi = self.a.create[FnInst]()?
+        *fi = FnInst{ decl: fd, env: self.env, llname: name.slice(), params: params, ret: ret, generated: false, is_closure: true, caps: caps }
+        self.pending.push(fi)?
+        let t = self.mk(.Closure)?
+        t.params = params
+        t.ret = ret
+        var fnptr = self.sb()
+        sprint(&fnptr, "@{fi.llname}")?
+        let a = self.insert(t, "zeroinitializer", Value{ ty: self.t_ptr_u8, v: fnptr.slice() }, 0)?
+        let b = self.insert(t, a, Value{ ty: self.t_ptr_u8, v: ctx }, 1)?
+        return Value{ ty: t, v: b }
     }
 
     fn union_of(self, t: *Type, idx: i64, payload: Value) !Value {

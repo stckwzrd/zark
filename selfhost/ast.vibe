@@ -12,12 +12,13 @@ struct TypeExpr {
     elem: *TypeExpr          // Ptr/Slice/Array/Errun inner
     len: *Expr               // Array length
     ret: *TypeExpr           // Func return (null = void)
+    closure: bool            // Func written as fn[](...)
 }
 
 enum EK {
     IntLit, FloatLit, BoolLit, StrLit, Interp, NullLit, Ident, EnumLit, ErrorVal,
     Binary, Unary, Call, Field, Index, Slice, StructLit, ArrayLit, Cast, Try, Catch,
-    Sizeof, Alignof, Is, Match, Orelse,
+    Sizeof, Alignof, Is, Match, Orelse, Closure,
 }
 
 struct FieldInit { name: str, value: *Expr }
@@ -43,6 +44,7 @@ struct Expr {
     parts: List[IPart]      // Interp
     handler: *Stmt          // Catch
     arms: List[MatchArm]    // Match
+    func: *FnDecl           // Closure
     zero_rest: bool         // StructLit `..`
     has_name: bool          // Catch |e|
 }
@@ -75,6 +77,7 @@ struct Param { name: str, ty: *TypeExpr }
 struct FnDecl {
     name: str
     type_params: List[str]
+    constraints: List[str]
     params: List[Param]
     ret: *TypeExpr          // null = void
     body: *Stmt             // null for extern
@@ -87,6 +90,7 @@ struct FnDecl {
     receiver_params: List[str]
     is_test: bool
     test_name: str
+    captures: List[str]
 }
 
 struct Field { name: str, ty: *TypeExpr }
@@ -94,6 +98,7 @@ struct Field { name: str, ty: *TypeExpr }
 struct StructDecl {
     name: str
     type_params: List[str]
+    constraints: List[str]
     fields: List[Field]
     line: i64
     is_union: bool

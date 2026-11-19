@@ -144,7 +144,7 @@ impl Gen {
             let idx = field_index(recv.ty.si, f.name)
             if idx >= 0 {
                 let fty = recv.ty.si.fields.get(idx).ty
-                if fty.k == .Func {
+                if fty.k == .Func || fty.k == .Closure {
                     let fp = self.gep_field(recv.ty, recv.v, idx)?
                     let fv = self.load(fty, fp)?
                     return self.call_indirect(fv, args, line)
@@ -156,22 +156,27 @@ impl Gen {
     }
 
     fn call_indirect(self, fv: Value, args: List[*Expr], line: i64) !Value {
-        if fv.ty.k != .Func { self.err(line); eprintln("'{self.type_name(fv.ty)?}' is not callable"); return error.CompileFailed }
+        if fv.ty.k != .Func && fv.ty.k != .Closure { self.err(line); eprintln("'{self.type_name(fv.ty)?}' is not callable"); return error.CompileFailed }
         let sig = fv.ty
         if args.len != sig.params.len { self.err(line); eprintln("function pointer expects {sig.params.len} argument(s), got {args.len}"); return error.CompileFailed }
+        var target = fv.v
         var argtxt = self.sb()
+        if sig.k == .Closure {
+            target = self.extract(fv, 0, self.t_ptr_u8)?.v
+            sprint(&argtxt, "ptr {self.extract(fv, 1, self.t_ptr_u8)?.v}")?
+        }
         for i, x in args {
             let pt = sig.params.get(i)
             let v = self.coerce(self.gen_expr(x, pt)?, pt, x.line)?
-            if i > 0 { argtxt.append(", ")? }
+            if argtxt.len > 0 { argtxt.append(", ")? }
             sprint(&argtxt, "{self.llty(v.ty)?} {v.v}")?
         }
         if sig.ret.k == .Void {
-            sprint(self.ins()?, "  call void {fv.v}({argtxt.slice()})\n")?
+            sprint(self.ins()?, "  call void {target}({argtxt.slice()})\n")?
             return Value{ ty: self.t_void, v: "" }
         }
         let t = self.tmp()?
-        sprint(self.ins()?, "  {t} = call {self.llty(sig.ret)?} {fv.v}({argtxt.slice()})\n")?
+        sprint(self.ins()?, "  {t} = call {self.llty(sig.ret)?} {target}({argtxt.slice()})\n")?
         return Value{ ty: sig.ret, v: t }
     }
 
@@ -208,7 +213,7 @@ impl Gen {
             .Errun => { if actual.k == .Errun { self.unify(te.elem, actual.elem, tps, env)? } }
             .Array => { if actual.k == .Array { self.unify(te.elem, actual.elem, tps, env)? } }
             .Func => {
-                if actual.k == .Func && actual.params.len == te.args.len {
+                if (actual.k == .Func || actual.k == .Closure) && actual.params.len == te.args.len {
                     for i, x in te.args { self.unify(x, actual.params.get(i), tps, env)? }
                     if te.ret != null { self.unify(te.ret, actual.ret, tps, env)? }
                 }
@@ -271,6 +276,7 @@ impl Gen {
 
         var targs = List[*Type].init(self.a)
         for tp in tps { targs.push(env.get(tp)?)? }
+        self.check_constraints(decl.name, tps, decl.constraints, targs, line)?
         let fi = self.inst_fn(decl, env, targs)?
 
         var argtxt = self.sb()
