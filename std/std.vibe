@@ -1039,7 +1039,6 @@ struct Spinlock {
     void unlock() { Atomic::swap32(&state as *u32, 0); }
 }
 
-
 !i64 __sys_result(i64 r) {
     if (r >= 0) { return r; }
     match -r {
