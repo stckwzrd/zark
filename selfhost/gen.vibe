@@ -940,12 +940,19 @@ struct Gen {
             main_inst = this->inst_fn(m, this->new_env()?, this->no_types())?;
         }
         for (auto f : this->fn_order) { if (f.is_export) { _ = this->inst_fn(f, this->new_env()?, this->no_types())?; } }
-        while (this->pending.len > 0) {
-            const auto fi = this->pending.pop()?;
+        auto nerr = 0;
+        auto next = 0;
+        while (next < this->pending.len && nerr < 10) {
+            const auto fi = this->pending.get(next);
+            next += 1;
             if (fi.generated) { continue; }
             fi.generated = true;
-            this->gen_function(fi)?;
+            this->gen_function(fi) catch {
+                this->flush_diag();
+                nerr += 1;
+            };
         }
+        if (nerr > 0) { return error.CompileFailed; }
         if (this->test_mode) {
             this->gen_test_main(test_insts)?;
         } else if (main_inst != null) {
