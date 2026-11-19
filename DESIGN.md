@@ -108,4 +108,9 @@ Migration notes (S2/S3a): the compiler (11.8k lines), std, examples and tests we
 - [x] `examples/baremetal`: boots in QEMU, serial through `Fmt`, IDT and an exception handled in Vibe; tested on both backends
 - [ ] `align(N)`, an `interrupt` function attribute, bitfields, 8/16-bit atomics, aarch64/riscv targets
 
+### Phase O: types with behavior
+- [x] default field values, constructors, interfaces with dynamic dispatch, operator methods
+- [x] decided against: implementation inheritance, destructors called implicitly, `[]`/`()`/`<<` overloading
+- [x] `--fast` (nsw), `inbounds` indexing, `List` growth by `realloc`, faster `sort`; `tools/fuzz.py` compares the three backends on random programs
+
 ### Phase 4 (only when asked): MIR and backend work

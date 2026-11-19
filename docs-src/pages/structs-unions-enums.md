@@ -401,6 +401,117 @@ void main() {
 }
 ```
 
+## Значения по умолчанию и конструкторы
+
+У поля можно задать значение по умолчанию. Оно применяется, когда структура создаётся литералом (`T{}`, `T{ .x = 1 }`) или объявляется без значения (`T x;`). Остальные поля, как и раньше, нули.
+
+Конструктор — это метод с именем структуры, без типа результата. Вызывается как функция: `Circle(2.0)`. Он получает уже заполненный значениями по умолчанию объект и дописывает остальное. Память при этом нигде не выделяется.
+
+```vibe run
+struct Config {
+    i64 width = 80;
+    i64 height = 24;
+    str name = "default";
+}
+
+struct Circle {
+    f64 r;
+    f64 area = 0.0;
+
+    Circle(f64 radius) {
+        r = radius;
+        area = 3.0 * radius * radius;
+    }
+}
+
+struct Window {
+    Config cfg;
+    i64 id = 1;
+    Window(i64 n) { id = n; }
+}
+
+void main() {
+    Config a;
+    auto b = Config{ .width = 120 };
+    println(a.width, a.height, a.name, b.width, b.height);
+    const auto c = Circle(2.0);
+    println(c.r, c.area);
+    const auto w = Window(7);
+    println(w.id, w.cfg.width);
+}
+```
+
+Вложенные структуры тоже получают свои значения по умолчанию. Деструкторов нет: освобождайте ресурсы через `defer` (см. [управление потоком](control-flow.md#defer-и-errdefer)).
+
+## Интерфейсы
+
+Интерфейс описывает набор методов. Структура реализует его, если у неё есть все эти методы с теми же типами: объявлять «наследование» не нужно.
+
+```vibe run
+interface Shape {
+    f64 area();
+    void scale(f64 k);
+}
+
+struct Circle {
+    f64 r;
+    f64 area() { return 3.0 * r * r; }
+    void scale(f64 k) { r *= k; }
+}
+
+struct Rect {
+    f64 w;
+    f64 h;
+    f64 area() { return w * h; }
+    void scale(f64 k) { w *= k; h *= k; }
+}
+
+f64 total(Shape[] shapes) {
+    f64 sum = 0.0;
+    for (auto s : shapes) { sum += s.area(); }
+    return sum;
+}
+
+void main() {
+    auto c = Circle{ .r = 2.0 };
+    auto r = Rect{ .w = 3.0, .h = 4.0 };
+    Shape[2] all = [&c, &r];
+    println(total(all[..]));
+    all[0].scale(2.0);
+    println(total(all[..]), c.r);
+}
+```
+
+Значение типа `Shape` — это пара из двух указателей: на объект и на таблицу методов. Её строит компилятор при преобразовании `&c` в `Shape`. Вызов метода — одна косвенная загрузка и один косвенный вызов, как у таблицы функций в C. Объект не копируется и не выделяется: интерфейс хранит указатель, поэтому объект должен жить дольше интерфейса. Если метода не хватает, ошибка сообщает, какого именно: `'Circle' does not implement 'Shape': missing method 'perimeter'`.
+
+Наследования реализации нет: общий код выносят в функцию или в структуру-поле.
+
+## Перегрузка операторов
+
+Для структур можно определить `+ - * / %`, сравнения `== != < <= > >=` и унарный `-`. Это обычные методы с именем `operator+` и так далее, компилятор превращает `a + b` в `a.operator+(b)`. `!=` берётся из `==`, если не определён.
+
+```vibe run
+struct Vec2 {
+    f64 x;
+    f64 y;
+
+    Vec2(f64 a, f64 b) { x = a; y = b; }
+    Vec2 operator+(Vec2 o) const { return Vec2(x + o.x, y + o.y); }
+    Vec2 operator*(f64 k) const { return Vec2(x * k, y * k); }
+    Vec2 operator-() const { return Vec2(0.0 - x, 0.0 - y); }
+    bool operator==(Vec2 o) const { return x == o.x && y == o.y; }
+}
+
+void main() {
+    const auto a = Vec2(1.0, 2.0);
+    const auto b = a + a * 2.0;
+    const auto n = -a;
+    println(b.x, b.y, n.x, a == b, a != b);
+}
+```
+
+Операторы `[]`, `()`, `->`, `<<` и присваивание перегружать нельзя: действие должно быть видно в коде.
+
 ## Дженерик-структуры и union
 
 Параметры типа пишутся в угловых скобках после имени: `struct Pair<A, B>`. Методы лежат внутри, отдельно перечислять параметры не нужно.

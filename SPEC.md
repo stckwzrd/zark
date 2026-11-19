@@ -155,6 +155,14 @@ Format specs: `{v:x}` `{v:08X}` `{v:5}` `{v:-10}` `{v:+}` `{v:.3}` (string preci
 
 Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` as true/false, `str` as text (quoted inside aggregates), pointers as `0x...` (`(nil)` for null), enums as `.Name`, errors as `error.Name`, structs as `S{ f: v }`, unions as `U.V(payload)` (`U.V` when nested), arrays as `[a, b]` (at most 32 elements), slices as `[a, b]` (`[]T(len=N)` when nested), `void` as `void`.
 
+## 6a. Types with behavior
+
+- Default field values: `i64 n = 5;` in a struct applies to `T{}`, `T{ .x = 1 }` and `T x;` (also for nested structs).
+- Constructors: a method named like the struct without a result type; `T(args)` zero-fills with the defaults, then runs it with `this`. No allocation.
+- Interfaces: `interface I { R m(A a); }` declares a two-word struct `{ void* data; IVtable* vt; }` with dispatching methods. `Shape s = &obj;` converts any struct pointer whose type has all the methods (checked structurally). A call is one indirect call. There is no inheritance of implementation.
+- Operators on structs: methods `operator+ - * / % == != < <= > >=` and unary `operator-()`; `!=` falls back to `==`. `[]`, `()`, `->`, `<<` and assignment cannot be overloaded.
+- `const` after a method's parameters forbids assigning fields and calling non-const methods through `this`.
+
 ## 6b. Low-level code
 
 - `volatile T`: a type qualifier for pointees, fields and variables (`volatile u32* p`, `volatile u32 ctrl;`). Every access through such an lvalue is emitted as a volatile load or store of the exact width of `T`. Type equality ignores `volatile`.
