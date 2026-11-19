@@ -47,6 +47,7 @@ struct Expr {
     func: *FnDecl           // Closure
     zero_rest: bool         // StructLit `..`
     has_name: bool          // Catch |e|
+    name_off: i64           // Catch |e| position
 }
 
 enum SK { Let, Assign, ExprS, If, While, ForRange, ForEach, Ret, Brk, Cont, Block, Defer, Match }
@@ -58,7 +59,10 @@ struct Stmt {
     line: i64
     off: i64
     name: str              // Let/For var name
+    name_off: i64
     idx: str               // ForEach index name
+    idx_off: i64
+    end_off: i64           // Block: offset of the closing brace
     has_idx: bool
     mutable: bool          // Let: var
     is_err: bool           // Defer: errdefer
@@ -72,7 +76,7 @@ struct Stmt {
     arms: List[MatchArm]   // Match
 }
 
-struct Param { name: str, ty: *TypeExpr }
+struct Param { name: str, ty: *TypeExpr, off: i64 }
 
 struct FnDecl {
     name: str
@@ -91,9 +95,13 @@ struct FnDecl {
     is_test: bool
     test_name: str
     captures: List[str]
+    capture_offs: List[i64]
+    name_off: i64
+    end_off: i64
+    receiver_off: i64
 }
 
-struct Field { name: str, ty: *TypeExpr }
+struct Field { name: str, ty: *TypeExpr, off: i64 }
 
 struct StructDecl {
     name: str
@@ -101,10 +109,11 @@ struct StructDecl {
     constraints: List[str]
     fields: List[Field]
     line: i64
+    name_off: i64
     is_union: bool
 }
 
-struct EnumDecl { name: str, variants: List[str], line: i64 }
+struct EnumDecl { name: str, variants: List[str], variant_offs: List[i64], line: i64, name_off: i64 }
 
 struct ConstDecl {
     name: str
@@ -112,6 +121,7 @@ struct ConstDecl {
     value: *Expr
     mutable: bool
     line: i64
+    name_off: i64
 }
 
 enum DK { Func, Struct, Enum, Const, Import, Alias }
@@ -124,6 +134,8 @@ struct Decl {
     c: *ConstDecl
     path: str               // Import path / Alias name
     alias: str              // Import `as` name
+    name_off: i64           // Alias / import alias name
+    path_off: i64           // Import path string
     ty: *TypeExpr           // Alias target
     line: i64
 }

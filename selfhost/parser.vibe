@@ -162,33 +162,41 @@ impl Parser {
         match t.tag {
             .kw_import => {
                 _ = self.advance()
-                d.path = self.expect(.str_lit)?.text
+                let pt = self.expect(.str_lit)?
+                d.path = pt.text
+                d.path_off = pt.off
                 if self.eat(.kw_as) {
-                    d.alias = self.expect(.ident)?.text
+                    let at = self.expect(.ident)?
+                    d.alias = at.text
+                    d.name_off = at.off
                     self.aliases.push(d.alias)?
                 }
             }
             .kw_type => {
                 _ = self.advance()
                 d.k = .Alias
-                d.path = self.expect(.ident)?.text
+                let an = self.expect(.ident)?
+                d.path = an.text
+                d.name_off = an.off
                 _ = self.expect(.eq)?
                 d.ty = self.parse_type()?
             }
             .kw_fn, .kw_extern, .kw_export => {
                 d.k = .Func
-                d.f = self.parse_fn("", self.strs())?
+                d.f = self.parse_fn("", self.strs(), 0)?
             }
             .kw_struct, .kw_union => {
                 let is_union = self.advance().tag == .kw_union
-                let name = self.expect(.ident)?.text
+                let nt = self.expect(.ident)?
+                let name = nt.text
                 var cons = self.strs()
                 let tps = self.parse_type_params(&cons)?
                 _ = self.expect(.lbrace)?
                 var fields = List[Field].init(self.a)
                 self.skip_semis()
                 while !self.at(.rbrace) {
-                    let fname = self.expect(.ident)?.text
+                    let ft = self.expect(.ident)?
+                    let fname = ft.text
                     var fty: *TypeExpr = null
                     if is_union && !self.at(.colon) {
                         fty = self.te_name("void")?
@@ -196,42 +204,47 @@ impl Parser {
                         _ = self.expect(.colon)?
                         fty = self.parse_type()?
                     }
-                    fields.push(Field{ name: fname, ty: fty })?
+                    fields.push(Field{ name: fname, ty: fty, off: ft.off })?
                     _ = self.eat(.comma)
                     self.skip_semis()
                 }
                 _ = self.expect(.rbrace)?
                 let sd = self.a.create[StructDecl]()?
-                *sd = StructDecl{ name: name, type_params: tps, constraints: cons, fields: fields, line: t.line, is_union: is_union }
+                *sd = StructDecl{ name: name, type_params: tps, constraints: cons, fields: fields, line: t.line, name_off: nt.off, is_union: is_union }
                 d.k = .Struct
                 d.s = sd
             }
             .kw_enum => {
                 _ = self.advance()
-                let name = self.expect(.ident)?.text
+                let nt = self.expect(.ident)?
+                let name = nt.text
                 _ = self.expect(.lbrace)?
                 var vs = self.strs()
+                var voffs = List[i64].init(self.a)
                 self.skip_semis()
                 while !self.at(.rbrace) {
-                    vs.push(self.expect(.ident)?.text)?
+                    let vt = self.expect(.ident)?
+                    vs.push(vt.text)?
+                    voffs.push(vt.off)?
                     _ = self.eat(.comma)
                     self.skip_semis()
                 }
                 _ = self.expect(.rbrace)?
                 let ed = self.a.create[EnumDecl]()?
-                *ed = EnumDecl{ name: name, variants: vs, line: t.line }
+                *ed = EnumDecl{ name: name, variants: vs, variant_offs: voffs, line: t.line, name_off: nt.off }
                 d.k = .Enum
                 d.en = ed
             }
             .kw_impl => {
                 _ = self.advance()
-                let name = self.expect(.ident)?.text
+                let rt = self.expect(.ident)?
+                let name = rt.text
                 var ignored = self.strs()
                 let tps = self.parse_type_params(&ignored)?
                 _ = self.expect(.lbrace)?
                 self.skip_semis()
                 while !self.at(.rbrace) {
-                    let m = Decl{ k: .Func, f: self.parse_fn(name, tps)?, line: t.line, .. }
+                    let m = Decl{ k: .Func, f: self.parse_fn(name, tps, rt.off)?, line: t.line, .. }
                     out.push(m)?
                     self.skip_semis()
                 }
@@ -240,13 +253,14 @@ impl Parser {
             }
             .kw_const, .kw_var => {
                 _ = self.advance()
-                let name = self.expect(.ident)?.text
+                let nt = self.expect(.ident)?
+                let name = nt.text
                 var ty: *TypeExpr = null
                 if self.eat(.colon) { ty = self.parse_type()? }
                 _ = self.expect(.eq)?
                 let v = self.parse_expr()?
                 let cd = self.a.create[ConstDecl]()?
-                *cd = ConstDecl{ name: name, ty: ty, value: v, mutable: t.tag == .kw_var, line: t.line }
+                *cd = ConstDecl{ name: name, ty: ty, value: v, mutable: t.tag == .kw_var, line: t.line, name_off: nt.off }
                 d.k = .Const
                 d.c = cd
             }
@@ -265,7 +279,8 @@ impl Parser {
                 *variadic = true
                 break
             }
-            let pname = self.expect(.ident)?.text
+            let pt = self.expect(.ident)?
+            let pname = pt.text
             var pty: *TypeExpr = null
             if self.eat(.colon) {
                 pty = self.parse_type()?
@@ -277,7 +292,7 @@ impl Parser {
                 show_source(self.file, line, -1)
                 return error.ParseFailed
             }
-            params.push(Param{ name: pname, ty: pty })?
+            params.push(Param{ name: pname, ty: pty, off: pt.off })?
             if !self.eat(.comma) { break }
         }
         _ = self.expect(.rparen)?
@@ -288,8 +303,11 @@ impl Parser {
         let e = self.ex(.Closure, t)?
         _ = self.expect(.lbracket)?
         var caps = self.strs()
+        var cap_offs = List[i64].init(self.a)
         while !self.at(.rbracket) {
-            caps.push(self.expect(.ident)?.text)?
+            let ct = self.expect(.ident)?
+            caps.push(ct.text)?
+            cap_offs.push(ct.off)?
             if !self.eat(.comma) { break }
         }
         _ = self.expect(.rbracket)?
@@ -300,17 +318,19 @@ impl Parser {
         let f = self.a.create[FnDecl]()?
         *f = FnDecl{
             name: "closure", type_params: self.strs(), constraints: self.strs(), params: params, ret: ret,
-            body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(), captures: caps, ..
+            body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(), captures: caps, capture_offs: cap_offs, ..
         }
+        f.end_off = f.body.end_off
         e.func = f
         return e
     }
 
-    fn parse_fn(self, receiver: str, recv_params: List[str]) !*FnDecl {
+    fn parse_fn(self, receiver: str, recv_params: List[str], recv_off: i64) !*FnDecl {
         let is_extern = self.eat(.kw_extern)
         let is_export = self.eat(.kw_export)
         let line = self.expect(.kw_fn)?.line
-        let name = self.expect(.ident)?.text
+        let nt = self.expect(.ident)?
+        let name = nt.text
         var cons = self.strs()
         let tps = self.parse_type_params(&cons)?
         var variadic = false
@@ -323,8 +343,9 @@ impl Parser {
         *f = FnDecl{
             name: name, type_params: tps, constraints: cons, params: params, ret: ret, body: body,
             is_extern: is_extern, is_export: is_export, variadic: variadic, line: line,
-            file: self.file, receiver: receiver, receiver_params: recv_params, ..
+            file: self.file, receiver: receiver, receiver_params: recv_params, name_off: nt.off, receiver_off: recv_off, ..
         }
+        if body != null { f.end_off = body.end_off }
         return f
     }
 
@@ -395,7 +416,8 @@ impl Parser {
             b.stmts.push(self.parse_stmt()?)?
             self.skip_semis()
         }
-        _ = self.expect(.rbrace)?
+        let rb = self.expect(.rbrace)?
+        b.end_off = rb.off
         self.no_struct = saved
         return b
     }
@@ -414,7 +436,9 @@ impl Parser {
             .kw_let, .kw_var => {
                 _ = self.advance()
                 let s = self.st(.Let, t)?
-                s.name = self.expect(.ident)?.text
+                let nt = self.expect(.ident)?
+                s.name = nt.text
+                s.name_off = nt.off
                 s.mutable = t.tag == .kw_var
                 if self.eat(.colon) { s.ty = self.parse_type()? }
                 if self.eat(.eq) { s.e = self.parse_expr()? }
@@ -435,11 +459,15 @@ impl Parser {
             }
             .kw_for => {
                 _ = self.advance()
-                let n1 = self.expect(.ident)?.text
+                let t1 = self.expect(.ident)?
+                let n1 = t1.text
                 var n2 = ""
+                var off2 = 0
                 var has2 = false
                 if self.eat(.comma) {
-                    n2 = self.expect(.ident)?.text
+                    let t2 = self.expect(.ident)?
+                    n2 = t2.text
+                    off2 = t2.off
                     has2 = true
                 }
                 _ = self.expect(.kw_in)?
@@ -448,6 +476,7 @@ impl Parser {
                     if has2 { self.fail("range loop takes a single variable")? }
                     let s = self.st(.ForRange, t)?
                     s.name = n1
+                    s.name_off = t1.off
                     s.e = e
                     s.e2 = self.parse_cond()?
                     s.body = self.parse_block()?
@@ -458,10 +487,13 @@ impl Parser {
                 s.body = self.parse_block()?
                 if has2 {
                     s.idx = n1
+                    s.idx_off = t1.off
                     s.has_idx = true
                     s.name = n2
+                    s.name_off = off2
                 } else {
                     s.name = n1
+                    s.name_off = t1.off
                 }
                 return s
             }
@@ -556,7 +588,9 @@ impl Parser {
             let c = self.ex(kind, kw)?
             c.l = l
             if kind == .Catch && self.eat(.pipe) {
-                c.name = self.expect(.ident)?.text
+                let bt = self.expect(.ident)?
+                c.name = bt.text
+                c.name_off = bt.off
                 c.has_name = true
                 _ = self.expect(.pipe)?
             }
@@ -710,8 +744,12 @@ impl Parser {
             } else if t.tag == .kw_is {
                 _ = self.advance()
                 if !self.eat(.dot) {
-                    _ = self.expect(.ident)?
+                    let first = self.expect(.ident)?
                     _ = self.expect(.dot)?
+                    if self.is_alias(first.text) && self.at(.ident) && self.peek_at(1).tag == .dot {
+                        _ = self.advance()
+                        _ = self.advance()
+                    }
                 }
                 let x = self.ex(.Is, t)?
                 x.l = e
