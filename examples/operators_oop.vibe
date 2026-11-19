@@ -1,0 +1,22 @@
+struct Vec2 {
+    f64 x;
+    f64 y;
+
+    Vec2(f64 a, f64 b) { x = a; y = b; }
+    Vec2 operator+(Vec2 o) const { return Vec2(x + o.x, y + o.y); }
+    Vec2 operator-(Vec2 o) const { return Vec2(x - o.x, y - o.y); }
+    Vec2 operator*(f64 k) const { return Vec2(x * k, y * k); }
+    Vec2 operator-() const { return Vec2(0.0 - x, 0.0 - y); }
+    bool operator==(Vec2 o) const { return x == o.x && y == o.y; }
+    bool operator<(Vec2 o) const { return x * x + y * y < o.x * o.x + o.y * o.y; }
+    f64 dot(Vec2 o) const { return x * o.x + y * o.y; }
+}
+
+void main() {
+    const auto a = Vec2(1.0, 2.0);
+    const auto b = Vec2(3.0, 4.0);
+    const auto c = a + b * 2.0 - a;
+    println(c.x, c.y, a == b, a == Vec2(1.0, 2.0), a < b, a.dot(b));
+    const auto n = -a;
+    println(n.x, n.y, a != b, a != a);
+}

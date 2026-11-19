@@ -2,6 +2,23 @@
 
 import "parser.vibe";
 
+str operator_method(Tag t) {
+    match t {
+        .plus => return "op_add";
+        .minus => return "op_sub";
+        .star => return "op_mul";
+        .slash => return "op_div";
+        .percent => return "op_rem";
+        .eqeq => return "op_eq";
+        .neq => return "op_ne";
+        .lt => return "op_lt";
+        .le => return "op_le";
+        .gt => return "op_gt";
+        .ge => return "op_ge";
+    }
+    return "";
+}
+
 bool is_builtin_type_name(str s) {
     match s {
         "i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "str", "void" => return true;
@@ -339,7 +356,14 @@ bool Parser::new_member(bool is_union) {
     }
     const auto ty = this->try_type();
     if (ty == null) { this->fail("expected a member declaration")?; }
-    const auto nt = this->expect(.ident)?;
+    auto nt = this->expect(.ident)?;
+    if (nt.text == "operator") {
+        const auto ot = this->advance();
+        const auto on = operator_method(ot.tag);
+        if (on.len == 0) { this->fail("this operator cannot be overloaded")?; }
+        nt.text = on;
+        if (on == "op_sub" && this->peek_at(1).tag == .rparen) { nt.text = "op_neg"; }
+    }
     if (this->at(.lparen)) {
         const auto f = this->fn_rest(mtps, mcons, 0, ty, nt, sname, tps, t.off, is_static)?;
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;

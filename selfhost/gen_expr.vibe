@@ -237,6 +237,11 @@ bool can_coerce(Type* from, Type* to) {
                 if (lt != null && lt.k == .Float) { return Value{ .ty = lt, .v = this->float_const(0.0 - (e.l.ival as f64), lt.bits)? } };
             }
             const auto v = this->gen_expr(e.l, expected)?;
+            if (v.ty.k == .Strct && !is_union(v.ty)) {
+                auto kb = this->sb();
+                sprint(&kb, "{recv_name(v.ty)}.op_neg")?;
+                if (this->methods.has(kb.slice())) { return this->call_method(this->methods.get(kb.slice())?, this->spill(v)?, List<Expr*>::init(this->a), this->no_types(), null, e.line); }
+            }
             const auto t = this->tmp()?;
             if (v.ty.k == .Int) {
                 sprint(this->ins()?, "  {t} = sub {this->llty(v.ty)?} 0, {v.v}\n")?;
@@ -740,6 +745,23 @@ bool has_defaults(Type* t) {
 }
 
 // ------------------------------------------------------------------ operators
+str operator_name(Tag t) {
+    match t {
+        .plus => return "op_add";
+        .minus => return "op_sub";
+        .star => return "op_mul";
+        .slash => return "op_div";
+        .percent => return "op_rem";
+        .eqeq => return "op_eq";
+        .neq => return "op_ne";
+        .lt => return "op_lt";
+        .le => return "op_le";
+        .gt => return "op_gt";
+        .ge => return "op_ge";
+    }
+    return "";
+}
+
 !Value Gen::gen_binary(Tag op, Expr* le, Expr* re, Type* expected, i64 line) {
     if (op == .andand || op == .oror) {
         const auto l = this->gen_cond(le)?;
@@ -777,6 +799,28 @@ bool has_defaults(Type* t) {
     } else {
         l = this->gen_expr(le, exp)?;
         r = this->gen_expr(re, l.ty)?;
+    }
+    if (l.ty.k == .Strct && !is_union(l.ty) && !l.ty.si.decl.is_iface) {
+        const auto on = operator_name(op);
+        auto kb = this->sb();
+        sprint(&kb, "{recv_name(l.ty)}.{on}")?;
+        if (on.len > 0 && this->methods.has(kb.slice())) {
+            const auto recv = this->spill(l)?;
+            auto args = List<Expr*>::init(this->a);
+            args.push(this->mk_pre(r, line)?)?;
+            return this->call_method(this->methods.get(kb.slice())?, recv, args, this->no_types(), null, line);
+        }
+        auto eb = this->sb();
+        sprint(&eb, "{recv_name(l.ty)}.op_eq")?;
+        if (op == .neq && this->methods.has(eb.slice())) {
+            const auto recv = this->spill(l)?;
+            auto args = List<Expr*>::init(this->a);
+            args.push(this->mk_pre(r, line)?)?;
+            const auto eq = this->call_method(this->methods.get(eb.slice())?, recv, args, this->no_types(), null, line)?;
+            const auto nt = this->tmp()?;
+            sprint(this->ins()?, "  {nt} = xor i1 {eq.v}, true\n")?;
+            return Value{ .ty = this->t_bool, .v = nt };
+        }
     }
     if (l.ty.k == .Ptr && r.ty.k == .Int && (op == .plus || op == .minus)) {
         auto off = this->to_i64(r, line)?;
