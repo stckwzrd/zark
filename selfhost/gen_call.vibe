@@ -93,6 +93,7 @@ bool Gen::names_type(Expr* e) {
         const auto name = callee.name;
         if (this->is_builtin(name) && !this->fns.has(name)) { return this->gen_builtin(name, e.args, e.line); }
         if (this->fns.has(name)) { return this->call_decl(this->fns.get(name)?, this->new_env()?, null, e.args, this->no_types(), expected, e.line); }
+        if (this->structs.has(name) && !this->consts.has(name)) { return this->gen_construct(e); }
         if (!this->consts.has(name)) { this->err(e.line); eprintln("unknown function '{name}'{this->hint(name, this->visible_names())}"); return error.CompileFailed; }
     }
     if (callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field)) {

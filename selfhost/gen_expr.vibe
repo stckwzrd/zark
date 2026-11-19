@@ -290,7 +290,56 @@ bool can_coerce(Type* from, Type* to) {
         const auto v = this->coerce(this->gen_expr(fi.value, fty)?, fty, e.line)?;
         cur = this->insert(t, cur, v, idx)?;
     }
+    for (auto [i, f] : si.fields) {
+        if (given.get(i)) { continue; }
+        if (f.init != null) {
+            cur = this->insert(t, cur, this->coerce(this->gen_expr(f.init, f.ty)?, f.ty, e.line)?, i)?;
+        } else if (has_defaults(f.ty)) {
+            cur = this->insert(t, cur, this->default_value(f.ty, e.line)?, i)?;
+        }
+    }
     return Value{ .ty = t, .v = cur };
+}
+
+bool has_defaults(Type* t) {
+    if (t.k != .Strct || t.si.decl.is_union) { return false; }
+    for (auto f : t.si.fields) {
+        if (f.init != null || has_defaults(f.ty)) { return true; }
+    }
+    return false;
+}
+
+!Value Gen::default_value(Type* t, i64 line) {
+    auto cur = "zeroinitializer";
+    for (auto [i, f] : t.si.fields) {
+        if (f.init != null) {
+            cur = this->insert(t, cur, this->coerce(this->gen_expr(f.init, f.ty)?, f.ty, line)?, i)?;
+        } else if (has_defaults(f.ty)) {
+            cur = this->insert(t, cur, this->default_value(f.ty, line)?, i)?;
+        }
+    }
+    return Value{ .ty = t, .v = cur };
+}
+
+!Value Gen::gen_construct(Expr* e) {
+    const auto te = this->a.create<TypeExpr>()?;
+    te.k = .Name;
+    te.name = e.l.name;
+    te.args = List<TypeExpr*>::init(this->a);
+    const auto t = this->resolve_type_at(te, e.line)?;
+    if (t.k != .Strct || is_union(t)) { this->err(e.line); eprintln("'{e.l.name}' is not a struct"); return error.CompileFailed; }
+    const auto slot = this->alloca(t, "obj")?;
+    this->zero_fill(t, slot)?;
+    auto kb = this->sb();
+    sprint(&kb, "{recv_name(t)}.init")?;
+    if (this->methods.has(kb.slice())) {
+        const auto addr = Addr{ .ty = t, .v = slot, .imm = false };
+        _ = this->call_method(this->methods.get(kb.slice())?, addr, e.args, this->no_types(), null, e.line)?;
+    } else if (e.args.len > 0) {
+        this->err(e.line); eprintln("'{e.l.name}' has no constructor taking {e.args.len} argument(s); declare '{e.l.name}(...) \{ ... }' inside the struct");
+        return error.CompileFailed;
+    }
+    return this->load(t, slot);
 }
 
 !Value Gen::gen_array_lit(Expr* e, Type* expected) {

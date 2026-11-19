@@ -103,7 +103,7 @@ struct FnDecl {
     bool is_const;
 }
 
-struct Field { str name; TypeExpr* ty; i64 off; }
+struct Field { str name; TypeExpr* ty; i64 off; Expr* init; }
 
 struct StructDecl {
     str name;

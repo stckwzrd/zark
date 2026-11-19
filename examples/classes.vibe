@@ -1,0 +1,45 @@
+struct Config {
+    i64 width = 80;
+    i64 height = 24;
+    bool verbose = false;
+    str name = "default";
+}
+
+struct Circle {
+    f64 r;
+    f64 area = 0.0;
+
+    Circle(f64 radius) {
+        r = radius;
+        area = 3.0 * radius * radius;
+    }
+
+    void grow(f64 k) {
+        r *= k;
+        area = 3.0 * r * r;
+    }
+}
+
+struct Window {
+    Config cfg;
+    i64 id = 1;
+    Window(i64 n) { id = n; }
+}
+
+void main() {
+    Config a;
+    auto b = Config{ .width = 120 };
+    const auto c = Config{};
+    println(a.width, a.height, a.verbose, a.name);
+    println(b.width, b.height, b.name);
+    println(c.width);
+
+    auto circle = Circle(2.0);
+    circle.grow(2.0);
+    println(circle.r, circle.area);
+
+    auto w = Window(7);
+    println(w.id, w.cfg.width, w.cfg.name);
+    auto plain = Circle{ .r = 1.0 };
+    println(plain.r, plain.area);
+}

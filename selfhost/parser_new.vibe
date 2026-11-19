@@ -327,6 +327,13 @@ bool Parser::new_member(bool is_union) {
         _ = this->advance();
         mtps = this->parse_type_params(&mcons)?;
     }
+    if (this->at(.ident) && this->peek().text == sname && this->peek_at(1).tag == .lparen) {
+        auto nt = this->advance();
+        nt.text = "init";
+        const auto f = this->fn_rest(mtps, mcons, 0, this->te_name("void")?, nt, sname, tps, t.off, false)?;
+        out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+        return;
+    }
     while (this->at(.kw_static) || this->at(.kw_const)) {
         if (this->advance().tag == .kw_static) { is_static = true; }
     }
@@ -338,7 +345,9 @@ bool Parser::new_member(bool is_union) {
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
     }
-    fields.push(Field{ .name = nt.text, .ty = ty, .off = nt.off })?;
+    Expr* init = null;
+    if (this->eat(.eq)) { init = this->parse_expr()?; }
+    fields.push(Field{ .name = nt.text, .ty = ty, .off = nt.off, .init = init })?;
     if (!this->at(.rbrace)) { _ = this->expect(.semi)?; }
 }
 

@@ -18,7 +18,7 @@ struct Type {
     bool vol;           // lives in volatile storage when reached through an lvalue
 }
 
-struct FieldInfo { str name; Type* ty; }
+struct FieldInfo { str name; Type* ty; Expr* init; }
 
 struct StructInst {
     StructDecl* decl;
@@ -399,6 +399,10 @@ struct Gen {
     }
 
     !void zero_fill(Type* ty, str ptr) {
+        if (has_defaults(ty)) {
+            this->store(this->default_value(ty, 0)?, ptr)?;
+            return;
+        }
         if (ty.k == .Array || ty.k == .Strct) {
             this->declare("llvm.memset.p0.i64", "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")?;
             const auto gp = this->tmp()?;

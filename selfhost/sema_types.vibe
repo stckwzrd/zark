@@ -247,7 +247,7 @@ bool Gen::satisfies(Type* t, str name) {
     this->struct_insts.put(key, inst)?;
     const auto env = this->new_env()?;
     for (auto [i, tp] : sd.type_params) { env.put(tp, args.get(i))?; }
-    for (auto f : sd.fields) { inst.fields.push(FieldInfo{ .name = f.name, .ty = this->resolve_type(f.ty, env)? })?; }
+    for (auto f : sd.fields) { inst.fields.push(FieldInfo{ .name = f.name, .ty = this->resolve_type(f.ty, env)?, .init = f.init })?; }
     if (sd.is_union) {
         u64 maxsz = 0;
         auto refs = this->sb();
