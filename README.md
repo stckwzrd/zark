@@ -49,6 +49,8 @@ build/vibe run examples/hello.vibe
 vibe build examples/bench.vibe --release -o bench
 vibe run main.vibe lib.c engine.cpp       # link C/C++ sources directly
 vibe ir  main.vibe                        # print LLVM IR
+vibe test main.vibe                       # run the `test "name" { ... }` blocks
+vibe fmt main.vibe                        # format in place (--check to only report)
 VIBE=build/vibe tests/run.sh              # test suite
 ```
 
@@ -171,4 +173,4 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [x] **v0.4: self-hosted.** The compiler is written in Vibe and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
 - [ ] `comptime` blocks, `inline for`
 - [ ] `@cImport` via libclang; passing structs by value across the C ABI
-- [ ] closures (explicit, with a context pointer)
+- [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `vibe test`, `vibe fmt`

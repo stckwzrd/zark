@@ -45,6 +45,7 @@ Integer literals take their type from context and default to `i64`. Float litera
 
 ```vibe
 import "path.vibe"                   // relative to the current file, loaded once
+import "net.vibe" as net             // namespaced: net.connect(...), net.Conn{ ... }
 type Bytes = []u8                    // type alias (any type expression)
 const N = 4 * 2                      // compile-time constant (inlined)
 var counter: i64 = 0                 // global variable, constant initializer
@@ -52,6 +53,7 @@ struct P[T] { x: T, y: T }
 union Shape { Circle: f64, Rect: P[f64], Empty }
 enum Color { Red, Green }
 fn name[T](a: T, b: i64) !T { ... }  // generic, monomorphized on use
+fn sort[T: Ord](s: []T) { ... }      // constrained generic, checked at the call
 extern fn puts(s: *u8) i32           // C symbol
 extern fn printf(fmt: *u8, ...) i32  // C varargs
 export fn cb(x: i64) i64 { ... }     // emitted under its C name
@@ -62,7 +64,19 @@ impl P[T] {
 }
 ```
 
-Only reachable functions are compiled. Generic code is type-checked when it is instantiated.
+Only reachable functions are compiled. Generic code is type-checked when it is instantiated; constraints (`Eq`, `Ord`, `Num`, `Int`, `Float`) are checked at the call or at the type instantiation, before the body is compiled.
+
+### Modules
+
+`import "file.vibe" as name` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name.`. Inside the file its own names keep working unprefixed. `extern` and `export` names stay global. Rules, all checked by the compiler:
+
+- A file is imported under one name for the whole program, and a name belongs to one file.
+- A plain `import "file.vibe"` still puts everything in the global namespace.
+- The alias is reserved in the importing file: `net.x` always means the module member.
+
+### Tests
+
+`test "name" { ... }` at the top level declares a test: a function returning `!void`. `vibe test file.vibe` runs the tests of that file, each in its own process, and prints the output of the failed ones. `assert` and `?` fail a test. Tests are ignored by `run` and `build`.
 
 ## 4. Statements
 
@@ -83,6 +97,9 @@ Precedence, lowest to highest:
 - `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]` slice arrays, slices and pointers. Pointers need an end index.
 - `e as T` covers int↔int, int↔float, float↔float, ptr↔ptr, ptr↔int, enum↔int and `[]T` → `*T`.
 - `sizeof(T)` and `alignof(T)` are compile-time `u64` values.
+- `match v { pat => expr, ... }` is also an expression. Arms are expressions or blocks whose last statement is the value, or leave with `return`/`break`/`continue`. All values are converted to one type (the expected type, otherwise the first arm's). An expression `match` must be exhaustive: cover every variant or add `_`.
+- `?T` means `Option[T]`. `null` and a plain `T` convert to `?T` implicitly; `.Some(x)` and `.None` also work. `a orelse b` yields the value of `a`, or `b` when it is empty; `b` can also be `return`, `break` or `continue`.
+- `fn[a, b](x: i64) i64 { ... }` is a closure. The listed variables are captured by reference: the closure keeps pointers to them in a context on the stack of the function that wrote the literal, so it must not outlive that function. Its type is `fn[](i64) i64`. A closure is called like a function and costs one indirect call.
 - `.Name` is an enum value or payload-less union variant, typed by context. `.Name(e)` is a union variant with a payload, also typed by context.
 - `Type.Variant` and `Type.Variant(e)` are the explicit forms.
 - `x is .Variant` (or `x is Type.Variant`) is a `bool` test of an enum value or union tag.
@@ -167,6 +184,6 @@ Containers such as `List[T]` and `Map[V]` take the allocator in `init` and relea
 
 ## 10. Not in v0.3 (deliberately)
 
-Closures, operator overloading, exceptions, a GC, implicit copies through a heap, inheritance, and macros.
+Heap-allocated closures, operator overloading, exceptions, a GC, implicit copies through a heap, inheritance, and macros.
 
-Candidates for later: `comptime` blocks, `inline for`, `@cImport`, and `?T` sugar over `Option[T]`.
+Candidates for later: `comptime` blocks, `inline for`, and `@cImport`.

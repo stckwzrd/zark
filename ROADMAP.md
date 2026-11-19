@@ -25,6 +25,7 @@ Today the frontend prints LLVM IR text and the native backend parses it back, wh
 - Cache per module: content hash → `.o` in `.vibe-cache`; only modules that changed are recompiled.
 
 ## 6. Language
+Done: closures with explicit captures, `T: Ord` constraints (checked at the call, not inside the generic body), `match` as an expression, `?T` and `orelse`, modules (`import "x.vibe" as x`). Labeled `break` is still open.
 - **Closures with an explicit context:** `fn[ctx](x: i64) i64`, lowered to a {fn, ctx} pair, with no hidden allocation (the context lives where the caller says).
 - **Interfaces as generic constraints:** `fn sort[T: Ord](s: []T)`, checked when the generic is declared instead of when it is instantiated, which gives clearer errors.
 - **`match` as an expression,** labeled `break`, and `?T` as sugar for `Option[T]` plus `orelse`.
@@ -34,6 +35,7 @@ Today the frontend prints LLVM IR text and the native backend parses it back, wh
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
 
 ## 7. Tooling
+Done: `vibe test`, `vibe fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
 - `vibe fmt`: the parser already exists; add a printer for the AST.
 - `vibe test`: `test "name" { ... }` blocks collected and run by the driver.
 - DWARF line tables from the native backend, so gdb/lldb work: we know the source line of every instruction.
