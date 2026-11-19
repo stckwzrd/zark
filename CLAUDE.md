@@ -9,26 +9,29 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
   - `native.vibe`: parses that IR and lowers it to x86-64 (System V ABI, every SSA value in a stack slot).
   - `x64.vibe`: encoder + ELF `.o` writer.
   - `main.vibe`: the driver.
-- `src/*.zig`: stage0 compiler (Zig 0.13) used only to start the bootstrap, plus the reference lexer. `src/std.vibe` is the prelude, embedded into both compilers.
-- `examples/`, `tests/run.sh` + `tests/expected/`, `tests/errors/` (programs that must fail to compile).
+- `std/std.vibe`: the prelude, embedded into the compiler with `embed`.
+- `bootstrap/seed.ll.gz`: the bootstrap seed, the LLVM IR of the compiler itself. `./bootstrap.sh` builds stage1 from it with clang; no other compiler is needed.
+- `legacy/zig-stage0/`: the old Zig compiler, kept for history only. It is not built and not maintained.
+- `tools/update-seed.sh`: regenerates the seed from a stage that passed the fixed-point check.
+- `examples/`, `tests/run.sh` + `tests/expected/`, `tests/errors/` (programs that must fail to compile), `tests/tokens/` (golden token dumps of the examples).
 - `bench/compile_speed.sh`: compile time against gcc and clang.
 - Docs: `SPEC.md` (the language contract), `BOOTSTRAP.md`, `ROADMAP.md` (next steps).
 
 ## Commands
 - `./bootstrap.sh` does everything:
-  1. Zig stage0 → stage1 → stage2 → stage3 through LLVM, checks stage2 == stage3.
+  1. seed → stage1 → stage2 → stage3 through LLVM, checks stage2 == stage3.
   2. Builds the native-only chain native1 → native2 → native3, checks native2 == native3.
   3. Runs the tests.
   4. Writes the result to `build/vibe`.
 - `VIBE=build/vibe tests/run.sh`: run the tests. `FLAGS=--llvm` or `FLAGS=-O` tests the other backends. 21 tests, all must pass.
 - `build/vibe run|build|ir|tokens file.vibe [x.c y.cpp] [-o out] [-O|--release|--llvm|--native] [--time]`
-- Zig if it is missing: `pip install ziglang==0.13.0 --break-system-packages`, then call it as `python3 -m ziglang`. clang 18 is also required (for linking and `--release`).
+- clang 18 is required (it builds the seed, links programs and runs `--release`). Zig is not needed.
 
 ## Invariants (do not break)
 1. The fixed points must hold: stage2 == stage3, native2 == native3.
-2. **Any new syntax or builtin that `selfhost/` itself uses must also be added to `src/*.zig`**, otherwise stage0 cannot build stage1. The other way out is to bootstrap from the previous `build/vibe` and freeze stage0.
+2. **New syntax or builtins reach `selfhost/` in two steps.** (a) Teach the compiler the feature without using it in `selfhost/`, run `./bootstrap.sh`, then `tools/update-seed.sh` and commit the new seed. (b) Only then use the feature in `selfhost/`. Using it earlier makes the old seed unable to build stage1.
 3. The language rule: **no hidden allocations**. Memory goes only through an explicit `Allocator`. String interpolation is allowed only in `print/println/eprint/eprintln/panic/bprint/sprint`.
-4. The lexer in `selfhost/lexer.vibe` must match the Zig lexer token for token (a test checks this). New keywords go into both.
+4. The lexer output must match `tests/tokens/*.tok`. After an intended lexer change, regenerate them with `build/vibe tokens FILE > tests/tokens/NAME.tok` (NAME is the path with `/` replaced by `_`) and review the diff.
 
 ## Gotchas when writing Vibe (the compiler is written in it too)
 - `{` inside a string starts interpolation. For a literal brace write `{{` / `}}`. IR text like `"{{ ptr, i64 }}"` is the usual case.

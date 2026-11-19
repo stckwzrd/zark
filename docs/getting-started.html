@@ -31,31 +31,18 @@
 <td>любой</td>
 </tr>
 <tr>
-<td>Zig</td>
-<td>только для первой сборки (stage0)</td>
-<td><strong>ровно 0.13</strong></td>
-</tr>
-<tr>
-<td><code>bash</code>, <code>python3</code></td>
+<td><code>bash</code>, <code>gzip</code></td>
 <td>скрипт <code>bootstrap.sh</code></td>
 <td>любые</td>
 </tr>
 </tbody></table></div>
-<p>Zig нужен лишь для того, чтобы собрать самый первый компилятор: он умеет читать Vibe и написан на Zig. После этого компилятор Vibe собирает себя сам. Более новые версии Zig (например 0.17) <strong>не подходят</strong>: в них изменилось <code>build.zig</code>.</p>
-<blockquote class="callout tip"><p><strong>Совет:</strong> если в системе стоит другой Zig, поставьте 0.13 в отдельное виртуальное окружение, не трогая системные пакеты:</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">python3</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -m</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> venv</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/venv</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">~</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">/.cache/zig013/venv/bin/pip install ziglang</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">=0.13.0</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">mkdir</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> -p</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/bin</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">printf</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> '#!/bin/sh\nexec %s/.cache/zig013/venv/bin/python -m ziglang "$@"\n'</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$HOME</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ></span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/bin/zig</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">chmod</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> +x</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ~/.cache/zig013/bin/zig</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">export</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> PATH</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$HOME/.cache/zig013/bin:$PATH   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D"># только для этого терминала</span></span></code></pre></div><p>Скрипт <code>bootstrap.sh</code> берёт <code>zig</code> из <code>PATH</code>, а если его нет, пробует <code>python3 -m ziglang</code>.</p>
-</blockquote>
+<p>Отдельный стартовый компилятор не нужен. В репозитории лежит «семя» (<code>bootstrap/seed.ll.gz</code>): компилятор Vibe, записанный как LLVM IR. <code>clang</code> собирает из него первую версию, а дальше компилятор собирает сам себя.</p>
 <h2 id="сборка-компилятора"><a class="anchor" href="#сборка-компилятора">#</a>Сборка компилятора</h2>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">git</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> clone</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> https://github.com/stckwzrd/vibe.git</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">./bootstrap.sh</span></span></code></pre></div><p>Скрипт выполняет всю цепочку и проверяет результат:</p>
 <ol>
-<li>собирает Zig-компилятор stage0 и строит им <code>stage1</code> (компилятор Vibe, собранный stage0);</li>
+<li>собирает из семени первый компилятор через <code>clang</code>, а им — <code>stage1</code> из исходников <code>selfhost/</code>;</li>
 <li>строит <code>stage2</code> — компилятор, собранный предыдущим, и <code>stage3</code> — ещё раз; проверяет, что <code>stage2</code> и <code>stage3</code> побайтно совпадают (неподвижная точка);</li>
 <li>строит цепочку без LLVM: <code>native1</code>, <code>native2</code>, <code>native3</code> и проверяет, что <code>native2 == native3</code>;</li>
 <li>прогоняет тесты (21 штука) собственным компилятором;</li>

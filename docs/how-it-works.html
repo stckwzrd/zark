@@ -93,7 +93,7 @@
 </tr>
 </tbody></table></div>
 <p>Посмотреть промежуточные результаты можно прямо из CLI: <code>vibe tokens file.vibe</code> (токены) и <code>vibe ir file.vibe</code> (LLVM IR). Подробнее — в <a href="tooling.html#промежуточные-представления">инструментах</a>.</p>
-<p>Прелюдия (<code>src/std.vibe</code>) вшита в компилятор через <code>embed</code>, поэтому <code>vibe</code> — один исполняемый файл без внешних данных.</p>
+<p>Прелюдия (<code>std/std.vibe</code>) вшита в компилятор через <code>embed</code>, поэтому <code>vibe</code> — один исполняемый файл без внешних данных.</p>
 <h2 id="два-бэкенда"><a class="anchor" href="#два-бэкенда">#</a>Два бэкенда</h2>
 <p><strong>Свой (по умолчанию).</strong> Парсит текстовый LLVM IR, который сгенерировал фронтенд, и превращает его в машинный код x86-64. Использует линейное распределение регистров (linear scan), слияние сравнения с ветвлением, константы в операндах, ленивую загрузку составных значений. Ни одной строки LLVM внутри нет. Назначение — быстрая сборка: типичный проект собирается за доли секунды.</p>
 <p><strong>LLVM (<code>-O</code>, <code>--release</code>, <code>--llvm</code>).</strong> Тот же IR отдаётся <code>clang</code>, который делает полную оптимизацию. Нужен для скорости в рабочих сборках.</p>
@@ -139,11 +139,11 @@
 </tbody></table></div>
 <p>То есть <code>--release</code> не уступает C, а отладочная сборка выигрывает в скорости компиляции.</p>
 <h2 id="самосборка-и-неподвижная-точка"><a class="anchor" href="#самосборка-и-неподвижная-точка">#</a>Самосборка и неподвижная точка</h2>
-<p>Компилятор собирает сам себя. Чтобы начать с нуля, есть «стартовый» компилятор на Zig (<code>src/*.zig</code>), его называют <strong>stage0</strong>.</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>stage0 (Zig)  →  stage1 (Vibe, собран stage0)</span></span>
+<p>Компилятор собирает сам себя. Чтобы начать с нуля, в репозитории лежит <strong>семя</strong>: LLVM IR самого компилятора (<code>bootstrap/seed.ll.gz</code>). <code>clang</code> превращает его в первый рабочий компилятор.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>семя (clang)  →  stage1 (Vibe, собран из семени)</span></span>
 <span class="line"><span>              →  stage2 (Vibe, собран stage1)</span></span>
 <span class="line"><span>              →  stage3 (Vibe, собран stage2)</span></span></code></pre></div><p>Проверка: <strong>stage2 и stage3 совпадают побайтно</strong> (неподвижная точка). То же делается для цепочки со своим бэкендом без LLVM (native2 == native3). Скрипт <code>bootstrap.sh</code> запускает всё, затем прогоняет набор тестов и кладёт результат в <code>build/vibe</code>.</p>
-<p>Следствие для разработки: <strong>новый синтаксис, который использует сам компилятор, должен быть добавлен и в stage0</strong>, иначе stage0 не сможет собрать stage1. Обратный выход — собирать из предыдущего <code>build/vibe</code>.</p>
+<p>Следствие для разработки: новая возможность языка добавляется в два шага. Сначала компилятор учат ей, не используя её в своих исходниках, и обновляют семя (<code>tools/update-seed.sh</code>). Только потом её можно использовать в <code>selfhost/</code>: иначе старое семя не сможет собрать новый код.</p>
 <h2 id="раскладка-типов-в-памяти"><a class="anchor" href="#раскладка-типов-в-памяти">#</a>Раскладка типов в памяти</h2>
 <p>Принцип «что видите, то и лежит»:</p>
 <div class="table-wrap"><table><thead><tr>
@@ -214,7 +214,7 @@
 <ul>
 <li><code>tests/run.sh</code> прогоняет примеры из <code>examples/</code> и сравнивает вывод с <code>tests/expected/</code>;</li>
 <li><code>tests/errors/</code> — программы, которые <strong>обязаны</strong> не компилироваться;</li>
-<li>проверка, что токены собственного лексера совпадают с лексером на Zig (тысячи токенов);</li>
+<li>проверка, что токены примеров совпадают с эталонными файлами <code>tests/tokens</code>;</li>
 <li>проверка неподвижной точки.</li>
 </ul>
 <p>Режимы сборки проверяются теми же тестами: <code>FLAGS=--llvm</code> и <code>FLAGS=-O</code> прогоняют их через LLVM.</p>

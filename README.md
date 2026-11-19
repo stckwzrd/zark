@@ -41,10 +41,10 @@ fn main() !void {
 
 ## Quick start
 
-Requirements: clang (tested with clang 18), plus Zig 0.13 for stage0.
+Requirements: clang (tested with clang 18).
 
 ```sh
-./bootstrap.sh                            # Zig stage0 -> self-hosted build/vibe (+ tests)
+./bootstrap.sh                            # seed -> self-hosted build/vibe (+ tests)
 build/vibe run examples/hello.vibe
 vibe build examples/bench.vibe --release -o bench
 vibe run main.vibe lib.c engine.cpp       # link C/C++ sources directly
@@ -135,7 +135,7 @@ var line: [64]u8
 let s = bprint(line[..], "n = {xs.len}")?   // formatting into your own buffer
 ```
 
-## Standard library (auto-imported prelude, `src/std.vibe`)
+## Standard library (auto-imported prelude, `std/std.vibe`)
 
 - `Allocator` (ctx + 2 function pointers), `c_allocator()`, `FixedBuf`: `alloc[T], free, create[T], destroy, dup`
 - `List[T]`: `init(a), deinit, reserve, push, append, pop, last, get, set, slice, sort, reverse, contains, clear`
@@ -160,21 +160,22 @@ The full build of the example, compilation plus linking, takes about 80 ms.
 
 ## Compiler architecture
 
-The self-hosted compiler lives in `selfhost/` (~4.5k lines of Vibe, see BOOTSTRAP.md). The original Zig compiler in `src/` (~4.5k lines) is kept as stage0:
+The self-hosted compiler lives in `selfhost/` (see BOOTSTRAP.md). It is built from a committed seed (`bootstrap/seed.ll.gz`), so only clang is needed:
 
 ```
-src/lexer.zig    tokens + automatic `;` at line ends
-src/parser.zig   recursive descent → AST; string interpolation parsed into sub-expressions
-src/codegen.zig  type checking + monomorphization + LLVM IR (text), one pass
-src/main.zig     driver: imports, IR → clang, linking .c/.cpp/.o
-src/std.vibe     prelude written in Vibe itself (List, Map, StrBuf, runtime helpers)
+selfhost/lexer.vibe    tokens + automatic `;` at line ends
+selfhost/parser.vibe   recursive descent → AST; string interpolation parsed into sub-expressions
+selfhost/gen*.vibe     type checking + monomorphization + LLVM IR (text), one pass
+selfhost/native.vibe   own x86-64 backend, x64.vibe encoder + ELF writer
+selfhost/main.vibe     driver: imports, IR → backend, linking .c/.cpp/.o
+std/std.vibe           prelude written in Vibe itself (List, Map, Arena, runtime helpers)
 ```
 The compiler emits textual LLVM IR and calls `clang`, with no linking against libLLVM. Locals become `alloca`s, which LLVM promotes to registers at `-O2`.
 
 ## Roadmap
 
 - [x] v0.2: no hidden allocations, `Allocator`, `*void`, function pointers, tagged unions, `..` in literals, `alignof`, errdefer on runtime errors
-- [x] v0.3: files, processes, `sprint`, format specs, `type` aliases, `Arena`; self-hosted lexer identical to the Zig one
+- [x] v0.3: files, processes, `sprint`, format specs, `type` aliases, `Arena`; self-hosted lexer
 - [x] **v0.5: own x86-64 backend + ELF writer** (default); the native-built compiler reaches its own fixed point. Next steps: [ROADMAP.md](ROADMAP.md)
 - [x] **v0.4: self-hosted.** The compiler is written in Vibe and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
 - [ ] `comptime` blocks, `inline for`
