@@ -5,7 +5,8 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 ## Layout
 - `selfhost/*.vibe`: **the real compiler**, about 6.2k lines of Vibe.
   - `lexer` → `ast` (fat nodes with a kind tag) → `parser`.
-  - `gen*.vibe`: types, generics, statements, expressions, calls, formatting. Emits LLVM IR **as text**.
+  - `sema_types.vibe`: type layouts, names, resolution, constraints (first piece of the semantic layer).
+  - `gen*.vibe`: generics, statements, expressions, calls, formatting. Emits LLVM IR **as text**.
   - `native.vibe`: parses that IR and lowers it to x86-64 (System V ABI, every SSA value in a stack slot).
   - `x64.vibe`: encoder + ELF `.o` writer.
   - `main.vibe`: the driver.

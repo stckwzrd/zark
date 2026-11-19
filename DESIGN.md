@@ -73,7 +73,7 @@ Goal: code that reads like C++ for someone who writes C++ every day, while keepi
 - Steps S1 parser, S2 converter, S3 migrate everything, S4 remove the old syntax, S5 guide and editor grammar. Each step green: tests, both fixed points, `tests/no_magic_names.sh`.
 
 ### Phase 3: semantic layer
-- [ ] `sema*.vibe`: types and layouts
+- [x] `sema*.vibe`: types and layouts (`sema_types.vibe`, moved out of `gen.vibe` unchanged, IR byte-identical)
 - [ ] expression typing
 - [ ] calls and generics
 - [ ] statements

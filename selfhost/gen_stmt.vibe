@@ -1,6 +1,6 @@
 // Statements: let/assign/if/loops/defer/match/return.
 
-import "gen.vibe";
+import "sema_types.vibe";
 
 struct UPat { i64 idx; str bind; }
 struct MatchRes { Type* ty; str slot; }
