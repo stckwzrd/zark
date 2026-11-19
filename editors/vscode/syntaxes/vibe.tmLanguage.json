@@ -54,11 +54,11 @@
     "declarations": {
       "patterns": [
         {
-          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-          "captures": { "1": { "name": "storage.type.function.vibe" }, "2": { "name": "entity.name.function.vibe" } }
+          "match": "\\b([A-Za-z_][A-Za-z0-9_<>:*\\[\\]!?]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(",
+          "captures": { "2": { "name": "entity.name.function.vibe" } }
         },
         {
-          "match": "\\b(struct|union|enum|impl|type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(struct|union|enum|type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": { "1": { "name": "storage.type.vibe" }, "2": { "name": "entity.name.type.vibe" } }
         }
       ]
@@ -69,12 +69,12 @@
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.vibe", "match": "\\b(if|else|while|for|in|return|break|continue|match|defer|errdefer|catch|orelse|is)\\b" },
+        { "name": "keyword.control.vibe", "match": "\\b(if|else|while|for|return|break|continue|match|defer|errdefer|catch|orelse|is)\\b" },
         { "name": "keyword.operator.word.vibe", "match": "\\b(as|sizeof|alignof)\\b" },
-        { "name": "storage.type.vibe", "match": "\\b(fn|let|var|const|struct|enum|union|impl|type)\\b" },
+        { "name": "storage.type.vibe", "match": "\\b(fn|auto|const|static|template|struct|enum|union|type)\\b" },
         { "name": "storage.modifier.vibe", "match": "\\b(extern|export)\\b" },
         { "name": "keyword.control.import.vibe", "match": "\\bimport\\b" },
-        { "name": "constant.language.vibe", "match": "\\b(true|false|null)\\b" },
+        { "name": "constant.language.vibe", "match": "\\b(true|false|null|nullptr|this)\\b" },
         { "name": "constant.other.error.vibe", "match": "\\berror\\.[A-Za-z_][A-Za-z0-9_]*" }
       ]
     },
