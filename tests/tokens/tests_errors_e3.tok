@@ -1,0 +1,15 @@
+1 .kw_fn fn
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .kw_let let
+1 .ident s
+1 .colon :
+1 .ident str
+1 .eq =
+1 .int_lit 5
+1 .rbrace }
+1 .semi \n
+2 .semi 
+2 .eof 

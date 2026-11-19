@@ -1,0 +1,42 @@
+1 .kw_fn fn
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .kw_let let
+1 .ident a
+1 .eq =
+1 .lbracket [
+1 .int_lit 1
+1 .comma ,
+1 .int_lit 2
+1 .comma ,
+1 .int_lit 3
+1 .rbracket ]
+1 .semi ;
+1 .kw_var var
+1 .ident i
+1 .eq =
+1 .int_lit 1
+1 .semi ;
+1 .kw_while while
+1 .kw_true true
+1 .lbrace {
+1 .ident print
+1 .lparen (
+1 .ident a
+1 .lbracket [
+1 .ident i
+1 .rbracket ]
+1 .comma ,
+1 .str_lit 
+1 .rparen )
+1 .semi ;
+1 .ident i
+1 .plus_eq +=
+1 .int_lit 1
+1 .rbrace }
+1 .rbrace }
+1 .semi \n
+2 .semi 
+2 .eof 

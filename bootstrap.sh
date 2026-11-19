@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# Full bootstrap: Zig stage0 -> Vibe stage1 -> stage2 -> stage3, then check the fixed point.
 set -euo pipefail
 cd "$(dirname "$0")"
-ZIG=zig; command -v zig >/dev/null || ZIG="python3 -m ziglang"
 mkdir -p build
 
-echo "== stage0: Zig reference compiler"
-$ZIG build -Doptimize=ReleaseFast
-S0=zig-out/bin/vibe
+echo "== seed: bootstrap/seed.ll.gz -> stage1 (clang)"
+gzip -dc bootstrap/seed.ll.gz > build/seed.ll
+clang -O1 -Wno-override-module build/seed.ll -o build/seed -lm
 
-echo "== stage1: Vibe compiler built by stage0"
-$S0 build selfhost/main.vibe --release -o build/stage1
+echo "== stage1: compiler built from the seed"
+build/seed build selfhost/main.vibe --release -o build/stage1
 echo "== stage2: Vibe compiler built by itself"
 build/stage1 build selfhost/main.vibe --release -o build/stage2
 echo "== stage3: and again"

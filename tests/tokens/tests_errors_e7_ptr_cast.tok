@@ -1,0 +1,22 @@
+1 .kw_fn fn
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .kw_var var
+1 .ident a
+1 .eq =
+1 .int_lit 1
+1 .semi ;
+1 .kw_let let
+1 .ident p
+1 .colon :
+1 .star *
+1 .ident u8
+1 .eq =
+1 .amp &
+1 .ident a
+1 .rbrace }
+1 .semi \n
+2 .semi 
+2 .eof 

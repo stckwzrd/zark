@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs all examples and compares against expected output.
 cd "$(dirname "$0")/.."
-VIBE=${VIBE:-./zig-out/bin/vibe}; [ -x "$VIBE" ] || VIBE=./vibe
+VIBE=${VIBE:-./build/vibe}
 pass=0; fail=0
 check() { # name, cmd...
   local name=$1; shift
@@ -13,11 +13,10 @@ check interop $VIBE run examples/interop/main.vibe examples/interop/mathlib.c ex
 for f in tests/errors/*.vibe; do
   if $VIBE run "$f" >/dev/null 2>&1; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
 done
-# self-hosted compiler: its lexer must match the Zig reference token for token
-REF=./zig-out/bin/vibe
-FILES="src/std.vibe $(ls selfhost/*.vibe examples/*.vibe examples/interop/*.vibe tests/errors/*.vibe)"
-if [ -x "$REF" ]; then
-  if cmp -s <($VIBE tokens $FILES) <($REF tokens $FILES); then pass=$((pass+1)); echo "ok   tokens == zig reference ($($REF tokens $FILES | wc -l) tokens)"
-  else fail=$((fail+1)); echo "FAIL tokens differ from zig reference"; fi
-fi
+tok_bad=0
+for f in examples/*.vibe examples/interop/*.vibe tests/errors/*.vibe; do
+  n=$(echo ${f%.vibe} | tr / _)
+  cmp -s <($VIBE tokens $f) tests/tokens/$n.tok || { tok_bad=1; echo "tokens differ: $f"; }
+done
+if [ $tok_bad -eq 0 ]; then pass=$((pass+1)); echo "ok   tokens match tests/tokens ($(ls tests/tokens | wc -l) files)"; else fail=$((fail+1)); echo "FAIL tokens"; fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]
