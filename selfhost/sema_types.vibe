@@ -264,12 +264,16 @@ bool Gen::satisfies(Type* t, str name) {
         sprint(&this->types_out, "%\"{inst.llname}\" = type {{ i32, [{inst.payload_words} x i64] }}\n")?;
         return inst;
     }
-    sprint(&this->types_out, "%\"{inst.llname}\" = type {{ ")?;
+    if (sd.packed) {
+        sprint(&this->types_out, "%\"{inst.llname}\" = type <{{ ")?;
+    } else {
+        sprint(&this->types_out, "%\"{inst.llname}\" = type {{ ")?;
+    }
     for (auto [i, f] : inst.fields) {
         if (i > 0) { this->types_out.append(", ")?; }
         this->types_out.append(this->llty(f.ty)?)?;
     }
-    this->types_out.append(" }\n")?;
+    if (sd.packed) { this->types_out.append(" }>\n")?; } else { this->types_out.append(" }\n")?; }
     return inst;
 }
 
@@ -328,6 +332,10 @@ bool Gen::satisfies(Type* t, str name) {
             if (t.si.decl.is_union) { return 8 + 8 * t.si.payload_words; }
             u64 off = 0;
             u64 maxa = 1;
+            if (t.si.decl.packed) {
+                for (auto f : t.si.fields) { off += this->size_of(f.ty)?; }
+                return off;
+            }
             for (auto f : t.si.fields) {
                 const auto sz = this->size_of(f.ty)?;
                 const auto al = this->align_of(f.ty)?;
@@ -351,6 +359,7 @@ bool Gen::satisfies(Type* t, str name) {
         .Array => return this->align_of(t.elem);
         .Strct => {
             if (t.si.decl.is_union) { return 8; }
+            if (t.si.decl.packed) { return 1; }
             u64 m = 1;
             for (auto f : t.si.fields) { m = max(m, this->align_of(f.ty)?); }
             return m;

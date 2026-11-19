@@ -22,6 +22,7 @@ struct Parser {
     bool no_post;
     bool arrow_only;
     List<i64> splits;
+    bool at_packed;
 
     Token peek() { return this->toks[this->pos] };
     Token peek_at(i64 n) {
@@ -160,6 +161,11 @@ struct Parser {
             out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
             return;
         }
+        if (t.tag == .ident && t.text == "packed" && (this->peek_at(1).tag == .kw_struct || this->peek_at(1).tag == .kw_union)) {
+            _ = this->advance();
+            this->at_packed = true;
+            return this->parse_decl(out);
+        }
         match t.tag {
             .kw_import => {
                 _ = this->advance();
@@ -205,7 +211,8 @@ struct Parser {
                 }
                 _ = this->expect(.rbrace)?;
                 const auto sd = this->a.create<StructDecl>()?;
-                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union };
+                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union, .packed = this->at_packed };
+                this->at_packed = false;
                 d.k = .Struct;
                 d.s = sd;
             }
