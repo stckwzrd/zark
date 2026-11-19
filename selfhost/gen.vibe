@@ -90,6 +90,7 @@ struct Gen {
     List<Scope> scopes;
     List<Loop> loops;
     FnInst* cur;
+    bool const_this;
     Env env;
     bool terminated;
     str cur_label;
@@ -1046,6 +1047,7 @@ struct Gen {
         this->terminated = false;
         this->cur_label = "entry";
         this->cur = fi;
+        this->const_this = fi.decl.is_const;
         this->env = fi.env;
 
         this->push_scope()?;

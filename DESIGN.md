@@ -78,7 +78,8 @@ Goal: code that reads like C++ for someone who writes C++ every day, while keepi
 - [ ] calls and generics
 - [ ] statements
 - [ ] delete duplicated logic in `gen*.vibe`
-- [ ] several errors per run (up to 10) with `file:line:col`
+- [x] several errors per run (up to 10); the column is shown by the caret line, not in the header
+- [x] `const` methods cannot assign fields (calls of non-const methods are not checked yet)
 - [ ] constraints `T: Ord` checked at the declaration, interfaces defined in std
 - [ ] all tests on three backends, fixed points, compile time within +10%
 
@@ -96,8 +97,8 @@ Migration notes (S2/S3a): the compiler (11.8k lines), std, examples and tests we
 - [x] S1 parser accepts the new syntax (`selfhost/parser_new.vibe`, example `examples/cpp_style.vibe`, guide page `cpp-style.md`)
 - [x] S2 converter: `python3 tools/convert-syntax.py FILE...` rewrites old-syntax files in place (token based, keeps comments; run `vibe fmt` after it). It is a script, not a `vibe fmt` flag, because it is only needed once
 - [x] S3a migrate selfhost, std, examples, tests (done; every method of a struct that lives in another file is an out-of-class definition, `void Gen::gen_expr(...)`)
-- [ ] S3b migrate the guide (code blocks and the prose that explains `fn`/`let`/`var`/`impl`), README, SPEC examples
-- [ ] S4 remove the old syntax
-- [ ] S5 guide, editor grammar and snippets
+- [x] S3b migrate the guide (code blocks and the prose that explains `fn`/`let`/`var`/`impl`), README, SPEC examples
+- [x] S4 remove the old syntax (`;` is mandatory except before `}`)
+- [x] S5 guide, editor grammar and snippets
 
 ### Phase 4 (only when asked): MIR and backend work

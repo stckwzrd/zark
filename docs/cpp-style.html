@@ -59,7 +59,7 @@
 <ul>
 <li>Методы лежат внутри <code>struct</code>. Поля доступны по голому имени (<code>x</code>) и через <code>this-&gt;x</code> (или <code>this.x</code>). Локальная переменная с тем же именем перекрывает поле.</li>
 <li><code>static</code> объявляет функцию без <code>this</code>: <code>Point::origin()</code>.</li>
-<li><code>const</code> после списка параметров принимается, но пока <strong>не проверяется</strong>: константный метод всё ещё может менять поля.</li>
+<li><code>const</code> после списка параметров запрещает методу менять поля через <code>this</code> (присваивание и <code>+=</code> дают ошибку). Вызов неконстантных методов из константного пока не проверяется.</li>
 <li>Литерал с точками, <code>Point{ .x = 3 }</code>, обнуляет остальные поля, как в C++. <code>Point{}</code> — все поля нулевые.</li>
 </ul>
 <h2 id="union-enum-и"><a class="anchor" href="#union-enum-и">#</a>Union, enum и <code>::</code></h2>
@@ -179,7 +179,6 @@
 <ul>
 <li>Нет <code>class</code>, <code>public:</code>, конструкторов и деструкторов, наследования и перегрузки.</li>
 <li>В приведении указатель пишется префиксом: <code>p as *u8</code>.</li>
-<li><code>const</code> у метода не проверяется.</li>
 </ul>
 <h2 id="таблица-отличий"><a class="anchor" href="#таблица-отличий">#</a>Таблица отличий</h2>
 <div class="table-wrap"><table><thead><tr>

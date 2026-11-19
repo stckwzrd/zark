@@ -539,7 +539,7 @@ bool can_coerce(Type* from, Type* to) {
             const auto idx = field_index(si, e.name);
             if (idx < 0) { this->err(e.line); eprintln("'{si.display}' has no field '{e.name}'{this->hint(e.name, this->field_names(si))}"); return error.CompileFailed; }
             const auto t = this->gep_field(base.ty, base.v, idx)?;
-            return Addr{ .ty = si.fields.get(idx).ty, .v = t, .imm = base.imm };
+            return Addr{ .ty = si.fields.get(idx).ty, .v = t, .imm = base.imm || (this->const_this && e.l.k == .Ident && e.l.name == "this") };
         }
         if (base.ty.k == .Slice) {
             auto idx = 0;

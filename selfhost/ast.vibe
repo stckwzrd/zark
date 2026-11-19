@@ -99,6 +99,7 @@ struct FnDecl {
     i64 name_off;
     i64 end_off;
     i64 receiver_off;
+    bool is_const;
 }
 
 struct Field { str name; TypeExpr* ty; i64 off; }
