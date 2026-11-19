@@ -62,6 +62,7 @@ VIBE=build/vibe tests/run.sh              # test suite
 | `--time` | print frontend/backend/link times |
 | `-O` | LLVM `-O2`, bounds checks stay on |
 | `--release` | `-O2` and bounds checks removed |
+| `--fast-math` | `--fast` plus fast-math flags on float arithmetic (reassociation, like `-ffast-math`) |
 | `--fast` | `--release` plus `nsw` on signed arithmetic (signed overflow is undefined, as in C++) |
 | `-o out` | output binary |
 | `-- a b` | arguments for `vibe run` |

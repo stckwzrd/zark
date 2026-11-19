@@ -138,6 +138,7 @@ str base_of(str path) {
     auto timing = false;
     auto freestanding = false;
     auto fast = false;
+    auto fastmath = false;
     auto i = 2;
     while (i < arg_count()) {
         const auto x = arg(i);
@@ -153,6 +154,11 @@ str base_of(str path) {
             force_llvm = true;
         } else if (x == "--native") {
             force_native = true;
+        } else if (x == "--fast-math") {
+            fast = true;
+            fastmath = true;
+            opt = true;
+            safety = false;
         } else if (x == "--fast") {
             opt = true;
             safety = false;
@@ -182,6 +188,7 @@ str base_of(str path) {
     const auto t0 = now_ns();
     const auto g = new_gen(a, safety)?;
     g.fast = fast;
+    g.fastmath = fastmath;
     auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = Map<str>::init(a) };
     diag_prelude = PRELUDE;
     g.test_mode = is_test;

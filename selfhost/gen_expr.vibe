@@ -913,6 +913,10 @@ str operator_name(Tag t) {
         return error.CompileFailed;
     }
     if (ins.len == 0) { this->err(line); eprintln("bad operator for '{this->type_name(l.ty)?}'"); return error.CompileFailed; }
+    if (this->fastmath && l.ty.k == .Float && (ins == "fadd" || ins == "fsub" || ins == "fmul" || ins == "fdiv")) {
+        sprint(this->ins()?, "  {t} = {ins} fast {ty} {l.v}, {r.v}\n")?;
+        return Value{ .ty = l.ty, .v = t };
+    }
     sprint(this->ins()?, "  {t} = {ins} {ty} {l.v}, {r.v}\n")?;
     return Value{ .ty = l.ty, .v = t };
 }

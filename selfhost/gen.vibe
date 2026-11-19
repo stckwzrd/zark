@@ -58,6 +58,7 @@ struct Gen {
     Allocator a;
     bool safety;
     bool fast;
+    bool fastmath;
 
     Map<FnDecl*> fns;
     Map<FnDecl*> methods;
