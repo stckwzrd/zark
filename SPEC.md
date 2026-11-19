@@ -10,6 +10,10 @@ This file is the contract for the self-hosted compiler: anything written here mu
 4. **Conversions are visible.** Implicit conversions are limited to lossless int widening, `T` → `!T`, `error.X` → `!T`, `null` → pointer/fn, and `*T` ↔ `*void`. Everything else is `as`.
 5. **What you see is the layout.** Structs are laid out like C structs. A union is `{ i32 tag, payload }`. `str` is `{ *u8, i64 }`.
 
+## C++-style syntax
+
+Every construct also has a C++-style spelling (type-first declarations, `template<T>`, methods inside `struct`, `[&k](T x) -> R {}`, `for (T i : a..b)`, `::`, `->`, `nullptr`, `++`, `--`, `|= &= ^= <<= >>=`); both spellings produce the same AST. See the guide page `cpp-style` and `DESIGN.md` (Phase S).
+
 ## 1. Lexical
 
 - Comments: `// ...` and `/* ... */`.

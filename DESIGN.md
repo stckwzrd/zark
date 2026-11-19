@@ -82,8 +82,16 @@ Goal: code that reads like C++ for someone who writes C++ every day, while keepi
 - [ ] constraints `T: Ord` checked at the declaration, interfaces defined in std
 - [ ] all tests on three backends, fixed points, compile time within +10%
 
+S1 as built, and where it differs from the plan:
+- Semicolons are accepted but not required: the lexer still inserts them at line ends, so the "operator at the start of a line" trap remains. Enforcing them needs a per-file mode and is left for S4.
+- `for (T i = a; i < b; i++)` (also `<=`, `++i`, `i += 1`) is lowered to the range loop; other C-style loops are rejected with a message that points to `while`. Index form `for (i, x : xs)` is not supported yet.
+- `const` on a method and parameters are parsed; methods get a `this` pointer, `const` is not enforced (Phase 3). Parameters are mutable copies in the new syntax only.
+- `T[N]` is an array for builtin type names and for any type when `N` is an integer literal; `Name[T]` stays the old generic form. Casts take pointer types in prefix form (`p as *u8`).
+- A designated literal (`Point{ .x = 1 }`) zero-fills the rest, as in C++.
+- `vibe fmt` keeps new-syntax files stable (spacing around `<`, `>`, `::`, `->`, `*` follows the source); a real printer is part of S2.
+
 ### Phase S checklist
-- [ ] S1 parser accepts the new syntax
+- [x] S1 parser accepts the new syntax (`selfhost/parser_new.vibe`, example `examples/cpp_style.vibe`, guide page `cpp-style.md`)
 - [ ] S2 `vibe fmt --to-new`
 - [ ] S3 migrate selfhost, std, examples, tests, guide
 - [ ] S4 remove the old syntax
