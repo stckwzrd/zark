@@ -1,0 +1,770 @@
+// Static analysis for the language server: symbols, references and shallow type inference over the AST.
+
+import "loader.vibe"
+import "resolve.vibe"
+
+enum SymK { Fn, Method, Struct, Union, Enum, Const, Var, Alias, Field, Variant, Param, Local, TypeParam, Module }
+
+struct Symbol {
+    k: SymK
+    name: str
+    file: str
+    off: i64
+    len: i64
+    ty: *TypeExpr
+    fd: *FnDecl
+    sd: *StructDecl
+    ed: *EnumDecl
+    owner: str
+    mutable: bool
+}
+
+struct Occ { file: str, off: i64, len: i64, sym: *Symbol }
+
+struct FileInfo {
+    path: str
+    src: str
+    decls: List[Decl]
+    ok: bool
+}
+
+struct Project {
+    a: Allocator
+    files: List[*FileInfo]
+    by_path: Map[*FileInfo]
+    flat: Map[*Symbol]
+    members: Map[*Symbol]
+    occs: List[Occ]
+    overrides: Map[str]
+    cursor_file: str
+    cursor: i64
+    snap: bool
+    near: List[*Symbol]
+    cur_fn: *FnDecl
+}
+
+fn last_segment(name: str) str {
+    let dot = str_rfind_byte(name, '.')
+    if dot < 0 { return name }
+    return name[dot + 1..]
+}
+
+fn qname(a: Allocator, owner: str, name: str) str {
+    var b = List[u8].init(a)
+    sprint(&b, "{owner}.{name}") catch return name
+    return b.slice()
+}
+
+fn ident_len(src: str, off: i64) i64 {
+    var i = off
+    while i < src.len && (is_alnum(src[i]) || src[i] == '_') { i += 1 }
+    return i - off
+}
+
+fn new_project(a: Allocator, overrides: Map[str]) Project {
+    return Project{
+        a: a, files: List[*FileInfo].init(a), by_path: Map[*FileInfo].init(a), flat: Map[*Symbol].init(a),
+        members: Map[*Symbol].init(a), occs: List[Occ].init(a), overrides: overrides, cursor_file: "", cursor: -1,
+        snap: false, near: List[*Symbol].init(a), cur_fn: null,
+    }
+}
+
+impl Project {
+    fn sym(self, k: SymK, name: str, file: str, off: i64) !*Symbol {
+        let s = self.a.create[Symbol]()?
+        s.k = k
+        s.name = last_segment(name)
+        s.file = file
+        s.off = off
+        s.len = s.name.len
+        return s
+    }
+
+    fn parse_file(self, src: str, path: str) !*FileInfo {
+        let fi = self.a.create[FileInfo]()?
+        fi.path = path
+        fi.src = src
+        fi.decls = List[Decl].init(self.a)
+        fi.ok = true
+        let toks = tokenize(self.a, src, path) catch {
+            fi.ok = false
+            return fi
+        }
+        var p = new_parser(self.a, toks.slice(), path)
+        fi.decls = p.parse_file() catch {
+            fi.ok = false
+            fi.decls
+        }
+        return fi
+    }
+
+    fn load(self, path: str, prefix: str) !void {
+        if self.by_path.has(path) { return }
+        var src = ""
+        if self.overrides.has(path) {
+            src = self.overrides.get(path)?
+        } else {
+            src = read_file(self.a, path) catch return
+        }
+        let fi = self.parse_file(src, path)?
+        self.by_path.put(path, fi)?
+        let dir = dir_of(path)
+        for d in fi.decls {
+            if d.k != .Import { continue }
+            let full = canonical(self.a, join_path(self.a, dir, d.path)?)?
+            self.load(full, d.alias)?
+        }
+        if prefix.len > 0 && fi.ok { resolve_module(self.a, fi.decls, prefix)? }
+        self.files.push(fi)?
+    }
+
+    fn load_prelude(self) !void {
+        let fi = self.parse_file(PRELUDE, "<std>")?
+        self.by_path.put("<std>", fi)?
+        self.files.push(fi)?
+    }
+
+    fn add_flat(self, s: *Symbol, key: str) !void {
+        if !self.flat.has(key) { self.flat.put(key, s)? }
+    }
+
+    fn register(self, fi: *FileInfo) !void {
+        for d in fi.decls {
+            match d.k {
+                .Func => {
+                    let f = d.f
+                    if f.is_test { continue }
+                    var k = SymK.Fn
+                    if f.receiver.len > 0 { k = .Method }
+                    let s = self.sym(k, f.name, fi.path, f.name_off)?
+                    s.fd = f
+                    s.ty = f.ret
+                    s.owner = f.receiver
+                    if f.receiver.len > 0 {
+                        let key = qname(self.a, f.receiver, s.name)
+                        if !self.members.has(key) { self.members.put(key, s)? }
+                    } else {
+                        self.add_flat(s, f.name)?
+                    }
+                }
+                .Struct => {
+                    let sd = d.s
+                    var k = SymK.Struct
+                    if sd.is_union { k = .Union }
+                    let s = self.sym(k, sd.name, fi.path, sd.name_off)?
+                    s.sd = sd
+                    self.add_flat(s, sd.name)?
+                    for f in sd.fields {
+                        let fs = self.sym(.Field, f.name, fi.path, f.off)?
+                        fs.ty = f.ty
+                        fs.owner = sd.name
+                        fs.sd = sd
+                        self.members.put(qname(self.a, sd.name, f.name), fs)?
+                    }
+                }
+                .Enum => {
+                    let ed = d.en
+                    let s = self.sym(.Enum, ed.name, fi.path, ed.name_off)?
+                    s.ed = ed
+                    self.add_flat(s, ed.name)?
+                    for i, v in ed.variants {
+                        let vs = self.sym(.Variant, v, fi.path, ed.variant_offs.get(i))?
+                        vs.owner = ed.name
+                        vs.ed = ed
+                        self.members.put(qname(self.a, ed.name, v), vs)?
+                    }
+                }
+                .Const => {
+                    var k = SymK.Const
+                    if d.c.mutable { k = .Var }
+                    let s = self.sym(k, d.c.name, fi.path, d.c.name_off)?
+                    s.ty = d.c.ty
+                    s.mutable = d.c.mutable
+                    self.add_flat(s, d.c.name)?
+                }
+                .Alias => {
+                    let s = self.sym(.Alias, d.path, fi.path, d.name_off)?
+                    s.ty = d.ty
+                    self.add_flat(s, d.path)?
+                }
+                .Import => {
+                    if d.alias.len > 0 {
+                        let s = self.sym(.Module, d.alias, fi.path, d.name_off)?
+                        s.owner = d.path
+                        self.add_flat(s, d.alias)?
+                    }
+                }
+            }
+        }
+    }
+
+    fn mk_name(self, name: str) !*TypeExpr {
+        let t = self.a.create[TypeExpr]()?
+        t.k = .Name
+        t.name = name
+        t.off = -1
+        t.args = List[*TypeExpr].init(self.a)
+        return t
+    }
+
+    fn mk_wrap(self, k: TEK, elem: *TypeExpr) !*TypeExpr {
+        let t = self.mk_name("")?
+        t.k = k
+        t.elem = elem
+        return t
+    }
+
+    fn subst(self, te: *TypeExpr, names: List[str], args: List[*TypeExpr]) !*TypeExpr {
+        if te == null { return null }
+        if te.k == .Name && te.args.len == 0 {
+            for i, n in names {
+                if n == te.name && i < args.len { return args.get(i) }
+            }
+            return te
+        }
+        let t = self.a.create[TypeExpr]()?
+        *t = *te
+        t.args = List[*TypeExpr].init(self.a)
+        for x in te.args { t.args.push(self.subst(x, names, args)?)? }
+        t.elem = self.subst(te.elem, names, args)?
+        t.ret = self.subst(te.ret, names, args)?
+        return t
+    }
+
+    fn recv_type(self, f: *FnDecl) !*TypeExpr {
+        let t = self.mk_name(f.receiver)?
+        for x in f.receiver_params { t.args.push(self.mk_name(x)?)? }
+        return t
+    }
+}
+
+struct Walker {
+    p: *Project
+    fi: *FileInfo
+    locals: List[*Symbol]
+    tps: List[*Symbol]
+    self_ty: *TypeExpr
+}
+
+fn mentions(te: *TypeExpr, names: List[str]) bool {
+    if te == null { return false }
+    if te.k == .Name && te.args.len == 0 { return contains_str(names, te.name) }
+    for x in te.args { if mentions(x, names) { return true } }
+    return mentions(te.elem, names) || mentions(te.ret, names)
+}
+
+impl Walker {
+    fn find(self, name: str) *Symbol {
+        var i = self.locals.len
+        while i > 0 {
+            i -= 1
+            if self.locals.get(i).name == name { return self.locals.get(i) }
+        }
+        for t in self.tps { if t.name == name { return t } }
+        return self.p.flat.get(name) catch null
+    }
+
+    fn occ(self, off: i64, len: i64, s: *Symbol) {
+        if s == null || off < 0 { return }
+        self.p.occs.push(Occ{ file: self.fi.path, off: off, len: len, sym: s }) catch return
+    }
+
+    fn declare(self, k: SymK, name: str, off: i64, ty: *TypeExpr) !void {
+        let s = self.p.sym(k, name, self.fi.path, off)?
+        s.ty = ty
+        self.locals.push(s)?
+        self.occ(off, name.len, s)
+    }
+
+    fn use_name(self, name: str, off: i64) {
+        if off < 0 { return }
+        let src = self.fi.src
+        let dot = str_find_byte(name, '.')
+        if dot >= 0 && off + name.len <= src.len && src[off..off + name.len] == name {
+            let alias = name[0..dot]
+            self.occ(off, alias.len, self.p.flat.get(alias) catch null)
+            self.occ(off + dot + 1, name.len - dot - 1, self.p.flat.get(name) catch null)
+            return
+        }
+        let n = last_segment(name)
+        let len = ident_len(src, off)
+        var s = self.find(name)
+        if s == null && dot >= 0 { s = self.p.flat.get(name) catch null }
+        self.occ(off, max(len, 0), s)
+        if len != n.len && s != null && s.k != .Local { return }
+    }
+
+    fn snapshot(self, off: i64) {
+        if self.p.snap || self.fi.path != self.p.cursor_file || off <= self.p.cursor { return }
+        self.take()
+    }
+
+    fn take(self) {
+        self.p.snap = true
+        for s in self.locals { self.p.near.push(s) catch return }
+    }
+
+    fn type_of(self, name: str) *TypeExpr {
+        let s = self.find(name)
+        if s == null { return null }
+        return s.ty
+    }
+
+    fn peel(self, te: *TypeExpr) *TypeExpr {
+        var t = te
+        var guard = 0
+        while t != null && guard < 8 {
+            guard += 1
+            if t.k == .Ptr { t = t.elem } else if t.k == .Name && t.args.len == 0 {
+                let s = self.p.flat.get(t.name) catch null
+                if s != null && s.k == .Alias && s.ty != null { t = s.ty } else { break }
+            } else {
+                break
+            }
+        }
+        return t
+    }
+
+    fn member(self, owner: *TypeExpr, name: str) *Symbol {
+        let t = self.peel(owner)
+        if t == null || t.k != .Name { return null }
+        return self.p.members.get(qname(self.p.a, t.name, name)) catch null
+    }
+
+    fn member_type(self, owner: *TypeExpr, ms: *Symbol) *TypeExpr {
+        let t = self.peel(owner)
+        if t == null || ms == null { return null }
+        if ms.k == .Field && ms.sd != null {
+            if ms.sd.type_params.len == t.args.len { return self.p.subst(ms.ty, ms.sd.type_params, t.args) catch ms.ty }
+            return ms.ty
+        }
+        if ms.k == .Method && ms.fd != null {
+            var r = ms.fd.ret
+            if r == null { return null }
+            if ms.fd.receiver_params.len == t.args.len { r = self.p.subst(r, ms.fd.receiver_params, t.args) catch r }
+            if r.k == .Name && r.name == "Self" { return t }
+            return r
+        }
+        return null
+    }
+
+    fn elem_of(self, te: *TypeExpr) *TypeExpr {
+        let t = self.peel(te)
+        if t == null { return null }
+        if t.k == .Slice || t.k == .Array { return t.elem }
+        if t.k == .Name && t.name == "str" { return self.p.mk_name("u8") catch null }
+        if t.k == .Name && t.name == "List" && t.args.len == 1 { return t.args.get(0) }
+        return null
+    }
+
+    fn infer(self, e: *Expr) *TypeExpr {
+        if e == null { return null }
+        match e.k {
+            .IntLit => return self.p.mk_name("i64") catch null
+            .FloatLit => return self.p.mk_name("f64") catch null
+            .BoolLit, .Is => return self.p.mk_name("bool") catch null
+            .StrLit, .Interp => return self.p.mk_name("str") catch null
+            .Sizeof, .Alignof => return self.p.mk_name("u64") catch null
+            .StructLit, .Cast => return e.ty
+            .Ident => {
+                let s = self.find(e.name)
+                if s == null { return null }
+                if s.k == .Struct || s.k == .Union || s.k == .Enum || s.k == .Alias { return self.p.mk_name(e.name) catch null }
+                return s.ty
+            }
+            .Field => {
+                let bt = self.infer(e.l)
+                if bt == null { return null }
+                let pt = self.peel(bt)
+                if pt != null && (pt.k == .Slice || pt.k == .Array || (pt.k == .Name && pt.name == "str")) {
+                    if e.name == "len" { return self.p.mk_name("i64") catch null }
+                    return null
+                }
+                return self.member_type(bt, self.member(bt, e.name))
+            }
+            .Index => {
+                if e.l.k == .Ident || e.l.k == .Field {
+                    let ft = self.infer(e.l)
+                    let t = self.peel(ft)
+                    if t != null && t.k == .Name && e.args.len > 0 && ft == null { return null }
+                }
+                return self.elem_of(self.infer(e.l))
+            }
+            .Slice => return self.infer(e.l)
+            .Unary => {
+                if e.op == .amp {
+                    let t = self.infer(e.l)
+                    if t == null { return null }
+                    return self.p.mk_wrap(.Ptr, t) catch null
+                }
+                if e.op == .star {
+                    let t = self.infer(e.l)
+                    if t != null && t.k == .Ptr { return t.elem }
+                    return null
+                }
+                if e.op == .bang { return self.p.mk_name("bool") catch null }
+                return self.infer(e.l)
+            }
+            .Binary => {
+                match e.op {
+                    .eqeq, .neq, .lt, .le, .gt, .ge, .andand, .oror => return self.p.mk_name("bool") catch null
+                }
+                let l = self.infer(e.l)
+                if l != null { return l }
+                return self.infer(e.r)
+            }
+            .Try => {
+                let t = self.infer(e.l)
+                if t != null && t.k == .Errun { return t.elem }
+                return null
+            }
+            .Catch => {
+                let t = self.infer(e.l)
+                if t != null && t.k == .Errun { return t.elem }
+                return null
+            }
+            .Orelse => {
+                let t = self.peel(self.infer(e.l))
+                if t != null && t.k == .Name && t.name == "Option" && t.args.len == 1 { return t.args.get(0) }
+                return null
+            }
+            .Call => return self.infer_call(e)
+        }
+        return null
+    }
+
+    fn infer_call(self, e: *Expr) *TypeExpr {
+        let c = e.l
+        if c.k == .Ident {
+            let s = self.find(c.name)
+            if s == null { return null }
+            if s.k == .Struct { return self.p.mk_name(c.name) catch null }
+            if s.k == .Fn && s.fd != null { return self.call_ret(s.fd, e) }
+            if s.ty != null && s.ty.k == .Func { return s.ty.ret }
+            return null
+        }
+        if c.k == .Field {
+            let bt = self.infer(c.l)
+            if bt == null { return null }
+            var ms = self.member(bt, c.name)
+            if ms == null && c.l.k == .Ident {
+                let ts = self.find(c.l.name)
+                if ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum) { ms = self.member(self.p.mk_name(c.l.name) catch null, c.name) }
+            }
+            if ms == null { return null }
+            if ms.k == .Field && ms.ty != null && ms.ty.k == .Func { return ms.ty.ret }
+            let r = self.member_type(bt, ms)
+            if r != null && ms.fd != null && mentions(r, ms.fd.type_params) { return self.call_ret(ms.fd, e) }
+            return r
+        }
+        return null
+    }
+
+    fn bind(self, pat: *TypeExpr, actual: *TypeExpr, names: List[str], out: *List[*TypeExpr]) {
+        if pat == null || actual == null { return }
+        if pat.k == .Name && pat.args.len == 0 {
+            for i, n in names {
+                if n == pat.name && out.items[i] == null { out.items[i] = actual }
+            }
+            return
+        }
+        self.bind(pat.elem, actual.elem, names, out)
+        if pat.args.len == actual.args.len {
+            for i, x in pat.args { self.bind(x, actual.args.get(i), names, out) }
+        }
+    }
+
+    fn call_ret(self, fd: *FnDecl, e: *Expr) *TypeExpr {
+        if fd.ret == null { return null }
+        if fd.type_params.len == 0 { return fd.ret }
+        var found = List[*TypeExpr].init(self.p.a)
+        for _t in fd.type_params { found.push(null) catch return null }
+        for i, p in fd.params {
+            if i >= e.args.len { break }
+            self.bind(p.ty, self.infer(e.args.get(i)), fd.type_params, &found)
+        }
+        for x in found { if x == null { return null } }
+        return self.p.subst(fd.ret, fd.type_params, found) catch null
+    }
+}
+
+impl Walker {
+    fn wtype(self, te: *TypeExpr) {
+        if te == null { return }
+        if te.k == .Name && te.off >= 0 { self.use_name(te.name, te.off) }
+        for x in te.args { self.wtype(x) }
+        self.wtype(te.elem)
+        self.wtype(te.ret)
+        if te.len != null { self.wexpr(te.len) }
+    }
+
+    fn variant_of(self, owner: *TypeExpr, name: str, off: i64) *Symbol {
+        var s = self.member(owner, name)
+        if s == null {
+            var found: *Symbol = null
+            var n = 0
+            for e in self.p.members.entries {
+                if e.used && e.value.k == .Variant && e.value.name == name {
+                    found = e.value
+                    n += 1
+                }
+            }
+            if n == 1 { s = found }
+        }
+        self.occ(off, name.len, s)
+        return s
+    }
+
+    fn payload_type(self, owner: *TypeExpr, name: str) *TypeExpr {
+        let ms = self.member(owner, name)
+        if ms == null { return null }
+        return self.member_type(owner, ms)
+    }
+
+    fn warms(self, arms: List[MatchArm], scrut: *TypeExpr) {
+        for arm in arms {
+            let mark = self.locals.len
+            for pat in arm.pats {
+                if pat.k == .Call && pat.l.k == .EnumLit && pat.args.len == 1 && pat.args.get(0).k == .Ident {
+                    self.variant_of(scrut, pat.l.name, pat.l.name_off)
+                    let b = pat.args.get(0)
+                    if b.name != "_" { self.declare(.Local, b.name, b.off, self.payload_type(scrut, pat.l.name)) catch {} }
+                } else if pat.k == .EnumLit {
+                    self.variant_of(scrut, pat.name, pat.name_off)
+                } else {
+                    self.wexpr(pat)
+                }
+            }
+            self.wstmt(arm.body)
+            self.locals.len = mark
+        }
+    }
+
+    fn wexpr(self, e: *Expr) {
+        if e == null { return }
+        match e.k {
+            .Ident => {
+                self.use_name(e.name, e.off)
+                return
+            }
+            .Interp => {
+                for p in e.parts { if p.kind != 0 { self.wexpr(p.e) } }
+                return
+            }
+            .Field => {
+                self.wexpr(e.l)
+                var ms = self.member(self.infer(e.l), e.name)
+                if ms == null && e.l.k == .Ident {
+                    let ts = self.find(e.l.name)
+                    if ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum) { ms = self.member(self.p.mk_name(e.l.name) catch null, e.name) }
+                }
+                self.occ(e.name_off, e.name.len, ms)
+                return
+            }
+            .EnumLit => {
+                self.variant_of(null, e.name, e.name_off)
+                return
+            }
+            .Is => {
+                self.wexpr(e.l)
+                self.occ(e.name_off, e.name.len, self.member(self.infer(e.l), e.name))
+                return
+            }
+            .StructLit => {
+                self.wtype(e.ty)
+                let st = e.ty
+                for f in e.fields {
+                    self.wexpr(f.value)
+                    self.occ(f.off, f.name.len, self.member(st, f.name))
+                }
+                return
+            }
+            .Catch, .Orelse => {
+                self.wexpr(e.l)
+                let mark = self.locals.len
+                if e.has_name && e.k == .Catch { self.declare(.Local, e.name, e.name_off, null) catch {} }
+                self.wstmt(e.handler)
+                self.locals.len = mark
+                return
+            }
+            .Match => {
+                self.wexpr(e.l)
+                self.warms(e.arms, self.infer(e.l))
+                return
+            }
+            .Closure => {
+                self.wclosure(e.func)
+                return
+            }
+        }
+        self.wexpr(e.l)
+        self.wexpr(e.r)
+        self.wexpr(e.x)
+        for a in e.args { self.wexpr(a) }
+        self.wtype(e.ty)
+    }
+
+    fn wclosure(self, f: *FnDecl) {
+        let mark = self.locals.len
+        for i, c in f.captures {
+            let s = self.find(c)
+            self.occ(f.capture_offs.get(i), c.len, s)
+        }
+        for p in f.params { self.wtype(p.ty) }
+        self.wtype(f.ret)
+        var captured = List[*Symbol].init(self.p.a)
+        for c in f.captures {
+            let s = self.find(c)
+            if s != null { captured.push(s) catch {} }
+        }
+        self.locals.len = mark
+        for s in captured { self.locals.push(s) catch {} }
+        for p in f.params { self.declare(.Param, p.name, p.off, p.ty) catch {} }
+        self.wstmt(f.body)
+        self.locals.len = mark
+    }
+
+    fn wstmt(self, s: *Stmt) {
+        if s == null { return }
+        self.snapshot(s.off)
+        let mark = self.locals.len
+        match s.k {
+            .Let => {
+                self.wtype(s.ty)
+                self.wexpr(s.e)
+                var ty = s.ty
+                if ty == null { ty = self.infer(s.e) }
+                var k = SymK.Local
+                self.declare(k, s.name, s.name_off, ty) catch {}
+                let d = self.locals.get(self.locals.len - 1)
+                d.mutable = s.mutable
+                return
+            }
+            .Assign => {
+                self.wexpr(s.e2)
+                self.wexpr(s.e)
+            }
+            .ExprS, .Ret => self.wexpr(s.e)
+            .If => {
+                self.wexpr(s.e)
+                self.wstmt(s.body)
+                self.wstmt(s.els)
+            }
+            .While => {
+                self.wexpr(s.e)
+                self.wstmt(s.body)
+            }
+            .ForRange => {
+                self.wexpr(s.e)
+                self.wexpr(s.e2)
+                self.declare(.Local, s.name, s.name_off, self.infer(s.e)) catch {}
+                self.wstmt(s.body)
+            }
+            .ForEach => {
+                self.wexpr(s.e)
+                if s.has_idx { self.declare(.Local, s.idx, s.idx_off, self.p.mk_name("i64") catch null) catch {} }
+                self.declare(.Local, s.name, s.name_off, self.elem_of(self.infer(s.e))) catch {}
+                self.wstmt(s.body)
+            }
+            .Block => {
+                for x in s.stmts { self.wstmt(x) }
+                if s.end_off >= self.p.cursor && self.fi.path == self.p.cursor_file && !self.p.snap && s.off <= self.p.cursor { self.take() }
+            }
+            .Defer => self.wstmt(s.body)
+            .Match => {
+                self.wexpr(s.e)
+                self.warms(s.arms, self.infer(s.e))
+            }
+        }
+        self.locals.len = mark
+    }
+
+    fn add_tp(self, name: str) {
+        let t = self.p.sym(.TypeParam, name, self.fi.path, -1) catch return
+        self.tps.push(t) catch return
+    }
+
+    fn wfn(self, f: *FnDecl) {
+        let mark = self.locals.len
+        let tmark = self.tps.len
+        for x in f.type_params { self.add_tp(x) }
+        for x in f.receiver_params { self.add_tp(x) }
+        if f.receiver.len > 0 {
+            self.occ(f.receiver_off, last_segment(f.receiver).len, self.p.flat.get(f.receiver) catch null)
+            self.self_ty = self.p.recv_type(f) catch null
+        }
+        self.occ(f.name_off, last_segment(f.name).len, self.sym_for_fn(f))
+        for p in f.params { self.wtype(p.ty) }
+        self.wtype(f.ret)
+        if f.body != null {
+            for p in f.params {
+                var ty = p.ty
+                if ty != null && self.self_ty != null && p.name == "self" && ty.k == .Ptr { ty = self.p.mk_wrap(.Ptr, self.self_ty) catch ty }
+                self.declare(.Param, p.name, p.off, ty) catch {}
+            }
+            if self.p.cursor_file == self.fi.path && f.name_off <= self.p.cursor && self.p.cursor <= f.end_off { self.p.cur_fn = f }
+            self.wstmt(f.body)
+        }
+        self.locals.len = mark
+        self.tps.len = tmark
+        self.self_ty = null
+    }
+
+    fn sym_for_fn(self, f: *FnDecl) *Symbol {
+        if f.receiver.len > 0 { return self.p.members.get(qname(self.p.a, f.receiver, last_segment(f.name))) catch null }
+        return self.p.flat.get(f.name) catch null
+    }
+
+    fn wdecl(self, d: Decl) {
+        match d.k {
+            .Func => {
+                if d.f.is_test {
+                    self.wfn(d.f)
+                } else {
+                    self.wfn(d.f)
+                }
+            }
+            .Struct => {
+                let sd = d.s
+                let tmark = self.tps.len
+                for x in sd.type_params { self.add_tp(x) }
+                self.occ(sd.name_off, last_segment(sd.name).len, self.p.flat.get(sd.name) catch null)
+                for f in sd.fields {
+                    self.occ(f.off, f.name.len, self.p.members.get(qname(self.p.a, sd.name, f.name)) catch null)
+                    self.wtype(f.ty)
+                }
+                self.tps.len = tmark
+            }
+            .Enum => {
+                let ed = d.en
+                self.occ(ed.name_off, last_segment(ed.name).len, self.p.flat.get(ed.name) catch null)
+                for i, v in ed.variants { self.occ(ed.variant_offs.get(i), v.len, self.p.members.get(qname(self.p.a, ed.name, v)) catch null) }
+            }
+            .Const => {
+                self.occ(d.c.name_off, last_segment(d.c.name).len, self.p.flat.get(d.c.name) catch null)
+                self.wtype(d.c.ty)
+                self.wexpr(d.c.value)
+            }
+            .Alias => {
+                self.occ(d.name_off, last_segment(d.path).len, self.p.flat.get(d.path) catch null)
+                self.wtype(d.ty)
+            }
+            .Import => {
+                if d.alias.len > 0 { self.occ(d.name_off, d.alias.len, self.p.flat.get(d.alias) catch null) }
+            }
+        }
+    }
+}
+
+fn analyze(p: *Project, root: str, cursor_file: str, cursor: i64) !void {
+    p.cursor_file = cursor_file
+    p.cursor = cursor
+    p.load_prelude()?
+    p.load(root, "")?
+    for fi in p.files { p.register(fi)? }
+    for fi in p.files {
+        if fi.path == "<std>" || !fi.ok { continue }
+        var w = Walker{ p: p, fi: fi, locals: List[*Symbol].init(p.a), tps: List[*Symbol].init(p.a), self_ty: null }
+        for d in fi.decls { w.wdecl(d) }
+    }
+}

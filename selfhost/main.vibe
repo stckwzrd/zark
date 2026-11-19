@@ -5,6 +5,7 @@ import "native.vibe"
 import "resolve.vibe"
 import "fmt.vibe"
 import "loader.vibe"
+import "lsp.vibe"
 
 fn usage() {
     eprintln("vibe 0.4 (self-hosted) — a compact systems language (LLVM backend)
@@ -14,6 +15,7 @@ usage:
   vibe build <file.vibe> [extra.c|.cpp|.o ...] [-o out] [-O] [--release]
   vibe test  <file.vibe> [extra.c|.cpp|.o ...] [-O]   run the test blocks of a file
   vibe fmt   [--check] <file.vibe ...>  format source files in place
+  vibe lsp                          language server on stdin/stdout
   vibe ir    <file.vibe>            print LLVM IR to stdout
   vibe tokens <file.vibe ...>       dump tokens
 ")
@@ -92,6 +94,7 @@ fn run_fmt(a: Allocator) !i32 {
 }
 
 fn compile(a: Allocator) !i32 {
+    if arg_count() == 2 && arg(1) == "lsp" { return lsp_main() }
     if arg_count() < 3 {
         usage()
         return 1
