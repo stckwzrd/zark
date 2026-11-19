@@ -4,26 +4,26 @@ import sys
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 500
 v, c = [], ['#include <stdio.h>']
 for k in range(N):
-    cv = f"        t += f{k-1}(2, s)\n" if k > 0 else ""
+    cv = f"        t += f{k-1}(2, s);\n" if k > 0 else ""
     cc = f"    t += f{k-1}(2, s);\n" if k > 0 else ""
-    v.append(f"""fn f{k}(n: i64, s: i64) i64 {{
-    var acc = n * {k} + s
-    var i = 0
-    while i < n {{
-        if (acc & 1) == 0 {{
-            acc = acc / 2 + i
+    v.append(f"""i64 f{k}(i64 n, i64 s) {{
+    auto acc = n * {k} + s;
+    auto i = 0;
+    while (i < n) {{
+        if ((acc & 1) == 0) {{
+            acc = acc / 2 + i;
         }} else {{
-            acc = acc * 3 + 1
+            acc = acc * 3 + 1;
         }}
-        if acc > 1000000 {{ acc = acc % 1000 }}
-        i += 1
+        if (acc > 1000000) {{ acc = acc % 1000; }}
+        i += 1;
     }}
-    let arr = [acc, n, s, {k}]
-    var t = 0
-    for x in arr {{ t += x }}
-    if n > 0 {{
+    const auto arr = [acc, n, s, {k}];
+    auto t = 0;
+    for (auto x : arr) {{ t += x; }}
+    if (n > 0) {{
 {cv}    }}
-    return t
+    return t;
 }}""")
     c.append(f"""long f{k}(long n, long s) {{
     long acc = n * {k} + s;
@@ -44,10 +44,10 @@ for k in range(N):
 {cc}    }}
     return t;
 }}""")
-v.append(f"""fn main() {{
-    var total = 0
-    for r in 0..2000 {{ total += f{N-1}(10, r) }}
-    println("total = {{total}}")
+v.append(f"""void main() {{
+    auto total = 0;
+    for (auto r : 0..2000) {{ total += f{N-1}(10, r); }}
+    println("total = {{total}}");
 }}""")
 c.append(f"""int main(void) {{
     long total = 0;

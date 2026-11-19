@@ -2,3 +2,8 @@ build/
 zig-out/
 .zig-cache/
 .vibe-cache/
+bench/w.vibe
+bench/w.c
+bench/wv
+bench/wg
+bench/wc
