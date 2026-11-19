@@ -60,6 +60,11 @@ impl Gen {
                         .minus_eq => op = .minus
                         .star_eq => op = .star
                         .slash_eq => op = .slash
+                        .pipe_eq => op = .pipe
+                        .amp_eq => op = .amp
+                        .caret_eq => op = .caret
+                        .shl_eq => op = .shl
+                        .shr_eq => op = .shr
                     }
                     let r = self.arith(op, cur, rhs, s.line)?
                     self.store(r, addr.v)?

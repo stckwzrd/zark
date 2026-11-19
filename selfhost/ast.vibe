@@ -77,7 +77,7 @@ struct Stmt {
     arms: List[MatchArm]   // Match
 }
 
-struct Param { name: str, ty: *TypeExpr, off: i64 }
+struct Param { name: str, ty: *TypeExpr, off: i64, mutable: bool }
 
 struct FnDecl {
     name: str

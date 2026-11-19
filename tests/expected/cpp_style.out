@@ -1,0 +1,7 @@
+len2 = 41 Point{ x: 4, y: 5 }
+51 4 9 2.5
+10 2
+15
+7 Pair[i64, str]{ first: 7, second: "seven" }
+Shape.Circle(2) .Green Point{ x: 0, y: 0 }
+6 12 42

@@ -1141,7 +1141,7 @@ impl Gen {
             var an = self.sb()
             sprint(&an, "%a.{i}")?
             self.store(Value{ ty: pt, v: an.slice() }, slot)?
-            self.declare_var(p.name, Var{ ptr: slot, ty: pt, mutable: false }, decl.line)?
+            self.declare_var(p.name, Var{ ptr: slot, ty: pt, mutable: p.mutable }, decl.line)?
         }
         hdr.append(") {{\n")?
         for i, cap in fi.caps {

@@ -1,0 +1,454 @@
+// C++-style syntax: type-first declarations, templates, methods inside struct, lambdas.
+// Everything here produces the same AST as the older fn/let/var/impl syntax.
+
+import "parser.vibe"
+
+fn is_builtin_type_name(s: str) bool {
+    match s {
+        "i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "str", "void" => return true
+    }
+    return false
+}
+
+impl Parser {
+    fn expect_gt(self) !void {
+        if self.at(.gt) {
+            _ = self.advance()
+            return
+        }
+        if self.at(.shr) {
+            self.toks[self.pos].tag = .gt
+            self.toks[self.pos].text = ">"
+            self.splits.push(self.pos)?
+            return
+        }
+        self.fail("expected '>'")?
+    }
+
+    fn undo_splits(self, mark: i64) {
+        while self.splits.len > mark {
+            let i = self.splits.pop() catch return
+            self.toks[i].tag = .shr
+            self.toks[i].text = ">>"
+        }
+    }
+
+    /// `Name[` is an array type for builtin names and a generic instance otherwise (see parse_type)
+    fn generic_brackets(self, name: str) bool {
+        if is_builtin_type_name(name) { return false }
+        let n = self.peek_at(1).tag
+        if n == .rbracket || n == .int_lit { return false }
+        return true
+    }
+
+    /// postfix `*`, `[]`, `[N]` of C++-style types
+    fn type_suffix(self, base: *TypeExpr) !*TypeExpr {
+        var t = base
+        if self.no_post { return t }
+        while self.at(.star) {
+            _ = self.advance()
+            let p = self.te(.Ptr)?
+            p.elem = t
+            t = p
+        }
+        var dims = List[*Expr].init(self.a)
+        while self.at(.lbracket) {
+            if self.peek_at(1).tag == .rbracket {
+                _ = self.advance()
+                _ = self.advance()
+                let s = self.te(.Slice)?
+                s.elem = t
+                t = s
+                continue
+            }
+            _ = self.advance()
+            dims.push(self.parse_expr()?)?
+            _ = self.expect(.rbracket)?
+        }
+        var i = dims.len
+        while i > 0 {
+            i -= 1
+            let a = self.te(.Array)?
+            a.len = dims.get(i)
+            a.elem = t
+            t = a
+        }
+        while self.at(.star) {
+            _ = self.advance()
+            let p = self.te(.Ptr)?
+            p.elem = t
+            t = p
+        }
+        return t
+    }
+
+    fn try_type(self) *TypeExpr {
+        let save = self.pos
+        let mark = self.splits.len
+        let q = self.quiet
+        let ao = self.arrow_only
+        self.quiet = true
+        self.arrow_only = true
+        let t = self.parse_type() catch {
+            self.quiet = q
+            self.arrow_only = ao
+            self.pos = save
+            self.undo_splits(mark)
+            return null
+        }
+        self.quiet = q
+        self.arrow_only = ao
+        return t
+    }
+
+    fn type_to_expr(self, t: *TypeExpr, line: i64, off: i64) !*Expr {
+        if t.k == .Name {
+            let e = self.ex(.Ident, Token{ tag: .ident, text: t.name, line: line, off: off })?
+            e.name = t.name
+            if t.args.len == 0 { return e }
+            let ix = self.ex(.Index, Token{ tag: .lbracket, text: "[", line: line, off: off })?
+            ix.l = e
+            for a in t.args { ix.args.push(self.type_to_expr(a, line, off)?)? }
+            return ix
+        }
+        if t.k == .Ptr || t.k == .Errun {
+            var tag: Tag = .star
+            if t.k == .Errun { tag = .bang }
+            let u = self.ex(.Unary, Token{ tag: tag, text: "*", line: line, off: off })?
+            u.op = tag
+            u.l = self.type_to_expr(t.elem, line, off)?
+            return u
+        }
+        self.fail("this type cannot be a template argument here")?
+        return error.ParseFailed
+    }
+
+    /// `name<T, U>` followed by `(`, `::` or `{`: returns an Index expression, or null (position restored)
+    fn try_generic_args(self, base: *Expr) !*Expr {
+        let save = self.pos
+        let mark = self.splits.len
+        let q = self.quiet
+        self.quiet = true
+        _ = self.advance()
+        var targs = List[*TypeExpr].init(self.a)
+        var ok = true
+        while !self.at(.gt) && !self.at(.shr) {
+            let ty = self.try_type()
+            if ty == null {
+                ok = false
+                break
+            }
+            targs.push(ty)?
+            if !self.eat(.comma) { break }
+        }
+        if ok {
+            self.expect_gt() catch {
+                ok = false
+            }
+        }
+        self.quiet = q
+        if ok {
+            let n = self.peek().tag
+            ok = n == .lparen || n == .coloncolon || (n == .lbrace && !self.no_struct && is_type_like(base))
+        }
+        if !ok {
+            self.pos = save
+            self.undo_splits(mark)
+            return null
+        }
+        let ix = self.ex(.Index, Token{ tag: .lbracket, text: "[", line: base.line, off: base.off })?
+        ix.l = base
+        for ta in targs { ix.args.push(self.type_to_expr(ta, base.line, base.off)?)? }
+        return ix
+    }
+
+    // ------------------------------------------------------------ parameters
+    fn parse_params_new(self, line: i64, variadic: *bool, this_ty: str, ptps: List[str]) !List[Param] {
+        _ = self.expect(.lparen)?
+        var params = List[Param].init(self.a)
+        if this_ty.len > 0 {
+            let pty = self.te(.Ptr)?
+            pty.elem = self.te_name("Self")?
+            params.push(Param{ name: "this", ty: pty, off: -1, mutable: false })?
+        }
+        while !self.at(.rparen) {
+            if self.eat(.ellipsis) {
+                *variadic = true
+                break
+            }
+            if self.at(.ident) && self.peek_at(1).tag == .colon {
+                let pt = self.advance()
+                _ = self.advance()
+                params.push(Param{ name: pt.text, ty: self.parse_type()?, off: pt.off, mutable: false })?
+            } else {
+                let saved = self.arrow_only
+                self.arrow_only = true
+                let ty = self.parse_type()?
+                self.arrow_only = saved
+                let pt = self.expect(.ident)?
+                params.push(Param{ name: pt.text, ty: ty, off: pt.off, mutable: true })?
+            }
+            if !self.eat(.comma) { break }
+        }
+        _ = self.expect(.rparen)?
+        return params
+    }
+
+    fn lambda_ahead(self) bool {
+        var i = self.pos
+        while i < self.toks.len {
+            let tg = self.toks[i].tag
+            if tg == .rbracket { break }
+            if tg != .amp && tg != .ident && tg != .comma { return false }
+            i += 1
+        }
+        if i + 1 >= self.toks.len { return false }
+        return self.toks[i + 1].tag == .lparen
+    }
+
+    fn parse_lambda(self, t: Token) !*Expr {
+        let e = self.ex(.Closure, t)?
+        var caps = self.strs()
+        var cap_offs = List[i64].init(self.a)
+        while !self.at(.rbracket) {
+            _ = self.eat(.amp)
+            let ct = self.expect(.ident)?
+            caps.push(ct.text)?
+            cap_offs.push(ct.off)?
+            if !self.eat(.comma) { break }
+        }
+        _ = self.expect(.rbracket)?
+        var variadic = false
+        let params = self.parse_params_new(t.line, &variadic, "", self.strs())?
+        var ret: *TypeExpr = null
+        if self.eat(.arrow) {
+            let saved = self.arrow_only
+            self.arrow_only = true
+            ret = self.parse_type()?
+            self.arrow_only = saved
+        }
+        let f = self.a.create[FnDecl]()?
+        *f = FnDecl{
+            name: "closure", type_params: self.strs(), constraints: self.strs(), params: params, ret: ret,
+            body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(), captures: caps, capture_offs: cap_offs, ..
+        }
+        f.end_off = f.body.end_off
+        e.func = f
+        return e
+    }
+
+    // ------------------------------------------------------------ declarations
+    fn fn_rest(self, tps: List[str], cons: List[str], flags: i64, ret_te: *TypeExpr, nt: Token, receiver: str, recv_params: List[str], recv_off: i64, is_static: bool) !*FnDecl {
+        var variadic = false
+        var this_ty = ""
+        if receiver.len > 0 && !is_static { this_ty = receiver }
+        let params = self.parse_params_new(nt.line, &variadic, this_ty, recv_params)?
+        _ = self.eat(.kw_const)
+        var ret = ret_te
+        if ret != null && ret.k == .Name && ret.name == "void" && ret.args.len == 0 { ret = null }
+        let is_extern = flags == 1
+        let is_export = flags == 2
+        var body: *Stmt = null
+        if is_extern {
+            self.skip_semis()
+        } else {
+            body = self.parse_block()?
+        }
+        let f = self.a.create[FnDecl]()?
+        *f = FnDecl{
+            name: nt.text, type_params: tps, constraints: cons, params: params, ret: ret, body: body,
+            is_extern: is_extern, is_export: is_export, variadic: variadic, line: nt.line,
+            file: self.file, receiver: receiver, receiver_params: recv_params, name_off: nt.off, receiver_off: recv_off, ..
+        }
+        if body != null { f.end_off = body.end_off }
+        return f
+    }
+
+    fn parse_decl_new(self, out: *List[Decl]) !void {
+        let t = self.peek()
+        var tps = self.strs()
+        var cons = self.strs()
+        if self.at(.kw_template) {
+            _ = self.advance()
+            tps = self.parse_type_params(&cons)?
+            if self.at(.kw_struct) || self.at(.kw_union) {
+                self.fail("write generic types as 'struct Name<T>'")?
+            }
+        }
+        var flags = 0
+        while self.at(.kw_extern) || self.at(.kw_export) || self.at(.kw_static) {
+            let k = self.advance().tag
+            if k == .kw_extern { flags = 1 }
+            if k == .kw_export { flags = 2 }
+        }
+        let is_const = self.eat(.kw_const)
+        let ty = self.try_type()
+        if ty == null { self.fail("expected declaration")? }
+        if !self.at(.ident) { self.fail("expected a name after the type")? }
+        let nt = self.advance()
+        if self.at(.lparen) && !is_const {
+            let f = self.fn_rest(tps, cons, flags, ty, nt, "", self.strs(), 0, true)?
+            out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
+            return
+        }
+        _ = self.expect(.eq)?
+        let v = self.parse_expr()?
+        var vty = ty
+        if ty.k == .Name && ty.name == "auto" && ty.args.len == 0 { vty = null }
+        let cd = self.a.create[ConstDecl]()?
+        *cd = ConstDecl{ name: nt.text, ty: vty, value: v, mutable: !is_const, line: t.line, name_off: nt.off }
+        out.push(Decl{ k: .Const, c: cd, line: t.line, .. })?
+    }
+
+    /// true when the next struct member is written C++-style (type first)
+    fn new_member(self, is_union: bool) bool {
+        if self.at(.kw_static) || self.at(.kw_const) { return true }
+        if self.at(.ident) && self.peek_at(1).tag == .colon { return false }
+        if is_union && self.at(.ident) {
+            let n = self.peek_at(1).tag
+            if n == .comma || n == .semi || n == .rbrace { return false }
+        }
+        return true
+    }
+
+    fn parse_member_new(self, sname: str, tps: List[str], is_union: bool, fields: *List[Field], out: *List[Decl]) !void {
+        let t = self.peek()
+        var is_static = false
+        while self.at(.kw_static) || self.at(.kw_const) {
+            if self.advance().tag == .kw_static { is_static = true }
+        }
+        let ty = self.try_type()
+        if ty == null { self.fail("expected a member declaration")? }
+        let nt = self.expect(.ident)?
+        if self.at(.lparen) {
+            let f = self.fn_rest(self.strs(), self.strs(), 0, ty, nt, sname, tps, t.off, is_static)?
+            out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
+            return
+        }
+        fields.push(Field{ name: nt.text, ty: ty, off: nt.off })?
+        _ = self.eat(.comma)
+    }
+
+    // ------------------------------------------------------------ statements
+    fn parse_decl_stmt_new(self, t: Token, require: bool) !*Stmt {
+        let is_const = self.eat(.kw_const)
+        let ty = self.try_type()
+        if ty == null { self.fail("expected a type")? }
+        let nt = self.expect(.ident)?
+        let s = self.st(.Let, t)?
+        s.name = nt.text
+        s.name_off = nt.off
+        s.mutable = !is_const
+        if !(ty.k == .Name && ty.name == "auto" && ty.args.len == 0) { s.ty = ty }
+        if self.eat(.eq) { s.e = self.parse_expr()? }
+        if s.ty == null && s.e == null {
+            eprintln("{self.file}:{t.line}: error: '{s.name}' needs a type or initializer")
+            show_source(self.file, t.line, t.off)
+            return error.ParseFailed
+        }
+        return s
+    }
+
+    /// `Type name = e;` / `Type name;` / `auto name = e;`, or null (position restored) when it is not a declaration
+    fn try_decl_stmt(self, t: Token) !*Stmt {
+        let save = self.pos
+        let ty = self.try_type()
+        if ty == null { return null }
+        if !self.at(.ident) {
+            self.pos = save
+            return null
+        }
+        let after = self.peek_at(1).tag
+        if after != .eq && after != .semi && after != .rbrace {
+            self.pos = save
+            return null
+        }
+        self.pos = save
+        return self.parse_decl_stmt_new(t, false)
+    }
+
+    fn incr_stmt(self, t: Token, target: *Expr, up: bool) !*Stmt {
+        let s = self.st(.Assign, t)?
+        s.op = .plus_eq
+        if !up { s.op = .minus_eq }
+        s.e2 = target
+        let one = self.ex(.IntLit, t)?
+        one.ival = 1
+        s.e = one
+        return s
+    }
+
+    /// for (auto x : seq) / for (T i : a..b) / for (T i = a; i < b; i++)
+    fn parse_for_new(self, t: Token) !*Stmt {
+        _ = self.expect(.lparen)?
+        let save = self.pos
+        let ty = self.try_type()
+        if ty == null || !self.at(.ident) {
+            self.pos = save
+            self.fail("expected a declaration in 'for ('")?
+        }
+        let nt = self.advance()
+        if self.eat(.colon) {
+            let e = self.parse_expr()?
+            if self.eat(.dotdot) {
+                let s = self.st(.ForRange, t)?
+                s.name = nt.text
+                s.name_off = nt.off
+                s.e = e
+                s.e2 = self.parse_expr()?
+                _ = self.expect(.rparen)?
+                s.body = self.parse_block()?
+                return s
+            }
+            _ = self.expect(.rparen)?
+            let s = self.st(.ForEach, t)?
+            s.e = e
+            s.name = nt.text
+            s.name_off = nt.off
+            s.body = self.parse_block()?
+            return s
+        }
+        _ = self.expect(.eq)?
+        let lo = self.parse_expr()?
+        _ = self.expect(.semi)?
+        let c = self.parse_expr()?
+        _ = self.expect(.semi)?
+        var ok = c.k == .Binary && (c.op == .lt || c.op == .le) && c.l.k == .Ident && c.l.name == nt.text
+        var step_ok = false
+        if self.at(.ident) && self.peek().text == nt.text && self.peek_at(1).tag == .plusplus {
+            _ = self.advance()
+            _ = self.advance()
+            step_ok = true
+        } else if self.at(.plusplus) && self.peek_at(1).text == nt.text {
+            _ = self.advance()
+            _ = self.advance()
+            step_ok = true
+        } else if self.at(.ident) && self.peek().text == nt.text && self.peek_at(1).tag == .plus_eq && self.peek_at(2).tag == .int_lit && self.peek_at(2).text == "1" {
+            _ = self.advance()
+            _ = self.advance()
+            _ = self.advance()
+            step_ok = true
+        }
+        if !ok || !step_ok {
+            self.pos -= 1
+            self.fail("this for loop is not of the form for (T i = a; i < b; i++); use while for other loops")?
+        }
+        _ = self.expect(.rparen)?
+        let s = self.st(.ForRange, t)?
+        s.name = nt.text
+        s.name_off = nt.off
+        s.e = lo
+        s.e2 = c.r
+        if c.op == .le {
+            let plus = self.ex(.Binary, t)?
+            plus.op = .plus
+            plus.l = c.r
+            let one = self.ex(.IntLit, t)?
+            one.ival = 1
+            plus.r = one
+            s.e2 = plus
+        }
+        s.body = self.parse_block()?
+        return s
+    }
+}

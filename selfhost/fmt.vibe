@@ -18,7 +18,7 @@ fn ends_value(t: Token) bool {
 fn is_binary_op(t: Tag) bool {
     match t {
         .eq, .eqeq, .neq, .lt, .le, .gt, .ge, .shl, .shr, .andand, .oror, .plus_eq, .minus_eq, .star_eq, .slash_eq,
-        .percent_eq, .fat_arrow, .plus, .slash, .percent, .caret => return true
+        .percent_eq, .pipe_eq, .amp_eq, .caret_eq, .shl_eq, .shr_eq, .fat_arrow, .plus, .slash, .percent, .caret => return true
     }
     return false
 }
@@ -90,7 +90,14 @@ impl Formatter {
         if c == .rbrace { return p != .lbrace }
         if p == .lbrace { return c != .rbrace }
         if p == .lparen || p == .lbracket || p == .dot { return false }
-        if c == .colon { return false }
+        if c == .coloncolon || p == .coloncolon { return false }
+        if c == .arrow || p == .arrow { return orig }
+        if c == .plusplus || c == .minusminus || p == .plusplus || p == .minusminus { return false }
+        if c == .lt || c == .gt || p == .lt || p == .gt { return orig }
+        if c == .colon {
+            if have2 && p == .ident && p2 == .ident { return orig }
+            return false
+        }
         if p == .colon { return true }
         if c == .question && ends_value(prev) {
             if p == .rparen || p == .rbracket { return orig }
@@ -118,6 +125,8 @@ impl Formatter {
             if p == .ident || p == .rbracket || p == .question || p == .kw_fn { return false }
             return true
         }
+        if c == .star && p == .ident { return orig }
+        if p == .star && have2 && p2 == .ident { return orig }
         if (c == .star || c == .amp || c == .minus) && (p == .rparen || p == .rbracket) { return orig }
         if (p == .star || p == .amp || p == .minus) && (p2 == .rparen || p2 == .rbracket) && have2 { return orig }
         if p == .rbracket && (c == .ident || c == .star || c == .lbracket || c == .bang || c == .question || c == .kw_fn) { return orig }

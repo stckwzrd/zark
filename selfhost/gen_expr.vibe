@@ -103,6 +103,8 @@ impl Gen {
                     let v = self.lookup_var(n)?
                     return self.load(v.ty, v.ptr)
                 }
+                let mx = self.member_expr(e)?
+                if mx != null { return self.gen_expr(mx, expected) }
                 if self.consts.has(n) {
                     let c = self.consts.get(n)?
                     var t = expected
@@ -500,10 +502,36 @@ impl Gen {
         return a
     }
 
+    /// a bare field name inside a method of a `this`-style struct means this->name
+    fn member_expr(self, e: *Expr) !*Expr {
+        if self.cur == null || self.cur.decl.receiver.len == 0 || !self.has_var("this") { return null }
+        let tv = self.lookup_var("this")?
+        var t = tv.ty
+        if t.k == .Ptr { t = t.elem }
+        if t.k != .Strct || t.si.decl.is_union || field_index(t.si, e.name) < 0 { return null }
+        let th = self.a.create[Expr]()?
+        th.k = .Ident
+        th.name = "this"
+        th.line = e.line
+        th.off = e.off
+        let f = self.a.create[Expr]()?
+        f.k = .Field
+        f.l = th
+        f.name = e.name
+        f.line = e.line
+        f.off = e.off
+        f.name_off = e.off
+        return f
+    }
+
     fn gen_addr(self, e: *Expr) !Addr {
         if e.k == .Ident && self.has_var(e.name) {
             let v = self.lookup_var(e.name)?
             return Addr{ ty: v.ty, v: v.ptr, imm: !v.mutable }
+        }
+        if e.k == .Ident {
+            let mx = self.member_expr(e)?
+            if mx != null { return self.gen_addr(mx) }
         }
         if e.k == .Field {
             if e.l.k == .Ident && !self.has_var(e.l.name) && self.enums.has(e.l.name) {

@@ -9,10 +9,12 @@ enum Tag {
     plus, minus, star, slash, percent, amp, pipe, caret, tilde, bang, question,
     eq, eqeq, neq, lt, le, gt, ge, shl, shr, andand, oror,
     plus_eq, minus_eq, star_eq, slash_eq, percent_eq,
+    pipe_eq, amp_eq, caret_eq, shl_eq, shr_eq, plusplus, minusminus, coloncolon, arrow,
     kw_fn, kw_let, kw_var, kw_const, kw_if, kw_else, kw_while, kw_for, kw_in,
     kw_return, kw_break, kw_continue, kw_struct, kw_enum, kw_impl, kw_extern,
     kw_export, kw_defer, kw_errdefer, kw_error, kw_catch, kw_true, kw_false,
     kw_null, kw_as, kw_import, kw_match, kw_sizeof, kw_alignof, kw_union, kw_type, kw_is,
+    kw_template, kw_static,
 }
 
 struct Token {
@@ -47,7 +49,9 @@ fn keyword(s: str) Tag {
         "catch" => return .kw_catch
         "true" => return .kw_true
         "false" => return .kw_false
-        "null" => return .kw_null
+        "null", "nullptr" => return .kw_null
+        "template" => return .kw_template
+        "static" => return .kw_static
         "as" => return .kw_as
         "import" => return .kw_import
         "match" => return .kw_match
@@ -63,7 +67,7 @@ fn keyword(s: str) Tag {
 fn ends_statement(t: Tag) bool {
     match t {
         .ident, .int_lit, .float_lit, .str_lit, .char_lit, .rparen, .rbracket, .rbrace,
-        .kw_return, .kw_break, .kw_continue, .question, .kw_true, .kw_false, .kw_null => return true
+        .kw_return, .kw_break, .kw_continue, .question, .kw_true, .kw_false, .kw_null, .plusplus, .minusminus => return true
     }
     return false
 }
@@ -73,6 +77,8 @@ struct Op { tag: Tag, len: i64 }
 
 fn operator(s: str) Op {
     if s.len >= 3 && s[0..3] == "..." { return Op{ tag: .ellipsis, len: 3 } }
+    if s.len >= 3 && s[0..3] == "<<=" { return Op{ tag: .shl_eq, len: 3 } }
+    if s.len >= 3 && s[0..3] == ">>=" { return Op{ tag: .shr_eq, len: 3 } }
     if s.len >= 2 {
         match s[0..2] {
             ".." => return Op{ tag: .dotdot, len: 2 }
@@ -90,6 +96,13 @@ fn operator(s: str) Op {
             "*=" => return Op{ tag: .star_eq, len: 2 }
             "/=" => return Op{ tag: .slash_eq, len: 2 }
             "%=" => return Op{ tag: .percent_eq, len: 2 }
+            "|=" => return Op{ tag: .pipe_eq, len: 2 }
+            "&=" => return Op{ tag: .amp_eq, len: 2 }
+            "^=" => return Op{ tag: .caret_eq, len: 2 }
+            "++" => return Op{ tag: .plusplus, len: 2 }
+            "--" => return Op{ tag: .minusminus, len: 2 }
+            "::" => return Op{ tag: .coloncolon, len: 2 }
+            "->" => return Op{ tag: .arrow, len: 2 }
         }
     }
     var t: Tag = .eof
