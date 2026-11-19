@@ -22,10 +22,15 @@ fn line_start_of(src: str, line: i64) i64 {
 
 fn show_source(file: str, line: i64, off: i64) {
     var src = diag_prelude
+    var owned = false
     if diag_files.has(file) {
         src = diag_files.get(file) catch return
     } else if file != "<std>" {
         src = read_file(c_allocator(), file) catch return
+        owned = true
+    }
+    defer {
+        if owned { c_allocator().free(src) }
     }
     var start = 0
     var shown = line
@@ -44,6 +49,7 @@ fn show_source(file: str, line: i64, off: i64) {
     eprintln("{shown:5} | {text}")
     if off < 0 { return }
     var pad = List[u8].init(c_allocator())
+    defer pad.deinit()
     for i in start..off {
         if i < end && src[i] == '\t' { pad.push('\t') catch return } else { pad.push(' ') catch return }
     }

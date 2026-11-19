@@ -67,6 +67,7 @@ impl Reader {
                 length = (parse_int(str_trim(h[15..])) catch 0) as i64
             }
         }
+        if length > 268435456 { length = 0 }
         let body = a.alloc[u8](length)?
         for i in 0..length {
             let b = self.byte()
@@ -126,7 +127,11 @@ fn uri_to_path(a: Allocator, uri: str) !str {
     return b.slice()
 }
 
+var uri_map: Map[str] = Map[str]{ .. }
+var rename_blocked: bool = false
+
 fn path_to_uri(a: Allocator, path: str) !str {
+    if uri_map.has(path) { return uri_map.get(path) }
     var b = List[u8].init(a)
     b.append("file://")?
     for c in path {
@@ -214,6 +219,7 @@ impl Server {
         let d = self.a.create[Doc]()?
         d.uri = self.a.dup(uri)?
         d.path = canonical(self.a, path)?
+        uri_map.put(d.path, d.uri)?
         d.text = copy
         d.version = version
         d.starts = compute_starts(self.a, copy)?
@@ -767,7 +773,7 @@ fn handle(s: *Server, a: Allocator, msg: *Json) !void {
     let method = jstr(jget(msg, "method"), "")
     let id = jget(msg, "id")
     let params = jget(msg, "params")
-    let is_req = id != null
+    let is_req = id != null && jkind(id) != .Null
     if method == "initialize" {
         var root = jstr(jget(params, "rootUri"), "")
         let folders = jget(params, "workspaceFolders")
@@ -838,6 +844,7 @@ fn handle(s: *Server, a: Allocator, msg: *Json) !void {
 
 fn lsp_main() i32 {
     let a = c_allocator()
+    uri_map = Map[str].init(a)
     var s = Server{
         a: a, rd: new_reader(a) catch return 1, out: fdopen(1, "wb"), docs: Map[*Doc].init(a), dirty: List[str].init(a),
         published: Map[List[str]].init(a), root: "", down: false,
@@ -855,6 +862,8 @@ fn lsp_main() i32 {
         }
         handle(&s, ta, msg) catch |e| {
             eprintln("vibe lsp: {e}")
+            let rid = jget(msg, "id")
+            if rid != null && jkind(rid) != .Null { s.fail(ta, rid, -32603, "internal error") catch {} }
         }
         ar.deinit()
     }
@@ -900,9 +909,9 @@ fn list_workspace(a: Allocator, root: str) !List[str] {
 fn file_imports(a: Allocator, path: str) !List[str] {
     var out = List[str].init(a)
     let src = read_file(a, path) catch return out
-    let toks = tokenize(a, src, path) catch return out
+    let toks = tokenize(a, src, path)?
     var p = new_parser(a, toks.slice(), path)
-    let decls = p.parse_file() catch return out
+    let decls = p.parse_file()?
     for d in decls {
         if d.k == .Import { out.push(canonical(a, join_path(a, dir_of(path), d.path)?)?)? }
     }
@@ -915,7 +924,17 @@ fn roots_for(s: *Server, a: Allocator, target: str, hint_dir: str) !List[str] {
     let files = list_workspace(a, base)?
     var imports = Map[List[str]].init(a)
     let saved = silence_begin()
-    for f in files { imports.put(f, file_imports(a, f) catch List[str].init(a))? }
+    var tname = target
+    let ts = str_rfind_byte(target, '/')
+    if ts >= 0 { tname = target[ts + 1..] }
+    for f in files {
+        let im = file_imports(a, f) catch {
+            let text = read_file(a, f) catch ""
+            if str_find(text, tname) >= 0 { rename_blocked = true }
+            List[str].init(a)
+        }
+        imports.put(f, im)?
+    }
     silence_end(saved)
     var reach = List[str].init(a)
     reach.push(target)?
@@ -985,6 +1004,7 @@ fn all_refs(s: *Server, a: Allocator, d: *Doc, off: i64) !List[OccRef] {
         let saved = silence_begin()
         analyze(q, r, r, -1) catch {}
         silence_end(saved)
+        for f in q.files { if !f.ok { rename_blocked = true } }
         collect_refs(a, q, sym.file, sym.off, &seen, &out)?
     }
     return out
@@ -1009,8 +1029,9 @@ fn refs_json(s: *Server, a: Allocator, d: *Doc, off: i64, with_decl: bool) !str 
 
 fn rename_json(s: *Server, a: Allocator, d: *Doc, off: i64, new_name: str) !str {
     if !valid_ident(new_name) { return "null" }
+    rename_blocked = false
     let refs = all_refs(s, a, d, off)?
-    if refs.len == 0 { return "null" }
+    if refs.len == 0 || rename_blocked { return "null" }
     var files = List[str].init(a)
     for r in refs { if !contains_str(files, r.file) { files.push(r.file)? } }
     var w = new_jw(a)

@@ -263,7 +263,9 @@ impl Lexer {
             }
             let op = operator(src[self.i..])
             if op.tag == .eof {
-                eprintln("{self.file}:{self.line}: error: unexpected character '{src[self.i..self.i + 1]}'")
+                var ce = self.i + 1
+                while ce < src.len && (src[ce] & 0xC0) == 0x80 { ce += 1 }
+                eprintln("{self.file}:{self.line}: error: unexpected character '{src[self.i..ce]}'")
                 show_source(self.file, self.line, self.i)
                 return error.LexFailed
             }

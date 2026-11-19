@@ -152,10 +152,11 @@ impl Parser {
             let ret = self.te(.Errun)?
             ret.elem = self.te_name("void")?
             let f = self.a.create[FnDecl]()?
+            let body = self.parse_block()?
             *f = FnDecl{
                 name: "test", type_params: self.strs(), params: List[Param].init(self.a), ret: ret,
-                body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(),
-                is_test: true, test_name: name, name_off: t.off, ..
+                body: body, line: t.line, file: self.file, receiver_params: self.strs(),
+                is_test: true, test_name: name, name_off: t.off, end_off: body.end_off, ..
             }
             out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
             return
