@@ -1,0 +1,3 @@
+interface Shape { f64 area(); f64 perimeter(); }
+struct Circle { f64 r; f64 area() { return r; } }
+void main() { auto c = Circle{ .r = 1.0 }; Shape s = &c; }

@@ -1,0 +1,39 @@
+interface Shape {
+    f64 area();
+    void scale(f64 k);
+    str name();
+}
+
+struct Circle {
+    f64 r;
+    f64 area() { return 3.0 * r * r; }
+    void scale(f64 k) { r *= k; }
+    str name() { return "circle"; }
+}
+
+struct Rect {
+    f64 w;
+    f64 h;
+    f64 area() { return w * h; }
+    void scale(f64 k) { w *= k; h *= k; }
+    str name() { return "rect"; }
+}
+
+f64 total(Shape[] shapes) {
+    f64 sum = 0.0;
+    for (auto s : shapes) { sum += s.area(); }
+    return sum;
+}
+
+void grow(Shape s) { s.scale(2.0); }
+
+void main() {
+    auto c = Circle{ .r = 2.0 };
+    auto r = Rect{ .w = 3.0, .h = 4.0 };
+    Shape[2] all = [&c, &r];
+    println(total(all[..]));
+    grow(&c);
+    grow(&r);
+    println(total(all[..]), c.r, r.w);
+    for (auto s : all) { println(s.name(), s.area()); }
+}

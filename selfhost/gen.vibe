@@ -76,6 +76,7 @@ struct Gen {
     List<str> error_names;
     List<Value> pre_vals;
     Map<i64> thunks;
+    Map<str> vtables;
     Map<Type*> rtypes;
 
     List<u8> types_out;
@@ -791,6 +792,7 @@ struct Gen {
     g.error_names = List<str>::init(a);
     g.pre_vals = List<Value>::init(a);
     g.thunks = Map<i64>::init(a);
+    g.vtables = Map<str>::init(a);
     g.rtypes = Map<Type*>::init(a);
     g.types_out = List<u8>::init(a);
     g.globals_out = List<u8>::init(a);

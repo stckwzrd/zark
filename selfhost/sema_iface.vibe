@@ -1,0 +1,77 @@
+// Interfaces: a struct implements an interface when it has all its methods; the conversion builds a (data, vtable) pair.
+
+import "sema_check.vibe";
+
+!Value Gen::make_iface(Value v, Type* to, i64 line) {
+    const auto st = v.ty.elem;
+    const auto iname = to.si.decl.name;
+    auto vtn = this->sb();
+    sprint(&vtn, "{iname}Vtable")?;
+    const auto vt = this->get_struct(this->structs.get(vtn.slice())?, this->no_types())?;
+    auto kb = this->sb();
+    sprint(&kb, "{this->mangle(st)?}|{iname}")?;
+    auto gname = "";
+    if (this->vtables.has(kb.slice())) {
+        gname = this->vtables.get(kb.slice())?;
+    } else {
+        const auto rn = recv_name(st);
+        const auto id = this->vtables.len;
+        auto sa = this->sb();
+        sprint(&sa, "ivs{id}")?;
+        this->rtypes.put(sa.slice(), st)?;
+        auto src = this->sb();
+        for (auto [i, f] : vt.fields) {
+            auto mk = this->sb();
+            sprint(&mk, "{rn}.{f.name}")?;
+            if (rn.len == 0 || !this->methods.has(mk.slice())) {
+                this->err(line);
+                eprintln("'{this->type_name(st)?}' does not implement '{iname}': missing method '{f.name}'");
+                return error.CompileFailed;
+            }
+            const auto ft = f.ty;
+            auto ret = "void";
+            if (ft.ret.k != .Void) {
+                auto ra = this->sb();
+                sprint(&ra, "ivr{id}x{i}")?;
+                this->rtypes.put(ra.slice(), ft.ret)?;
+                ret = ra.slice();
+            }
+            sprint(&src, "{ret} ivf{id}x{i}(void* self")?;
+            for (auto j : 1..ft.params.len) {
+                auto pa = this->sb();
+                sprint(&pa, "ivp{id}x{i}x{j}")?;
+                this->rtypes.put(pa.slice(), ft.params.get(j))?;
+                sprint(&src, ", {pa.slice()} a{j}")?;
+            }
+            src.append(") \{ ")?;
+            if (ft.ret.k != .Void) { src.append("return ")?; }
+            sprint(&src, "(self as *{sa.slice()}).{f.name}(")?;
+            for (auto j : 1..ft.params.len) {
+                if (j > 1) { src.append(", ")?; }
+                sprint(&src, "a{j}")?;
+            }
+            src.append("); }\n")?;
+        }
+        const auto toks = tokenize(this->a, src.slice(), "<iface>")?;
+        auto ps = new_parser(this->a, toks.slice(), "<iface>");
+        const auto decls = ps.parse_file()?;
+        const auto saved = this->file;
+        this->add_decls(decls, "<iface>")?;
+        this->file = saved;
+        auto refs = this->sb();
+        for (auto [i, f] : vt.fields) {
+            auto fname = this->sb();
+            sprint(&fname, "ivf{id}x{i}")?;
+            const auto fi = this->inst_fn(this->fns.get(fname.slice())?, this->new_env()?, this->no_types())?;
+            if (i > 0) { refs.append(", ")?; }
+            sprint(&refs, "ptr @{fi.llname}")?;
+        }
+        auto gb = this->sb();
+        sprint(&gb, "@vtbl.{id}")?;
+        gname = gb.slice();
+        sprint(&this->globals_out, "{gname} = private constant [{vt.fields.len} x ptr] [{refs.slice()}]\n")?;
+        this->vtables.put(kb.slice(), gname)?;
+    }
+    const auto a1 = this->insert(to, "zeroinitializer", Value{ .ty = this->t_ptr_u8, .v = v.v }, 0)?;
+    return Value{ .ty = to, .v = this->insert(to, a1, Value{ .ty = this->t_ptr_u8, .v = gname }, 1)? };
+}

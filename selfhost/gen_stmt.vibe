@@ -1,6 +1,6 @@
 // Statements: let/assign/if/loops/defer/match/return.
 
-import "sema_check.vibe";
+import "sema_iface.vibe";
 
 struct UPat { i64 idx; str bind; }
 struct MatchRes { Type* ty; str slot; }

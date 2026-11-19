@@ -38,6 +38,7 @@ bool can_coerce(Type* from, Type* to) {
     if (from.k == .Null && (to.k == .Ptr || to.k == .Func)) { return true; }
     if (from.k == .Ptr && to.k == .Ptr) { return from.elem.k == .Void || to.elem.k == .Void };
     if (to.k == .Errun) { return from.k == .ErrVal || can_coerce(from, to.elem) };
+    if (to.k == .Strct && to.si.decl.is_iface && from.k == .Ptr && from.elem.k == .Strct) { return true; }
     return false;
 }
 
@@ -755,6 +756,7 @@ bool can_coerce(Type* from, Type* to) {
 
 !Value Gen::coerce(Value v, Type* to, i64 line) {
     if (type_eq(v.ty, to)) { return v; }
+    if (to.k == .Strct && to.si.decl.is_iface && v.ty.k == .Ptr && v.ty.elem.k == .Strct && !v.ty.elem.si.decl.is_iface) { return this->make_iface(v, to, line); }
     if (!can_coerce(v.ty, to)) { this->err(line); eprintln("type mismatch: expected '{this->type_name(to)?}', got '{this->type_name(v.ty)?}'"); return error.CompileFailed; }
     if (to.k == .Int) {
         const auto t = this->tmp()?;

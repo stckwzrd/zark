@@ -483,3 +483,96 @@ bool Parser::new_member(bool is_union) {
     s.body = this->parse_block()?;
     return s;
 }
+
+struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
+
+/// `interface Name { R m(A a); }` becomes a vtable struct plus a two-word struct `Name { void* data; NameVtable* vt; }` with dispatching methods
+!void Parser::parse_interface(Token t, List<Decl>*out) {
+    _ = this->advance();
+    const auto nt = this->expect(.ident)?;
+    const auto name = nt.text;
+    _ = this->expect(.lbrace)?;
+    auto methods = List<IfaceMethod>::init(this->a);
+    while (!this->at(.rbrace)) {
+        auto ts = List<Token>::init(this->a);
+        while (!this->at(.semi) && !this->at(.rbrace) && !this->at(.eof)) { ts.push(this->advance())?; }
+        _ = this->eat(.semi);
+        if (ts.len == 0) { continue; }
+        auto lp = 0;
+        while (lp < ts.len && ts.get(lp).tag != .lparen) { lp += 1; }
+        if (lp < 2 || lp >= ts.len) { this->fail("expected a method declaration like 'R name(T a);' in an interface")?; }
+        auto m = IfaceMethod{ .ret = "", .name = ts.get(lp - 1).text, .ptypes = this->strs(), .pnames = this->strs() };
+        auto rb = List<u8>::init(this->a);
+        for (auto i : 0..lp - 1) {
+            if (i > 0) { rb.push(' ')?; }
+            rb.append(ts.get(i).text)?;
+        }
+        m.ret = rb.slice();
+        auto depth = 0;
+        auto cur = List<Token>::init(this->a);
+        auto k = lp + 1;
+        while (k < ts.len) {
+            const auto tk = ts.get(k);
+            auto close = false;
+            match tk.tag {
+                .lparen, .lt => depth += 1;
+                .gt => depth -= 1;
+                .shr => depth -= 2;
+                .rparen => {
+                    if (depth == 0) { close = true; } else { depth -= 1; }
+                }
+            }
+            if (close || (tk.tag == .comma && depth == 0)) {
+                if (cur.len > 0) {
+                    auto tb = List<u8>::init(this->a);
+                    for (auto i : 0..cur.len - 1) {
+                        if (i > 0) { tb.push(' ')?; }
+                        tb.append(cur.get(i).text)?;
+                    }
+                    m.ptypes.push(tb.slice())?;
+                    m.pnames.push(cur.get(cur.len - 1).text)?;
+                }
+                cur = List<Token>::init(this->a);
+                if (close) { break; }
+            } else {
+                cur.push(tk)?;
+            }
+            k += 1;
+        }
+        methods.push(m)?;
+    }
+    _ = this->expect(.rbrace)?;
+    auto b = List<u8>::init(this->a);
+    sprint(&b, "struct {name}Vtable {{ ")?;
+    for (auto m : methods) {
+        sprint(&b, "fn(void*")?;
+        for (auto pt : m.ptypes) { sprint(&b, ", {pt}")?; }
+        sprint(&b, ") -> {m.ret} {m.name}; ")?;
+    }
+    sprint(&b, "}\nstruct {name} {{ void* data; {name}Vtable* vt; ")?;
+    for (auto m : methods) {
+        sprint(&b, "{m.ret} {m.name}(")?;
+        for (auto [i, pt] : m.ptypes) {
+            if (i > 0) { b.append(", ")?; }
+            sprint(&b, "{pt} {m.pnames.get(i)}")?;
+        }
+        b.append(") \{ ")?;
+        if (m.ret != "void") { b.append("return ")?; }
+        sprint(&b, "this->vt->{m.name}(this->data")?;
+        for (auto pn : m.pnames) { sprint(&b, ", {pn}")?; }
+        b.append("); } ")?;
+    }
+    b.append("}\n")?;
+    auto toks = tokenize(this->a, b.slice(), this->file)?;
+    for (auto k : 0..toks.len) {
+        toks.items[k].line = t.line;
+        toks.items[k].off = t.off;
+    }
+    auto sub = new_parser(this->a, toks.slice(), this->file);
+    sub.aliases = this->aliases;
+    const auto decls = sub.parse_file()?;
+    for (auto d : decls) {
+        if (d.k == .Struct && d.s.name == name) { d.s.is_iface = true; }
+        out.push(d)?;
+    }
+}

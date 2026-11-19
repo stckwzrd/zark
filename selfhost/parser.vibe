@@ -161,6 +161,9 @@ struct Parser {
             out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
             return;
         }
+        if (t.tag == .ident && t.text == "interface" && this->peek_at(1).tag == .ident && this->peek_at(2).tag == .lbrace) {
+            return this->parse_interface(t, out);
+        }
         if (t.tag == .ident && t.text == "packed" && (this->peek_at(1).tag == .kw_struct || this->peek_at(1).tag == .kw_union)) {
             _ = this->advance();
             this->at_packed = true;
