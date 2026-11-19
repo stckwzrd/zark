@@ -153,25 +153,44 @@ template<T> T max(T a, T b) { if (a > b) { return a; } return b; }
 template<T> T abs(T a) { if (a < 0) { return -a; } return a; }
 template<T> void swap(T* a, T* b) { const auto t = *a; *a = *b; *b = t; }
 
-/// in-place quicksort of any slice whose elements support < and >
+/// in-place sort of any slice whose elements support < and >
 template<T> void sort(T[] s) { if (s.len > 1) { __qsort(s.ptr, 0, s.len - 1); } }
 
 template<T> void __qsort(T* a, i64 lo, i64 hi) {
-    if (lo >= hi) { return; }
-    const auto pivot = a[(lo + hi) / 2];
-    auto i = lo;
-    auto j = hi;
-    while (i <= j) {
-        while (a[i] < pivot) { i += 1; }
-        while (a[j] > pivot) { j -= 1; }
-        if (i <= j) {
-            swap(&a[i], &a[j]);
-            i += 1;
-            j -= 1;
+    while (hi - lo > 16) {
+        const auto mid = lo + (hi - lo) / 2;
+        if (a[mid] < a[lo]) { swap(&a[mid], &a[lo]); }
+        if (a[hi] < a[lo]) { swap(&a[hi], &a[lo]); }
+        if (a[hi] < a[mid]) { swap(&a[hi], &a[mid]); }
+        const auto pivot = a[mid];
+        auto i = lo;
+        auto j = hi;
+        while (i <= j) {
+            while (a[i] < pivot) { i += 1; }
+            while (a[j] > pivot) { j -= 1; }
+            if (i <= j) {
+                swap(&a[i], &a[j]);
+                i += 1;
+                j -= 1;
+            }
+        }
+        if (j - lo < hi - i) {
+            __qsort(a, lo, j);
+            lo = i;
+        } else {
+            __qsort(a, i, hi);
+            hi = j;
         }
     }
-    __qsort(a, lo, j);
-    __qsort(a, i, hi);
+    for (auto i : lo + 1..hi + 1) {
+        const auto v = a[i];
+        auto j = i - 1;
+        while (j >= lo && a[j] > v) {
+            a[j + 1] = a[j];
+            j -= 1;
+        }
+        a[j + 1] = v;
+    }
 }
 
 // ================================================================ strings (no allocation)
