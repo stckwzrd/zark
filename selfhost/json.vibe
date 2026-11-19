@@ -1,380 +1,376 @@
 enum JK { Null, Bool, Num, Str, Arr, Obj }
 
 struct Json {
-    k: JK
-    b: bool
-    n: f64
-    s: str
-    items: List[*Json]
-    keys: List[str]
+    JK k;
+    bool b;
+    f64 n;
+    str s;
+    List<Json*> items;
+    List<str> keys;
 }
 
 struct JP {
-    a: Allocator
-    s: str
-    i: i64
-}
+    Allocator a;
+    str s;
+    i64 i;
 
-fn new_json(a: Allocator, k: JK) !*Json {
-    let j = a.create[Json]()?
-    j.k = k
-    if k == .Arr || k == .Obj {
-        j.items = List[*Json].init(a)
-        j.keys = List[str].init(a)
-    }
-    return j
-}
-
-impl JP {
-    fn cur(self) u8 {
-        if self.i < self.s.len { return self.s[self.i] }
-        return 0
+    u8 cur() {
+        if (this->i < this->s.len) { return this->s[this->i]; }
+        return 0;
     }
 
-    fn ws(self) {
-        while self.i < self.s.len {
-            let c = self.s[self.i]
-            if c != ' ' && c != '\t' && c != '\n' && c != '\r' { return }
-            self.i += 1
+    void ws() {
+        while (this->i < this->s.len) {
+            const auto c = this->s[this->i];
+            if (c != ' ' && c != '\t' && c != '\n' && c != '\r') { return; }
+            this->i += 1;
         }
     }
 
-    fn word(self, w: str, j: *Json) !*Json {
-        if !str_starts_with(self.s[self.i..], w) { return error.BadJson }
-        self.i += w.len
-        return j
-    }
+    !Json* word(str w, Json* j) {
+        if (!str_starts_with(this->s[this->i..], w)) { return error.BadJson; }
+        this->i += w.len;
+        return j;
+    };
 
-    fn hex4(self, at: i64) i64 {
-        if at + 4 > self.s.len { return -1 }
-        for k in at..at + 4 {
-            if !is_hex(self.s[k]) { return -1 }
+    i64 hex4(i64 at) {
+        if (at + 4 > this->s.len) { return -1; }
+        for (auto k : at..at + 4) {
+            if (!is_hex(this->s[k])) { return -1; }
         }
-        return (parse_int_radix(self.s[at..at + 4], 16) catch 0) as i64
+        return (parse_int_radix(this->s[at..at + 4], 16) catch 0) as i64;
     }
 
-    fn utf8(self, b: *List[u8], cp: i64) !void {
-        if cp < 0x80 {
-            b.push(cp as u8)?
-        } else if cp < 0x800 {
-            b.push((0xC0 | (cp >> 6)) as u8)?
-            b.push((0x80 | (cp & 0x3F)) as u8)?
-        } else if cp < 0x10000 {
-            b.push((0xE0 | (cp >> 12)) as u8)?
-            b.push((0x80 | ((cp >> 6) & 0x3F)) as u8)?
-            b.push((0x80 | (cp & 0x3F)) as u8)?
+    !void utf8(List<u8>*b, i64 cp) {
+        if (cp < 0x80) {
+            b.push(cp as u8)?;
+        } else if (cp < 0x800) {
+            b.push((0xC0 | (cp >> 6)) as u8)?;
+            b.push((0x80 | (cp & 0x3F)) as u8)?;
+        } else if (cp < 0x10000) {
+            b.push((0xE0 | (cp >> 12)) as u8)?;
+            b.push((0x80 | ((cp >> 6) & 0x3F)) as u8)?;
+            b.push((0x80 | (cp & 0x3F)) as u8)?;
         } else {
-            b.push((0xF0 | (cp >> 18)) as u8)?
-            b.push((0x80 | ((cp >> 12) & 0x3F)) as u8)?
-            b.push((0x80 | ((cp >> 6) & 0x3F)) as u8)?
-            b.push((0x80 | (cp & 0x3F)) as u8)?
+            b.push((0xF0 | (cp >> 18)) as u8)?;
+            b.push((0x80 | ((cp >> 12) & 0x3F)) as u8)?;
+            b.push((0x80 | ((cp >> 6) & 0x3F)) as u8)?;
+            b.push((0x80 | (cp & 0x3F)) as u8)?;
         }
     }
 
-    fn escape(self, b: *List[u8]) !void {
-        let c = self.cur()
-        self.i += 1
+    !void escape(List<u8>*b) {
+        const auto c = this->cur();
+        this->i += 1;
         match c {
-            '"' => b.push('"')?
-            '\\' => b.push('\\')?
-            '/' => b.push('/')?
-            'b' => b.push(8)?
-            'f' => b.push(12)?
-            'n' => b.push('\n')?
-            'r' => b.push('\r')?
-            't' => b.push('\t')?
+            '"' => b.push('"')?;
+            '\\' => b.push('\\')?;
+            '/' => b.push('/')?;
+            'b' => b.push(8)?;
+            'f' => b.push(12)?;
+            'n' => b.push('\n')?;
+            'r' => b.push('\r')?;
+            't' => b.push('\t')?;
             'u' => {
-                var cp = self.hex4(self.i)
-                if cp < 0 { return error.BadJson }
-                self.i += 4
-                if cp >= 0xD800 && cp < 0xDC00 {
-                    var lo: i64 = -1
-                    if str_starts_with(self.s[self.i..], "\\u") { lo = self.hex4(self.i + 2) }
-                    if lo >= 0xDC00 && lo < 0xE000 {
-                        cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
-                        self.i += 6
+                auto cp = this->hex4(this->i);
+                if (cp < 0) { return error.BadJson; }
+                this->i += 4;
+                if (cp >= 0xD800 && cp < 0xDC00) {
+                    i64 lo = -1;
+                    if (str_starts_with(this->s[this->i..], "\\u")) { lo = this->hex4(this->i + 2); }
+                    if (lo >= 0xDC00 && lo < 0xE000) {
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                        this->i += 6;
                     } else {
-                        cp = 0xFFFD
+                        cp = 0xFFFD;
                     }
-                } else if cp >= 0xDC00 && cp < 0xE000 {
-                    cp = 0xFFFD
+                } else if (cp >= 0xDC00 && cp < 0xE000) {
+                    cp = 0xFFFD;
                 }
-                self.utf8(b, cp)?
+                this->utf8(b, cp)?;
             }
-            _ => return error.BadJson
+            _ => return error.BadJson;
         }
     }
 
-    fn string(self) !str {
-        self.i += 1
-        var b = List[u8].init(self.a)
-        defer b.deinit()
-        while true {
-            if self.i >= self.s.len { return error.BadJson }
-            let c = self.s[self.i]
-            if c == '"' { break }
-            if c < 0x20 { return error.BadJson }
-            self.i += 1
-            if c == '\\' { self.escape(&b)? } else { b.push(c)? }
+    !str string() {
+        this->i += 1;
+        auto b = List<u8>::init(this->a);
+        defer b.deinit();
+        while (true) {
+            if (this->i >= this->s.len) { return error.BadJson; }
+            const auto c = this->s[this->i];
+            if (c == '"') { break; }
+            if (c < 0x20) { return error.BadJson; }
+            this->i += 1;
+            if (c == '\\') { this->escape(&b)?; } else { b.push(c)?; }
         }
-        self.i += 1
-        return self.a.dup(b.slice())
+        this->i += 1;
+        return this->a.dup(b.slice());
     }
 
-    fn number(self) !*Json {
-        let st = self.i
-        if self.cur() == '-' { self.i += 1 }
-        if self.cur() == '0' {
-            self.i += 1
-        } else if is_digit(self.cur()) {
-            while is_digit(self.cur()) { self.i += 1 }
+    !Json* number() {
+        const auto st = this->i;
+        if (this->cur() == '-') { this->i += 1; }
+        if (this->cur() == '0') {
+            this->i += 1;
+        } else if (is_digit(this->cur())) {
+            while (is_digit(this->cur())) { this->i += 1; }
         } else {
-            return error.BadJson
+            return error.BadJson;
         }
-        if self.cur() == '.' {
-            self.i += 1
-            if !is_digit(self.cur()) { return error.BadJson }
-            while is_digit(self.cur()) { self.i += 1 }
+        if (this->cur() == '.') {
+            this->i += 1;
+            if (!is_digit(this->cur())) { return error.BadJson; }
+            while (is_digit(this->cur())) { this->i += 1; }
         }
-        if self.cur() == 'e' || self.cur() == 'E' {
-            self.i += 1
-            if self.cur() == '+' || self.cur() == '-' { self.i += 1 }
-            if !is_digit(self.cur()) { return error.BadJson }
-            while is_digit(self.cur()) { self.i += 1 }
+        if (this->cur() == 'e' || this->cur() == 'E') {
+            this->i += 1;
+            if (this->cur() == '+' || this->cur() == '-') { this->i += 1; }
+            if (!is_digit(this->cur())) { return error.BadJson; }
+            while (is_digit(this->cur())) { this->i += 1; }
         }
-        let j = new_json(self.a, .Num)?
-        j.n = parse_float(self.s[st..self.i]) catch return error.BadJson
-        return j
+        const auto j = new_json(this->a, .Num)?;
+        j.n = parse_float(this->s[st..this->i]) catch return error.BadJson;
+        return j;
+    };
+
+    !Json* arr(i64 depth) {
+        if (depth > 64) { return error.BadJson; }
+        this->i += 1;
+        const auto j = new_json(this->a, .Arr)?;
+        this->ws();
+        if (this->cur() == ']') {
+            this->i += 1;
+            return j;
+        }
+        while (true) {
+            j.items.push(this->value(depth)?)?;
+            this->ws();
+            const auto c = this->cur();
+            this->i += 1;
+            if (c == ']') { break; }
+            if (c != ',') { return error.BadJson; }
+        }
+        return j;
+    };
+
+    !Json* obj(i64 depth) {
+        if (depth > 64) { return error.BadJson; }
+        this->i += 1;
+        const auto j = new_json(this->a, .Obj)?;
+        this->ws();
+        if (this->cur() == '}') {
+            this->i += 1;
+            return j;
+        }
+        while (true) {
+            this->ws();
+            if (this->cur() != '"') { return error.BadJson; }
+            const auto k = this->string()?;
+            this->ws();
+            if (this->cur() != ':') { return error.BadJson; }
+            this->i += 1;
+            j.keys.push(k)?;
+            j.items.push(this->value(depth)?)?;
+            this->ws();
+            const auto c = this->cur();
+            this->i += 1;
+            if (c == '}') { break; }
+            if (c != ',') { return error.BadJson; }
+        }
+        return j;
+    };
+
+    !Json* value(i64 depth) {
+        this->ws();
+        const auto c = this->cur();
+        if (c == '{') { return this->obj(depth + 1); }
+        if (c == '[') { return this->arr(depth + 1); }
+        if (c == '"') {
+            const auto j = new_json(this->a, .Str)?;
+            j.s = this->string()?;
+            return j;
+        }
+        if (c == 't') {
+            const auto j = new_json(this->a, .Bool)?;
+            j.b = true;
+            return this->word("true", j);
+        }
+        if (c == 'f') { return this->word("false", new_json(this->a, .Bool)?); }
+        if (c == 'n') { return this->word("null", new_json(this->a, .Null)?); }
+        if (c == '-' || is_digit(c)) { return this->number(); }
+        return error.BadJson;
+    };
+}
+
+!Json* new_json(Allocator a, JK k) {
+    const auto j = a.create<Json>()?;
+    j.k = k;
+    if (k == .Arr || k == .Obj) {
+        j.items = List<Json*>::init(a);
+        j.keys = List<str>::init(a);
+    };
+    return j;
+};
+
+!Json* json_parse(Allocator a, str s) {
+    auto p = JP{ a: a, s: s, i: 0; }
+    const auto j = p.value(0)?;
+    p.ws();
+    if (p.i != s.len) { return error.BadJson; }
+    return j;
+};
+
+JK jkind(Json* j) {
+    if (j == null) { return .Null; }
+    return j.k;
+}
+
+Json* jget(Json* j, str key) {
+    if (jkind(j) != .Obj) { return null };
+    auto i = j.items.len - 1;
+    while (i >= 0) {
+        if (j.keys.get(i) == key) { return j.items.get(i); }
+        i -= 1;
     }
+    return null;
+};
 
-    fn arr(self, depth: i64) !*Json {
-        if depth > 64 { return error.BadJson }
-        self.i += 1
-        let j = new_json(self.a, .Arr)?
-        self.ws()
-        if self.cur() == ']' {
-            self.i += 1
-            return j
-        }
-        while true {
-            j.items.push(self.value(depth)?)?
-            self.ws()
-            let c = self.cur()
-            self.i += 1
-            if c == ']' { break }
-            if c != ',' { return error.BadJson }
-        }
-        return j
-    }
+Json* jat(Json* j, i64 i) {
+    if (jkind(j) != .Arr || i < 0 || i >= j.items.len) { return null; }
+    return j.items.get(i);
+};
 
-    fn obj(self, depth: i64) !*Json {
-        if depth > 64 { return error.BadJson }
-        self.i += 1
-        let j = new_json(self.a, .Obj)?
-        self.ws()
-        if self.cur() == '}' {
-            self.i += 1
-            return j
-        }
-        while true {
-            self.ws()
-            if self.cur() != '"' { return error.BadJson }
-            let k = self.string()?
-            self.ws()
-            if self.cur() != ':' { return error.BadJson }
-            self.i += 1
-            j.keys.push(k)?
-            j.items.push(self.value(depth)?)?
-            self.ws()
-            let c = self.cur()
-            self.i += 1
-            if c == '}' { break }
-            if c != ',' { return error.BadJson }
-        }
-        return j
-    }
-
-    fn value(self, depth: i64) !*Json {
-        self.ws()
-        let c = self.cur()
-        if c == '{' { return self.obj(depth + 1) }
-        if c == '[' { return self.arr(depth + 1) }
-        if c == '"' {
-            let j = new_json(self.a, .Str)?
-            j.s = self.string()?
-            return j
-        }
-        if c == 't' {
-            let j = new_json(self.a, .Bool)?
-            j.b = true
-            return self.word("true", j)
-        }
-        if c == 'f' { return self.word("false", new_json(self.a, .Bool)?) }
-        if c == 'n' { return self.word("null", new_json(self.a, .Null)?) }
-        if c == '-' || is_digit(c) { return self.number() }
-        return error.BadJson
-    }
+i64 jlen(Json* j) {
+    if (jkind(j) == .Arr || jkind(j) == .Obj) { return j.items.len };
+    return 0;
 }
 
-fn json_parse(a: Allocator, s: str) !*Json {
-    var p = JP{ a: a, s: s, i: 0 }
-    let j = p.value(0)?
-    p.ws()
-    if p.i != s.len { return error.BadJson }
-    return j
+str jstr(Json* j, str d) {
+    if (jkind(j) == .Str) { return j.s };
+    return d;
 }
 
-fn jkind(j: *Json) JK {
-    if j == null { return .Null }
-    return j.k
+i64 jint(Json* j, i64 d) {
+    if (jkind(j) == .Num) { return j.n as i64 };
+    return d;
 }
 
-fn jget(j: *Json, key: str) *Json {
-    if jkind(j) != .Obj { return null }
-    var i = j.items.len - 1
-    while i >= 0 {
-        if j.keys.get(i) == key { return j.items.get(i) }
-        i -= 1
-    }
-    return null
+f64 jnum(Json* j, f64 d) {
+    if (jkind(j) == .Num) { return j.n };
+    return d;
 }
 
-fn jat(j: *Json, i: i64) *Json {
-    if jkind(j) != .Arr || i < 0 || i >= j.items.len { return null }
-    return j.items.get(i)
-}
-
-fn jlen(j: *Json) i64 {
-    if jkind(j) == .Arr || jkind(j) == .Obj { return j.items.len }
-    return 0
-}
-
-fn jstr(j: *Json, d: str) str {
-    if jkind(j) == .Str { return j.s }
-    return d
-}
-
-fn jint(j: *Json, d: i64) i64 {
-    if jkind(j) == .Num { return j.n as i64 }
-    return d
-}
-
-fn jnum(j: *Json, d: f64) f64 {
-    if jkind(j) == .Num { return j.n }
-    return d
-}
-
-fn jbool(j: *Json, d: bool) bool {
-    if jkind(j) == .Bool { return j.b }
-    return d
+bool jbool(Json* j, bool d) {
+    if (jkind(j) == .Bool) { return j.b };
+    return d;
 }
 
 struct JW {
-    out: List[u8]
-    first: List[bool]
-    ends: List[u8]
-}
+    List<u8> out;
+    List<bool> first;
+    List<u8> ends;
 
-fn new_jw(a: Allocator) JW {
-    return JW{ out: List[u8].init(a), first: List[bool].init(a), ends: List[u8].init(a) }
-}
-
-impl JW {
-    fn comma(self) !void {
-        if self.first.len == 0 { return }
-        let i = self.first.len - 1
-        if self.first.items[i] {
-            self.first.items[i] = false
+    !void comma() {
+        if (this->first.len == 0) { return; }
+        const auto i = this->first.len - 1;
+        if (this->first.items[i]) {
+            this->first.items[i] = false;
         } else {
-            self.out.push(',')?
+            this->out.push(',')?;
         }
     }
 
-    fn open(self, c: u8, e: u8) !void {
-        self.comma()?
-        self.out.push(c)?
-        self.first.push(true)?
-        self.ends.push(e)?
+    !void open(u8 c, u8 e) {
+        this->comma()?;
+        this->out.push(c)?;
+        this->first.push(true)?;
+        this->ends.push(e)?;
     }
 
-    fn obj(self) !void { self.open('{', '}')? }
+    !void obj() { this->open('{', '}')?; }
 
-    fn arr(self) !void { self.open('[', ']')? }
+    !void arr() { this->open('[', ']')?; }
 
-    fn end(self) !void {
-        let e = self.ends.pop()?
-        _ = self.first.pop()?
-        self.out.push(e)?
+    !void end() {
+        const auto e = this->ends.pop()?;
+        _ = this->first.pop()?;
+        this->out.push(e)?;
     }
 
-    fn quoted(self, s: str) !void {
-        let hex = "0123456789abcdef"
-        self.out.push('"')?
-        for c in s {
-            if c == '"' {
-                self.out.append("\\\"")?
-            } else if c == '\\' {
-                self.out.append("\\\\")?
-            } else if c == '\n' {
-                self.out.append("\\n")?
-            } else if c == '\r' {
-                self.out.append("\\r")?
-            } else if c == '\t' {
-                self.out.append("\\t")?
-            } else if c < 0x20 {
-                self.out.append("\\u00")?
-                self.out.push(hex[c >> 4])?
-                self.out.push(hex[c & 15])?
+    !void quoted(str s) {
+        const auto hex = "0123456789abcdef";
+        this->out.push('"')?;
+        for (auto c : s) {
+            if (c == '"') {
+                this->out.append("\\\"")?;
+            } else if (c == '\\') {
+                this->out.append("\\\\")?;
+            } else if (c == '\n') {
+                this->out.append("\\n")?;
+            } else if (c == '\r') {
+                this->out.append("\\r")?;
+            } else if (c == '\t') {
+                this->out.append("\\t")?;
+            } else if (c < 0x20) {
+                this->out.append("\\u00")?;
+                this->out.push(hex[c >> 4])?;
+                this->out.push(hex[c & 15])?;
             } else {
-                self.out.push(c)?
+                this->out.push(c)?;
             }
         }
-        self.out.push('"')?
+        this->out.push('"')?;
     }
 
-    fn key(self, k: str) !void {
-        self.comma()?
-        self.quoted(k)?
-        self.out.push(':')?
-        if self.first.len > 0 { self.first.items[self.first.len - 1] = true }
+    !void key(str k) {
+        this->comma()?;
+        this->quoted(k)?;
+        this->out.push(':')?;
+        if (this->first.len > 0) { this->first.items[this->first.len - 1] = true; }
     }
 
-    fn str(self, s: str) !void {
-        self.comma()?
-        self.quoted(s)?
+    !void str(str s) {
+        this->comma()?;
+        this->quoted(s)?;
     }
 
-    fn int(self, n: i64) !void {
-        self.comma()?
-        sprint(&self.out, "{n}")?
+    !void int(i64 n) {
+        this->comma()?;
+        sprint(&this->out, "{n}")?;
     }
 
-    fn num(self, f: f64) !void {
-        self.comma()?
-        if f != f || f - f != 0.0 {
-            self.out.append("null")?
-            return
+    !void num(f64 f) {
+        this->comma()?;
+        if (f != f || f - f != 0.0) {
+            this->out.append("null")?;
+            return;
         }
-        var buf: [40]u8
-        var t = bprint(buf[..], "{f:.15g}")?
-        if (parse_float(t) catch 0.0) != f { t = bprint(buf[..], "{f:.17g}")? }
-        self.out.append(t)?
+        u8[40] buf;
+        auto t = bprint(buf[..], "{f:.15g}")?;
+        if ((parse_float(t) catch 0.0) != f) { t = bprint(buf[..], "{f:.17g}")?; }
+        this->out.append(t)?;
     }
 
-    fn bool(self, b: bool) !void {
-        self.comma()?
-        if b { self.out.append("true")? } else { self.out.append("false")? }
+    !void bool(bool b) {
+        this->comma()?;
+        if (b) { this->out.append("true")?; } else { this->out.append("false")?; }
     }
 
-    fn nul(self) !void {
-        self.comma()?
-        self.out.append("null")?
+    !void nul() {
+        this->comma()?;
+        this->out.append("null")?;
     }
 
-    fn raw(self, s: str) !void {
-        self.comma()?
-        self.out.append(s)?
+    !void raw(str s) {
+        this->comma()?;
+        this->out.append(s)?;
     }
 
-    fn text(self) str { return self.out.slice() }
+    str text() { return this->out.slice(); }
+}
+
+JW new_jw(Allocator a) {
+    return JW{ out: List<u8>::init(a), first: List<bool>::init(a), ends: List<u8>::init(a); }
 }

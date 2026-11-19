@@ -1,191 +1,189 @@
 // Gives the declarations of a module imported `as name` the prefix `name.` and rewrites
 // the references to them inside that module.
 
-import "ast.vibe"
+import "ast.vibe";
 
 struct Resolver {
-    a: Allocator
-    prefix: str
-    names: Map[bool]
-    locals: List[str]
-}
+    Allocator a;
+    str prefix;
+    Map<bool> names;
+    List<str> locals;
 
-impl Resolver {
-    fn qual(self, name: str) !str {
-        var b = List[u8].init(self.a)
-        sprint(&b, "{self.prefix}.{name}")?
-        return b.slice()
+    !str qual(str name) {
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "{this->prefix}.{name}")?;
+        return b.slice();
     }
 
-    fn is_local(self, name: str) bool {
-        for x in self.locals { if x == name { return true } }
-        return false
+    bool is_local(str name) {
+        for (auto x : this->locals) { if (x == name) { return true; } }
+        return false;
     }
 
-    fn rename(self, name: str) !str {
-        if self.names.has(name) && !self.is_local(name) { return self.qual(name) }
-        return name
+    !str rename(str name) {
+        if (this->names.has(name) && !this->is_local(name)) { return this->qual(name); }
+        return name;
     }
 
-    fn rtype(self, t: *TypeExpr) !void {
-        if t == null { return }
-        if t.k == .Name { t.name = self.rename(t.name)? }
-        for x in t.args { self.rtype(x)? }
-        self.rtype(t.elem)?
-        self.rexpr(t.len)?
-        self.rtype(t.ret)?
+    !void rtype(TypeExpr* t) {
+        if (t == null) { return; }
+        if (t.k == .Name) { t.name = this->rename(t.name)? };
+        for (auto x : t.args) { this->rtype(x)?; }
+        this->rtype(t.elem)?;
+        this->rexpr(t.len)?;
+        this->rtype(t.ret)?;
     }
 
-    fn rexpr(self, e: *Expr) !void {
-        if e == null { return }
+    !void rexpr(Expr* e) {
+        if (e == null) { return; }
         match e.k {
             .Ident => {
-                e.name = self.rename(e.name)?
-                return
+                e.name = this->rename(e.name)?;
+                return;
             }
             .Interp => {
-                for p in e.parts { if p.kind != 0 { self.rexpr(p.e)? } }
-                return
+                for (auto p : e.parts) { if (p.kind != 0) { this->rexpr(p.e)?; } }
+                return;
             }
             .Catch, .Orelse => {
-                self.rexpr(e.l)?
-                let mark = self.locals.len
-                if e.has_name && e.k == .Catch { self.locals.push(e.name)? }
-                self.rstmt(e.handler)?
-                self.locals.len = mark
-                return
+                this->rexpr(e.l)?;
+                const auto mark = this->locals.len;
+                if (e.has_name && e.k == .Catch) { this->locals.push(e.name)? };
+                this->rstmt(e.handler)?;
+                this->locals.len = mark;
+                return;
             }
             .Match => {
-                self.rexpr(e.l)?
-                self.rarms(e.arms)?
-                return
+                this->rexpr(e.l)?;
+                this->rarms(e.arms)?;
+                return;
             }
             .Closure => {
-                let f = e.func
-                let mark = self.locals.len
-                for p in f.params { self.rtype(p.ty)? }
-                self.rtype(f.ret)?
-                for c in f.captures { self.locals.push(c)? }
-                for p in f.params { self.locals.push(p.name)? }
-                self.rstmt(f.body)?
-                self.locals.len = mark
-                return
+                const auto f = e.func;
+                const auto mark = this->locals.len;
+                for (auto p : f.params) { this->rtype(p.ty)?; }
+                this->rtype(f.ret)?;
+                for (auto c : f.captures) { this->locals.push(c)?; }
+                for (auto p : f.params) { this->locals.push(p.name)?; }
+                this->rstmt(f.body)?;
+                this->locals.len = mark;
+                return;
             }
         }
-        self.rexpr(e.l)?
-        self.rexpr(e.r)?
-        self.rexpr(e.x)?
-        for x in e.args { self.rexpr(x)? }
-        self.rtype(e.ty)?
-        for f in e.fields { self.rexpr(f.value)? }
+        this->rexpr(e.l)?;
+        this->rexpr(e.r)?;
+        this->rexpr(e.x)?;
+        for (auto x : e.args) { this->rexpr(x)?; }
+        this->rtype(e.ty)?;
+        for (auto f : e.fields) { this->rexpr(f.value)?; }
     }
 
-    fn rarms(self, arms: List[MatchArm]) !void {
-        for arm in arms {
-            let mark = self.locals.len
-            for pat in arm.pats {
-                if pat.k == .Call && pat.args.len == 1 && pat.args.get(0).k == .Ident {
-                    self.locals.push(pat.args.get(0).name)?
+    !void rarms(List<MatchArm> arms) {
+        for (auto arm : arms) {
+            const auto mark = this->locals.len;
+            for (auto pat : arm.pats) {
+                if (pat.k == .Call && pat.args.len == 1 && pat.args.get(0).k == .Ident) {
+                    this->locals.push(pat.args.get(0).name)?;
                 } else {
-                    self.rexpr(pat)?
+                    this->rexpr(pat)?;
                 }
             }
-            self.rstmt(arm.body)?
-            self.locals.len = mark
+            this->rstmt(arm.body)?;
+            this->locals.len = mark;
         }
     }
 
-    fn rstmt(self, s: *Stmt) !void {
-        if s == null { return }
-        let mark = self.locals.len
+    !void rstmt(Stmt* s) {
+        if (s == null) { return; }
+        const auto mark = this->locals.len;
         match s.k {
             .Let => {
-                self.rtype(s.ty)?
-                self.rexpr(s.e)?
-                self.locals.push(s.name)?
-                return
+                this->rtype(s.ty)?;
+                this->rexpr(s.e)?;
+                this->locals.push(s.name)?;
+                return;
             }
             .Assign => {
-                self.rexpr(s.e2)?
-                self.rexpr(s.e)?
+                this->rexpr(s.e2)?;
+                this->rexpr(s.e)?;
             }
-            .ExprS, .Ret => self.rexpr(s.e)?
+            .ExprS, .Ret => this->rexpr(s.e)?;
             .If => {
-                self.rexpr(s.e)?
-                self.rstmt(s.body)?
-                self.rstmt(s.els)?
+                this->rexpr(s.e)?;
+                this->rstmt(s.body)?;
+                this->rstmt(s.els)?;
             }
             .While => {
-                self.rexpr(s.e)?
-                self.rstmt(s.body)?
+                this->rexpr(s.e)?;
+                this->rstmt(s.body)?;
             }
             .ForRange, .ForEach => {
-                self.rexpr(s.e)?
-                self.rexpr(s.e2)?
-                self.locals.push(s.name)?
-                if s.has_idx { self.locals.push(s.idx)? }
-                self.rstmt(s.body)?
+                this->rexpr(s.e)?;
+                this->rexpr(s.e2)?;
+                this->locals.push(s.name)?;
+                if (s.has_idx) { this->locals.push(s.idx)?; }
+                this->rstmt(s.body)?;
             }
             .Block => {
-                for x in s.stmts { self.rstmt(x)? }
+                for (auto x : s.stmts) { this->rstmt(x)?; }
             }
-            .Defer => self.rstmt(s.body)?
+            .Defer => this->rstmt(s.body)?;
             .Match => {
-                self.rexpr(s.e)?
-                self.rarms(s.arms)?
+                this->rexpr(s.e)?;
+                this->rarms(s.arms)?;
             }
         }
-        self.locals.len = mark
+        this->locals.len = mark;
     }
 
-    fn rfn(self, f: *FnDecl) !void {
-        let mark = self.locals.len
-        for x in f.type_params { self.locals.push(x)? }
-        for x in f.receiver_params { self.locals.push(x)? }
-        if f.receiver.len > 0 { f.receiver = self.rename(f.receiver)? }
-        for p in f.params { self.rtype(p.ty)? }
-        self.rtype(f.ret)?
-        for p in f.params { self.locals.push(p.name)? }
-        self.rstmt(f.body)?
-        self.locals.len = mark
-        if f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test { f.name = self.rename(f.name)? }
+    !void rfn(FnDecl* f) {
+        const auto mark = this->locals.len;
+        for (auto x : f.type_params) { this->locals.push(x)?; }
+        for (auto x : f.receiver_params) { this->locals.push(x)?; }
+        if (f.receiver.len > 0) { f.receiver = this->rename(f.receiver)?; }
+        for (auto p : f.params) { this->rtype(p.ty)?; }
+        this->rtype(f.ret)?;
+        for (auto p : f.params) { this->locals.push(p.name)?; }
+        this->rstmt(f.body)?;
+        this->locals.len = mark;
+        if (f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test) { f.name = this->rename(f.name)?; }
     }
 }
 
-fn resolve_module(a: Allocator, decls: List[Decl], prefix: str) !void {
-    var r = Resolver{ a: a, prefix: prefix, names: Map[bool].init(a), locals: List[str].init(a) }
-    for d in decls {
+!void resolve_module(Allocator a, List<Decl> decls, str prefix) {
+    auto r = Resolver{ .a = a, .prefix = prefix, .names = Map<bool>::init(a), .locals = List<str>::init(a) };
+    for (auto d : decls) {
         match d.k {
             .Func => {
-                let f = d.f
-                if f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test { r.names.put(f.name, true)? }
+                const auto f = d.f;
+                if (f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test) { r.names.put(f.name, true)?; }
             }
-            .Struct => r.names.put(d.s.name, true)?
-            .Enum => r.names.put(d.en.name, true)?
-            .Const => r.names.put(d.c.name, true)?
-            .Alias => r.names.put(d.path, true)?
+            .Struct => r.names.put(d.s.name, true)?;
+            .Enum => r.names.put(d.en.name, true)?;
+            .Const => r.names.put(d.c.name, true)?;
+            .Alias => r.names.put(d.path, true)?;
         }
     }
-    for i in 0..decls.len {
-        let d = &decls.items[i]
+    for (auto i : 0..decls.len) {
+        const auto d = &decls.items[i];
         match d.k {
-            .Func => r.rfn(d.f)?
+            .Func => r.rfn(d.f)?;
             .Struct => {
-                let mark = r.locals.len
-                for x in d.s.type_params { r.locals.push(x)? }
-                for fld in d.s.fields { r.rtype(fld.ty)? }
-                r.locals.len = mark
-                d.s.name = r.rename(d.s.name)?
+                const auto mark = r.locals.len;
+                for (auto x : d.s.type_params) { r.locals.push(x)?; }
+                for (auto fld : d.s.fields) { r.rtype(fld.ty)?; }
+                r.locals.len = mark;
+                d.s.name = r.rename(d.s.name)?;
             }
-            .Enum => d.en.name = r.rename(d.en.name)?
+            .Enum => d.en.name = r.rename(d.en.name)?;
             .Const => {
-                r.rtype(d.c.ty)?
-                r.rexpr(d.c.value)?
-                d.c.name = r.rename(d.c.name)?
+                r.rtype(d.c.ty)?;
+                r.rexpr(d.c.value)?;
+                d.c.name = r.rename(d.c.name)?;
             }
             .Alias => {
-                r.rtype(d.ty)?
-                d.path = r.rename(d.path)?
+                r.rtype(d.ty)?;
+                d.path = r.rename(d.path)?;
             }
         }
     }

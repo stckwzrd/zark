@@ -1,92 +1,92 @@
 // Prints the source line of an error with a caret under the offending column.
 
-var diag_prelude: str = ""
-var diag_files: Map[str] = Map[str]{ .. }
+str diag_prelude = "";
+Map<str> diag_files = Map<str>{};
 
-fn line_start(src: str, off: i64) i64 {
-    var i = off
-    if i > src.len { i = src.len }
-    while i > 0 && src[i - 1] != '\n' { i -= 1 }
-    return i
+i64 line_start(str src, i64 off) {
+    auto i = off;
+    if (i > src.len) { i = src.len; }
+    while (i > 0 && src[i - 1] != '\n') { i -= 1; }
+    return i;
 }
 
-fn line_start_of(src: str, line: i64) i64 {
-    var i = 0
-    var n = 1
-    while n < line && i < src.len {
-        if src[i] == '\n' { n += 1 }
-        i += 1
+i64 line_start_of(str src, i64 line) {
+    auto i = 0;
+    auto n = 1;
+    while (n < line && i < src.len) {
+        if (src[i] == '\n') { n += 1; }
+        i += 1;
     }
-    return i
+    return i;
 }
 
-fn show_source(file: str, line: i64, off: i64) {
-    var src = diag_prelude
-    var owned = false
-    if diag_files.has(file) {
-        src = diag_files.get(file) catch return
-    } else if file != "<std>" {
-        src = read_file(c_allocator(), file) catch return
-        owned = true
+void show_source(str file, i64 line, i64 off) {
+    auto src = diag_prelude;
+    auto owned = false;
+    if (diag_files.has(file)) {
+        src = diag_files.get(file) catch return;
+    } else if (file != "<std>") {
+        src = read_file(c_allocator(), file) catch return;
+        owned = true;
     }
     defer {
-        if owned { c_allocator().free(src) }
+        if (owned) { c_allocator().free(src); }
     }
-    var start = 0
-    var shown = line
-    if off >= 0 {
-        start = line_start(src, off)
-        shown = 1
-        for i in 0..start {
-            if src[i] == '\n' { shown += 1 }
+    auto start = 0;
+    auto shown = line;
+    if (off >= 0) {
+        start = line_start(src, off);
+        shown = 1;
+        for (auto i : 0..start) {
+            if (src[i] == '\n') { shown += 1; }
         }
     } else {
-        start = line_start_of(src, line)
+        start = line_start_of(src, line);
     }
-    var end = start
-    while end < src.len && src[end] != '\n' { end += 1 }
-    let text = src[start..end]
-    eprintln("{shown:5} | {text}")
-    if off < 0 { return }
-    var pad = List[u8].init(c_allocator())
-    defer pad.deinit()
-    for i in start..off {
-        if i < end && src[i] == '\t' { pad.push('\t') catch return } else { pad.push(' ') catch return }
+    auto end = start;
+    while (end < src.len && src[end] != '\n') { end += 1; }
+    const auto text = src[start..end];
+    eprintln("{shown:5} | {text}");
+    if (off < 0) { return; }
+    auto pad = List<u8>::init(c_allocator());
+    defer pad.deinit();
+    for (auto i : start..off) {
+        if (i < end && src[i] == '\t') { pad.push('\t') catch return; } else { pad.push(' ') catch return; }
     }
-    eprintln("      | {pad.slice()}^")
+    eprintln("      | {pad.slice()}^");
 }
 
-fn edit_distance(a: str, b: str) i64 {
-    if a.len > 40 || b.len > 40 { return 99 }
-    var prev: [41]i64
-    var cur: [41]i64
-    for j in 0..b.len + 1 { prev[j] = j }
-    for i in 1..a.len + 1 {
-        cur[0] = i
-        for j in 1..b.len + 1 {
-            var cost = 1
-            if a[i - 1] == b[j - 1] { cost = 0 }
-            cur[j] = min(min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + cost)
+i64 edit_distance(str a, str b) {
+    if (a.len > 40 || b.len > 40) { return 99; }
+    i64[41] prev;
+    i64[41] cur;
+    for (auto j : 0..b.len + 1) { prev[j] = j; }
+    for (auto i : 1..a.len + 1) {
+        cur[0] = i;
+        for (auto j : 1..b.len + 1) {
+            auto cost = 1;
+            if (a[i - 1] == b[j - 1]) { cost = 0; }
+            cur[j] = min(min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + cost);
         }
-        for j in 0..b.len + 1 { prev[j] = cur[j] }
+        for (auto j : 0..b.len + 1) { prev[j] = cur[j]; }
     }
-    return prev[b.len]
+    return prev[b.len];
 }
 
-fn closest(name: str, cands: List[str]) str {
-    var best = ""
-    var bd = 99
-    if name.len < 3 { return "" }
-    for c in cands {
-        let d = edit_distance(name, c)
-        if d < bd {
-            bd = d
-            best = c
+str closest(str name, List<str> cands) {
+    auto best = "";
+    auto bd = 99;
+    if (name.len < 3) { return ""; }
+    for (auto c : cands) {
+        const auto d = edit_distance(name, c);
+        if (d < bd) {
+            bd = d;
+            best = c;
         }
     }
-    var limit = 1
-    if name.len >= 4 { limit = 2 }
-    if name.len >= 9 { limit = 3 }
-    if bd <= limit { return best }
-    return ""
+    auto limit = 1;
+    if (name.len >= 4) { limit = 2; }
+    if (name.len >= 9) { limit = 3; }
+    if (bd <= limit) { return best; }
+    return "";
 }

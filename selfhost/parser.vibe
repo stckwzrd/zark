@@ -1,1151 +1,1148 @@
 // Recursive-descent parser: tokens -> AST. Mirrors src/parser.zig.
 
-import "ast.vibe"
-import "parser_new.vibe"
+import "ast.vibe";
+import "parser_new.vibe";
 
 struct Parser {
-    a: Allocator
-    toks: []Token
-    pos: i64
-    file: str
-    no_struct: bool
-    aliases: List[str]
-    quiet: bool
-    no_post: bool
-    arrow_only: bool
-    splits: List[i64]
-}
+    Allocator a;
+    Token[] toks;
+    i64 pos;
+    str file;
+    bool no_struct;
+    List<str> aliases;
+    bool quiet;
+    bool no_post;
+    bool arrow_only;
+    List<i64> splits;
 
-fn new_parser(a: Allocator, toks: []Token, file: str) Parser {
-    return Parser{ a: a, toks: toks, pos: 0, file: file, no_struct: false, aliases: List[str].init(a), quiet: false, no_post: false, arrow_only: false, splits: List[i64].init(a) }
-}
-
-fn prec(t: Tag) i64 {
-    match t {
-        .oror => return 1
-        .andand => return 2
-        .eqeq, .neq, .lt, .le, .gt, .ge => return 3
-        .pipe => return 4
-        .caret => return 5
-        .amp => return 6
-        .shl, .shr => return 7
-        .plus, .minus => return 8
-        .star, .slash, .percent => return 9
-    }
-    return -1
-}
-
-fn starts_type(t: Tag) bool {
-    match t {
-        .ident, .star, .bang, .question, .lbracket, .kw_fn => return true
-    }
-    return false
-}
-
-fn is_type_like(e: *Expr) bool {
-    if e.k == .Ident {
-        let dot = str_rfind_byte(e.name, '.')
-        return e.name.len > dot + 1 && is_upper(e.name[dot + 1])
-    }
-    if e.k == .Index { return is_type_like(e.l) }
-    return false
-}
-
-impl Parser {
-    // ---------------------------------------------------------------- tokens
-    fn peek(self) Token { return self.toks[self.pos] }
-    fn peek_at(self, n: i64) Token {
-        var i = self.pos + n
-        if i > self.toks.len - 1 { i = self.toks.len - 1 }
-        return self.toks[i]
-    }
-    fn at(self, t: Tag) bool { return self.toks[self.pos].tag == t }
-    fn advance(self) Token {
-        let t = self.toks[self.pos]
-        if self.pos < self.toks.len - 1 { self.pos += 1 }
-        return t
-    }
-    fn eat(self, t: Tag) bool {
-        if self.at(t) {
-            _ = self.advance()
-            return true
+    Token peek() { return this->toks[this->pos] };
+    Token peek_at(i64 n) {
+        auto i = this->pos + n;
+        if (i > this->toks.len - 1) { i = this->toks.len - 1; }
+        return this->toks[i];
+    };
+    bool at(Tag t) { return this->toks[this->pos].tag == t; }
+    Token advance() {
+        const auto t = this->toks[this->pos];
+        if (this->pos < this->toks.len - 1) { this->pos += 1; }
+        return t;
+    };
+    bool eat(Tag t) {
+        if (this->at(t)) {
+            _ = this->advance();
+            return true;
         }
-        return false
+        return false;
     }
-    fn fail(self, msg: str) !void {
-        let t = self.peek()
-        if !self.quiet {
-            eprintln("{self.file}:{t.line}: error: {msg} (near '{t.text}')")
-            show_source(self.file, t.line, t.off)
+    !void fail(str msg) {
+        const auto t = this->peek();
+        if (!this->quiet) {
+            eprintln("{this->file}:{t.line}: error: {msg} (near '{t.text}')");
+            show_source(this->file, t.line, t.off);
         }
-        return error.ParseFailed
+        return error.ParseFailed;
     }
-    fn expect(self, t: Tag) !Token {
-        if !self.at(t) {
-            let cur = self.peek()
-            if !self.quiet {
-                eprintln("{self.file}:{cur.line}: error: expected {t} (near '{cur.text}')")
-                show_source(self.file, cur.line, cur.off)
+    !Token expect(Tag t) {
+        if (!this->at(t)) {
+            const auto cur = this->peek();
+            if (!this->quiet) {
+                eprintln("{this->file}:{cur.line}: error: expected {t} (near '{cur.text}')");
+                show_source(this->file, cur.line, cur.off);
             }
-            return error.ParseFailed
+            return error.ParseFailed;
         }
-        return self.advance()
-    }
-    fn skip_semis(self) { while self.at(.semi) { _ = self.advance() } }
+        return this->advance();
+    };
+    void skip_semis() { while (this->at(.semi)) { _ = this->advance(); } }
 
     // ---------------------------------------------------------------- node helpers
-    fn ex(self, k: EK, t: Token) !*Expr {
-        let e = self.a.create[Expr]()?
-        e.k = k
-        e.line = t.line
-        e.off = t.off
-        e.args = List[*Expr].init(self.a)
-        e.fields = List[FieldInit].init(self.a)
-        e.parts = List[IPart].init(self.a)
-        e.arms = List[MatchArm].init(self.a)
-        return e
-    }
-    fn st(self, k: SK, t: Token) !*Stmt {
-        let s = self.a.create[Stmt]()?
-        s.k = k
-        s.line = t.line
-        s.off = t.off
-        s.stmts = List[*Stmt].init(self.a)
-        s.arms = List[MatchArm].init(self.a)
-        return s
-    }
-    fn te(self, k: TEK) !*TypeExpr {
-        let t = self.a.create[TypeExpr]()?
-        t.k = k
-        t.off = -1
-        t.args = List[*TypeExpr].init(self.a)
-        return t
-    }
-    fn te_name(self, name: str) !*TypeExpr {
-        let t = self.te(.Name)?
-        t.name = name
-        return t
-    }
-    fn strs(self) List[str] { return List[str].init(self.a) }
+    !Expr* ex(EK k, Token t) {
+        const auto e = this->a.create<Expr>()?;
+        e.k = k;
+        e.line = t.line;
+        e.off = t.off;
+        e.args = List<Expr*>::init(this->a);
+        e.fields = List<FieldInit>::init(this->a);
+        e.parts = List<IPart>::init(this->a);
+        e.arms = List<MatchArm>::init(this->a);
+        return e;
+    };
+    !Stmt* st(SK k, Token t) {
+        const auto s = this->a.create<Stmt>()?;
+        s.k = k;
+        s.line = t.line;
+        s.off = t.off;
+        s.stmts = List<Stmt*>::init(this->a);
+        s.arms = List<MatchArm>::init(this->a);
+        return s;
+    };
+    !TypeExpr* te(TEK k) {
+        const auto t = this->a.create<TypeExpr>()?;
+        t.k = k;
+        t.off = -1;
+        t.args = List<TypeExpr*>::init(this->a);
+        return t;
+    };
+    !TypeExpr* te_name(str name) {
+        const auto t = this->te(.Name)?;
+        t.name = name;
+        return t;
+    };
+    List<str> strs() { return List<str>::init(this->a); }
 
     // ---------------------------------------------------------------- declarations
-    fn parse_file(self) !List[Decl] {
-        var decls = List[Decl].init(self.a)
-        self.skip_semis()
-        while !self.at(.eof) {
-            self.parse_decl(&decls)?
-            self.skip_semis()
+    !List<Decl> parse_file() {
+        auto decls = List<Decl>::init(this->a);
+        this->skip_semis();
+        while (!this->at(.eof)) {
+            this->parse_decl(&decls)?;
+            this->skip_semis();
         }
-        return decls
+        return decls;
     }
 
-    fn parse_type_params(self, cons: *List[str]) !List[str] {
-        var list = self.strs()
-        if self.eat(.lbracket) {
-            while !self.at(.rbracket) {
-                list.push(self.expect(.ident)?.text)?
-                if self.eat(.colon) { cons.push(self.expect(.ident)?.text)? } else { cons.push("")? }
-                if !self.eat(.comma) { break }
+    !List<str> parse_type_params(List<str>*cons) {
+        auto list = this->strs();
+        if (this->eat(.lbracket)) {
+            while (!this->at(.rbracket)) {
+                list.push(this->expect(.ident)?.text)?;
+                if (this->eat(.colon)) { cons.push(this->expect(.ident)?.text)?; } else { cons.push("")?; }
+                if (!this->eat(.comma)) { break; }
             }
-            _ = self.expect(.rbracket)?
-        } else if self.eat(.lt) {
-            while !self.at(.gt) {
-                list.push(self.expect(.ident)?.text)?
-                if self.eat(.colon) { cons.push(self.expect(.ident)?.text)? } else { cons.push("")? }
-                if !self.eat(.comma) { break }
+            _ = this->expect(.rbracket)?;
+        } else if (this->eat(.lt)) {
+            while (!this->at(.gt)) {
+                list.push(this->expect(.ident)?.text)?;
+                if (this->eat(.colon)) { cons.push(this->expect(.ident)?.text)?; } else { cons.push("")?; }
+                if (!this->eat(.comma)) { break; }
             }
-            self.expect_gt()?
+            this->expect_gt()?;
         }
-        return list
+        return list;
     }
 
-    fn parse_decl(self, out: *List[Decl]) !void {
-        let t = self.peek()
-        var d = Decl{ k: .Import, line: t.line, .. }
-        if t.tag == .ident && t.text == "test" && self.peek_at(1).tag == .str_lit {
-            _ = self.advance()
-            let name = self.advance().text
-            let ret = self.te(.Errun)?
-            ret.elem = self.te_name("void")?
-            let f = self.a.create[FnDecl]()?
-            let body = self.parse_block()?
+    !void parse_decl(List<Decl>*out) {
+        const auto t = this->peek();
+        auto d = Decl{ .k = .Import, .line = t.line };
+        if (t.tag == .ident && t.text == "test" && this->peek_at(1).tag == .str_lit) {
+            _ = this->advance();
+            const auto name = this->advance().text;
+            const auto ret = this->te(.Errun)?;
+            ret.elem = this->te_name("void")?;
+            const auto f = this->a.create<FnDecl>()?;
+            const auto body = this->parse_block()?;
             *f = FnDecl{
-                name: "test", type_params: self.strs(), params: List[Param].init(self.a), ret: ret,
-                body: body, line: t.line, file: self.file, receiver_params: self.strs(),
-                is_test: true, test_name: name, name_off: t.off, end_off: body.end_off, ..
-            }
-            out.push(Decl{ k: .Func, f: f, line: t.line, .. })?
-            return
+                .name = "test", .type_params = this->strs(), .params = List<Param>::init(this->a), .ret = ret,
+                .body = body, .line = t.line, .file = this->file, .receiver_params = this->strs(),
+                .is_test = true, .test_name = name, .name_off = t.off, .end_off = body.end_off
+            };
+            out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+            return;
         }
         match t.tag {
             .kw_import => {
-                _ = self.advance()
-                let pt = self.expect(.str_lit)?
-                d.path = pt.text
-                d.path_off = pt.off
-                if self.eat(.kw_as) {
-                    let at = self.expect(.ident)?
-                    d.alias = at.text
-                    d.name_off = at.off
-                    self.aliases.push(d.alias)?
+                _ = this->advance();
+                const auto pt = this->expect(.str_lit)?;
+                d.path = pt.text;
+                d.path_off = pt.off;
+                if (this->eat(.kw_as)) {
+                    const auto at = this->expect(.ident)?;
+                    d.alias = at.text;
+                    d.name_off = at.off;
+                    this->aliases.push(d.alias)?;
                 }
             }
             .kw_type => {
-                _ = self.advance()
-                d.k = .Alias
-                let an = self.expect(.ident)?
-                d.path = an.text
-                d.name_off = an.off
-                _ = self.expect(.eq)?
-                d.ty = self.parse_type()?
+                _ = this->advance();
+                d.k = .Alias;
+                const auto an = this->expect(.ident)?;
+                d.path = an.text;
+                d.name_off = an.off;
+                _ = this->expect(.eq)?;
+                d.ty = this->parse_type()?;
             }
             .kw_fn => {
-                d.k = .Func
-                d.f = self.parse_fn("", self.strs(), 0)?
+                d.k = .Func;
+                d.f = this->parse_fn("", this->strs(), 0)?;
             }
             .kw_extern, .kw_export => {
-                if self.peek_at(1).tag == .kw_fn || (self.peek_at(1).tag == .kw_extern && self.peek_at(2).tag == .kw_fn) || (self.peek_at(1).tag == .kw_export && self.peek_at(2).tag == .kw_fn) {
-                    d.k = .Func
-                    d.f = self.parse_fn("", self.strs(), 0)?
+                if (this->peek_at(1).tag == .kw_fn || (this->peek_at(1).tag == .kw_extern && this->peek_at(2).tag == .kw_fn) || (this->peek_at(1).tag == .kw_export && this->peek_at(2).tag == .kw_fn)) {
+                    d.k = .Func;
+                    d.f = this->parse_fn("", this->strs(), 0)?;
                 } else {
-                    self.parse_decl_new(out)?
-                    return
+                    this->parse_decl_new(out)?;
+                    return;
                 }
             }
             .kw_struct, .kw_union => {
-                let is_union = self.advance().tag == .kw_union
-                let nt = self.expect(.ident)?
-                let name = nt.text
-                var cons = self.strs()
-                let tps = self.parse_type_params(&cons)?
-                _ = self.expect(.lbrace)?
-                var fields = List[Field].init(self.a)
-                self.skip_semis()
-                while !self.at(.rbrace) {
-                    if self.new_member(is_union) {
-                        self.parse_member_new(name, tps, is_union, &fields, out)?
-                        self.skip_semis()
-                        continue
+                const auto is_union = this->advance().tag == .kw_union;
+                const auto nt = this->expect(.ident)?;
+                const auto name = nt.text;
+                auto cons = this->strs();
+                const auto tps = this->parse_type_params(&cons)?;
+                _ = this->expect(.lbrace)?;
+                auto fields = List<Field>::init(this->a);
+                this->skip_semis();
+                while (!this->at(.rbrace)) {
+                    if (this->new_member(is_union)) {
+                        this->parse_member_new(name, tps, is_union, &fields, out)?;
+                        this->skip_semis();
+                        continue;
                     }
-                    let ft = self.expect(.ident)?
-                    let fname = ft.text
-                    var fty: *TypeExpr = null
-                    if is_union && !self.at(.colon) {
-                        fty = self.te_name("void")?
+                    const auto ft = this->expect(.ident)?;
+                    const auto fname = ft.text;
+                    TypeExpr* fty = null;
+                    if (is_union && !this->at(.colon)) {
+                        fty = this->te_name("void")?;
                     } else {
-                        _ = self.expect(.colon)?
-                        fty = self.parse_type()?
+                        _ = this->expect(.colon)?;
+                        fty = this->parse_type()?;
                     }
-                    fields.push(Field{ name: fname, ty: fty, off: ft.off })?
-                    _ = self.eat(.comma)
-                    self.skip_semis()
+                    fields.push(Field{ .name = fname, .ty = fty, .off = ft.off })?;
+                    _ = this->eat(.comma);
+                    this->skip_semis();
                 }
-                _ = self.expect(.rbrace)?
-                let sd = self.a.create[StructDecl]()?
-                *sd = StructDecl{ name: name, type_params: tps, constraints: cons, fields: fields, line: t.line, name_off: nt.off, is_union: is_union }
-                d.k = .Struct
-                d.s = sd
+                _ = this->expect(.rbrace)?;
+                const auto sd = this->a.create<StructDecl>()?;
+                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union };
+                d.k = .Struct;
+                d.s = sd;
             }
             .kw_enum => {
-                _ = self.advance()
-                let nt = self.expect(.ident)?
-                let name = nt.text
-                _ = self.expect(.lbrace)?
-                var vs = self.strs()
-                var voffs = List[i64].init(self.a)
-                self.skip_semis()
-                var no_fields = List[Field].init(self.a)
-                while !self.at(.rbrace) {
-                    let nx = self.peek_at(1).tag
-                    if !(self.at(.ident) && (nx == .comma || nx == .semi || nx == .rbrace)) {
-                        self.parse_member_new(name, self.strs(), false, &no_fields, out)?
-                        self.skip_semis()
-                        continue
+                _ = this->advance();
+                const auto nt = this->expect(.ident)?;
+                const auto name = nt.text;
+                _ = this->expect(.lbrace)?;
+                auto vs = this->strs();
+                auto voffs = List<i64>::init(this->a);
+                this->skip_semis();
+                auto no_fields = List<Field>::init(this->a);
+                while (!this->at(.rbrace)) {
+                    const auto nx = this->peek_at(1).tag;
+                    if (!(this->at(.ident) && (nx == .comma || nx == .semi || nx == .rbrace))) {
+                        this->parse_member_new(name, this->strs(), false, &no_fields, out)?;
+                        this->skip_semis();
+                        continue;
                     }
-                    let vt = self.expect(.ident)?
-                    vs.push(vt.text)?
-                    voffs.push(vt.off)?
-                    _ = self.eat(.comma)
-                    self.skip_semis()
+                    const auto vt = this->expect(.ident)?;
+                    vs.push(vt.text)?;
+                    voffs.push(vt.off)?;
+                    _ = this->eat(.comma);
+                    this->skip_semis();
                 }
-                _ = self.expect(.rbrace)?
-                let ed = self.a.create[EnumDecl]()?
-                *ed = EnumDecl{ name: name, variants: vs, variant_offs: voffs, line: t.line, name_off: nt.off }
-                d.k = .Enum
-                d.en = ed
+                _ = this->expect(.rbrace)?;
+                const auto ed = this->a.create<EnumDecl>()?;
+                *ed = EnumDecl{ .name = name, .variants = vs, .variant_offs = voffs, .line = t.line, .name_off = nt.off };
+                d.k = .Enum;
+                d.en = ed;
             }
             .kw_impl => {
-                _ = self.advance()
-                let rt = self.expect(.ident)?
-                let name = rt.text
-                var ignored = self.strs()
-                let tps = self.parse_type_params(&ignored)?
-                _ = self.expect(.lbrace)?
-                self.skip_semis()
-                while !self.at(.rbrace) {
-                    let m = Decl{ k: .Func, f: self.parse_fn(name, tps, rt.off)?, line: t.line, .. }
-                    out.push(m)?
-                    self.skip_semis()
+                _ = this->advance();
+                const auto rt = this->expect(.ident)?;
+                const auto name = rt.text;
+                auto ignored = this->strs();
+                const auto tps = this->parse_type_params(&ignored)?;
+                _ = this->expect(.lbrace)?;
+                this->skip_semis();
+                while (!this->at(.rbrace)) {
+                    const auto m = Decl{ .k = .Func, .f = this->parse_fn(name, tps, rt.off)?, .line = t.line };
+                    out.push(m)?;
+                    this->skip_semis();
                 }
-                _ = self.expect(.rbrace)?
-                return
+                _ = this->expect(.rbrace)?;
+                return;
             }
             .kw_const, .kw_var => {
-                if t.tag == .kw_const && !(self.peek_at(1).tag == .ident && (self.peek_at(2).tag == .eq || self.peek_at(2).tag == .colon)) {
-                    self.parse_decl_new(out)?
-                    return
+                if (t.tag == .kw_const && !(this->peek_at(1).tag == .ident && (this->peek_at(2).tag == .eq || this->peek_at(2).tag == .colon))) {
+                    this->parse_decl_new(out)?;
+                    return;
                 }
-                _ = self.advance()
-                let nt = self.expect(.ident)?
-                let name = nt.text
-                var ty: *TypeExpr = null
-                if self.eat(.colon) { ty = self.parse_type()? }
-                _ = self.expect(.eq)?
-                let v = self.parse_expr()?
-                let cd = self.a.create[ConstDecl]()?
-                *cd = ConstDecl{ name: name, ty: ty, value: v, mutable: t.tag == .kw_var, line: t.line, name_off: nt.off }
-                d.k = .Const
-                d.c = cd
+                _ = this->advance();
+                const auto nt = this->expect(.ident)?;
+                const auto name = nt.text;
+                TypeExpr* ty = null;
+                if (this->eat(.colon)) { ty = this->parse_type()?; }
+                _ = this->expect(.eq)?;
+                const auto v = this->parse_expr()?;
+                const auto cd = this->a.create<ConstDecl>()?;
+                *cd = ConstDecl{ .name = name, .ty = ty, .value = v, .mutable = t.tag == .kw_var, .line = t.line, .name_off = nt.off };
+                d.k = .Const;
+                d.c = cd;
             }
             .kw_template, .kw_static, .ident, .bang, .question, .star => {
-                self.parse_decl_new(out)?
-                return
+                this->parse_decl_new(out)?;
+                return;
             }
             _ => {
-                self.fail("expected declaration")?
+                this->fail("expected declaration")?;
             }
         }
-        out.push(d)?
+        out.push(d)?;
     }
 
-    fn parse_param_list(self, line: i64, variadic: *bool) !List[Param] {
-        _ = self.expect(.lparen)?
-        var params = List[Param].init(self.a)
-        while !self.at(.rparen) {
-            if self.eat(.ellipsis) {
-                *variadic = true
-                break
+    !List<Param> parse_param_list(i64 line, bool* variadic) {
+        _ = this->expect(.lparen)?;
+        auto params = List<Param>::init(this->a);
+        while (!this->at(.rparen)) {
+            if (this->eat(.ellipsis)) {
+                *variadic = true;
+                break;
             }
-            let pt = self.expect(.ident)?
-            let pname = pt.text
-            var pty: *TypeExpr = null
-            if self.eat(.colon) {
-                pty = self.parse_type()?
-            } else if pname == "self" {
-                pty = self.te(.Ptr)?
-                pty.elem = self.te_name("Self")?
+            const auto pt = this->expect(.ident)?;
+            const auto pname = pt.text;
+            TypeExpr* pty = null;
+            if (this->eat(.colon)) {
+                pty = this->parse_type()?;
+            } else if (pname == "self") {
+                pty = this->te(.Ptr)?;
+                pty.elem = this->te_name("Self")?;
             } else {
-                eprintln("{self.file}:{line}: error: parameter '{pname}' needs a type")
-                show_source(self.file, line, -1)
-                return error.ParseFailed
+                eprintln("{this->file}:{line}: error: parameter '{pname}' needs a type");
+                show_source(this->file, line, -1);
+                return error.ParseFailed;
             }
-            params.push(Param{ name: pname, ty: pty, off: pt.off, .. })?
-            if !self.eat(.comma) { break }
+            params.push(Param{ .name = pname, .ty = pty, .off = pt.off })?;
+            if (!this->eat(.comma)) { break; }
         }
-        _ = self.expect(.rparen)?
-        return params
+        _ = this->expect(.rparen)?;
+        return params;
     }
 
-    fn parse_closure(self, t: Token) !*Expr {
-        let e = self.ex(.Closure, t)?
-        _ = self.expect(.lbracket)?
-        var caps = self.strs()
-        var cap_offs = List[i64].init(self.a)
-        while !self.at(.rbracket) {
-            let ct = self.expect(.ident)?
-            caps.push(ct.text)?
-            cap_offs.push(ct.off)?
-            if !self.eat(.comma) { break }
+    !Expr* parse_closure(Token t) {
+        const auto e = this->ex(.Closure, t)?;
+        _ = this->expect(.lbracket)?;
+        auto caps = this->strs();
+        auto cap_offs = List<i64>::init(this->a);
+        while (!this->at(.rbracket)) {
+            const auto ct = this->expect(.ident)?;
+            caps.push(ct.text)?;
+            cap_offs.push(ct.off)?;
+            if (!this->eat(.comma)) { break; }
         }
-        _ = self.expect(.rbracket)?
-        var variadic = false
-        let params = self.parse_param_list(t.line, &variadic)?
-        var ret: *TypeExpr = null
-        if !self.at(.lbrace) { ret = self.parse_type()? }
-        let f = self.a.create[FnDecl]()?
+        _ = this->expect(.rbracket)?;
+        auto variadic = false;
+        const auto params = this->parse_param_list(t.line, &variadic)?;
+        TypeExpr* ret = null;
+        if (!this->at(.lbrace)) { ret = this->parse_type()?; }
+        const auto f = this->a.create<FnDecl>()?;
         *f = FnDecl{
-            name: "closure", type_params: self.strs(), constraints: self.strs(), params: params, ret: ret,
-            body: self.parse_block()?, line: t.line, file: self.file, receiver_params: self.strs(), captures: caps, capture_offs: cap_offs, ..
-        }
-        f.end_off = f.body.end_off
-        e.func = f
-        return e
-    }
+            .name = "closure", .type_params = this->strs(), .constraints = this->strs(), .params = params, .ret = ret,
+            .body = this->parse_block()?, .line = t.line, .file = this->file, .receiver_params = this->strs(), .captures = caps, .capture_offs = cap_offs
+        };
+        f.end_off = f.body.end_off;
+        e.func = f;
+        return e;
+    };
 
-    fn parse_fn(self, receiver: str, recv_params: List[str], recv_off: i64) !*FnDecl {
-        let is_extern = self.eat(.kw_extern)
-        let is_export = self.eat(.kw_export)
-        let line = self.expect(.kw_fn)?.line
-        let nt = self.expect(.ident)?
-        let name = nt.text
-        var cons = self.strs()
-        let tps = self.parse_type_params(&cons)?
-        var variadic = false
-        let params = self.parse_param_list(line, &variadic)?
-        var ret: *TypeExpr = null
-        if !self.at(.lbrace) && !self.at(.semi) && !self.at(.eof) { ret = self.parse_type()? }
-        var body: *Stmt = null
-        if !is_extern { body = self.parse_block()? }
-        let f = self.a.create[FnDecl]()?
+    !FnDecl* parse_fn(str receiver, List<str> recv_params, i64 recv_off) {
+        const auto is_extern = this->eat(.kw_extern);
+        const auto is_export = this->eat(.kw_export);
+        const auto line = this->expect(.kw_fn)?.line;
+        const auto nt = this->expect(.ident)?;
+        const auto name = nt.text;
+        auto cons = this->strs();
+        const auto tps = this->parse_type_params(&cons)?;
+        auto variadic = false;
+        const auto params = this->parse_param_list(line, &variadic)?;
+        TypeExpr* ret = null;
+        if (!this->at(.lbrace) && !this->at(.semi) && !this->at(.eof)) { ret = this->parse_type()?; }
+        Stmt* body = null;
+        if (!is_extern) { body = this->parse_block()?; }
+        const auto f = this->a.create<FnDecl>()?;
         *f = FnDecl{
-            name: name, type_params: tps, constraints: cons, params: params, ret: ret, body: body,
-            is_extern: is_extern, is_export: is_export, variadic: variadic, line: line,
-            file: self.file, receiver: receiver, receiver_params: recv_params, name_off: nt.off, receiver_off: recv_off, ..
-        }
-        if body != null { f.end_off = body.end_off }
-        return f
-    }
+            .name = name, .type_params = tps, .constraints = cons, .params = params, .ret = ret, .body = body,
+            .is_extern = is_extern, .is_export = is_export, .variadic = variadic, .line = line,
+            .file = this->file, .receiver = receiver, .receiver_params = recv_params, .name_off = nt.off, .receiver_off = recv_off
+        };
+        if (body != null) { f.end_off = body.end_off; }
+        return f;
+    };
 
-    fn parse_type(self) !*TypeExpr {
-        if self.eat(.kw_fn) {
-            let t = self.te(.Func)?
-            if self.eat(.lbracket) {
-                _ = self.expect(.rbracket)?
-                t.closure = true
+    !TypeExpr* parse_type() {
+        if (this->eat(.kw_fn)) {
+            const auto t = this->te(.Func)?;
+            if (this->eat(.lbracket)) {
+                _ = this->expect(.rbracket)?;
+                t.closure = true;
             }
-            _ = self.expect(.lparen)?
-            while !self.at(.rparen) {
-                t.args.push(self.parse_type()?)?
-                if !self.eat(.comma) { break }
+            _ = this->expect(.lparen)?;
+            while (!this->at(.rparen)) {
+                t.args.push(this->parse_type()?)?;
+                if (!this->eat(.comma)) { break; }
             }
-            _ = self.expect(.rparen)?
-            if self.eat(.arrow) {
-                t.ret = self.parse_type()?
-            } else if !self.arrow_only && starts_type(self.peek().tag) {
-                t.ret = self.parse_type()?
+            _ = this->expect(.rparen)?;
+            if (this->eat(.arrow)) {
+                t.ret = this->parse_type()?;
+            } else if (!this->arrow_only && starts_type(this->peek().tag)) {
+                t.ret = this->parse_type()?;
             }
-            return self.type_suffix(t)
+            return this->type_suffix(t);
         }
-        if self.eat(.star) {
-            let t = self.te(.Ptr)?
-            t.elem = self.parse_type()?
-            return t
+        if (this->eat(.star)) {
+            const auto t = this->te(.Ptr)?;
+            t.elem = this->parse_type()?;
+            return t;
         }
-        if self.eat(.bang) {
-            let t = self.te(.Errun)?
-            t.elem = self.parse_type()?
-            return t
+        if (this->eat(.bang)) {
+            const auto t = this->te(.Errun)?;
+            t.elem = this->parse_type()?;
+            return t;
         }
-        if self.eat(.question) {
-            let t = self.te_name("Option")?
-            t.args.push(self.parse_type()?)?
-            return t
+        if (this->eat(.question)) {
+            const auto t = this->te_name("Option")?;
+            t.args.push(this->parse_type()?)?;
+            return t;
         }
-        if self.eat(.lbracket) {
-            if self.eat(.rbracket) {
-                let t = self.te(.Slice)?
-                t.elem = self.parse_type()?
-                return t
+        if (this->eat(.lbracket)) {
+            if (this->eat(.rbracket)) {
+                const auto t = this->te(.Slice)?;
+                t.elem = this->parse_type()?;
+                return t;
             }
-            let t = self.te(.Array)?
-            t.len = self.parse_expr()?
-            _ = self.expect(.rbracket)?
-            t.elem = self.parse_type()?
-            return t
+            const auto t = this->te(.Array)?;
+            t.len = this->parse_expr()?;
+            _ = this->expect(.rbracket)?;
+            t.elem = this->parse_type()?;
+            return t;
         }
-        let nt = self.expect(.ident)?
-        let t = self.te_name(self.qualified(nt.text)?)?
-        t.off = nt.off
-        if self.at(.lbracket) && self.generic_brackets(t.name) {
-            _ = self.advance()
-            while !self.at(.rbracket) {
-                t.args.push(self.parse_type()?)?
-                if !self.eat(.comma) { break }
+        const auto nt = this->expect(.ident)?;
+        const auto t = this->te_name(this->qualified(nt.text)?)?;
+        t.off = nt.off;
+        if (this->at(.lbracket) && this->generic_brackets(t.name)) {
+            _ = this->advance();
+            while (!this->at(.rbracket)) {
+                t.args.push(this->parse_type()?)?;
+                if (!this->eat(.comma)) { break; }
             }
-            _ = self.expect(.rbracket)?
-        } else if self.at(.lt) && (!self.no_post || is_upper(nt.text[0])) {
-            _ = self.advance()
-            while !self.at(.gt) && !self.at(.shr) {
-                t.args.push(self.parse_type()?)?
-                if !self.eat(.comma) { break }
+            _ = this->expect(.rbracket)?;
+        } else if (this->at(.lt) && (!this->no_post || is_upper(nt.text[0]))) {
+            _ = this->advance();
+            while (!this->at(.gt) && !this->at(.shr)) {
+                t.args.push(this->parse_type()?)?;
+                if (!this->eat(.comma)) { break; }
             }
-            self.expect_gt()?
+            this->expect_gt()?;
         }
-        return self.type_suffix(t)
-    }
+        return this->type_suffix(t);
+    };
 
     // ---------------------------------------------------------------- statements
-    fn parse_block(self) !*Stmt {
-        let lb = self.expect(.lbrace)?
-        let b = self.st(.Block, lb)?
-        let saved = self.no_struct
-        self.no_struct = false
-        self.skip_semis()
-        while !self.at(.rbrace) {
-            if self.at(.eof) { self.fail("unexpected end of file in block")? }
-            b.stmts.push(self.parse_stmt()?)?
-            self.skip_semis()
+    !Stmt* parse_block() {
+        const auto lb = this->expect(.lbrace)?;
+        const auto b = this->st(.Block, lb)?;
+        const auto saved = this->no_struct;
+        this->no_struct = false;
+        this->skip_semis();
+        while (!this->at(.rbrace)) {
+            if (this->at(.eof)) { this->fail("unexpected end of file in block")?; }
+            b.stmts.push(this->parse_stmt()?)?;
+            this->skip_semis();
         }
-        let rb = self.expect(.rbrace)?
-        b.end_off = rb.off
-        self.no_struct = saved
-        return b
-    }
+        const auto rb = this->expect(.rbrace)?;
+        b.end_off = rb.off;
+        this->no_struct = saved;
+        return b;
+    };
 
-    fn parse_cond(self) !*Expr {
-        let saved = self.no_struct
-        self.no_struct = true
-        defer self.no_struct = saved
-        return self.parse_expr()
-    }
+    !Expr* parse_cond() {
+        const auto saved = this->no_struct;
+        this->no_struct = true;
+        defer this->no_struct = saved;
+        return this->parse_expr();
+    };
 
-    fn parse_stmt(self) !*Stmt {
-        let t = self.peek()
+    !Stmt* parse_stmt() {
+        const auto t = this->peek();
         match t.tag {
-            .lbrace => return self.parse_block()
+            .lbrace => return this->parse_block();
             .kw_let, .kw_var => {
-                _ = self.advance()
-                let s = self.st(.Let, t)?
-                let nt = self.expect(.ident)?
-                s.name = nt.text
-                s.name_off = nt.off
-                s.mutable = t.tag == .kw_var
-                if self.eat(.colon) { s.ty = self.parse_type()? }
-                if self.eat(.eq) { s.e = self.parse_expr()? }
-                if s.ty == null && s.e == null {
-                    eprintln("{self.file}:{t.line}: error: '{s.name}' needs a type or initializer")
-                    show_source(self.file, t.line, t.off)
-                    return error.ParseFailed
+                _ = this->advance();
+                const auto s = this->st(.Let, t)?;
+                const auto nt = this->expect(.ident)?;
+                s.name = nt.text;
+                s.name_off = nt.off;
+                s.mutable = t.tag == .kw_var;
+                if (this->eat(.colon)) { s.ty = this->parse_type()?; }
+                if (this->eat(.eq)) { s.e = this->parse_expr()?; }
+                if (s.ty == null && s.e == null) {
+                    eprintln("{this->file}:{t.line}: error: '{s.name}' needs a type or initializer");
+                    show_source(this->file, t.line, t.off);
+                    return error.ParseFailed;
                 }
-                return s
+                return s;
             }
-            .kw_const => return self.parse_decl_stmt_new(t, true)
+            .kw_const => return this->parse_decl_stmt_new(t, true);
             .plusplus, .minusminus => {
-                _ = self.advance()
-                let target = self.parse_prefix()?
-                return self.incr_stmt(t, target, t.tag == .plusplus)
+                _ = this->advance();
+                const auto target = this->parse_prefix()?;
+                return this->incr_stmt(t, target, t.tag == .plusplus);
             }
-            .kw_if => return self.parse_if()
+            .kw_if => return this->parse_if();
             .kw_while => {
-                _ = self.advance()
-                let s = self.st(.While, t)?
-                s.e = self.parse_cond()?
-                s.body = self.parse_block()?
-                return s
+                _ = this->advance();
+                const auto s = this->st(.While, t)?;
+                s.e = this->parse_cond()?;
+                s.body = this->parse_block()?;
+                return s;
             }
             .kw_for => {
-                _ = self.advance()
-                if self.at(.lparen) { return self.parse_for_new(t) }
-                let t1 = self.expect(.ident)?
-                let n1 = t1.text
-                var n2 = ""
-                var off2 = 0
-                var has2 = false
-                if self.eat(.comma) {
-                    let t2 = self.expect(.ident)?
-                    n2 = t2.text
-                    off2 = t2.off
-                    has2 = true
+                _ = this->advance();
+                if (this->at(.lparen)) { return this->parse_for_new(t); }
+                const auto t1 = this->expect(.ident)?;
+                const auto n1 = t1.text;
+                auto n2 = "";
+                auto off2 = 0;
+                auto has2 = false;
+                if (this->eat(.comma)) {
+                    const auto t2 = this->expect(.ident)?;
+                    n2 = t2.text;
+                    off2 = t2.off;
+                    has2 = true;
                 }
-                _ = self.expect(.kw_in)?
-                let e = self.parse_cond()?
-                if self.eat(.dotdot) {
-                    if has2 { self.fail("range loop takes a single variable")? }
-                    let s = self.st(.ForRange, t)?
-                    s.name = n1
-                    s.name_off = t1.off
-                    s.e = e
-                    s.e2 = self.parse_cond()?
-                    s.body = self.parse_block()?
-                    return s
+                _ = this->expect(.kw_in)?;
+                const auto e = this->parse_cond()?;
+                if (this->eat(.dotdot)) {
+                    if (has2) { this->fail("range loop takes a single variable")?; }
+                    const auto s = this->st(.ForRange, t)?;
+                    s.name = n1;
+                    s.name_off = t1.off;
+                    s.e = e;
+                    s.e2 = this->parse_cond()?;
+                    s.body = this->parse_block()?;
+                    return s;
                 }
-                let s = self.st(.ForEach, t)?
-                s.e = e
-                s.body = self.parse_block()?
-                if has2 {
-                    s.idx = n1
-                    s.idx_off = t1.off
-                    s.has_idx = true
-                    s.name = n2
-                    s.name_off = off2
+                const auto s = this->st(.ForEach, t)?;
+                s.e = e;
+                s.body = this->parse_block()?;
+                if (has2) {
+                    s.idx = n1;
+                    s.idx_off = t1.off;
+                    s.has_idx = true;
+                    s.name = n2;
+                    s.name_off = off2;
                 } else {
-                    s.name = n1
-                    s.name_off = t1.off
+                    s.name = n1;
+                    s.name_off = t1.off;
                 }
-                return s
+                return s;
             }
             .kw_return => {
-                _ = self.advance()
-                let s = self.st(.Ret, t)?
-                if !self.at(.semi) && !self.at(.rbrace) { s.e = self.parse_expr()? }
-                return s
+                _ = this->advance();
+                const auto s = this->st(.Ret, t)?;
+                if (!this->at(.semi) && !this->at(.rbrace)) { s.e = this->parse_expr()?; }
+                return s;
             }
             .kw_break => {
-                _ = self.advance()
-                return self.st(.Brk, t)
+                _ = this->advance();
+                return this->st(.Brk, t);
             }
             .kw_continue => {
-                _ = self.advance()
-                return self.st(.Cont, t)
+                _ = this->advance();
+                return this->st(.Cont, t);
             }
             .kw_defer, .kw_errdefer => {
-                _ = self.advance()
-                let s = self.st(.Defer, t)?
-                s.is_err = t.tag == .kw_errdefer
-                s.body = self.parse_stmt()?
-                return s
+                _ = this->advance();
+                const auto s = this->st(.Defer, t)?;
+                s.is_err = t.tag == .kw_errdefer;
+                s.body = this->parse_stmt()?;
+                return s;
             }
             .kw_match => {
-                _ = self.advance()
-                let s = self.st(.Match, t)?
-                s.e = self.parse_cond()?
-                self.parse_match_arms(&s.arms)?
-                return s
+                _ = this->advance();
+                const auto s = this->st(.Match, t)?;
+                s.e = this->parse_cond()?;
+                this->parse_match_arms(&s.arms)?;
+                return s;
             }
         }
-        if t.tag == .ident || t.tag == .bang || t.tag == .question || (t.tag == .kw_fn && self.peek_at(1).tag == .lparen) {
-            let ds = self.try_decl_stmt(t)?
-            if ds != null { return ds }
+        if (t.tag == .ident || t.tag == .bang || t.tag == .question || (t.tag == .kw_fn && this->peek_at(1).tag == .lparen)) {
+            const auto ds = this->try_decl_stmt(t)?;
+            if (ds != null) { return ds; }
         }
-        let e = self.parse_expr()?
-        let op = self.peek().tag
+        const auto e = this->parse_expr()?;
+        const auto op = this->peek().tag;
         match op {
             .plusplus, .minusminus => {
-                _ = self.advance()
-                return self.incr_stmt(t, e, op == .plusplus)
+                _ = this->advance();
+                return this->incr_stmt(t, e, op == .plusplus);
             }
             .eq, .plus_eq, .minus_eq, .star_eq, .slash_eq, .percent_eq, .pipe_eq, .amp_eq, .caret_eq, .shl_eq, .shr_eq => {
-                _ = self.advance()
-                let s = self.st(.Assign, t)?
-                s.op = op
-                s.e2 = e
-                s.e = self.parse_expr()?
-                return s
+                _ = this->advance();
+                const auto s = this->st(.Assign, t)?;
+                s.op = op;
+                s.e2 = e;
+                s.e = this->parse_expr()?;
+                return s;
             }
         }
-        let s = self.st(.ExprS, t)?
-        s.e = e
-        return s
-    }
+        const auto s = this->st(.ExprS, t)?;
+        s.e = e;
+        return s;
+    };
 
-    fn parse_match_arms(self, arms: *List[MatchArm]) !void {
-        _ = self.expect(.lbrace)?
-        self.skip_semis()
-        while !self.at(.rbrace) {
-            var pats = List[*Expr].init(self.a)
-            if self.at(.ident) && self.peek().text == "_" {
-                _ = self.advance()
+    !void parse_match_arms(List<MatchArm>*arms) {
+        _ = this->expect(.lbrace)?;
+        this->skip_semis();
+        while (!this->at(.rbrace)) {
+            auto pats = List<Expr*>::init(this->a);
+            if (this->at(.ident) && this->peek().text == "_") {
+                _ = this->advance();
             } else {
-                while true {
-                    pats.push(self.parse_expr()?)?
-                    if !self.eat(.comma) { break }
-                    self.skip_semis()
+                while (true) {
+                    pats.push(this->parse_expr()?)?;
+                    if (!this->eat(.comma)) { break; }
+                    this->skip_semis();
                 }
             }
-            _ = self.expect(.fat_arrow)?
-            let body = self.parse_stmt()?
-            arms.push(MatchArm{ pats: pats, body: body })?
-            _ = self.eat(.comma)
-            self.skip_semis()
+            _ = this->expect(.fat_arrow)?;
+            const auto body = this->parse_stmt()?;
+            arms.push(MatchArm{ .pats = pats, .body = body })?;
+            _ = this->eat(.comma);
+            this->skip_semis();
         }
-        _ = self.expect(.rbrace)?
+        _ = this->expect(.rbrace)?;
     }
 
-    fn parse_if(self) !*Stmt {
-        let kw = self.expect(.kw_if)?
-        let s = self.st(.If, kw)?
-        s.e = self.parse_cond()?
-        s.body = self.parse_block()?
-        if self.at(.semi) && self.peek_at(1).tag == .kw_else { _ = self.advance() }
-        if self.eat(.kw_else) {
-            if self.at(.kw_if) { s.els = self.parse_if()? } else { s.els = self.parse_block()? }
+    !Stmt* parse_if() {
+        const auto kw = this->expect(.kw_if)?;
+        const auto s = this->st(.If, kw)?;
+        s.e = this->parse_cond()?;
+        s.body = this->parse_block()?;
+        if (this->at(.semi) && this->peek_at(1).tag == .kw_else) { _ = this->advance(); }
+        if (this->eat(.kw_else)) {
+            if (this->at(.kw_if)) { s.els = this->parse_if()?; } else { s.els = this->parse_block()?; }
         }
-        return s
-    }
+        return s;
+    };
 
     // ---------------------------------------------------------------- expressions
-    fn parse_expr(self) !*Expr {
-        var l = self.parse_bin(0)?
-        while self.at(.kw_catch) || (self.at(.ident) && self.peek().text == "orelse") {
-            let kw = self.advance()
-            var kind: EK = .Catch
-            if kw.tag == .ident { kind = .Orelse }
-            let c = self.ex(kind, kw)?
-            c.l = l
-            if kind == .Catch && self.eat(.pipe) {
-                let bt = self.expect(.ident)?
-                c.name = bt.text
-                c.name_off = bt.off
-                c.has_name = true
-                _ = self.expect(.pipe)?
+    !Expr* parse_expr() {
+        auto l = this->parse_bin(0)?;
+        while (this->at(.kw_catch) || (this->at(.ident) && this->peek().text == "orelse")) {
+            const auto kw = this->advance();
+            EK kind = .Catch;
+            if (kw.tag == .ident) { kind = .Orelse; }
+            const auto c = this->ex(kind, kw)?;
+            c.l = l;
+            if (kind == .Catch && this->eat(.pipe)) {
+                const auto bt = this->expect(.ident)?;
+                c.name = bt.text;
+                c.name_off = bt.off;
+                c.has_name = true;
+                _ = this->expect(.pipe)?;
             }
-            if self.at(.lbrace) {
-                c.handler = self.parse_block()?
-            } else if self.at(.kw_return) || self.at(.kw_break) || self.at(.kw_continue) {
-                c.handler = self.parse_stmt()?
+            if (this->at(.lbrace)) {
+                c.handler = this->parse_block()?;
+            } else if (this->at(.kw_return) || this->at(.kw_break) || this->at(.kw_continue)) {
+                c.handler = this->parse_stmt()?;
             } else {
-                let h = self.st(.ExprS, kw)?
-                h.e = self.parse_bin(0)?
-                c.handler = h
+                const auto h = this->st(.ExprS, kw)?;
+                h.e = this->parse_bin(0)?;
+                c.handler = h;
             }
-            l = c
+            l = c;
         }
-        return l
-    }
+        return l;
+    };
 
-    fn parse_bin(self, min: i64) !*Expr {
-        var l = self.parse_unary()?
-        while true {
-            let op = self.peek()
-            let pr = prec(op.tag)
-            if pr < 0 || pr < min { break }
-            _ = self.advance()
-            let r = self.parse_bin(pr + 1)?
-            let b = self.ex(.Binary, op)?
-            b.op = op.tag
-            b.l = l
-            b.r = r
-            l = b
+    !Expr* parse_bin(i64 min) {
+        auto l = this->parse_unary()?;
+        while (true) {
+            const auto op = this->peek();
+            const auto pr = prec(op.tag);
+            if (pr < 0 || pr < min) { break; }
+            _ = this->advance();
+            const auto r = this->parse_bin(pr + 1)?;
+            const auto b = this->ex(.Binary, op)?;
+            b.op = op.tag;
+            b.l = l;
+            b.r = r;
+            l = b;
         }
-        return l
-    }
+        return l;
+    };
 
-    fn parse_prefix(self) !*Expr {
-        let t = self.peek()
+    !Expr* parse_prefix() {
+        const auto t = this->peek();
         match t.tag {
             .minus, .bang, .tilde, .amp, .star => {
-                _ = self.advance()
-                let u = self.ex(.Unary, t)?
-                u.op = t.tag
-                u.l = self.parse_prefix()?
-                return u
+                _ = this->advance();
+                const auto u = this->ex(.Unary, t)?;
+                u.op = t.tag;
+                u.l = this->parse_prefix()?;
+                return u;
             }
         }
-        return self.parse_postfix()
-    }
+        return this->parse_postfix();
+    };
 
-    fn parse_unary(self) !*Expr {
-        var e = self.parse_prefix()?
-        while self.at(.kw_as) {
-            let kw = self.advance()
-            let c = self.ex(.Cast, kw)?
-            c.l = e
-            let saved_np = self.no_post
-            self.no_post = true
-            c.ty = self.parse_type()?
-            self.no_post = saved_np
-            e = c
+    !Expr* parse_unary() {
+        auto e = this->parse_prefix()?;
+        while (this->at(.kw_as)) {
+            const auto kw = this->advance();
+            const auto c = this->ex(.Cast, kw)?;
+            c.l = e;
+            const auto saved_np = this->no_post;
+            this->no_post = true;
+            c.ty = this->parse_type()?;
+            this->no_post = saved_np;
+            e = c;
         }
-        return e
-    }
+        return e;
+    };
 
-    fn expr_to_type(self, e: *Expr) !*TypeExpr {
-        if e.k == .Ident {
-            let t = self.te_name(e.name)?
-            t.off = e.off
-            return t
+    !TypeExpr* expr_to_type(Expr* e) {
+        if (e.k == .Ident) {
+            const auto t = this->te_name(e.name)?;
+            t.off = e.off;
+            return t;
+        };
+        if (e.k == .Index) {
+            const auto base = this->expr_to_type(e.l)?;
+            for (auto a : e.args) { base.args.push(this->expr_to_type(a)?)?; }
+            return base;
+        };
+        if (e.k == .Unary && (e.op == .star || e.op == .bang)) {
+            const auto t = this->te(if_tek(e.op == .star))?;
+            t.elem = this->expr_to_type(e.l)?;
+            return t;
         }
-        if e.k == .Index {
-            let base = self.expr_to_type(e.l)?
-            for a in e.args { base.args.push(self.expr_to_type(a)?)? }
-            return base
-        }
-        if e.k == .Unary && (e.op == .star || e.op == .bang) {
-            let t = self.te(if_tek(e.op == .star))?
-            t.elem = self.expr_to_type(e.l)?
-            return t
-        }
-        eprintln("{self.file}:{e.line}: error: expected a type")
-        show_source(self.file, e.line, e.off)
-        return error.ParseFailed
+        eprintln("{this->file}:{e.line}: error: expected a type");
+        show_source(this->file, e.line, e.off);
+        return error.ParseFailed;
+    };
+
+    bool is_alias(str name) {
+        for (auto x : this->aliases) { if (x == name) { return true; } }
+        return false;
     }
 
-    fn is_alias(self, name: str) bool {
-        for x in self.aliases { if x == name { return true } }
-        return false
+    !str qualified(str name) {
+        if (!this->is_alias(name) || !(this->at(.dot) || this->at(.coloncolon)) || this->peek_at(1).tag != .ident) { return name; }
+        _ = this->advance();
+        const auto member = this->advance().text;
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "{name}.{member}")?;
+        return b.slice();
     }
 
-    fn qualified(self, name: str) !str {
-        if !self.is_alias(name) || !(self.at(.dot) || self.at(.coloncolon)) || self.peek_at(1).tag != .ident { return name }
-        _ = self.advance()
-        let member = self.advance().text
-        var b = List[u8].init(self.a)
-        sprint(&b, "{name}.{member}")?
-        return b.slice()
-    }
-
-    fn parse_postfix(self) !*Expr {
-        var e = self.parse_primary()?
-        while true {
-            let t = self.peek()
-            if t.tag == .lparen {
-                _ = self.advance()
-                let c = self.ex(.Call, t)?
-                c.l = e
-                let saved = self.no_struct
-                self.no_struct = false
-                while !self.at(.rparen) {
-                    c.args.push(self.parse_expr()?)?
-                    if !self.eat(.comma) { break }
+    !Expr* parse_postfix() {
+        auto e = this->parse_primary()?;
+        while (true) {
+            const auto t = this->peek();
+            if (t.tag == .lparen) {
+                _ = this->advance();
+                const auto c = this->ex(.Call, t)?;
+                c.l = e;
+                const auto saved = this->no_struct;
+                this->no_struct = false;
+                while (!this->at(.rparen)) {
+                    c.args.push(this->parse_expr()?)?;
+                    if (!this->eat(.comma)) { break; }
                 }
-                self.no_struct = saved
-                _ = self.expect(.rparen)?
-                e = c
-            } else if t.tag == .lbracket {
-                _ = self.advance()
-                let saved = self.no_struct
-                self.no_struct = false
-                if self.eat(.dotdot) {
-                    let s = self.ex(.Slice, t)?
-                    s.l = e
-                    if !self.at(.rbracket) { s.x = self.parse_expr()? }
-                    _ = self.expect(.rbracket)?
-                    self.no_struct = saved
-                    e = s
-                    continue
+                this->no_struct = saved;
+                _ = this->expect(.rparen)?;
+                e = c;
+            } else if (t.tag == .lbracket) {
+                _ = this->advance();
+                const auto saved = this->no_struct;
+                this->no_struct = false;
+                if (this->eat(.dotdot)) {
+                    const auto s = this->ex(.Slice, t)?;
+                    s.l = e;
+                    if (!this->at(.rbracket)) { s.x = this->parse_expr()?; }
+                    _ = this->expect(.rbracket)?;
+                    this->no_struct = saved;
+                    e = s;
+                    continue;
                 }
-                let first = self.parse_expr()?
-                if self.eat(.dotdot) {
-                    let s = self.ex(.Slice, t)?
-                    s.l = e
-                    s.r = first
-                    if !self.at(.rbracket) { s.x = self.parse_expr()? }
-                    _ = self.expect(.rbracket)?
-                    self.no_struct = saved
-                    e = s
-                    continue
+                const auto first = this->parse_expr()?;
+                if (this->eat(.dotdot)) {
+                    const auto s = this->ex(.Slice, t)?;
+                    s.l = e;
+                    s.r = first;
+                    if (!this->at(.rbracket)) { s.x = this->parse_expr()?; }
+                    _ = this->expect(.rbracket)?;
+                    this->no_struct = saved;
+                    e = s;
+                    continue;
                 }
-                let ix = self.ex(.Index, t)?
-                ix.l = e
-                ix.args.push(first)?
-                while self.eat(.comma) { ix.args.push(self.parse_expr()?)? }
-                _ = self.expect(.rbracket)?
-                self.no_struct = saved
-                e = ix
-            } else if t.tag == .dot || t.tag == .arrow || t.tag == .coloncolon {
-                _ = self.advance()
-                let f = self.ex(.Field, t)?
-                f.l = e
-                let mt = self.expect(.ident)?
-                f.name = mt.text
-                f.name_off = mt.off
-                e = f
-                if self.at(.lt) && !self.no_post {
-                    let g = self.try_generic_args(f)?
-                    if g != null { e = g }
+                const auto ix = this->ex(.Index, t)?;
+                ix.l = e;
+                ix.args.push(first)?;
+                while (this->eat(.comma)) { ix.args.push(this->parse_expr()?)?; }
+                _ = this->expect(.rbracket)?;
+                this->no_struct = saved;
+                e = ix;
+            } else if (t.tag == .dot || t.tag == .arrow || t.tag == .coloncolon) {
+                _ = this->advance();
+                const auto f = this->ex(.Field, t)?;
+                f.l = e;
+                const auto mt = this->expect(.ident)?;
+                f.name = mt.text;
+                f.name_off = mt.off;
+                e = f;
+                if (this->at(.lt) && !this->no_post) {
+                    const auto g = this->try_generic_args(f)?;
+                    if (g != null) { e = g; }
                 }
-            } else if t.tag == .question {
-                _ = self.advance()
-                let q = self.ex(.Try, t)?
-                q.l = e
-                e = q
-            } else if t.tag == .kw_is {
-                _ = self.advance()
-                if !self.eat(.dot) {
-                    let first = self.expect(.ident)?
-                    _ = self.expect(.dot)?
-                    if self.is_alias(first.text) && self.at(.ident) && self.peek_at(1).tag == .dot {
-                        _ = self.advance()
-                        _ = self.advance()
+            } else if (t.tag == .question) {
+                _ = this->advance();
+                const auto q = this->ex(.Try, t)?;
+                q.l = e;
+                e = q;
+            } else if (t.tag == .kw_is) {
+                _ = this->advance();
+                if (!this->eat(.dot)) {
+                    const auto first = this->expect(.ident)?;
+                    _ = this->expect(.dot)?;
+                    if (this->is_alias(first.text) && this->at(.ident) && this->peek_at(1).tag == .dot) {
+                        _ = this->advance();
+                        _ = this->advance();
                     }
                 }
-                let x = self.ex(.Is, t)?
-                x.l = e
-                let vt = self.expect(.ident)?
-                x.name = vt.text
-                x.name_off = vt.off
-                e = x
-            } else if t.tag == .lbrace {
-                if self.no_struct || !is_type_like(e) { break }
-                _ = self.advance()
-                let sl = self.ex(.StructLit, t)?
-                sl.ty = self.expr_to_type(e)?
-                self.skip_semis()
-                if self.at(.rbrace) { sl.zero_rest = true }
-                while !self.at(.rbrace) {
-                    if self.eat(.dotdot) {
-                        sl.zero_rest = true
-                        self.skip_semis()
-                        break
+                const auto x = this->ex(.Is, t)?;
+                x.l = e;
+                const auto vt = this->expect(.ident)?;
+                x.name = vt.text;
+                x.name_off = vt.off;
+                e = x;
+            } else if (t.tag == .lbrace) {
+                if (this->no_struct || !is_type_like(e)) { break; }
+                _ = this->advance();
+                const auto sl = this->ex(.StructLit, t)?;
+                sl.ty = this->expr_to_type(e)?;
+                this->skip_semis();
+                if (this->at(.rbrace)) { sl.zero_rest = true; }
+                while (!this->at(.rbrace)) {
+                    if (this->eat(.dotdot)) {
+                        sl.zero_rest = true;
+                        this->skip_semis();
+                        break;
                     }
-                    var designated = false
-                    if self.eat(.dot) { designated = true }
-                    let fnt = self.expect(.ident)?
-                    if designated { _ = self.expect(.eq)? } else { _ = self.expect(.colon)? }
-                    if designated { sl.zero_rest = true }
-                    let v = self.parse_expr()?
-                    sl.fields.push(FieldInit{ name: fnt.text, value: v, off: fnt.off })?
-                    _ = self.eat(.comma)
-                    self.skip_semis()
+                    auto designated = false;
+                    if (this->eat(.dot)) { designated = true; }
+                    const auto fnt = this->expect(.ident)?;
+                    if (designated) { _ = this->expect(.eq)?; } else { _ = this->expect(.colon)?; }
+                    if (designated) { sl.zero_rest = true; }
+                    const auto v = this->parse_expr()?;
+                    sl.fields.push(FieldInit{ .name = fnt.text, .value = v, .off = fnt.off })?;
+                    _ = this->eat(.comma);
+                    this->skip_semis();
                 }
-                _ = self.expect(.rbrace)?
-                e = sl
+                _ = this->expect(.rbrace)?;
+                e = sl;
             } else {
-                break
+                break;
             }
         }
-        return e
+        return e;
+    };
+
+    !str clean_digits(str s) {
+        auto b = List<u8>::init(this->a);
+        for (auto c : s) { if (c != '_') { b.push(c)?; } }
+        return b.slice();
     }
 
-    fn clean_digits(self, s: str) !str {
-        var b = List[u8].init(self.a)
-        for c in s { if c != '_' { b.push(c)? } }
-        return b.slice()
-    }
-
-    fn parse_primary(self) !*Expr {
-        let t = self.advance()
+    !Expr* parse_primary() {
+        const auto t = this->advance();
         match t.tag {
-            .kw_fn => return self.parse_closure(t)
+            .kw_fn => return this->parse_closure(t);
             .kw_match => {
-                let e = self.ex(.Match, t)?
-                e.l = self.parse_cond()?
-                self.parse_match_arms(&e.arms)?
-                return e
+                const auto e = this->ex(.Match, t)?;
+                e.l = this->parse_cond()?;
+                this->parse_match_arms(&e.arms)?;
+                return e;
             }
             .int_lit => {
-                let e = self.ex(.IntLit, t)?
+                const auto e = this->ex(.IntLit, t)?;
                 e.ival = parse_int_radix(t.text, 0) catch {
-                    eprintln("{self.file}:{t.line}: error: bad integer literal '{t.text}'")
-                    show_source(self.file, t.line, t.off)
-                    return error.ParseFailed
+                    eprintln("{this->file}:{t.line}: error: bad integer literal '{t.text}'");
+                    show_source(this->file, t.line, t.off);
+                    return error.ParseFailed;
                 }
-                return e
+                return e;
             }
             .float_lit => {
-                let e = self.ex(.FloatLit, t)?
-                e.fval = parse_float(self.clean_digits(t.text)?) catch {
-                    eprintln("{self.file}:{t.line}: error: bad float literal")
-                    show_source(self.file, t.line, t.off)
-                    return error.ParseFailed
+                const auto e = this->ex(.FloatLit, t)?;
+                e.fval = parse_float(this->clean_digits(t.text)?) catch {
+                    eprintln("{this->file}:{t.line}: error: bad float literal");
+                    show_source(this->file, t.line, t.off);
+                    return error.ParseFailed;
                 }
-                return e
+                return e;
             }
             .char_lit => {
-                let s = self.unescape(t.text)?
-                if s.len != 1 {
-                    eprintln("{self.file}:{t.line}: error: char literal must be one byte")
-                    show_source(self.file, t.line, t.off)
-                    return error.ParseFailed
+                const auto s = this->unescape(t.text)?;
+                if (s.len != 1) {
+                    eprintln("{this->file}:{t.line}: error: char literal must be one byte");
+                    show_source(this->file, t.line, t.off);
+                    return error.ParseFailed;
                 }
-                let e = self.ex(.IntLit, t)?
-                e.ival = s[0] as u64
-                return e
+                const auto e = this->ex(.IntLit, t)?;
+                e.ival = s[0] as u64;
+                return e;
             }
-            .str_lit => return self.parse_string(t)
+            .str_lit => return this->parse_string(t);
             .kw_true, .kw_false => {
-                let e = self.ex(.BoolLit, t)?
-                e.bval = t.tag == .kw_true
-                return e
+                const auto e = this->ex(.BoolLit, t)?;
+                e.bval = t.tag == .kw_true;
+                return e;
             }
-            .kw_null => return self.ex(.NullLit, t)
+            .kw_null => return this->ex(.NullLit, t);
             .ident => {
-                let e = self.ex(.Ident, t)?
-                e.name = self.qualified(t.text)?
-                if self.at(.lt) && !self.no_post {
-                    let g = self.try_generic_args(e)?
-                    if g != null { return g }
+                const auto e = this->ex(.Ident, t)?;
+                e.name = this->qualified(t.text)?;
+                if (this->at(.lt) && !this->no_post) {
+                    const auto g = this->try_generic_args(e)?;
+                    if (g != null) { return g; }
                 }
-                return e
+                return e;
             }
             .dot => {
-                let e = self.ex(.EnumLit, t)?
-                let mt = self.expect(.ident)?
-                e.name = mt.text
-                e.name_off = mt.off
-                return e
+                const auto e = this->ex(.EnumLit, t)?;
+                const auto mt = this->expect(.ident)?;
+                e.name = mt.text;
+                e.name_off = mt.off;
+                return e;
             }
             .kw_error => {
-                _ = self.expect(.dot)?
-                let e = self.ex(.ErrorVal, t)?
-                e.name = self.expect(.ident)?.text
-                return e
+                _ = this->expect(.dot)?;
+                const auto e = this->ex(.ErrorVal, t)?;
+                e.name = this->expect(.ident)?.text;
+                return e;
             }
             .kw_sizeof, .kw_alignof => {
-                _ = self.expect(.lparen)?
-                var k: EK = .Sizeof
-                if t.tag == .kw_alignof { k = .Alignof }
-                let e = self.ex(k, t)?
-                e.ty = self.parse_type()?
-                _ = self.expect(.rparen)?
-                return e
+                _ = this->expect(.lparen)?;
+                EK k = .Sizeof;
+                if (t.tag == .kw_alignof) { k = .Alignof; }
+                const auto e = this->ex(k, t)?;
+                e.ty = this->parse_type()?;
+                _ = this->expect(.rparen)?;
+                return e;
             }
             .lparen => {
-                let saved = self.no_struct
-                self.no_struct = false
-                let e = self.parse_expr()?
-                self.no_struct = saved
-                _ = self.expect(.rparen)?
-                return e
+                const auto saved = this->no_struct;
+                this->no_struct = false;
+                const auto e = this->parse_expr()?;
+                this->no_struct = saved;
+                _ = this->expect(.rparen)?;
+                return e;
             }
             .lbracket => {
-                if self.lambda_ahead() { return self.parse_lambda(t) }
-                let e = self.ex(.ArrayLit, t)?
-                while !self.at(.rbracket) {
-                    e.args.push(self.parse_expr()?)?
-                    if !self.eat(.comma) { break }
+                if (this->lambda_ahead()) { return this->parse_lambda(t); }
+                const auto e = this->ex(.ArrayLit, t)?;
+                while (!this->at(.rbracket)) {
+                    e.args.push(this->parse_expr()?)?;
+                    if (!this->eat(.comma)) { break; }
                 }
-                _ = self.expect(.rbracket)?
-                return e
+                _ = this->expect(.rbracket)?;
+                return e;
             }
         }
-        self.pos -= 1
-        self.fail("expected expression")?
-        return error.ParseFailed
-    }
+        this->pos -= 1;
+        this->fail("expected expression")?;
+        return error.ParseFailed;
+    };
 
-    fn unescape(self, raw: str) !str {
-        var out = List[u8].init(self.a)
-        var i = 0
-        while i < raw.len {
-            if raw[i] == '\\' && i + 1 < raw.len {
-                i += 1
-                let c = raw[i]
+    !str unescape(str raw) {
+        auto out = List<u8>::init(this->a);
+        auto i = 0;
+        while (i < raw.len) {
+            if (raw[i] == '\\' && i + 1 < raw.len) {
+                i += 1;
+                const auto c = raw[i];
                 match c {
-                    'n' => out.push('\n')?
-                    't' => out.push('\t')?
-                    'r' => out.push('\r')?
-                    '0' => out.push(0)?
-                    'e' => out.push(27)?
+                    'n' => out.push('\n')?;
+                    't' => out.push('\t')?;
+                    'r' => out.push('\r')?;
+                    '0' => out.push(0)?;
+                    'e' => out.push(27)?;
                     'x' => {
-                        if i + 2 >= raw.len { self.fail("bad \\x escape")? }
-                        let v = parse_int_radix(raw[i + 1..i + 3], 16) catch {
-                            self.fail("bad \\x escape")?
-                            return error.ParseFailed
+                        if (i + 2 >= raw.len) { this->fail("bad \\x escape")?; }
+                        const auto v = parse_int_radix(raw[i + 1..i + 3], 16) catch {
+                            this->fail("bad \\x escape")?;
+                            return error.ParseFailed;
                         }
-                        out.push(v as u8)?
-                        i += 2
+                        out.push(v as u8)?;
+                        i += 2;
                     }
-                    _ => out.push(c)?
+                    _ => out.push(c)?;
                 }
             } else {
-                out.push(raw[i])?
+                out.push(raw[i])?;
             }
-            i += 1
+            i += 1;
         }
-        return out.slice()
+        return out.slice();
     }
 
-    fn parse_string(self, t: Token) !*Expr {
-        let raw = t.text
-        if str_find_byte(raw, '{') < 0 {
-            let e = self.ex(.StrLit, t)?
-            e.name = self.unescape(raw)?
-            return e
+    !Expr* parse_string(Token t) {
+        const auto raw = t.text;
+        if (str_find_byte(raw, '{') < 0) {
+            const auto e = this->ex(.StrLit, t)?;
+            e.name = this->unescape(raw)?;
+            return e;
         }
-        let e = self.ex(.Interp, t)?
-        var lit = List[u8].init(self.a)
-        var i = 0
-        var has_expr = false
-        while i < raw.len {
-            let ch = raw[i]
-            if ch == '\\' && i + 1 < raw.len {
-                lit.append(raw[i..i + 2])?
-                i += 2
-                continue
+        const auto e = this->ex(.Interp, t)?;
+        auto lit = List<u8>::init(this->a);
+        auto i = 0;
+        auto has_expr = false;
+        while (i < raw.len) {
+            const auto ch = raw[i];
+            if (ch == '\\' && i + 1 < raw.len) {
+                lit.append(raw[i..i + 2])?;
+                i += 2;
+                continue;
             }
-            if ch == '{' && i + 1 < raw.len && raw[i + 1] == '{' {
-                lit.push('{')?
-                i += 2
-                continue
+            if (ch == '{' && i + 1 < raw.len && raw[i + 1] == '{') {
+                lit.push('{')?;
+                i += 2;
+                continue;
             }
-            if ch == '}' && i + 1 < raw.len && raw[i + 1] == '}' {
-                lit.push('}')?
-                i += 2
-                continue
+            if (ch == '}' && i + 1 < raw.len && raw[i + 1] == '}') {
+                lit.push('}')?;
+                i += 2;
+                continue;
             }
-            if ch == '{' {
-                let close = match_brace(raw, i)
-                if close < 0 { self.fail("unclosed '{{' in string")? }
-                if lit.len > 0 {
-                    e.parts.push(IPart{ kind: 0, lit: self.unescape(lit.slice())?, e: null, spec: "" })?
-                    lit = List[u8].init(self.a)
+            if (ch == '{') {
+                const auto close = match_brace(raw, i);
+                if (close < 0) { this->fail("unclosed '{{' in string")?; }
+                if (lit.len > 0) {
+                    e.parts.push(IPart{ .kind = 0, .lit = this->unescape(lit.slice())?, .e = null, .spec = "" })?;
+                    lit = List<u8>::init(this->a);
                 }
-                var inner = raw[i + 1..close]
-                var spec = ""
-                var has_spec = false
-                let ci = spec_colon(inner)
-                if ci >= 0 {
-                    spec = inner[ci + 1..]
-                    inner = inner[0..ci]
-                    has_spec = true
+                auto inner = raw[i + 1..close];
+                auto spec = "";
+                auto has_spec = false;
+                const auto ci = spec_colon(inner);
+                if (ci >= 0) {
+                    spec = inner[ci + 1..];
+                    inner = inner[0..ci];
+                    has_spec = true;
                 }
-                var toks = tokenize(self.a, inner, self.file)?
-                let base = t.off + ((inner.ptr as u64) - (t.text.ptr as u64)) as i64
-                for k in 0..toks.len {
-                    toks.items[k].line = t.line
-                    toks.items[k].off += base
+                auto toks = tokenize(this->a, inner, this->file)?;
+                const auto base = t.off + ((inner.ptr as u64) - (t.text.ptr as u64)) as i64;
+                for (auto k : 0..toks.len) {
+                    toks.items[k].line = t.line;
+                    toks.items[k].off += base;
                 }
-                var sub = new_parser(self.a, toks.slice(), self.file)
-                sub.aliases = self.aliases
-                let x = sub.parse_expr()?
-                if !sub.at(.semi) && !sub.at(.eof) {
-                    eprintln("{self.file}:{t.line}: error: unexpected tokens in interpolation '{inner}'")
-                    show_source(self.file, t.line, t.off)
-                    return error.ParseFailed
+                auto sub = new_parser(this->a, toks.slice(), this->file);
+                sub.aliases = this->aliases;
+                const auto x = sub.parse_expr()?;
+                if (!sub.at(.semi) && !sub.at(.eof)) {
+                    eprintln("{this->file}:{t.line}: error: unexpected tokens in interpolation '{inner}'");
+                    show_source(this->file, t.line, t.off);
+                    return error.ParseFailed;
                 }
-                if has_spec {
-                    e.parts.push(IPart{ kind: 2, lit: "", e: x, spec: spec })?
+                if (has_spec) {
+                    e.parts.push(IPart{ .kind = 2, .lit = "", .e = x, .spec = spec })?;
                 } else {
-                    e.parts.push(IPart{ kind: 1, lit: "", e: x, spec: "" })?
+                    e.parts.push(IPart{ .kind = 1, .lit = "", .e = x, .spec = "" })?;
                 }
-                has_expr = true
-                i = close + 1
-                continue
+                has_expr = true;
+                i = close + 1;
+                continue;
             }
-            lit.push(ch)?
-            i += 1
+            lit.push(ch)?;
+            i += 1;
         }
-        if lit.len > 0 { e.parts.push(IPart{ kind: 0, lit: self.unescape(lit.slice())?, e: null, spec: "" })? }
-        if !has_expr {
-            var all = List[u8].init(self.a)
-            for p in e.parts { all.append(p.lit)? }
-            let s = self.ex(.StrLit, t)?
-            s.name = all.slice()
-            return s
+        if (lit.len > 0) { e.parts.push(IPart{ .kind = 0, .lit = this->unescape(lit.slice())?, .e = null, .spec = "" })?; }
+        if (!has_expr) {
+            auto all = List<u8>::init(this->a);
+            for (auto p : e.parts) { all.append(p.lit)?; }
+            const auto s = this->ex(.StrLit, t)?;
+            s.name = all.slice();
+            return s;
         }
-        return e
-    }
+        return e;
+    };
 }
 
-fn if_tek(is_ptr: bool) TEK {
-    if is_ptr { return .Ptr }
-    return .Errun
+Parser new_parser(Allocator a, Token[] toks, str file) {
+    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .arrow_only = false, .splits = List<i64>::init(a) };
+};
+
+i64 prec(Tag t) {
+    match t {
+        .oror => return 1;
+        .andand => return 2;
+        .eqeq, .neq, .lt, .le, .gt, .ge => return 3;
+        .pipe => return 4;
+        .caret => return 5;
+        .amp => return 6;
+        .shl, .shr => return 7;
+        .plus, .minus => return 8;
+        .star, .slash, .percent => return 9;
+    }
+    return -1;
 }
 
-fn match_brace(raw: str, open: i64) i64 {
-    var d = 0
-    var i = open
-    while i < raw.len {
-        let c = raw[i]
-        if c == '{' {
-            d += 1
-        } else if c == '}' {
-            d -= 1
-            if d == 0 { return i }
-        } else if c == '"' {
-            i += 1
-            while i < raw.len && raw[i] != '"' {
-                if raw[i] == '\\' { i += 1 }
-                i += 1
-            }
-        }
-        i += 1
+bool starts_type(Tag t) {
+    match t {
+        .ident, .star, .bang, .question, .lbracket, .kw_fn => return true;
     }
-    return -1
+    return false;
 }
 
-fn spec_colon(inner: str) i64 {
-    var d = 0
-    var i = 0
-    while i < inner.len {
-        let c = inner[i]
-        if c == '(' || c == '[' || c == '{' {
-            d += 1
-        } else if c == ')' || c == ']' || c == '}' {
-            d -= 1
-        } else if c == '"' {
-            i += 1
-            while i < inner.len && inner[i] != '"' {
-                if inner[i] == '\\' { i += 1 }
-                i += 1
+bool is_type_like(Expr* e) {
+    if (e.k == .Ident) {
+        const auto dot = str_rfind_byte(e.name, '.');
+        return e.name.len > dot + 1 && is_upper(e.name[dot + 1]);
+    };
+    if (e.k == .Index) { return is_type_like(e.l) };
+    return false;
+}
+
+TEK if_tek(bool is_ptr) {
+    if (is_ptr) { return .Ptr; }
+    return .Errun;
+}
+
+i64 match_brace(str raw, i64 open) {
+    auto d = 0;
+    auto i = open;
+    while (i < raw.len) {
+        const auto c = raw[i];
+        if (c == '{') {
+            d += 1;
+        } else if (c == '}') {
+            d -= 1;
+            if (d == 0) { return i; }
+        } else if (c == '"') {
+            i += 1;
+            while (i < raw.len && raw[i] != '"') {
+                if (raw[i] == '\\') { i += 1; }
+                i += 1;
             }
-        } else if c == '\'' {
-            i += 2
-        } else if c == ':' && d == 0 {
-            return i
         }
-        i += 1
+        i += 1;
     }
-    return -1
+    return -1;
+}
+
+i64 spec_colon(str inner) {
+    auto d = 0;
+    auto i = 0;
+    while (i < inner.len) {
+        const auto c = inner[i];
+        if (c == '(' || c == '[' || c == '{') {
+            d += 1;
+        } else if (c == ')' || c == ']' || c == '}') {
+            d -= 1;
+        } else if (c == '"') {
+            i += 1;
+            while (i < inner.len && inner[i] != '"') {
+                if (inner[i] == '\\') { i += 1; }
+                i += 1;
+            }
+        } else if (c == '\'') {
+            i += 2;
+        } else if (c == ':' && d == 0) {
+            return i;
+        }
+        i += 1;
+    }
+    return -1;
 }

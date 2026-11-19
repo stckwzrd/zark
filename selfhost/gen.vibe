@@ -1,1175 +1,1172 @@
 // Code generator core: types, instantiation, emission helpers, functions.
 // Mirrors src/codegen.zig.
 
-import "parser.vibe"
+import "parser.vibe";
 
 enum TK { Int, Float, Bool, Void, Ptr, Slice, Array, Strct, Enm, Errun, ErrVal, Null, Func, Closure }
 
 struct Type {
-    k: TK
-    bits: i64          // Int bits, Float bits
-    signed: bool
-    elem: *Type        // Ptr/Slice/Array elem, Errun inner
-    len: u64           // Array length
-    si: *StructInst
-    ei: *EnumInfo
-    params: List[*Type] // Func
-    ret: *Type          // Func
+    TK k;
+    i64 bits;          // Int bits, Float bits
+    bool signed;
+    Type* elem;        // Ptr/Slice/Array elem, Errun inner
+    u64 len;           // Array length
+    StructInst* si;
+    EnumInfo* ei;
+    List<Type*> params; // Func
+    Type* ret;          // Func
 }
 
-struct FieldInfo { name: str, ty: *Type }
+struct FieldInfo { str name; Type* ty; }
 
 struct StructInst {
-    decl: *StructDecl
-    args: List[*Type]
-    llname: str
-    display: str
-    fields: List[FieldInfo]
-    names_global: str
-    payload_words: u64
+    StructDecl* decl;
+    List<Type*> args;
+    str llname;
+    str display;
+    List<FieldInfo> fields;
+    str names_global;
+    u64 payload_words;
 }
 
-struct EnumInfo { decl: *EnumDecl, names_global: str }
+struct EnumInfo { EnumDecl* decl; str names_global; }
 
-struct Value { ty: *Type, v: str }
-struct Addr { ty: *Type, v: str, imm: bool }
-struct Var { ptr: str, ty: *Type, mutable: bool }
-struct Defer { stmt: *Stmt, is_err: bool }
-struct Scope { vars: Map[Var], defers: List[Defer] }
-struct Loop { brk: str, cont: str, depth: i64 }
+struct Value { Type* ty; str v; }
+struct Addr { Type* ty; str v; bool imm; }
+struct Var { str ptr; Type* ty; bool mutable; }
+struct Defer { Stmt* stmt; bool is_err; }
+struct Scope { Map<Var> vars; List<Defer> defers; }
+struct Loop { str brk; str cont; i64 depth; }
 
-type Env = *Map[*Type]
+type Env = Map<Type*>*;
 
-struct CapInfo { name: str, ty: *Type, mutable: bool }
+struct CapInfo { str name; Type* ty; bool mutable; }
 
 struct FnInst {
-    decl: *FnDecl
-    env: Env
-    llname: str
-    params: List[*Type]
-    ret: *Type
-    generated: bool
-    is_closure: bool
-    caps: List[CapInfo]
+    FnDecl* decl;
+    Env env;
+    str llname;
+    List<Type*> params;
+    Type* ret;
+    bool generated;
+    bool is_closure;
+    List<CapInfo> caps;
 }
 
 struct Gen {
-    a: Allocator
-    safety: bool
+    Allocator a;
+    bool safety;
 
-    fns: Map[*FnDecl]
-    methods: Map[*FnDecl]
-    structs: Map[*StructDecl]
-    enums: Map[*EnumInfo]
-    consts: Map[*ConstDecl]
-    aliases: Map[*TypeExpr]
-    globals: Map[Var]
-    fn_order: List[*FnDecl]      // declaration order (deterministic output)
-    const_order: List[*ConstDecl]
+    Map<FnDecl*> fns;
+    Map<FnDecl*> methods;
+    Map<StructDecl*> structs;
+    Map<EnumInfo*> enums;
+    Map<ConstDecl*> consts;
+    Map<TypeExpr*> aliases;
+    Map<Var> globals;
+    List<FnDecl*> fn_order;      // declaration order (deterministic output)
+    List<ConstDecl*> const_order;
 
-    struct_insts: Map[*StructInst]
-    fn_insts: Map[*FnInst]
-    pending: List[*FnInst]
-    declared: Map[bool]
-    errors: Map[i64]
-    error_names: List[str]
-    pre_vals: List[Value]
-    thunks: Map[i64]
-    rtypes: Map[*Type]
+    Map<StructInst*> struct_insts;
+    Map<FnInst*> fn_insts;
+    List<FnInst*> pending;
+    Map<bool> declared;
+    Map<i64> errors;
+    List<str> error_names;
+    List<Value> pre_vals;
+    Map<i64> thunks;
+    Map<Type*> rtypes;
 
-    types_out: List[u8]
-    globals_out: List[u8]
-    decls_out: List[u8]
-    funcs_out: List[u8]
-    nstr: i64
+    List<u8> types_out;
+    List<u8> globals_out;
+    List<u8> decls_out;
+    List<u8> funcs_out;
+    i64 nstr;
 
-    body: List[u8]
-    allocas: List[u8]
-    ntmp: i64
-    nlbl: i64
-    scopes: List[Scope]
-    loops: List[Loop]
-    cur: *FnInst
-    env: Env
-    terminated: bool
-    cur_label: str
-    file: str
-    tests: List[*FnDecl]
-    test_root: str
-    test_mode: bool
-    nclos: i64
-    at_line: i64
-    at_off: i64
-    pend_file: str
-    pend_line: i64
-    pend_off: i64
-    has_pend: bool
+    List<u8> body;
+    List<u8> allocas;
+    i64 ntmp;
+    i64 nlbl;
+    List<Scope> scopes;
+    List<Loop> loops;
+    FnInst* cur;
+    Env env;
+    bool terminated;
+    str cur_label;
+    str file;
+    List<FnDecl*> tests;
+    str test_root;
+    bool test_mode;
+    i64 nclos;
+    i64 at_line;
+    i64 at_off;
+    str pend_file;
+    i64 pend_line;
+    i64 pend_off;
+    bool has_pend;
 
-    t_i64: *Type
-    t_i32: *Type
-    t_u64: *Type
-    t_u8: *Type
-    t_f64: *Type
-    t_bool: *Type
-    t_void: *Type
-    t_str: *Type
-    t_errval: *Type
-    t_null: *Type
-    t_ptr_u8: *Type
-}
+    Type* t_i64;
+    Type* t_i32;
+    Type* t_u64;
+    Type* t_u8;
+    Type* t_f64;
+    Type* t_bool;
+    Type* t_void;
+    Type* t_str;
+    Type* t_errval;
+    Type* t_null;
+    Type* t_ptr_u8;
 
-fn new_gen(a: Allocator, safety: bool) !*Gen {
-    let g = a.create[Gen]()?
-    g.a = a
-    g.safety = safety
-    g.fns = Map[*FnDecl].init(a)
-    g.methods = Map[*FnDecl].init(a)
-    g.structs = Map[*StructDecl].init(a)
-    g.enums = Map[*EnumInfo].init(a)
-    g.consts = Map[*ConstDecl].init(a)
-    g.aliases = Map[*TypeExpr].init(a)
-    g.globals = Map[Var].init(a)
-    g.fn_order = List[*FnDecl].init(a)
-    g.const_order = List[*ConstDecl].init(a)
-    g.struct_insts = Map[*StructInst].init(a)
-    g.fn_insts = Map[*FnInst].init(a)
-    g.pending = List[*FnInst].init(a)
-    g.tests = List[*FnDecl].init(a)
-    g.declared = Map[bool].init(a)
-    g.errors = Map[i64].init(a)
-    g.error_names = List[str].init(a)
-    g.pre_vals = List[Value].init(a)
-    g.thunks = Map[i64].init(a)
-    g.rtypes = Map[*Type].init(a)
-    g.types_out = List[u8].init(a)
-    g.globals_out = List[u8].init(a)
-    g.decls_out = List[u8].init(a)
-    g.funcs_out = List[u8].init(a)
-    g.body = List[u8].init(a)
-    g.allocas = List[u8].init(a)
-    g.scopes = List[Scope].init(a)
-    g.loops = List[Loop].init(a)
-    g.env = g.new_env()?
-    g.cur_label = "entry"
-    g.t_i64 = g.mk_int(64, true)?
-    g.t_i32 = g.mk_int(32, true)?
-    g.t_u64 = g.mk_int(64, false)?
-    g.t_u8 = g.mk_int(8, false)?
-    g.t_f64 = g.mk(.Float)?
-    g.t_f64.bits = 64
-    g.t_bool = g.mk(.Bool)?
-    g.t_void = g.mk(.Void)?
-    g.t_str = g.mk_elem(.Slice, g.t_u8)?
-    g.t_errval = g.mk(.ErrVal)?
-    g.t_null = g.mk(.Null)?
-    g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?
-    g.error_names.push("ok")?
-    return g
-}
+    List<u8> sb() { return List<u8>::init(this->a); }
 
-// ------------------------------------------------------------------ type predicates
+    !Env new_env() {
+        const auto m = this->a.create<Map<Type*>> ()?;
+        *m = Map<Type*>::init(this->a);
+        return m;
+    };
 
-fn type_eq(a: *Type, b: *Type) bool {
-    if a == b { return true }
-    if a.k != b.k { return false }
-    match a.k {
-        .Int => return a.bits == b.bits && a.signed == b.signed
-        .Float => return a.bits == b.bits
-        .Ptr, .Slice, .Errun => return type_eq(a.elem, b.elem)
-        .Array => return a.len == b.len && type_eq(a.elem, b.elem)
-        .Strct => return a.si == b.si
-        .Enm => return a.ei == b.ei
-        .Func, .Closure => {
-            if a.params.len != b.params.len || !type_eq(a.ret, b.ret) { return false }
-            for i in 0..a.params.len { if !type_eq(a.params.get(i), b.params.get(i)) { return false } }
-            return true
+    !Env copy_env(Env e) {
+        const auto m = this->new_env()?;
+        for (auto en : e.entries) { if (en.used) { m.put(en.key, en.value)?; } }
+        return m;
+    };
+
+    !Type* mk(TK k) {
+        const auto t = this->a.create<Type>()?;
+        t.k = k;
+        return t;
+    };
+    !Type* mk_int(i64 bits, bool signed) {
+        const auto t = this->mk(.Int)?;
+        t.bits = bits;
+        t.signed = signed;
+        return t;
+    };
+    !Type* mk_elem(TK k, Type* elem) {
+        const auto t = this->mk(k)?;
+        t.elem = elem;
+        return t;
+    };
+
+    void err(i64 line) {
+        eprint("{this->file}:{line}: error: ");
+        this->pend_file = this->file;
+        this->pend_line = line;
+        this->pend_off = -1;
+        if (line == this->at_line) { this->pend_off = this->at_off; }
+        this->has_pend = true;
+    }
+
+    str hint(str name, List<str> cands) {
+        const auto c = closest(name, cands);
+        if (c.len == 0) { return ""; }
+        auto b = this->sb();
+        sprint(&b, " (did you mean '{c}'?)") catch return "";
+        return b.slice();
+    }
+
+    List<str> visible_names() {
+        auto out = List<str>::init(this->a);
+        for (auto sc : this->scopes) {
+            for (auto e : sc.vars.entries) { if (e.used) { out.push(e.key) catch return out; } }
         }
-    }
-    return true
-}
-
-fn is_str(t: *Type) bool { return t.k == .Slice && t.elem.k == .Int && t.elem.bits == 8 && !t.elem.signed }
-fn is_union(t: *Type) bool { return t.k == .Strct && t.si.decl.is_union }
-
-fn field_index(si: *StructInst, name: str) i64 {
-    for i, f in si.fields { if f.name == name { return i } }
-    return -1
-}
-
-fn contains_str(list: List[str], s: str) bool {
-    for x in list { if x == s { return true } }
-    return false
-}
-
-impl Gen {
-    // ------------------------------------------------------------------ small helpers
-    fn sb(self) List[u8] { return List[u8].init(self.a) }
-
-    fn new_env(self) !Env {
-        let m = self.a.create[Map[*Type]]()?
-        *m = Map[*Type].init(self.a)
-        return m
+        for (auto e : this->globals.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        for (auto e : this->fns.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        for (auto e : this->consts.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        return out;
     }
 
-    fn copy_env(self, e: Env) !Env {
-        let m = self.new_env()?
-        for en in e.entries { if en.used { m.put(en.key, en.value)? } }
-        return m
-    }
-
-    fn mk(self, k: TK) !*Type {
-        let t = self.a.create[Type]()?
-        t.k = k
-        return t
-    }
-    fn mk_int(self, bits: i64, signed: bool) !*Type {
-        let t = self.mk(.Int)?
-        t.bits = bits
-        t.signed = signed
-        return t
-    }
-    fn mk_elem(self, k: TK, elem: *Type) !*Type {
-        let t = self.mk(k)?
-        t.elem = elem
-        return t
-    }
-
-    fn err(self, line: i64) {
-        eprint("{self.file}:{line}: error: ")
-        self.pend_file = self.file
-        self.pend_line = line
-        self.pend_off = -1
-        if line == self.at_line { self.pend_off = self.at_off }
-        self.has_pend = true
-    }
-
-    fn hint(self, name: str, cands: List[str]) str {
-        let c = closest(name, cands)
-        if c.len == 0 { return "" }
-        var b = self.sb()
-        sprint(&b, " (did you mean '{c}'?)") catch return ""
-        return b.slice()
-    }
-
-    fn visible_names(self) List[str] {
-        var out = List[str].init(self.a)
-        for sc in self.scopes {
-            for e in sc.vars.entries { if e.used { out.push(e.key) catch return out } }
+    List<str> var_names() {
+        auto out = List<str>::init(this->a);
+        for (auto sc : this->scopes) {
+            for (auto e : sc.vars.entries) { if (e.used) { out.push(e.key) catch return out; } }
         }
-        for e in self.globals.entries { if e.used { out.push(e.key) catch return out } }
-        for e in self.fns.entries { if e.used { out.push(e.key) catch return out } }
-        for e in self.consts.entries { if e.used { out.push(e.key) catch return out } }
-        return out
+        for (auto e : this->globals.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        return out;
     }
 
-    fn var_names(self) List[str] {
-        var out = List[str].init(self.a)
-        for sc in self.scopes {
-            for e in sc.vars.entries { if e.used { out.push(e.key) catch return out } }
-        }
-        for e in self.globals.entries { if e.used { out.push(e.key) catch return out } }
-        return out
+    List<str> field_names(StructInst* si) {
+        auto out = List<str>::init(this->a);
+        for (auto f : si.fields) { out.push(f.name) catch return out; }
+        return out;
     }
 
-    fn field_names(self, si: *StructInst) List[str] {
-        var out = List[str].init(self.a)
-        for f in si.fields { out.push(f.name) catch return out }
-        return out
-    }
-
-    fn satisfies(self, t: *Type, name: str) bool {
+    bool satisfies(Type* t, str name) {
         match name {
-            "Eq" => return t.k == .Int || t.k == .Float || t.k == .Bool || t.k == .Enm || t.k == .Ptr || t.k == .Func || is_str(t)
-            "Ord" => return t.k == .Int || t.k == .Float || t.k == .Ptr
-            "Num" => return t.k == .Int || t.k == .Float
-            "Int" => return t.k == .Int
-            "Float" => return t.k == .Float
+            "Eq" => return t.k == .Int || t.k == .Float || t.k == .Bool || t.k == .Enm || t.k == .Ptr || t.k == .Func || is_str(t);
+            "Ord" => return t.k == .Int || t.k == .Float || t.k == .Ptr;
+            "Num" => return t.k == .Int || t.k == .Float;
+            "Int" => return t.k == .Int;
+            "Float" => return t.k == .Float;
         }
-        return false
+        return false;
     }
 
-    fn check_constraints(self, what: str, names: List[str], cons: List[str], targs: List[*Type], line: i64) !void {
-        for i, c in cons {
-            if c.len == 0 || i >= targs.len { continue }
-            let t = targs.get(i)
-            if !self.satisfies(t, c) {
-                self.err(line); eprintln("type '{self.type_name(t)?}' does not satisfy '{c}', required by '{names.get(i)}' in '{what}'")
-                return error.CompileFailed
+    !void check_constraints(str what, List<str> names, List<str> cons, List<Type*> targs, i64 line) {
+        for (auto [i, c] : cons) {
+            if (c.len == 0 || i >= targs.len) { continue; }
+            const auto t = targs.get(i);
+            if (!this->satisfies(t, c)) {
+                this->err(line); eprintln("type '{this->type_name(t)?}' does not satisfy '{c}', required by '{names.get(i)}' in '{what}'");
+                return error.CompileFailed;
             }
         }
     }
 
-    fn check_constraint_names(self, what: str, cons: List[str], line: i64) !void {
-        for c in cons {
-            if c.len > 0 && !self.satisfies(self.t_i64, c) && !self.satisfies(self.t_f64, c) && c != "Eq" {
-                var known = List[str].init(self.a)
-                for k in ["Eq", "Ord", "Num", "Int", "Float"] { known.push(k)? }
-                self.err(line); eprintln("unknown constraint '{c}' on '{what}'{self.hint(c, known)} (known: Eq, Ord, Num, Int, Float)")
-                return error.CompileFailed
+    !void check_constraint_names(str what, List<str> cons, i64 line) {
+        for (auto c : cons) {
+            if (c.len > 0 && !this->satisfies(this->t_i64, c) && !this->satisfies(this->t_f64, c) && c != "Eq") {
+                auto known = List<str>::init(this->a);
+                for (auto k : ["Eq", "Ord", "Num", "Int", "Float"]) { known.push(k)?; }
+                this->err(line); eprintln("unknown constraint '{c}' on '{what}'{this->hint(c, known)} (known: Eq, Ord, Num, Int, Float)");
+                return error.CompileFailed;
             }
         }
     }
 
-    fn flush_diag(self) {
-        if !self.has_pend { return }
-        self.has_pend = false
-        show_source(self.pend_file, self.pend_line, self.pend_off)
+    void flush_diag() {
+        if (!this->has_pend) { return; }
+        this->has_pend = false;
+        show_source(this->pend_file, this->pend_line, this->pend_off);
     }
 
     // ------------------------------------------------------------------ registration
-    fn add_decls(self, decls: List[Decl], file: str) !void {
-        self.file = file
-        for d in decls {
+    !void add_decls(List<Decl> decls, str file) {
+        this->file = file;
+        for (auto d : decls) {
             match d.k {
                 .Func => {
-                    let f = d.f
-                    if f.is_test {
-                        if file == self.test_root {
-                            var nb = self.sb()
-                            sprint(&nb, "__test_{self.tests.len}")?
-                            f.name = nb.slice()
-                            self.tests.push(f)?
+                    const auto f = d.f;
+                    if (f.is_test) {
+                        if (file == this->test_root) {
+                            auto nb = this->sb();
+                            sprint(&nb, "__test_{this->tests.len}")?;
+                            f.name = nb.slice();
+                            this->tests.push(f)?;
                         }
-                        continue
+                        continue;
                     }
-                    self.check_constraint_names(f.name, f.constraints, f.line)?
-                    if f.receiver.len > 0 {
-                        var kb = self.sb()
-                        sprint(&kb, "{f.receiver}.{f.name}")?
-                        let key = kb.slice()
-                        if self.methods.has(key) { self.err(f.line); eprintln("duplicate method '{key}'"); return error.CompileFailed }
-                        self.methods.put(key, f)?
+                    this->check_constraint_names(f.name, f.constraints, f.line)?;
+                    if (f.receiver.len > 0) {
+                        auto kb = this->sb();
+                        sprint(&kb, "{f.receiver}.{f.name}")?;
+                        const auto key = kb.slice();
+                        if (this->methods.has(key)) { this->err(f.line); eprintln("duplicate method '{key}'"); return error.CompileFailed; }
+                        this->methods.put(key, f)?;
                     } else {
-                        if self.fns.has(f.name) {
-                            let old = self.fns.get(f.name)?
-                            if old.is_extern && f.is_extern { continue }
-                            self.err(f.line); eprintln("duplicate function '{f.name}'"); return error.CompileFailed
+                        if (this->fns.has(f.name)) {
+                            const auto old = this->fns.get(f.name)?;
+                            if (old.is_extern && f.is_extern) { continue; }
+                            this->err(f.line); eprintln("duplicate function '{f.name}'"); return error.CompileFailed;
                         }
-                        self.fns.put(f.name, f)?
-                        self.fn_order.push(f)?
+                        this->fns.put(f.name, f)?;
+                        this->fn_order.push(f)?;
                     }
                 }
                 .Struct => {
-                    self.check_constraint_names(d.s.name, d.s.constraints, d.s.line)?
-                    if self.structs.has(d.s.name) { self.err(d.s.line); eprintln("duplicate struct '{d.s.name}'"); return error.CompileFailed }
-                    self.structs.put(d.s.name, d.s)?
+                    this->check_constraint_names(d.s.name, d.s.constraints, d.s.line)?;
+                    if (this->structs.has(d.s.name)) { this->err(d.s.line); eprintln("duplicate struct '{d.s.name}'"); return error.CompileFailed; }
+                    this->structs.put(d.s.name, d.s)?;
                 }
                 .Enum => {
-                    let e = d.en
-                    let info = self.a.create[EnumInfo]()?
-                    var nb = self.sb()
-                    sprint(&nb, "@enum.{e.name}.names")?
-                    info.decl = e
-                    info.names_global = nb.slice()
-                    self.enums.put(e.name, info)?
-                    var refs = self.sb()
-                    for i, v in e.variants {
-                        let s = self.str_global(v)?
-                        if i > 0 { refs.append(", ")? }
-                        sprint(&refs, "ptr {s}")?
+                    const auto e = d.en;
+                    const auto info = this->a.create<EnumInfo>()?;
+                    auto nb = this->sb();
+                    sprint(&nb, "@enum.{e.name}.names")?;
+                    info.decl = e;
+                    info.names_global = nb.slice();
+                    this->enums.put(e.name, info)?;
+                    auto refs = this->sb();
+                    for (auto [i, v] : e.variants) {
+                        const auto s = this->str_global(v)?;
+                        if (i > 0) { refs.append(", ")?; }
+                        sprint(&refs, "ptr {s}")?;
                     }
-                    sprint(&self.globals_out, "{info.names_global} = private constant [{e.variants.len} x ptr] [{refs.slice()}]\n")?
+                    sprint(&this->globals_out, "{info.names_global} = private constant [{e.variants.len} x ptr] [{refs.slice()}]\n")?;
                 }
                 .Const => {
-                    self.consts.put(d.c.name, d.c)?
-                    self.const_order.push(d.c)?
+                    this->consts.put(d.c.name, d.c)?;
+                    this->const_order.push(d.c)?;
                 }
                 .Alias => {
-                    if self.aliases.has(d.path) || self.structs.has(d.path) { self.err(d.line); eprintln("duplicate type name '{d.path}'"); return error.CompileFailed }
-                    self.aliases.put(d.path, d.ty)?
+                    if (this->aliases.has(d.path) || this->structs.has(d.path)) { this->err(d.line); eprintln("duplicate type name '{d.path}'"); return error.CompileFailed; }
+                    this->aliases.put(d.path, d.ty)?;
                 }
                 .Import => {}
             }
         }
     }
 
-    fn emit_global_var(self, c: *ConstDecl) !void {
-        var ty: *Type = null
-        if c.ty != null {
-            ty = self.resolve_type(c.ty, self.env)?
-        } else if c.value.k == .FloatLit {
-            ty = self.t_f64
-        } else if c.value.k == .BoolLit {
-            ty = self.t_bool
+    !void emit_global_var(ConstDecl* c) {
+        Type* ty = null;
+        if (c.ty != null) {
+            ty = this->resolve_type(c.ty, this->env)?;
+        } else if (c.value.k == .FloatLit) {
+            ty = this->t_f64;
+        } else if (c.value.k == .BoolLit) {
+            ty = this->t_bool;
         } else {
-            ty = self.t_i64
+            ty = this->t_i64;
         }
-        var init = "zeroinitializer"
-        if ty.k == .Int {
-            var b = self.sb()
-            sprint(&b, "{self.eval_const(c.value)?}")?
-            init = b.slice()
-        } else if ty.k == .Bool {
-            init = "false"
-            if c.value.k == .BoolLit && c.value.bval { init = "true" }
-        } else if ty.k == .Float {
-            var f = 0.0
-            if c.value.k == .FloatLit { f = c.value.fval } else { f = self.eval_const(c.value)? as f64 }
-            init = self.float_const(f, ty.bits)?
-        }
-        var nb = self.sb()
-        sprint(&nb, "@g.{c.name}")?
-        let name = nb.slice()
-        sprint(&self.globals_out, "{name} = global {self.llty(ty)?} {init}\n")?
-        self.globals.put(c.name, Var{ ptr: name, ty: ty, mutable: true })?
+        auto init = "zeroinitializer";
+        if (ty.k == .Int) {
+            auto b = this->sb();
+            sprint(&b, "{this->eval_const(c.value)?}")?;
+            init = b.slice();
+        } else if (ty.k == .Bool) {
+            init = "false";
+            if (c.value.k == .BoolLit && c.value.bval) { init = "true"; }
+        } else if (ty.k == .Float) {
+            auto f = 0.0;
+            if (c.value.k == .FloatLit) { f = c.value.fval } else { f = this->eval_const(c.value)? as f64; }
+            init = this->float_const(f, ty.bits)?;
+        };
+        auto nb = this->sb();
+        sprint(&nb, "@g.{c.name}")?;
+        const auto name = nb.slice();
+        sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}\n")?;
+        this->globals.put(c.name, Var{ .ptr = name, .ty = ty, .mutable = true })?;
     }
 
     // ------------------------------------------------------------------ type helpers
-    fn llty(self, t: *Type) !str {
+    !str llty(Type* t) {
         match t.k {
             .Int => {
-                var b = self.sb()
-                sprint(&b, "i{t.bits}")?
-                return b.slice()
+                auto b = this->sb();
+                sprint(&b, "i{t.bits}")?;
+                return b.slice();
             }
             .Float => {
-                if t.bits == 32 { return "float" }
-                return "double"
+                if (t.bits == 32) { return "float"; }
+                return "double";
             }
-            .Bool => return "i1"
-            .Void => return "void"
-            .Ptr, .Null, .Func => return "ptr"
-            .Slice => return "{{ ptr, i64 }}"
-            .Closure => return "{{ ptr, ptr }}"
+            .Bool => return "i1";
+            .Void => return "void";
+            .Ptr, .Null, .Func => return "ptr";
+            .Slice => return "{{ ptr, i64 }}";
+            .Closure => return "{{ ptr, ptr }}";
             .Array => {
-                var b = self.sb()
-                sprint(&b, "[{t.len} x {self.llty(t.elem)?}]")?
-                return b.slice()
+                auto b = this->sb();
+                sprint(&b, "[{t.len} x {this->llty(t.elem)?}]")?;
+                return b.slice();
             }
             .Strct => {
-                var b = self.sb()
-                sprint(&b, "%\"{t.si.llname}\"")?
-                return b.slice()
+                auto b = this->sb();
+                sprint(&b, "%\"{t.si.llname}\"")?;
+                return b.slice();
             }
-            .Enm, .ErrVal => return "i32"
+            .Enm, .ErrVal => return "i32";
             .Errun => {
-                if t.elem.k == .Void { return "{{ i32 }}" }
-                var b = self.sb()
-                sprint(&b, "{{ i32, {self.llty(t.elem)?} }}")?
-                return b.slice()
+                if (t.elem.k == .Void) { return "{{ i32 }}" };
+                auto b = this->sb();
+                sprint(&b, "{{ i32, {this->llty(t.elem)?} }}")?;
+                return b.slice();
             }
         }
-        return "void"
+        return "void";
     }
 
-    fn int_name(self, t: *Type) !str {
-        var b = self.sb()
-        if t.signed { sprint(&b, "i{t.bits}")? } else { sprint(&b, "u{t.bits}")? }
-        return b.slice()
+    !str int_name(Type* t) {
+        auto b = this->sb();
+        if (t.signed) { sprint(&b, "i{t.bits}")?; } else { sprint(&b, "u{t.bits}")?; }
+        return b.slice();
     }
 
-    fn mangle(self, t: *Type) !str {
-        var b = self.sb()
+    !str mangle(Type* t) {
+        auto b = this->sb();
         match t.k {
-            .Int => return self.int_name(t)
-            .Float => sprint(&b, "f{t.bits}")?
-            .Bool => return "bool"
-            .Void => return "void"
-            .Null => return "null"
-            .Ptr => sprint(&b, "P{self.mangle(t.elem)?}")?
-            .Slice => sprint(&b, "S{self.mangle(t.elem)?}")?
-            .Array => sprint(&b, "A{t.len}{self.mangle(t.elem)?}")?
-            .Strct => return t.si.llname
-            .Enm => return t.ei.decl.name
-            .Errun => sprint(&b, "E{self.mangle(t.elem)?}")?
-            .ErrVal => return "error"
+            .Int => return this->int_name(t);
+            .Float => sprint(&b, "f{t.bits}")?;
+            .Bool => return "bool";
+            .Void => return "void";
+            .Null => return "null";
+            .Ptr => sprint(&b, "P{this->mangle(t.elem)?}")?;
+            .Slice => sprint(&b, "S{this->mangle(t.elem)?}")?;
+            .Array => sprint(&b, "A{t.len}{this->mangle(t.elem)?}")?;
+            .Strct => return t.si.llname;
+            .Enm => return t.ei.decl.name;
+            .Errun => sprint(&b, "E{this->mangle(t.elem)?}")?;
+            .ErrVal => return "error";
             .Func, .Closure => {
-                if t.k == .Closure { b.append("C")? }
-                sprint(&b, "F{t.params.len}")?
-                for p in t.params { sprint(&b, "_{self.mangle(p)?}")? }
-                sprint(&b, "_R{self.mangle(t.ret)?}")?
+                if (t.k == .Closure) { b.append("C")? };
+                sprint(&b, "F{t.params.len}")?;
+                for (auto p : t.params) { sprint(&b, "_{this->mangle(p)?}")?; }
+                sprint(&b, "_R{this->mangle(t.ret)?}")?;
             }
         }
-        return b.slice()
+        return b.slice();
     }
 
-    fn type_name(self, t: *Type) !str {
-        if is_str(t) { return "str" }
-        var b = self.sb()
+    !str type_name(Type* t) {
+        if (is_str(t)) { return "str"; }
+        auto b = this->sb();
         match t.k {
-            .Int => return self.int_name(t)
-            .Float => sprint(&b, "f{t.bits}")?
-            .Bool => return "bool"
-            .Void => return "void"
-            .Null => return "null"
-            .Ptr => sprint(&b, "*{self.type_name(t.elem)?}")?
-            .Slice => sprint(&b, "[]{self.type_name(t.elem)?}")?
-            .Array => sprint(&b, "[{t.len}]{self.type_name(t.elem)?}")?
-            .Strct => return t.si.display
-            .Enm => return t.ei.decl.name
-            .Errun => sprint(&b, "!{self.type_name(t.elem)?}")?
-            .ErrVal => return "error"
+            .Int => return this->int_name(t);
+            .Float => sprint(&b, "f{t.bits}")?;
+            .Bool => return "bool";
+            .Void => return "void";
+            .Null => return "null";
+            .Ptr => sprint(&b, "*{this->type_name(t.elem)?}")?;
+            .Slice => sprint(&b, "[]{this->type_name(t.elem)?}")?;
+            .Array => sprint(&b, "[{t.len}]{this->type_name(t.elem)?}")?;
+            .Strct => return t.si.display;
+            .Enm => return t.ei.decl.name;
+            .Errun => sprint(&b, "!{this->type_name(t.elem)?}")?;
+            .ErrVal => return "error";
             .Func, .Closure => {
-                b.append("fn")?
-                if t.k == .Closure { b.append("[]")? }
-                b.append("(")?
-                for i, p in t.params {
-                    if i > 0 { b.append(", ")? }
-                    b.append(self.type_name(p)?)?
+                b.append("fn")?;
+                if (t.k == .Closure) { b.append("[]")? };
+                b.append("(")?;
+                for (auto [i, p] : t.params) {
+                    if (i > 0) { b.append(", ")?; }
+                    b.append(this->type_name(p)?)?;
                 }
-                b.append(")")?
-                if t.ret.k != .Void { sprint(&b, " {self.type_name(t.ret)?}")? }
+                b.append(")")?;
+                if (t.ret.k != .Void) { sprint(&b, " {this->type_name(t.ret)?}")? };
             }
         }
-        return b.slice()
+        return b.slice();
     }
 
-    fn builtin_type(self, name: str) !*Type {
+    !Type* builtin_type(str name) {
         match name {
-            "i8" => return self.mk_int(8, true)
-            "i16" => return self.mk_int(16, true)
-            "i32" => return self.mk_int(32, true)
-            "i64", "isize" => return self.mk_int(64, true)
-            "u8" => return self.mk_int(8, false)
-            "u16" => return self.mk_int(16, false)
-            "u32" => return self.mk_int(32, false)
-            "u64", "usize" => return self.mk_int(64, false)
+            "i8" => return this->mk_int(8, true);
+            "i16" => return this->mk_int(16, true);
+            "i32" => return this->mk_int(32, true);
+            "i64", "isize" => return this->mk_int(64, true);
+            "u8" => return this->mk_int(8, false);
+            "u16" => return this->mk_int(16, false);
+            "u32" => return this->mk_int(32, false);
+            "u64", "usize" => return this->mk_int(64, false);
             "f32" => {
-                let t = self.mk(.Float)?
-                t.bits = 32
-                return t
+                const auto t = this->mk(.Float)?;
+                t.bits = 32;
+                return t;
             }
-            "f64" => return self.t_f64
-            "bool" => return self.t_bool
-            "void" => return self.t_void
-            "str" => return self.t_str
+            "f64" => return this->t_f64;
+            "bool" => return this->t_bool;
+            "void" => return this->t_void;
+            "str" => return this->t_str;
         }
-        return null
-    }
+        return null;
+    };
 
-    fn resolve_type(self, te: *TypeExpr, env: Env) !*Type {
+    !Type* resolve_type(TypeExpr* te, Env env) {
         match te.k {
-            .Ptr => return self.mk_elem(.Ptr, self.resolve_type(te.elem, env)?)
-            .Slice => return self.mk_elem(.Slice, self.resolve_type(te.elem, env)?)
-            .Errun => return self.mk_elem(.Errun, self.resolve_type(te.elem, env)?)
+            .Ptr => return this->mk_elem(.Ptr, this->resolve_type(te.elem, env)?);
+            .Slice => return this->mk_elem(.Slice, this->resolve_type(te.elem, env)?);
+            .Errun => return this->mk_elem(.Errun, this->resolve_type(te.elem, env)?);
             .Func => {
-                let t = self.mk(.Func)?
-                if te.closure { t.k = .Closure }
-                t.params = List[*Type].init(self.a)
-                for p in te.args { t.params.push(self.resolve_type(p, env)?)? }
-                t.ret = self.t_void
-                if te.ret != null { t.ret = self.resolve_type(te.ret, env)? }
-                return t
+                const auto t = this->mk(.Func)?;
+                if (te.closure) { t.k = .Closure; }
+                t.params = List<Type*>::init(this->a);
+                for (auto p : te.args) { t.params.push(this->resolve_type(p, env)?)?; }
+                t.ret = this->t_void;
+                if (te.ret != null) { t.ret = this->resolve_type(te.ret, env)?; }
+                return t;
             }
             .Array => {
-                let n = self.eval_const(te.len)?
-                if n < 0 { self.err(te.len.line); eprintln("negative array length"); return error.CompileFailed }
-                let t = self.mk_elem(.Array, self.resolve_type(te.elem, env)?)?
-                t.len = n as u64
-                return t
+                const auto n = this->eval_const(te.len)?;
+                if (n < 0) { this->err(te.len.line); eprintln("negative array length"); return error.CompileFailed; }
+                const auto t = this->mk_elem(.Array, this->resolve_type(te.elem, env)?)?;
+                t.len = n as u64;
+                return t;
             }
             .Name => {
-                if te.args.len == 0 {
-                    if env.has(te.name) { return env.get(te.name) }
-                    if self.rtypes.has(te.name) { return self.rtypes.get(te.name) }
-                    let bt = self.builtin_type(te.name)?
-                    if bt != null { return bt }
-                    if self.enums.has(te.name) {
-                        let t = self.mk(.Enm)?
-                        t.ei = self.enums.get(te.name)?
-                        return t
+                if (te.args.len == 0) {
+                    if (env.has(te.name)) { return env.get(te.name); }
+                    if (this->rtypes.has(te.name)) { return this->rtypes.get(te.name); }
+                    const auto bt = this->builtin_type(te.name)?;
+                    if (bt != null) { return bt; }
+                    if (this->enums.has(te.name)) {
+                        const auto t = this->mk(.Enm)?;
+                        t.ei = this->enums.get(te.name)?;
+                        return t;
                     }
-                    if self.aliases.has(te.name) {
-                        let empty = self.new_env()?
-                        return self.resolve_type(self.aliases.get(te.name)?, empty)
+                    if (this->aliases.has(te.name)) {
+                        const auto empty = this->new_env()?;
+                        return this->resolve_type(this->aliases.get(te.name)?, empty);
                     }
                 }
-                if self.structs.has(te.name) {
-                    let sd = self.structs.get(te.name)?
-                    if sd.type_params.len != te.args.len {
-                        self.err(sd.line); eprintln("struct '{te.name}' expects {sd.type_params.len} type argument(s), got {te.args.len}")
-                        return error.CompileFailed
+                if (this->structs.has(te.name)) {
+                    const auto sd = this->structs.get(te.name)?;
+                    if (sd.type_params.len != te.args.len) {
+                        this->err(sd.line); eprintln("struct '{te.name}' expects {sd.type_params.len} type argument(s), got {te.args.len}");
+                        return error.CompileFailed;
                     }
-                    var args = List[*Type].init(self.a)
-                    for x in te.args { args.push(self.resolve_type(x, env)?)? }
-                    self.check_constraints(sd.name, sd.type_params, sd.constraints, args, sd.line)?
-                    let t = self.mk(.Strct)?
-                    t.si = self.get_struct(sd, args)?
-                    return t
+                    auto args = List<Type*>::init(this->a);
+                    for (auto x : te.args) { args.push(this->resolve_type(x, env)?)?; }
+                    this->check_constraints(sd.name, sd.type_params, sd.constraints, args, sd.line)?;
+                    const auto t = this->mk(.Strct)?;
+                    t.si = this->get_struct(sd, args)?;
+                    return t;
                 }
-                self.err(0); eprintln("unknown type '{te.name}'")
-                return error.CompileFailed
+                this->err(0); eprintln("unknown type '{te.name}'");
+                return error.CompileFailed;
             }
         }
-        return error.CompileFailed
-    }
+        return error.CompileFailed;
+    };
 
-    fn get_struct(self, sd: *StructDecl, args: List[*Type]) !*StructInst {
-        var name = self.sb()
-        var disp = self.sb()
-        name.append(sd.name)?
-        disp.append(sd.name)?
-        if args.len > 0 { disp.append("[")? }
-        for i, x in args {
-            sprint(&name, ".{self.mangle(x)?}")?
-            if i > 0 { disp.append(", ")? }
-            disp.append(self.type_name(x)?)?
+    !StructInst* get_struct(StructDecl* sd, List<Type*> args) {
+        auto name = this->sb();
+        auto disp = this->sb();
+        name.append(sd.name)?;
+        disp.append(sd.name)?;
+        if (args.len > 0) { disp.append("[")?; }
+        for (auto [i, x] : args) {
+            sprint(&name, ".{this->mangle(x)?}")?;
+            if (i > 0) { disp.append(", ")?; }
+            disp.append(this->type_name(x)?)?;
         }
-        if args.len > 0 { disp.append("]")? }
-        let key = name.slice()
-        if self.struct_insts.has(key) { return self.struct_insts.get(key) }
-        let inst = self.a.create[StructInst]()?
-        inst.decl = sd
-        inst.args = args
-        inst.llname = key
-        inst.display = disp.slice()
-        inst.fields = List[FieldInfo].init(self.a)
-        self.struct_insts.put(key, inst)?
-        let env = self.new_env()?
-        for i, tp in sd.type_params { env.put(tp, args.get(i))? }
-        for f in sd.fields { inst.fields.push(FieldInfo{ name: f.name, ty: self.resolve_type(f.ty, env)? })? }
-        if sd.is_union {
-            var maxsz: u64 = 0
-            var refs = self.sb()
-            for i, f in inst.fields {
-                maxsz = max(maxsz, self.size_of(f.ty)?)
-                if i > 0 { refs.append(", ")? }
-                sprint(&refs, "ptr {self.str_global(f.name)?}")?
+        if (args.len > 0) { disp.append("]")?; }
+        const auto key = name.slice();
+        if (this->struct_insts.has(key)) { return this->struct_insts.get(key); }
+        const auto inst = this->a.create<StructInst>()?;
+        inst.decl = sd;
+        inst.args = args;
+        inst.llname = key;
+        inst.display = disp.slice();
+        inst.fields = List<FieldInfo>::init(this->a);
+        this->struct_insts.put(key, inst)?;
+        const auto env = this->new_env()?;
+        for (auto [i, tp] : sd.type_params) { env.put(tp, args.get(i))?; }
+        for (auto f : sd.fields) { inst.fields.push(FieldInfo{ .name = f.name, .ty = this->resolve_type(f.ty, env)? })?; }
+        if (sd.is_union) {
+            u64 maxsz = 0;
+            auto refs = this->sb();
+            for (auto [i, f] : inst.fields) {
+                maxsz = max(maxsz, this->size_of(f.ty)?);
+                if (i > 0) { refs.append(", ")?; }
+                sprint(&refs, "ptr {this->str_global(f.name)?}")?;
             }
-            inst.payload_words = (maxsz + 7) / 8
-            var nb = self.sb()
-            sprint(&nb, "@union.{inst.llname}.names")?
-            inst.names_global = nb.slice()
-            sprint(&self.globals_out, "{inst.names_global} = private constant [{inst.fields.len} x ptr] [{refs.slice()}]\n")?
-            sprint(&self.types_out, "%\"{inst.llname}\" = type {{ i32, [{inst.payload_words} x i64] }}\n")?
-            return inst
+            inst.payload_words = (maxsz + 7) / 8;
+            auto nb = this->sb();
+            sprint(&nb, "@union.{inst.llname}.names")?;
+            inst.names_global = nb.slice();
+            sprint(&this->globals_out, "{inst.names_global} = private constant [{inst.fields.len} x ptr] [{refs.slice()}]\n")?;
+            sprint(&this->types_out, "%\"{inst.llname}\" = type {{ i32, [{inst.payload_words} x i64] }}\n")?;
+            return inst;
         }
-        sprint(&self.types_out, "%\"{inst.llname}\" = type {{ ")?
-        for i, f in inst.fields {
-            if i > 0 { self.types_out.append(", ")? }
-            self.types_out.append(self.llty(f.ty)?)?
+        sprint(&this->types_out, "%\"{inst.llname}\" = type {{ ")?;
+        for (auto [i, f] : inst.fields) {
+            if (i > 0) { this->types_out.append(", ")?; }
+            this->types_out.append(this->llty(f.ty)?)?;
         }
-        self.types_out.append(" }\n")?
-        return inst
-    }
+        this->types_out.append(" }\n")?;
+        return inst;
+    };
 
-    fn eval_const(self, e: *Expr) !i64 {
+    !i64 eval_const(Expr* e) {
         match e.k {
-            .IntLit => return e.ival as i64
+            .IntLit => return e.ival as i64;
             .Ident => {
-                if self.consts.has(e.name) {
-                    let c = self.consts.get(e.name)?
-                    if !c.mutable { return self.eval_const(c.value) }
+                if (this->consts.has(e.name)) {
+                    const auto c = this->consts.get(e.name)?;
+                    if (!c.mutable) { return this->eval_const(c.value); }
                 }
-                self.err(e.line); eprintln("'{e.name}' is not a compile-time constant")
-                return error.CompileFailed
+                this->err(e.line); eprintln("'{e.name}' is not a compile-time constant");
+                return error.CompileFailed;
             }
             .Unary => {
-                let v = self.eval_const(e.l)?
-                if e.op == .minus { return 0 - v }
-                if e.op == .tilde { return v ^ -1 }
+                const auto v = this->eval_const(e.l)?;
+                if (e.op == .minus) { return 0 - v; }
+                if (e.op == .tilde) { return v ^ -1; }
             }
             .Binary => {
-                let l = self.eval_const(e.l)?
-                let r = self.eval_const(e.r)?
+                const auto l = this->eval_const(e.l)?;
+                const auto r = this->eval_const(e.r)?;
                 match e.op {
-                    .plus => return l + r
-                    .minus => return l - r
-                    .star => return l * r
+                    .plus => return l + r;
+                    .minus => return l - r;
+                    .star => return l * r;
                     .slash, .percent => {
-                        if r == 0 { self.err(e.line); eprintln("division by zero in constant"); return error.CompileFailed }
-                        if e.op == .slash { return l / r }
-                        return l % r
+                        if (r == 0) { this->err(e.line); eprintln("division by zero in constant"); return error.CompileFailed; }
+                        if (e.op == .slash) { return l / r; }
+                        return l % r;
                     }
-                    .shl => return l << (r & 63)
-                    .shr => return l >> (r & 63)
-                    .amp => return l & r
-                    .pipe => return l | r
-                    .caret => return l ^ r
+                    .shl => return l << (r & 63);
+                    .shr => return l >> (r & 63);
+                    .amp => return l & r;
+                    .pipe => return l | r;
+                    .caret => return l ^ r;
                 }
             }
-            .Sizeof => return self.size_of(self.resolve_type(e.ty, self.env)?)? as i64
-            .Alignof => return self.align_of(self.resolve_type(e.ty, self.env)?)? as i64
+            .Sizeof => return this->size_of(this->resolve_type(e.ty, this->env)?)? as i64;
+            .Alignof => return this->align_of(this->resolve_type(e.ty, this->env)?)? as i64;
         }
-        self.err(e.line); eprintln("expression is not a compile-time constant")
-        return error.CompileFailed
+        this->err(e.line); eprintln("expression is not a compile-time constant");
+        return error.CompileFailed;
     }
 
-    fn size_of(self, t: *Type) !u64 {
+    !u64 size_of(Type* t) {
         match t.k {
-            .Int, .Float => return (t.bits / 8) as u64
-            .Bool => return 1
-            .Void => return 0
-            .Ptr, .Null, .Func => return 8
-            .Slice, .Closure => return 16
-            .Enm, .ErrVal => return 4
-            .Array => return t.len * self.size_of(t.elem)?
+            .Int, .Float => return (t.bits / 8) as u64;
+            .Bool => return 1;
+            .Void => return 0;
+            .Ptr, .Null, .Func => return 8;
+            .Slice, .Closure => return 16;
+            .Enm, .ErrVal => return 4;
+            .Array => return t.len * this->size_of(t.elem)?;
             .Strct => {
-                if t.si.decl.is_union { return 8 + 8 * t.si.payload_words }
-                var off: u64 = 0
-                var maxa: u64 = 1
-                for f in t.si.fields {
-                    let sz = self.size_of(f.ty)?
-                    let al = self.align_of(f.ty)?
-                    maxa = max(maxa, al)
-                    off = (off + al - 1) / al * al + sz
+                if (t.si.decl.is_union) { return 8 + 8 * t.si.payload_words; }
+                u64 off = 0;
+                u64 maxa = 1;
+                for (auto f : t.si.fields) {
+                    const auto sz = this->size_of(f.ty)?;
+                    const auto al = this->align_of(f.ty)?;
+                    maxa = max(maxa, al);
+                    off = (off + al - 1) / al * al + sz;
                 }
-                return (off + maxa - 1) / maxa * maxa
+                return (off + maxa - 1) / maxa * maxa;
             }
             .Errun => {
-                let al = max(4 as u64, self.align_of(t.elem)?)
-                let off = (4 + al - 1) / al * al
-                let total = off + self.size_of(t.elem)?
-                return (total + al - 1) / al * al
+                const auto al = max(4 as u64, this->align_of(t.elem)?);
+                const auto off = (4 + al - 1) / al * al;
+                const auto total = off + this->size_of(t.elem)?;
+                return (total + al - 1) / al * al;
             }
         }
-        return 0
+        return 0;
     }
 
-    fn align_of(self, t: *Type) !u64 {
+    !u64 align_of(Type* t) {
         match t.k {
-            .Array => return self.align_of(t.elem)
+            .Array => return this->align_of(t.elem);
             .Strct => {
-                if t.si.decl.is_union { return 8 }
-                var m: u64 = 1
-                for f in t.si.fields { m = max(m, self.align_of(f.ty)?) }
-                return m
+                if (t.si.decl.is_union) { return 8; }
+                u64 m = 1;
+                for (auto f : t.si.fields) { m = max(m, this->align_of(f.ty)?); }
+                return m;
             }
-            .Slice => return 8
-            .Errun => return max(4 as u64, self.align_of(t.elem)?)
-            .Void => return 1
+            .Slice => return 8;
+            .Errun => return max(4 as u64, this->align_of(t.elem)?);
+            .Void => return 1;
         }
-        return max(1 as u64, self.size_of(t)?)
+        return max(1 as u64, this->size_of(t)?);
     }
 
     // ------------------------------------------------------------------ emission helpers
-    fn str_global(self, bytes: str) !str {
-        self.nstr += 1
-        var nb = self.sb()
-        sprint(&nb, "@.str.{self.nstr}")?
-        let name = nb.slice()
-        sprint(&self.globals_out, "{name} = private unnamed_addr constant [{bytes.len + 1} x i8] c\"")?
-        let w = &self.globals_out
-        for c in bytes {
-            if c >= 0x20 && c < 0x7f && c != '"' && c != '\\' { w.push(c)? } else { sprint(w, "\\{c:02X}")? }
+    !str str_global(str bytes) {
+        this->nstr += 1;
+        auto nb = this->sb();
+        sprint(&nb, "@.str.{this->nstr}")?;
+        const auto name = nb.slice();
+        sprint(&this->globals_out, "{name} = private unnamed_addr constant [{bytes.len + 1} x i8] c\"")?;
+        const auto w = &this->globals_out;
+        for (auto c : bytes) {
+            if (c >= 0x20 && c < 0x7f && c != '"' && c != '\\') { w.push(c)?; } else { sprint(w, "\\{c:02X}")?; }
         }
-        w.append("\\00\"\n")?
-        return name
+        w.append("\\00\"\n")?;
+        return name;
     }
 
-    fn float_const(self, f: f64, bits: i64) !str {
-        var v = f
-        if bits == 32 { v = (f as f32) as f64 }
-        var b = self.sb()
-        sprint(&b, "0x{bits_f64(v):016X}")?
-        return b.slice()
+    !str float_const(f64 f, i64 bits) {
+        auto v = f;
+        if (bits == 32) { v = (f as f32) as f64; }
+        auto b = this->sb();
+        sprint(&b, "0x{bits_f64(v):016X}")?;
+        return b.slice();
     }
 
-    fn tmp(self) !str {
-        self.ntmp += 1
-        var b = self.sb()
-        sprint(&b, "%t{self.ntmp}")?
-        return b.slice()
+    !str tmp() {
+        this->ntmp += 1;
+        auto b = this->sb();
+        sprint(&b, "%t{this->ntmp}")?;
+        return b.slice();
     }
 
-    fn new_label(self, base: str) !str {
-        self.nlbl += 1
-        var b = self.sb()
-        sprint(&b, "{base}{self.nlbl}")?
-        return b.slice()
+    !str new_label(str base) {
+        this->nlbl += 1;
+        auto b = this->sb();
+        sprint(&b, "{base}{this->nlbl}")?;
+        return b.slice();
     }
 
     /// the body buffer, opening a fresh (dead) block if the current one is terminated
-    fn ins(self) !*List[u8] {
-        if self.terminated {
-            let l = self.new_label("dead")?
-            self.label(l)?
+    !List<u8>*ins() {
+        if (this->terminated) {
+            const auto l = this->new_label("dead")?;
+            this->label(l)?;
         }
-        return &self.body
+        return &this->body;
     }
 
-    fn label(self, name: str) !void {
-        if !self.terminated { sprint(&self.body, "  br label %{name}\n")? }
-        sprint(&self.body, "{name}:\n")?
-        self.cur_label = name
-        self.terminated = false
+    !void label(str name) {
+        if (!this->terminated) { sprint(&this->body, "  br label %{name}\n")?; }
+        sprint(&this->body, "{name}:\n")?;
+        this->cur_label = name;
+        this->terminated = false;
     }
 
-    fn br(self, l: str) !void {
-        sprint(self.ins()?, "  br label %{l}\n")?
-        self.terminated = true
+    !void br(str l) {
+        sprint(this->ins()?, "  br label %{l}\n")?;
+        this->terminated = true;
     }
 
-    fn alloca(self, ty: *Type, hint: str) !str {
-        self.ntmp += 1
-        var b = self.sb()
-        sprint(&b, "%v.{hint}.{self.ntmp}")?
-        let name = b.slice()
-        sprint(&self.allocas, "  {name} = alloca {self.llty(ty)?}\n")?
-        return name
+    !str alloca(Type* ty, str hint) {
+        this->ntmp += 1;
+        auto b = this->sb();
+        sprint(&b, "%v.{hint}.{this->ntmp}")?;
+        const auto name = b.slice();
+        sprint(&this->allocas, "  {name} = alloca {this->llty(ty)?}\n")?;
+        return name;
     }
 
-    fn load(self, ty: *Type, ptr: str) !Value {
-        let t = self.tmp()?
-        sprint(self.ins()?, "  {t} = load {self.llty(ty)?}, ptr {ptr}\n")?
-        return Value{ ty: ty, v: t }
+    !Value load(Type* ty, str ptr) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}\n")?;
+        return Value{ .ty = ty, .v = t };
+    };
+
+    !void store(Value v, str ptr) {
+        if (v.ty.k == .Void) { return };
+        sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}\n")?;
     }
 
-    fn store(self, v: Value, ptr: str) !void {
-        if v.ty.k == .Void { return }
-        sprint(self.ins()?, "  store {self.llty(v.ty)?} {v.v}, ptr {ptr}\n")?
+    !void zero_fill(Type* ty, str ptr) {
+        if (ty.k == .Array || ty.k == .Strct) {
+            this->declare("llvm.memset.p0.i64", "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")?;
+            const auto gp = this->tmp()?;
+            sprint(this->ins()?, "  {gp} = getelementptr {this->llty(ty)?}, ptr null, i32 1\n")?;
+            const auto sz = this->tmp()?;
+            sprint(this->ins()?, "  {sz} = ptrtoint ptr {gp} to i64\n")?;
+            sprint(this->ins()?, "  call void @llvm.memset.p0.i64(ptr {ptr}, i8 0, i64 {sz}, i1 false)\n")?;
+            return;
+        };
+        sprint(this->ins()?, "  store {this->llty(ty)?} zeroinitializer, ptr {ptr}\n")?;
     }
 
-    fn zero_fill(self, ty: *Type, ptr: str) !void {
-        if ty.k == .Array || ty.k == .Strct {
-            self.declare("llvm.memset.p0.i64", "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")?
-            let gp = self.tmp()?
-            sprint(self.ins()?, "  {gp} = getelementptr {self.llty(ty)?}, ptr null, i32 1\n")?
-            let sz = self.tmp()?
-            sprint(self.ins()?, "  {sz} = ptrtoint ptr {gp} to i64\n")?
-            sprint(self.ins()?, "  call void @llvm.memset.p0.i64(ptr {ptr}, i8 0, i64 {sz}, i1 false)\n")?
-            return
-        }
-        sprint(self.ins()?, "  store {self.llty(ty)?} zeroinitializer, ptr {ptr}\n")?
+    !Value extract(Value agg, i64 idx, Type* ty) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = extractvalue {this->llty(agg.ty)?} {agg.v}, {idx}\n")?;
+        return Value{ .ty = ty, .v = t };
+    };
+
+    !str insert(Type* agg_ty, str agg, Value v, i64 idx) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = insertvalue {this->llty(agg_ty)?} {agg}, {this->llty(v.ty)?} {v.v}, {idx}\n")?;
+        return t;
     }
 
-    fn extract(self, agg: Value, idx: i64, ty: *Type) !Value {
-        let t = self.tmp()?
-        sprint(self.ins()?, "  {t} = extractvalue {self.llty(agg.ty)?} {agg.v}, {idx}\n")?
-        return Value{ ty: ty, v: t }
+    !str gep_field(Type* agg_ty, str ptr, i64 idx) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = getelementptr {this->llty(agg_ty)?}, ptr {ptr}, i32 0, i32 {idx}\n")?;
+        return t;
     }
 
-    fn insert(self, agg_ty: *Type, agg: str, v: Value, idx: i64) !str {
-        let t = self.tmp()?
-        sprint(self.ins()?, "  {t} = insertvalue {self.llty(agg_ty)?} {agg}, {self.llty(v.ty)?} {v.v}, {idx}\n")?
-        return t
+    !void declare(str name, str text) {
+        if (this->declared.has(name)) { return; }
+        this->declared.put(name, true)?;
+        sprint(&this->decls_out, "{text}\n")?;
     }
 
-    fn gep_field(self, agg_ty: *Type, ptr: str, idx: i64) !str {
-        let t = self.tmp()?
-        sprint(self.ins()?, "  {t} = getelementptr {self.llty(agg_ty)?}, ptr {ptr}, i32 0, i32 {idx}\n")?
-        return t
+    !i64 error_id(str name) {
+        if (this->errors.has(name)) { return this->errors.get(name); }
+        const auto id = this->error_names.len;
+        this->error_names.push(name)?;
+        this->errors.put(name, id)?;
+        return id;
     }
 
-    fn declare(self, name: str, text: str) !void {
-        if self.declared.has(name) { return }
-        self.declared.put(name, true)?
-        sprint(&self.decls_out, "{text}\n")?
-    }
-
-    fn error_id(self, name: str) !i64 {
-        if self.errors.has(name) { return self.errors.get(name) }
-        let id = self.error_names.len
-        self.error_names.push(name)?
-        self.errors.put(name, id)?
-        return id
-    }
-
-    fn num(self, n: i64) !str {
-        var b = self.sb()
-        sprint(&b, "{n}")?
-        return b.slice()
+    !str num(i64 n) {
+        auto b = this->sb();
+        sprint(&b, "{n}")?;
+        return b.slice();
     }
 
     // ------------------------------------------------------------------ scopes
-    fn push_scope(self) !void {
-        self.scopes.push(Scope{ vars: Map[Var].init(self.a), defers: List[Defer].init(self.a) })?
+    !void push_scope() {
+        this->scopes.push(Scope{ .vars = Map<Var>::init(this->a), .defers = List<Defer>::init(this->a) })?;
     }
 
-    fn pop_scope(self) !void {
-        let idx = self.scopes.len - 1
-        if !self.terminated { self.run_defers(idx, idx, false)? }
-        self.scopes.len -= 1
+    !void pop_scope() {
+        const auto idx = this->scopes.len - 1;
+        if (!this->terminated) { this->run_defers(idx, idx, false)?; }
+        this->scopes.len -= 1;
     }
 
     /// run defers of scopes[hi] down to scopes[lo], innermost first
-    fn run_defers(self, hi: i64, lo: i64, is_err: bool) !void {
-        var i = hi + 1
-        while i > lo {
-            i -= 1
-            var j = self.scopes.items[i].defers.len
-            while j > 0 {
-                j -= 1
-                let d = self.scopes.items[i].defers.get(j)
-                if d.is_err && !is_err { continue }
-                self.push_scope()?
-                self.gen_stmt(d.stmt)?
-                self.pop_scope()?
+    !void run_defers(i64 hi, i64 lo, bool is_err) {
+        auto i = hi + 1;
+        while (i > lo) {
+            i -= 1;
+            auto j = this->scopes.items[i].defers.len;
+            while (j > 0) {
+                j -= 1;
+                const auto d = this->scopes.items[i].defers.get(j);
+                if (d.is_err && !is_err) { continue; }
+                this->push_scope()?;
+                this->gen_stmt(d.stmt)?;
+                this->pop_scope()?;
             }
         }
     }
 
-    fn has_err_defers(self) bool {
-        for sc in self.scopes {
-            for d in sc.defers { if d.is_err { return true } }
+    bool has_err_defers() {
+        for (auto sc : this->scopes) {
+            for (auto d : sc.defers) { if (d.is_err) { return true; } }
         }
-        return false
+        return false;
     }
 
-    fn declare_var(self, name: str, v: Var, line: i64) !void {
-        let sc = &self.scopes.items[self.scopes.len - 1]
-        if sc.vars.has(name) { self.err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed }
-        sc.vars.put(name, v)?
+    !void declare_var(str name, Var v, i64 line) {
+        const auto sc = &this->scopes.items[this->scopes.len - 1];
+        if (sc.vars.has(name)) { this->err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed; }
+        sc.vars.put(name, v)?;
     }
 
-    fn lookup_var(self, name: str) !Var {
-        var i = self.scopes.len
-        while i > 0 {
-            i -= 1
-            let sc = &self.scopes.items[i]
-            if sc.vars.has(name) { return sc.vars.get(name) }
+    !Var lookup_var(str name) {
+        auto i = this->scopes.len;
+        while (i > 0) {
+            i -= 1;
+            const auto sc = &this->scopes.items[i];
+            if (sc.vars.has(name)) { return sc.vars.get(name); }
         }
-        return self.globals.get(name)
-    }
+        return this->globals.get(name);
+    };
 
-    fn has_var(self, name: str) bool {
-        var i = self.scopes.len
-        while i > 0 {
-            i -= 1
-            if self.scopes.items[i].vars.has(name) { return true }
+    bool has_var(str name) {
+        auto i = this->scopes.len;
+        while (i > 0) {
+            i -= 1;
+            if (this->scopes.items[i].vars.has(name)) { return true; }
         }
-        return self.globals.has(name)
+        return this->globals.has(name);
     }
 
     // ------------------------------------------------------------------ functions
-    fn inst_fn(self, decl: *FnDecl, env: Env, type_args: List[*Type]) !*FnInst {
-        var name = self.sb()
-        if decl.is_extern || decl.is_export {
-            name.append(decl.name)?
+    !FnInst* inst_fn(FnDecl* decl, Env env, List<Type*> type_args) {
+        auto name = this->sb();
+        if (decl.is_extern || decl.is_export) {
+            name.append(decl.name)?;
         } else {
-            name.append("vb.")?
-            if decl.receiver.len > 0 {
-                name.append(self.mangle(env.get("Self")?)?)?
-                name.append(".")?
+            name.append("vb.")?;
+            if (decl.receiver.len > 0) {
+                name.append(this->mangle(env.get("Self")?)?)?;
+                name.append(".")?;
             }
-            name.append(decl.name)?
-            for x in type_args { sprint(&name, ".{self.mangle(x)?}")? }
+            name.append(decl.name)?;
+            for (auto x : type_args) { sprint(&name, ".{this->mangle(x)?}")?; }
         }
-        let key = name.slice()
-        if self.fn_insts.has(key) { return self.fn_insts.get(key) }
+        const auto key = name.slice();
+        if (this->fn_insts.has(key)) { return this->fn_insts.get(key); }
 
-        let saved_file = self.file
-        self.file = decl.file
-        defer self.file = saved_file
-        var params = List[*Type].init(self.a)
-        for p in decl.params { params.push(self.resolve_type(p.ty, env)?)? }
-        var ret = self.t_void
-        if decl.ret != null { ret = self.resolve_type(decl.ret, env)? }
-        let fi = self.a.create[FnInst]()?
-        *fi = FnInst{ decl: decl, env: env, llname: key, params: params, ret: ret, generated: false, .. }
-        self.fn_insts.put(key, fi)?
-        if decl.is_extern {
-            var txt = self.sb()
-            sprint(&txt, "declare {self.llty(ret)?} @{decl.name}(")?
-            for i, p in params {
-                if i > 0 { txt.append(", ")? }
-                txt.append(self.llty(p)?)?
+        const auto saved_file = this->file;
+        this->file = decl.file;
+        defer this->file = saved_file;
+        auto params = List<Type*>::init(this->a);
+        for (auto p : decl.params) { params.push(this->resolve_type(p.ty, env)?)?; }
+        auto ret = this->t_void;
+        if (decl.ret != null) { ret = this->resolve_type(decl.ret, env)?; }
+        const auto fi = this->a.create<FnInst>()?;
+        *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };
+        this->fn_insts.put(key, fi)?;
+        if (decl.is_extern) {
+            auto txt = this->sb();
+            sprint(&txt, "declare {this->llty(ret)?} @{decl.name}(")?;
+            for (auto [i, p] : params) {
+                if (i > 0) { txt.append(", ")?; }
+                txt.append(this->llty(p)?)?;
             }
-            if decl.variadic {
-                if params.len > 0 { txt.append(", ...")? } else { txt.append("...")? }
+            if (decl.variadic) {
+                if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
             }
-            txt.append(")")?
-            self.declare(decl.name, txt.slice())?
+            txt.append(")")?;
+            this->declare(decl.name, txt.slice())?;
         } else {
-            self.pending.push(fi)?
+            this->pending.push(fi)?;
         }
-        return fi
-    }
+        return fi;
+    };
 
-    fn no_types(self) List[*Type] { return List[*Type].init(self.a) }
+    List<Type*> no_types() { return List<Type*>::init(this->a); }
 
-    fn generate_check(self, root: str) !void {
-        for c in self.const_order {
-            if c.mutable { self.emit_global_var(c) catch self.flush_diag() }
+    !void generate_check(str root) {
+        for (auto c : this->const_order) {
+            if (c.mutable) { this->emit_global_var(c) catch this->flush_diag(); }
         }
-        for f in self.fn_order {
-            if f.file != root || f.type_params.len > 0 || f.is_extern || f.body == null { continue }
-            _ = self.inst_fn(f, self.new_env()?, self.no_types()) catch {
-                self.flush_diag()
-                continue
+        for (auto f : this->fn_order) {
+            if (f.file != root || f.type_params.len > 0 || f.is_extern || f.body == null) { continue; }
+            _ = this->inst_fn(f, this->new_env()?, this->no_types()) catch {
+                this->flush_diag();
+                continue;
             }
         }
-        for f in self.tests {
-            _ = self.inst_fn(f, self.new_env()?, self.no_types()) catch {
-                self.flush_diag()
-                continue
+        for (auto f : this->tests) {
+            _ = this->inst_fn(f, this->new_env()?, this->no_types()) catch {
+                this->flush_diag();
+                continue;
             }
         }
-        for e in self.methods.entries {
-            if !e.used { continue }
-            let m = e.value
-            if m.file != root || m.type_params.len > 0 || m.receiver_params.len > 0 || m.body == null { continue }
-            let te = self.a.create[TypeExpr]()?
-            te.k = .Name
-            te.name = m.receiver
-            te.args = List[*TypeExpr].init(self.a)
-            let t = self.resolve_type(te, self.new_env()?) catch {
-                self.flush_diag()
-                continue
+        for (auto e : this->methods.entries) {
+            if (!e.used) { continue; }
+            const auto m = e.value;
+            if (m.file != root || m.type_params.len > 0 || m.receiver_params.len > 0 || m.body == null) { continue; }
+            const auto te = this->a.create<TypeExpr>()?;
+            te.k = .Name;
+            te.name = m.receiver;
+            te.args = List<TypeExpr*>::init(this->a);
+            const auto t = this->resolve_type(te, this->new_env()?) catch {
+                this->flush_diag();
+                continue;
             }
-            let env = self.recv_env(m, t) catch {
-                self.flush_diag()
-                continue
+            const auto env = this->recv_env(m, t) catch {
+                this->flush_diag();
+                continue;
             }
-            _ = self.inst_fn(m, env, self.no_types()) catch {
-                self.flush_diag()
-                continue
+            _ = this->inst_fn(m, env, this->no_types()) catch {
+                this->flush_diag();
+                continue;
             }
         }
-        while self.pending.len > 0 {
-            let fi = self.pending.pop()?
-            if fi.generated { continue }
-            fi.generated = true
-            self.gen_function(fi) catch self.flush_diag()
+        while (this->pending.len > 0) {
+            const auto fi = this->pending.pop()?;
+            if (fi.generated) { continue; }
+            fi.generated = true;
+            this->gen_function(fi) catch this->flush_diag();
         }
     }
 
-    fn generate(self) !void {
-        for c in self.const_order { if c.mutable { self.emit_global_var(c)? } }
-        var main_inst: *FnInst = null
-        var test_insts = List[*FnInst].init(self.a)
-        if self.test_mode {
-            for f in self.tests { test_insts.push(self.inst_fn(f, self.new_env()?, self.no_types())?)? }
-        } else if self.fns.has("main") {
-            let m = self.fns.get("main")?
-            if m.type_params.len > 0 || m.params.len > 0 { self.err(m.line); eprintln("main takes no parameters"); return error.CompileFailed }
-            main_inst = self.inst_fn(m, self.new_env()?, self.no_types())?
+    !void generate() {
+        for (auto c : this->const_order) { if (c.mutable) { this->emit_global_var(c)?; } }
+        FnInst* main_inst = null;
+        auto test_insts = List<FnInst*>::init(this->a);
+        if (this->test_mode) {
+            for (auto f : this->tests) { test_insts.push(this->inst_fn(f, this->new_env()?, this->no_types())?)?; }
+        } else if (this->fns.has("main")) {
+            const auto m = this->fns.get("main")?;
+            if (m.type_params.len > 0 || m.params.len > 0) { this->err(m.line); eprintln("main takes no parameters"); return error.CompileFailed; }
+            main_inst = this->inst_fn(m, this->new_env()?, this->no_types())?;
         }
-        for f in self.fn_order { if f.is_export { _ = self.inst_fn(f, self.new_env()?, self.no_types())? } }
-        while self.pending.len > 0 {
-            let fi = self.pending.pop()?
-            if fi.generated { continue }
-            fi.generated = true
-            self.gen_function(fi)?
+        for (auto f : this->fn_order) { if (f.is_export) { _ = this->inst_fn(f, this->new_env()?, this->no_types())?; } }
+        while (this->pending.len > 0) {
+            const auto fi = this->pending.pop()?;
+            if (fi.generated) { continue; }
+            fi.generated = true;
+            this->gen_function(fi)?;
         }
-        if self.test_mode {
-            self.gen_test_main(test_insts)?
-        } else if main_inst != null {
-            self.gen_main_wrapper(main_inst)?
+        if (this->test_mode) {
+            this->gen_test_main(test_insts)?;
+        } else if (main_inst != null) {
+            this->gen_main_wrapper(main_inst)?;
         }
-        var refs = self.sb()
-        for i, n in self.error_names {
-            let s = self.str_global(n)?
-            if i > 0 { refs.append(", ")? }
-            sprint(&refs, "ptr {s}")?
+        auto refs = this->sb();
+        for (auto [i, n] : this->error_names) {
+            const auto s = this->str_global(n)?;
+            if (i > 0) { refs.append(", ")?; }
+            sprint(&refs, "ptr {s}")?;
         }
-        sprint(&self.globals_out, "@__vibe_errnames = private constant [{self.error_names.len} x ptr] [{refs.slice()}]\n")?
-        var lens = self.sb()
-        for i, n in self.error_names {
-            if i > 0 { lens.append(", ")? }
-            sprint(&lens, "i64 {n.len}")?
+        sprint(&this->globals_out, "@__vibe_errnames = private constant [{this->error_names.len} x ptr] [{refs.slice()}]\n")?;
+        auto lens = this->sb();
+        for (auto [i, n] : this->error_names) {
+            if (i > 0) { lens.append(", ")?; }
+            sprint(&lens, "i64 {n.len}")?;
         }
-        sprint(&self.globals_out, "@__vibe_errlens = private constant [{self.error_names.len} x i64] [{lens.slice()}]\n")?
+        sprint(&this->globals_out, "@__vibe_errlens = private constant [{this->error_names.len} x i64] [{lens.slice()}]\n")?;
     }
 
-    fn output(self, out: *List[u8]) !void {
-        out.append("; generated by vibe (self-hosted)\n")?
-        out.append(self.types_out.slice())?
-        out.append("\n")?
-        out.append(self.globals_out.slice())?
-        out.append("\n")?
-        out.append(self.decls_out.slice())?
-        out.append("\n")?
-        out.append(self.funcs_out.slice())?
+    !void output(List<u8>*out) {
+        out.append("; generated by vibe (self-hosted)\n")?;
+        out.append(this->types_out.slice())?;
+        out.append("\n")?;
+        out.append(this->globals_out.slice())?;
+        out.append("\n")?;
+        out.append(this->decls_out.slice())?;
+        out.append("\n")?;
+        out.append(this->funcs_out.slice())?;
     }
 
-    fn gen_test_main(self, insts: List[*FnInst]) !void {
-        let w = &self.funcs_out
-        self.declare("atoi", "declare i32 @atoi(ptr)")?
-        self.declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?
-        self.declare("fflush", "declare i32 @fflush(ptr)")?
-        let f = self.str_global("error: %s\n")?
-        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?
-        w.append("  %has = icmp sgt i32 %argc, 1\n  br i1 %has, label %go, label %none\nnone:\n  ret i32 2\ngo:\n")?
-        w.append("  %ap = getelementptr ptr, ptr %argv, i64 1\n  %as = load ptr, ptr %ap\n  %i = call i32 @atoi(ptr %as)\n  br label %c0\n")?
-        for k, fi in insts {
-            sprint(w, "c{k}:\n  %k{k} = icmp eq i32 %i, {k}\n  br i1 %k{k}, label %t{k}, label %c{k + 1}\n")?
-            sprint(w, "t{k}:\n  %r{k} = call {{ i32 }} @{fi.llname}()\n  %g{k} = extractvalue {{ i32 }} %r{k}, 0\n")?
-            sprint(w, "  %b{k} = icmp ne i32 %g{k}, 0\n  br i1 %b{k}, label %e{k}, label %o{k}\no{k}:\n  ret i32 0\ne{k}:\n  call i32 @fflush(ptr null)\n")?
-            sprint(w, "  %np{k} = getelementptr ptr, ptr @__vibe_errnames, i32 %g{k}\n  %n{k} = load ptr, ptr %np{k}\n")?
-            sprint(w, "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n{k})\n  ret i32 1\n")?
+    !void gen_test_main(List<FnInst*> insts) {
+        const auto w = &this->funcs_out;
+        this->declare("atoi", "declare i32 @atoi(ptr)")?;
+        this->declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?;
+        this->declare("fflush", "declare i32 @fflush(ptr)")?;
+        const auto f = this->str_global("error: %s\n")?;
+        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?;
+        w.append("  %has = icmp sgt i32 %argc, 1\n  br i1 %has, label %go, label %none\nnone:\n  ret i32 2\ngo:\n")?;
+        w.append("  %ap = getelementptr ptr, ptr %argv, i64 1\n  %as = load ptr, ptr %ap\n  %i = call i32 @atoi(ptr %as)\n  br label %c0\n")?;
+        for (auto [k, fi] : insts) {
+            sprint(w, "c{k}:\n  %k{k} = icmp eq i32 %i, {k}\n  br i1 %k{k}, label %t{k}, label %c{k + 1}\n")?;
+            sprint(w, "t{k}:\n  %r{k} = call {{ i32 }} @{fi.llname}()\n  %g{k} = extractvalue {{ i32 }} %r{k}, 0\n")?;
+            sprint(w, "  %b{k} = icmp ne i32 %g{k}, 0\n  br i1 %b{k}, label %e{k}, label %o{k}\no{k}:\n  ret i32 0\ne{k}:\n  call i32 @fflush(ptr null)\n")?;
+            sprint(w, "  %np{k} = getelementptr ptr, ptr @__vibe_errnames, i32 %g{k}\n  %n{k} = load ptr, ptr %np{k}\n")?;
+            sprint(w, "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n{k})\n  ret i32 1\n")?;
         }
-        sprint(w, "c{insts.len}:\n  ret i32 2\n}}\n")?
+        sprint(w, "c{insts.len}:\n  ret i32 2\n}}\n")?;
     }
 
-    fn gen_main_wrapper(self, mi: *FnInst) !void {
-        let w = &self.funcs_out
-        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?
-        if self.globals.has("__argc") {
-            w.append("  %argc64 = sext i32 %argc to i64\n  store i64 %argc64, ptr @g.__argc\n  store ptr %argv, ptr @g.__argv\n")?
+    !void gen_main_wrapper(FnInst* mi) {
+        const auto w = &this->funcs_out;
+        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?;
+        if (this->globals.has("__argc")) {
+            w.append("  %argc64 = sext i32 %argc to i64\n  store i64 %argc64, ptr @g.__argc\n  store ptr %argv, ptr @g.__argv\n")?;
         }
-        let rt = mi.ret
-        if rt.k == .Void {
-            sprint(w, "  call void @{mi.llname}()\n  ret i32 0\n")?
-        } else if rt.k == .Int {
-            sprint(w, "  %r = call {self.llty(rt)?} @{mi.llname}()\n")?
-            if rt.bits == 32 {
-                w.append("  ret i32 %r\n")?
-            } else if rt.bits > 32 {
-                w.append("  %r2 = trunc i64 %r to i32\n  ret i32 %r2\n")?
+        const auto rt = mi.ret;
+        if (rt.k == .Void) {
+            sprint(w, "  call void @{mi.llname}()\n  ret i32 0\n")?;
+        } else if (rt.k == .Int) {
+            sprint(w, "  %r = call {this->llty(rt)?} @{mi.llname}()\n")?;
+            if (rt.bits == 32) {
+                w.append("  ret i32 %r\n")?;
+            } else if (rt.bits > 32) {
+                w.append("  %r2 = trunc i64 %r to i32\n  ret i32 %r2\n")?;
             } else {
-                sprint(w, "  %r2 = zext i{rt.bits} %r to i32\n  ret i32 %r2\n")?
+                sprint(w, "  %r2 = zext i{rt.bits} %r to i32\n  ret i32 %r2\n")?;
             }
-        } else if rt.k == .Errun && rt.elem.k == .Void {
-            self.declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?
-            self.declare("fflush", "declare i32 @fflush(ptr)")?
-            let f = self.str_global("error: %s\n")?
-            sprint(w, "  %r = call {{ i32 }} @{mi.llname}()\n  %tag = extractvalue {{ i32 }} %r, 0\n  %bad = icmp ne i32 %tag, 0\n  br i1 %bad, label %err, label %ok\nok:\n  ret i32 0\nerr:\n  call i32 @fflush(ptr null)\n")?
-            sprint(w, "  %np = getelementptr ptr, ptr @__vibe_errnames, i32 %tag\n  %n = load ptr, ptr %np\n  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n)\n  ret i32 1\n")?
+        } else if (rt.k == .Errun && rt.elem.k == .Void) {
+            this->declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?;
+            this->declare("fflush", "declare i32 @fflush(ptr)")?;
+            const auto f = this->str_global("error: %s\n")?;
+            sprint(w, "  %r = call {{ i32 }} @{mi.llname}()\n  %tag = extractvalue {{ i32 }} %r, 0\n  %bad = icmp ne i32 %tag, 0\n  br i1 %bad, label %err, label %ok\nok:\n  ret i32 0\nerr:\n  call i32 @fflush(ptr null)\n")?;
+            sprint(w, "  %np = getelementptr ptr, ptr @__vibe_errnames, i32 %tag\n  %n = load ptr, ptr %np\n  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n)\n  ret i32 1\n")?;
         } else {
-            self.err(mi.decl.line); eprintln("main must return void, an integer, or !void")
-            return error.CompileFailed
+            this->err(mi.decl.line); eprintln("main must return void, an integer, or !void");
+            return error.CompileFailed;
         }
-        w.append("}\n")?
+        w.append("}\n")?;
     }
 
-    fn gen_function(self, fi: *FnInst) !void {
-        let decl = fi.decl
-        self.file = decl.file
-        self.body = self.sb()
-        self.allocas = self.sb()
-        self.scopes = List[Scope].init(self.a)
-        self.loops = List[Loop].init(self.a)
-        self.ntmp = 0
-        self.nlbl = 0
-        self.terminated = false
-        self.cur_label = "entry"
-        self.cur = fi
-        self.env = fi.env
+    !void gen_function(FnInst* fi) {
+        const auto decl = fi.decl;
+        this->file = decl.file;
+        this->body = this->sb();
+        this->allocas = this->sb();
+        this->scopes = List<Scope>::init(this->a);
+        this->loops = List<Loop>::init(this->a);
+        this->ntmp = 0;
+        this->nlbl = 0;
+        this->terminated = false;
+        this->cur_label = "entry";
+        this->cur = fi;
+        this->env = fi.env;
 
-        self.push_scope()?
-        var hdr = self.sb()
-        var linkage = "internal "
-        if decl.is_export || fi.llname == "vb.main" { linkage = "" }
-        sprint(&hdr, "define {linkage}{self.llty(fi.ret)?} @{fi.llname}(")?
-        if fi.is_closure { hdr.append("ptr %ctx")? }
-        for i, p in decl.params {
-            let pt = fi.params.get(i)
-            if i > 0 || fi.is_closure { hdr.append(", ")? }
-            sprint(&hdr, "{self.llty(pt)?} %a.{i}")?
-            let slot = self.alloca(pt, p.name)?
-            var an = self.sb()
-            sprint(&an, "%a.{i}")?
-            self.store(Value{ ty: pt, v: an.slice() }, slot)?
-            self.declare_var(p.name, Var{ ptr: slot, ty: pt, mutable: p.mutable }, decl.line)?
+        this->push_scope()?;
+        auto hdr = this->sb();
+        auto linkage = "internal ";
+        if (decl.is_export || fi.llname == "vb.main") { linkage = ""; }
+        sprint(&hdr, "define {linkage}{this->llty(fi.ret)?} @{fi.llname}(")?;
+        if (fi.is_closure) { hdr.append("ptr %ctx")?; }
+        for (auto [i, p] : decl.params) {
+            const auto pt = fi.params.get(i);
+            if (i > 0 || fi.is_closure) { hdr.append(", ")?; }
+            sprint(&hdr, "{this->llty(pt)?} %a.{i}")?;
+            const auto slot = this->alloca(pt, p.name)?;
+            auto an = this->sb();
+            sprint(&an, "%a.{i}")?;
+            this->store(Value{ .ty = pt, .v = an.slice() }, slot)?;
+            this->declare_var(p.name, Var{ .ptr = slot, .ty = pt, .mutable = p.mutable }, decl.line)?;
         }
-        hdr.append(") {{\n")?
-        for i, cap in fi.caps {
-            let cp = self.tmp()?
-            sprint(self.ins()?, "  {cp} = getelementptr ptr, ptr %ctx, i64 {i}\n")?
-            let pv = self.load(self.t_ptr_u8, cp)?
-            self.declare_var(cap.name, Var{ ptr: pv.v, ty: cap.ty, mutable: cap.mutable }, decl.line)?
+        hdr.append(") {{\n")?;
+        for (auto [i, cap] : fi.caps) {
+            const auto cp = this->tmp()?;
+            sprint(this->ins()?, "  {cp} = getelementptr ptr, ptr %ctx, i64 {i}\n")?;
+            const auto pv = this->load(this->t_ptr_u8, cp)?;
+            this->declare_var(cap.name, Var{ .ptr = pv.v, .ty = cap.ty, .mutable = cap.mutable }, decl.line)?;
         }
 
-        self.gen_stmt(decl.body)?
-        if !self.terminated {
-            self.run_defers(self.scopes.len - 1, 0, false)?
-            if fi.ret.k == .Void {
-                sprint(self.ins()?, "  ret void\n")?
-            } else if fi.ret.k == .Errun && fi.ret.elem.k == .Void {
-                sprint(self.ins()?, "  ret {{ i32 }} zeroinitializer\n")?
+        this->gen_stmt(decl.body)?;
+        if (!this->terminated) {
+            this->run_defers(this->scopes.len - 1, 0, false)?;
+            if (fi.ret.k == .Void) {
+                sprint(this->ins()?, "  ret void\n")?;
+            } else if (fi.ret.k == .Errun && fi.ret.elem.k == .Void) {
+                sprint(this->ins()?, "  ret {{ i32 }} zeroinitializer\n")?;
             } else {
-                sprint(self.ins()?, "  unreachable\n")?
+                sprint(this->ins()?, "  unreachable\n")?;
             }
-            self.terminated = true
+            this->terminated = true;
         }
-        self.scopes.len -= 1
+        this->scopes.len -= 1;
 
-        let w = &self.funcs_out
-        w.append(hdr.slice())?
-        w.append("entry:\n")?
-        w.append(self.allocas.slice())?
-        w.append(self.body.slice())?
-        w.append("}\n\n")?
+        const auto w = &this->funcs_out;
+        w.append(hdr.slice())?;
+        w.append("entry:\n")?;
+        w.append(this->allocas.slice())?;
+        w.append(this->body.slice())?;
+        w.append("}\n\n")?;
     }
+}
+
+!Gen* new_gen(Allocator a, bool safety) {
+    const auto g = a.create<Gen>()?;
+    g.a = a;
+    g.safety = safety;
+    g.fns = Map<FnDecl*>::init(a);
+    g.methods = Map<FnDecl*>::init(a);
+    g.structs = Map<StructDecl*>::init(a);
+    g.enums = Map<EnumInfo*>::init(a);
+    g.consts = Map<ConstDecl*>::init(a);
+    g.aliases = Map<TypeExpr*>::init(a);
+    g.globals = Map<Var>::init(a);
+    g.fn_order = List<FnDecl*>::init(a);
+    g.const_order = List<ConstDecl*>::init(a);
+    g.struct_insts = Map<StructInst*>::init(a);
+    g.fn_insts = Map<FnInst*>::init(a);
+    g.pending = List<FnInst*>::init(a);
+    g.tests = List<FnDecl*>::init(a);
+    g.declared = Map<bool>::init(a);
+    g.errors = Map<i64>::init(a);
+    g.error_names = List<str>::init(a);
+    g.pre_vals = List<Value>::init(a);
+    g.thunks = Map<i64>::init(a);
+    g.rtypes = Map<Type*>::init(a);
+    g.types_out = List<u8>::init(a);
+    g.globals_out = List<u8>::init(a);
+    g.decls_out = List<u8>::init(a);
+    g.funcs_out = List<u8>::init(a);
+    g.body = List<u8>::init(a);
+    g.allocas = List<u8>::init(a);
+    g.scopes = List<Scope>::init(a);
+    g.loops = List<Loop>::init(a);
+    g.env = g.new_env()?;
+    g.cur_label = "entry";
+    g.t_i64 = g.mk_int(64, true)?;
+    g.t_i32 = g.mk_int(32, true)?;
+    g.t_u64 = g.mk_int(64, false)?;
+    g.t_u8 = g.mk_int(8, false)?;
+    g.t_f64 = g.mk(.Float)?;
+    g.t_f64.bits = 64;
+    g.t_bool = g.mk(.Bool)?;
+    g.t_void = g.mk(.Void)?;
+    g.t_str = g.mk_elem(.Slice, g.t_u8)?;
+    g.t_errval = g.mk(.ErrVal)?;
+    g.t_null = g.mk(.Null)?;
+    g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?;
+    g.error_names.push("ok")?;
+    return g;
+};
+
+// ------------------------------------------------------------------ type predicates
+
+bool type_eq(Type* a, Type* b) {
+    if (a == b) { return true; }
+    if (a.k != b.k) { return false; }
+    match a.k {
+        .Int => return a.bits == b.bits && a.signed == b.signed;
+        .Float => return a.bits == b.bits;
+        .Ptr, .Slice, .Errun => return type_eq(a.elem, b.elem);
+        .Array => return a.len == b.len && type_eq(a.elem, b.elem);
+        .Strct => return a.si == b.si;
+        .Enm => return a.ei == b.ei;
+        .Func, .Closure => {
+            if (a.params.len != b.params.len || !type_eq(a.ret, b.ret)) { return false; }
+            for (auto i : 0..a.params.len) { if (!type_eq(a.params.get(i), b.params.get(i))) { return false; } }
+            return true;
+        }
+    }
+    return true;
+}
+
+bool is_str(Type* t) { return t.k == .Slice && t.elem.k == .Int && t.elem.bits == 8 && !t.elem.signed; }
+bool is_union(Type* t) { return t.k == .Strct && t.si.decl.is_union; }
+
+i64 field_index(StructInst* si, str name) {
+    for (auto [i, f] : si.fields) { if (f.name == name) { return i; } }
+    return -1;
+}
+
+bool contains_str(List<str> list, str s) {
+    for (auto x : list) { if (x == s) { return true; } }
+    return false;
 }

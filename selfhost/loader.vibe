@@ -1,71 +1,69 @@
 // Loads a program: the prelude, a root file and everything it imports.
 
-import "gen_fmt.vibe"
-import "resolve.vibe"
+import "gen_fmt.vibe";
+import "resolve.vibe";
 
-const PRELUDE = embed("../std/std.vibe")
+const auto PRELUDE = embed("../std/std.vibe");
 
-extern fn realpath(path: *u8, resolved: *u8) *u8
+extern u8* realpath(u8* path, u8* resolved);
 
 struct Loader {
-    a: Allocator
-    g: *Gen
-    seen: Map[str]
-    prefixes: Map[str]
-    overrides: Map[str]
-}
+    Allocator a;
+    Gen* g;
+    Map<str> seen;
+    Map<str> prefixes;
+    Map<str> overrides;
 
-fn canonical(a: Allocator, path: str) !str {
-    var pbuf: [4096]u8
-    var out: [4096]u8
-    let r = realpath(to_cstr(pbuf[..], path)?, out.ptr)
-    if r == null { return a.dup(path) }
-    return a.dup(cstr(r))
-}
-
-fn join_path(a: Allocator, dir: str, rel: str) !str {
-    if rel.len > 0 && rel[0] == '/' { return rel }
-    var b = List[u8].init(a)
-    sprint(&b, "{dir}/{rel}")?
-    return b.slice()
-}
-
-impl Loader {
-    fn load_source(self, src: str, path: str, prefix: str) !void {
-        var toks = tokenize(self.a, src, path)?
-        var p = new_parser(self.a, toks.slice(), path)
-        let decls = p.parse_file()?
-        let dir = dir_of(path)
-        for d in decls {
-            if d.k == .Import { self.load_file(canonical(self.a, join_path(self.a, dir, d.path)?)?, d.alias)? }
+    !void load_source(str src, str path, str prefix) {
+        auto toks = tokenize(this->a, src, path)?;
+        auto p = new_parser(this->a, toks.slice(), path);
+        const auto decls = p.parse_file()?;
+        const auto dir = dir_of(path);
+        for (auto d : decls) {
+            if (d.k == .Import) { this->load_file(canonical(this->a, join_path(this->a, dir, d.path)?)?, d.alias)? };
         }
-        if prefix.len > 0 { resolve_module(self.a, decls, prefix)? }
-        self.g.add_decls(decls, path)?
+        if (prefix.len > 0) { resolve_module(this->a, decls, prefix)?; }
+        this->g.add_decls(decls, path)?;
     }
 
-    fn load_file(self, path: str, prefix: str) !void {
-        if self.seen.has(path) {
-            let old = self.seen.get(path)?
-            if old != prefix {
-                eprintln("error: '{path}' is imported both as '{old}' and as '{prefix}'; use the same name everywhere")
-                return error.CompileFailed
+    !void load_file(str path, str prefix) {
+        if (this->seen.has(path)) {
+            const auto old = this->seen.get(path)?;
+            if (old != prefix) {
+                eprintln("error: '{path}' is imported both as '{old}' and as '{prefix}'; use the same name everywhere");
+                return error.CompileFailed;
             }
-            return
+            return;
         }
-        if prefix.len > 0 && self.prefixes.has(prefix) {
-            eprintln("error: the name '{prefix}' is already used for '{self.prefixes.get(prefix)?}'; pick another name for '{path}'")
-            return error.CompileFailed
+        if (prefix.len > 0 && this->prefixes.has(prefix)) {
+            eprintln("error: the name '{prefix}' is already used for '{this->prefixes.get(prefix)?}'; pick another name for '{path}'");
+            return error.CompileFailed;
         }
-        self.seen.put(path, prefix)?
-        if prefix.len > 0 { self.prefixes.put(prefix, path)? }
-        if self.overrides.has(path) {
-            self.load_source(self.overrides.get(path)?, path, prefix)?
-            return
+        this->seen.put(path, prefix)?;
+        if (prefix.len > 0) { this->prefixes.put(prefix, path)?; }
+        if (this->overrides.has(path)) {
+            this->load_source(this->overrides.get(path)?, path, prefix)?;
+            return;
         }
-        let src = read_file(self.a, path) catch |e| {
-            eprintln("error: cannot read '{path}': {e}")
-            return error.CompileFailed
+        const auto src = read_file(this->a, path) catch |e| {
+            eprintln("error: cannot read '{path}': {e}");
+            return error.CompileFailed;
         }
-        self.load_source(src, path, prefix)?
+        this->load_source(src, path, prefix)?;
     }
+}
+
+!str canonical(Allocator a, str path) {
+    u8[4096] pbuf;
+    u8[4096] out;
+    const auto r = realpath(to_cstr(pbuf[..], path)?, out.ptr);
+    if (r == null) { return a.dup(path); }
+    return a.dup(cstr(r));
+}
+
+!str join_path(Allocator a, str dir, str rel) {
+    if (rel.len > 0 && rel[0] == '/') { return rel; }
+    auto b = List<u8>::init(a);
+    sprint(&b, "{dir}/{rel}")?;
+    return b.slice();
 }

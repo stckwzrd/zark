@@ -1,13 +1,13 @@
 // vibe — the self-hosted compiler driver.
 
-import "gen_fmt.vibe"
-import "native.vibe"
-import "resolve.vibe"
-import "fmt.vibe"
-import "loader.vibe"
-import "lsp.vibe"
+import "gen_fmt.vibe";
+import "native.vibe";
+import "resolve.vibe";
+import "fmt.vibe";
+import "loader.vibe";
+import "lsp.vibe";
 
-fn usage() {
+void usage() {
     eprintln("vibe 0.4 (self-hosted) — a compact systems language (LLVM backend)
 
 usage:
@@ -18,277 +18,277 @@ usage:
   vibe lsp                          language server on stdin/stdout
   vibe ir    <file.vibe>            print LLVM IR to stdout
   vibe tokens <file.vibe ...>       dump tokens
-")
+");
 }
 
-fn stem_of(path: str) str {
-    var s = path
-    let slash = str_rfind_byte(s, '/')
-    if slash >= 0 { s = s[slash + 1..] }
-    let dot = str_rfind_byte(s, '.')
-    if dot > 0 { s = s[0..dot] }
-    return s
+str stem_of(str path) {
+    auto s = path;
+    const auto slash = str_rfind_byte(s, '/');
+    if (slash >= 0) { s = s[slash + 1..]; }
+    const auto dot = str_rfind_byte(s, '.');
+    if (dot > 0) { s = s[0..dot]; }
+    return s;
 }
 
-fn base_of(path: str) str {
-    let slash = str_rfind_byte(path, '/')
-    if slash >= 0 { return path[slash + 1..] }
-    return path
+str base_of(str path) {
+    const auto slash = str_rfind_byte(path, '/');
+    if (slash >= 0) { return path[slash + 1..]; }
+    return path;
 }
 
-fn run_tests(a: Allocator, exe: str, tests: List[*FnDecl]) !i32 {
-    var passed = 0
-    var failed = 0
-    let out_path = ".vibe-cache/test.out"
-    for i, t in tests {
-        var cmd = List[u8].init(a)
-        sprint(&cmd, "{exe} {i} > {out_path} 2>&1")?
-        let code = run(a, ["/bin/sh", "-c", cmd.slice()])?
-        if code == 0 {
-            passed += 1
-            println("ok   {t.test_name}")
-            continue
+!i32 run_tests(Allocator a, str exe, List<FnDecl*> tests) {
+    auto passed = 0;
+    auto failed = 0;
+    const auto out_path = ".vibe-cache/test.out";
+    for (auto [i, t] : tests) {
+        auto cmd = List<u8>::init(a);
+        sprint(&cmd, "{exe} {i} > {out_path} 2>&1")?;
+        const auto code = run(a, ["/bin/sh", "-c", cmd.slice()])?;
+        if (code == 0) {
+            passed += 1;
+            println("ok   {t.test_name}");
+            continue;
         }
-        failed += 1
-        println("FAIL {t.test_name}")
-        let out = read_file(a, out_path) catch ""
-        var start = 0
-        for j, ch in out {
-            if ch == '\n' {
-                println("     {out[start..j]}")
-                start = j + 1
+        failed += 1;
+        println("FAIL {t.test_name}");
+        const auto out = read_file(a, out_path) catch "";
+        auto start = 0;
+        for (auto [j, ch] : out) {
+            if (ch == '\n') {
+                println("     {out[start..j]}");
+                start = j + 1;
             }
         }
-        if start < out.len { println("     {out[start..]}") }
+        if (start < out.len) { println("     {out[start..]}"); }
     }
-    println("{passed} passed, {failed} failed")
-    if failed > 0 { return 1 }
-    return 0
+    println("{passed} passed, {failed} failed");
+    if (failed > 0) { return 1; }
+    return 0;
 }
 
-fn run_fmt(a: Allocator) !i32 {
-    var check = false
-    var changed = 0
-    for k in 2..arg_count() {
-        let path = arg(k)
-        if path == "--check" {
-            check = true
-            continue
+!i32 run_fmt(Allocator a) {
+    auto check = false;
+    auto changed = 0;
+    for (auto k : 2..arg_count()) {
+        const auto path = arg(k);
+        if (path == "--check") {
+            check = true;
+            continue;
         }
-        let src = read_file(a, path) catch |e| {
-            eprintln("error: cannot read '{path}': {e}")
-            return 1
+        const auto src = read_file(a, path) catch |e| {
+            eprintln("error: cannot read '{path}': {e}");
+            return 1;
         }
-        let out = format_source(a, src, path) catch return 1
-        if out == src { continue }
-        changed += 1
-        if check {
-            println("would reformat {path}")
+        const auto out = format_source(a, src, path) catch return 1;
+        if (out == src) { continue; }
+        changed += 1;
+        if (check) {
+            println("would reformat {path}");
         } else {
-            write_file(path, out)?
-            println("formatted {path}")
+            write_file(path, out)?;
+            println("formatted {path}");
         }
     }
-    if check && changed > 0 { return 1 }
-    return 0
+    if (check && changed > 0) { return 1; }
+    return 0;
 }
 
-fn compile(a: Allocator) !i32 {
-    if arg_count() == 2 && arg(1) == "lsp" { return lsp_main() }
-    if arg_count() < 3 {
-        usage()
-        return 1
+!i32 compile(Allocator a) {
+    if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
+    if (arg_count() < 3) {
+        usage();
+        return 1;
     }
-    let cmd = arg(1)
-    if cmd == "fmt" { return run_fmt(a) }
+    const auto cmd = arg(1);
+    if (cmd == "fmt") { return run_fmt(a); }
 
-    if cmd == "tokens" {
-        var out = List[u8].init(a)
-        for k in 2..arg_count() {
-            let path = arg(k)
-            let src = read_file(a, path)?
-            let toks = tokenize(a, src, path) catch return 1
-            for t in toks {
-                var tn: [32]u8
-                let name = bprint(tn[..], t.tag)?
-                sprint(&out, "{t.line} {name} {t.text}\n")?
+    if (cmd == "tokens") {
+        auto out = List<u8>::init(a);
+        for (auto k : 2..arg_count()) {
+            const auto path = arg(k);
+            const auto src = read_file(a, path)?;
+            const auto toks = tokenize(a, src, path) catch return 1;
+            for (auto t : toks) {
+                u8[32] tn;
+                const auto name = bprint(tn[..], t.tag)?;
+                sprint(&out, "{t.line} {name} {t.text}\n")?;
             }
         }
-        print(out.slice())
-        return 0
+        print(out.slice());
+        return 0;
     }
 
-    let is_run = cmd == "run"
-    let is_build = cmd == "build"
-    let is_ir = cmd == "ir"
-    let is_test = cmd == "test"
-    if !is_run && !is_build && !is_ir && !is_test {
-        usage()
-        return 1
+    const auto is_run = cmd == "run";
+    const auto is_build = cmd == "build";
+    const auto is_ir = cmd == "ir";
+    const auto is_test = cmd == "test";
+    if (!is_run && !is_build && !is_ir && !is_test) {
+        usage();
+        return 1;
     }
 
-    var src_file = ""
-    var extras = List[str].init(a)
-    var prog_args = List[str].init(a)
-    var out_path = ""
-    var opt = false
-    var safety = true
-    var force_llvm = false
-    var force_native = false
-    var timing = false
-    var i = 2
-    while i < arg_count() {
-        let x = arg(i)
-        if x == "--" {
-            for j in i + 1..arg_count() { prog_args.push(arg(j))? }
-            break
-        } else if x == "-O" {
-            opt = true
-        } else if x == "--release" {
-            opt = true
-            safety = false
-        } else if x == "--llvm" {
-            force_llvm = true
-        } else if x == "--native" {
-            force_native = true
-        } else if x == "--time" {
-            timing = true
-        } else if x == "--no-safety" {
-            safety = false
-        } else if x == "-o" {
-            i += 1
-            if i < arg_count() { out_path = arg(i) }
-        } else if str_ends_with(x, ".vibe") {
-            src_file = x
+    auto src_file = "";
+    auto extras = List<str>::init(a);
+    auto prog_args = List<str>::init(a);
+    auto out_path = "";
+    auto opt = false;
+    auto safety = true;
+    auto force_llvm = false;
+    auto force_native = false;
+    auto timing = false;
+    auto i = 2;
+    while (i < arg_count()) {
+        const auto x = arg(i);
+        if (x == "--") {
+            for (auto j : i + 1..arg_count()) { prog_args.push(arg(j))?; }
+            break;
+        } else if (x == "-O") {
+            opt = true;
+        } else if (x == "--release") {
+            opt = true;
+            safety = false;
+        } else if (x == "--llvm") {
+            force_llvm = true;
+        } else if (x == "--native") {
+            force_native = true;
+        } else if (x == "--time") {
+            timing = true;
+        } else if (x == "--no-safety") {
+            safety = false;
+        } else if (x == "-o") {
+            i += 1;
+            if (i < arg_count()) { out_path = arg(i); }
+        } else if (str_ends_with(x, ".vibe")) {
+            src_file = x;
         } else {
-            extras.push(x)?
+            extras.push(x)?;
         }
-        i += 1
+        i += 1;
     }
-    if src_file.len == 0 {
-        usage()
-        return 1
+    if (src_file.len == 0) {
+        usage();
+        return 1;
     }
 
-    let t0 = now_ns()
-    let g = new_gen(a, safety)?
-    var loader = Loader{ a: a, g: g, seen: Map[str].init(a), prefixes: Map[str].init(a), overrides: Map[str].init(a) }
-    diag_prelude = PRELUDE
-    g.test_mode = is_test
-    g.test_root = src_file
+    const auto t0 = now_ns();
+    const auto g = new_gen(a, safety)?;
+    auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = Map<str>::init(a) };
+    diag_prelude = PRELUDE;
+    g.test_mode = is_test;
+    g.test_root = src_file;
     loader.load_source(PRELUDE, "<std>", "") catch {
-        g.flush_diag()
-        return 1
+        g.flush_diag();
+        return 1;
     }
     loader.load_file(src_file, "") catch {
-        g.flush_diag()
-        return 1
+        g.flush_diag();
+        return 1;
     }
     g.generate() catch {
-        g.flush_diag()
-        return 1
+        g.flush_diag();
+        return 1;
     }
 
-    var ir = List[u8].init(a)
-    g.output(&ir)?
-    let t1 = now_ns()
-    if is_ir {
-        print(ir.slice())
-        return 0
+    auto ir = List<u8>::init(a);
+    g.output(&ir)?;
+    const auto t1 = now_ns();
+    if (is_ir) {
+        print(ir.slice());
+        return 0;
     }
 
-    let cache = ".vibe-cache"
-    _ = mkdir(".vibe-cache", 493)
-    let stem = stem_of(src_file)
-    let use_native = force_native || (!opt && !force_llvm)
-    var llb = List[u8].init(a)
-    if use_native { sprint(&llb, "{cache}/{stem}.o")? } else { sprint(&llb, "{cache}/{stem}.ll")? }
-    let ll_path = llb.slice()
-    if use_native {
+    const auto cache = ".vibe-cache";
+    _ = mkdir(".vibe-cache", 493);
+    const auto stem = stem_of(src_file);
+    const auto use_native = force_native || (!opt && !force_llvm);
+    auto llb = List<u8>::init(a);
+    if (use_native) { sprint(&llb, "{cache}/{stem}.o")?; } else { sprint(&llb, "{cache}/{stem}.ll")?; }
+    const auto ll_path = llb.slice();
+    if (use_native) {
         native_compile(a, ir.slice(), ll_path) catch |e| {
-            eprintln("error: native backend failed: {e}")
-            return 1
+            eprintln("error: native backend failed: {e}");
+            return 1;
         }
     } else {
-        write_file(ll_path, ir.slice())?
+        write_file(ll_path, ir.slice())?;
     }
-    let t2 = now_ns()
+    const auto t2 = now_ns();
 
-    var exe = out_path
-    if exe.len == 0 {
-        if is_run || is_test {
-            var eb = List[u8].init(a)
-            sprint(&eb, "{cache}/{stem}")?
-            if is_test { sprint(&eb, ".test")? }
-            exe = eb.slice()
+    auto exe = out_path;
+    if (exe.len == 0) {
+        if (is_run || is_test) {
+            auto eb = List<u8>::init(a);
+            sprint(&eb, "{cache}/{stem}")?;
+            if (is_test) { sprint(&eb, ".test")?; }
+            exe = eb.slice();
         } else {
-            exe = stem
+            exe = stem;
         }
     }
-    var olevel = "-O0"
-    if opt { olevel = "-O2" }
+    auto olevel = "-O0";
+    if (opt) { olevel = "-O2"; }
 
-    var objs = List[str].init(a)
-    var needs_cxx = false
-    for x in extras {
-        if str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L") {
-            objs.push(x)?
-            continue
+    auto objs = List<str>::init(a);
+    auto needs_cxx = false;
+    for (auto x : extras) {
+        if (str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L")) {
+            objs.push(x)?;
+            continue;
         }
-        let is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx")
-        if is_cpp { needs_cxx = true }
-        var ob = List[u8].init(a)
-        sprint(&ob, "{cache}/{base_of(x)}.o")?
-        var cc = "clang"
-        if is_cpp { cc = "clang++" }
-        let code = run(a, [cc, olevel, "-c", x, "-o", ob.slice()])?
-        if code != 0 { return code }
-        objs.push(ob.slice())?
+        const auto is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx");
+        if (is_cpp) { needs_cxx = true; }
+        auto ob = List<u8>::init(a);
+        sprint(&ob, "{cache}/{base_of(x)}.o")?;
+        auto cc = "clang";
+        if (is_cpp) { cc = "clang++"; }
+        const auto code = run(a, [cc, olevel, "-c", x, "-o", ob.slice()])?;
+        if (code != 0) { return code; }
+        objs.push(ob.slice())?;
     }
 
-    var link = List[str].init(a)
-    if needs_cxx { link.push("clang++")? } else { link.push("clang")? }
-    if use_native {
-        link.append(["-no-pie", ll_path])?
+    auto link = List<str>::init(a);
+    if (needs_cxx) { link.push("clang++")?; } else { link.push("clang")?; }
+    if (use_native) {
+        link.append(["-no-pie", ll_path])?;
     } else {
-        link.append([olevel, "-Wno-override-module", ll_path])?
+        link.append([olevel, "-Wno-override-module", ll_path])?;
     }
-    link.append(objs.slice())?
-    link.append(["-o", exe, "-lm"])?
-    let lc = run(a, link.slice())?
-    if lc != 0 {
-        eprintln("error: link failed (input kept at {ll_path})")
-        return lc
+    link.append(objs.slice())?;
+    link.append(["-o", exe, "-lm"])?;
+    const auto lc = run(a, link.slice())?;
+    if (lc != 0) {
+        eprintln("error: link failed (input kept at {ll_path})");
+        return lc;
     }
-    if timing {
-        let t3 = now_ns()
-        var backend = "llvm"
-        if use_native { backend = "native" }
-        eprintln("time: frontend {(t1 - t0) as f64 / 1000000.0:.1} ms, {backend} backend {(t2 - t1) as f64 / 1000000.0:.1} ms, link {(t3 - t2) as f64 / 1000000.0:.1} ms")
+    if (timing) {
+        const auto t3 = now_ns();
+        auto backend = "llvm";
+        if (use_native) { backend = "native"; }
+        eprintln("time: frontend {(t1 - t0) as f64 / 1000000.0:.1} ms, {backend} backend {(t2 - t1) as f64 / 1000000.0:.1} ms, link {(t3 - t2) as f64 / 1000000.0:.1} ms");
     }
 
-    if is_test { return run_tests(a, exe, g.tests) }
+    if (is_test) { return run_tests(a, exe, g.tests); }
 
-    if is_run {
-        var argv = List[str].init(a)
-        if str_find_byte(exe, '/') < 0 {
-            var eb = List[u8].init(a)
-            sprint(&eb, "./{exe}")?
-            argv.push(eb.slice())?
+    if (is_run) {
+        auto argv = List<str>::init(a);
+        if (str_find_byte(exe, '/') < 0) {
+            auto eb = List<u8>::init(a);
+            sprint(&eb, "./{exe}")?;
+            argv.push(eb.slice())?;
         } else {
-            argv.push(exe)?
+            argv.push(exe)?;
         }
-        argv.append(prog_args.slice())?
-        return run(a, argv.slice())
+        argv.append(prog_args.slice())?;
+        return run(a, argv.slice());
     }
-    return 0
+    return 0;
 }
 
-fn main() i32 {
-    var ar = Arena.init(c_allocator())
-    let code = compile(ar.allocator()) catch |e| {
-        eprintln("error: {e}")
-        1
+i32 main() {
+    auto ar = Arena::init(c_allocator());
+    const auto code = compile(ar.allocator()) catch |e| {
+        eprintln("error: {e}");
+        1;
     }
-    return code
+    return code;
 }

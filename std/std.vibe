@@ -3,58 +3,58 @@
 // Every heap allocation goes through an Allocator value that you pass in explicitly.
 
 // ---- libc ----
-extern fn printf(fmt: *u8, ...) i32
-extern fn malloc(n: u64) *void
-extern fn calloc(n: u64, size: u64) *void
-extern fn free(p: *void)
-extern fn exit(code: i32)
-extern fn memcmp(a: *void, b: *void, n: u64) i32
-extern fn memcpy(dst: *void, src: *void, n: u64) *void
-extern fn memmove(dst: *void, src: *void, n: u64) *void
-extern fn memset(dst: *void, c: i32, n: u64) *void
-extern fn strlen(s: *u8) u64
-extern fn fdopen(fd: i32, mode: *u8) *void
-extern fn fgets(buf: *u8, n: i32, f: *void) *u8
-extern fn clock() i64
-extern fn rand() i32
-extern fn srand(seed: u32)
-extern fn time(t: *i64) i64
+extern i32 printf(u8* fmt, ...);
+extern void* malloc(u64 n);
+extern void* calloc(u64 n, u64 size);
+extern void free(void* p);
+extern void exit(i32 code);
+extern i32 memcmp(void* a, void* b, u64 n);
+extern void* memcpy(void* dst, void* src, u64 n);
+extern void* memmove(void* dst, void* src, u64 n);
+extern void* memset(void* dst, i32 c, u64 n);
+extern u64 strlen(u8* s);
+extern void* fdopen(i32 fd, u8* mode);
+extern u8* fgets(u8* buf, i32 n, void* f);
+extern i64 clock();
+extern i32 rand();
+extern void srand(u32 seed);
+extern i64 time(i64* t);
 
 // ---- math (libm) ----
-extern fn sqrt(x: f64) f64
-extern fn sin(x: f64) f64
-extern fn cos(x: f64) f64
-extern fn tan(x: f64) f64
-extern fn pow(x: f64, y: f64) f64
-extern fn exp(x: f64) f64
-extern fn log(x: f64) f64
-extern fn floor(x: f64) f64
-extern fn ceil(x: f64) f64
-extern fn fabs(x: f64) f64
+extern f64 sqrt(f64 x);
+extern f64 sin(f64 x);
+extern f64 cos(f64 x);
+extern f64 tan(f64 x);
+extern f64 pow(f64 x, f64 y);
+extern f64 exp(f64 x);
+extern f64 log(f64 x);
+extern f64 floor(f64 x);
+extern f64 ceil(f64 x);
+extern f64 fabs(f64 x);
 
-const PI = 3.141592653589793
+const auto PI = 3.141592653589793;
 
 // ---- process ----
-var __argc: i64 = 0
-var __argv: **u8 = null
-var __stdin: *void = null
+i64 __argc = 0;
+u8**__argv = null;
+void* __stdin = null;
 
-fn arg_count() i64 { return __argc }
-fn arg(i: i64) str {
-    if i < 0 || i >= __argc { panic("arg index {i} out of range") }
-    return cstr(__argv[i])
+i64 arg_count() { return __argc; }
+str arg(i64 i) {
+    if (i < 0 || i >= __argc) { panic("arg index {i} out of range"); }
+    return cstr(__argv[i]);
 }
 
 // ---- runtime helpers used by the compiler (never allocate) ----
-fn __str_eq(a: str, b: str) bool {
-    if a.len != b.len { return false }
-    if a.len == 0 { return true }
-    return memcmp(a.ptr, b.ptr, a.len as u64) == 0
+bool __str_eq(str a, str b) {
+    if (a.len != b.len) { return false; }
+    if (a.len == 0) { return true; }
+    return memcmp(a.ptr, b.ptr, a.len as u64) == 0;
 }
 
-fn __oob(i: i64, n: i64, file: str, line: i64) {
-    eprintln("panic: index {i} out of bounds (len {n}) at {file}:{line}")
-    exit(1)
+void __oob(i64 i, i64 n, str file, i64 line) {
+    eprintln("panic: index {i} out of bounds (len {n}) at {file}:{line}");
+    exit(1);
 }
 
 // ================================================================ memory
@@ -62,934 +62,914 @@ fn __oob(i: i64, n: i64, file: str, line: i64) {
 /// An allocator is just a context pointer plus two functions.
 /// Contract: alloc_fn returns zeroed memory aligned to `align`, or null.
 struct Allocator {
-    ctx: *void
-    alloc_fn: fn(*void, u64, u64) *void
-    free_fn: fn(*void, *void, u64)
-}
+    void* ctx;
+    fn(void*, u64, u64) -> void* alloc_fn;
+    fn(void*, void*, u64) free_fn;
 
-impl Allocator {
-    /// n zeroed elements of T
-    fn alloc[T](self, n: i64) ![]T {
-        if n == 0 { return (null as *T)[0..0] }
-        let p = self.alloc_fn(self.ctx, (n as u64) * sizeof(T), alignof(T))
-        if p == null { return error.OutOfMemory }
-        return (p as *T)[0..n]
+    template<T> !T[] alloc(i64 n) {
+        if (n == 0) { return (null as *T)[0..0]; }
+        const auto p = this->alloc_fn(this->ctx, (n as u64) * sizeof(T), alignof(T));
+        if (p == null) { return error.OutOfMemory; }
+        return (p as *T)[0..n];
     }
-    fn free[T](self, s: []T) {
-        if s.len > 0 { self.free_fn(self.ctx, s.ptr, (s.len as u64) * sizeof(T)) }
+    template<T> void free(T[] s) {
+        if (s.len > 0) { this->free_fn(this->ctx, s.ptr, (s.len as u64) * sizeof(T)); }
     }
     /// one zeroed T
-    fn create[T](self) !*T {
-        let s = self.alloc[T](1)?
-        return s.ptr
+    template<T> !T* create() {
+        const auto s = this->alloc[T](1)?;
+        return s.ptr;
     }
-    fn destroy[T](self, p: *T) { self.free_fn(self.ctx, p, sizeof(T)) }
+    template<T> void destroy(T* p) { this->free_fn(this->ctx, p, sizeof(T)); }
     /// copy a string into memory owned by this allocator
-    fn dup(self, s: str) !str {
-        let d = self.alloc[u8](s.len)?
-        if s.len > 0 { memcpy(d.ptr, s.ptr, s.len as u64) }
-        return d
+    !str dup(str s) {
+        const auto d = this->alloc<u8>(s.len)?;
+        if (s.len > 0) { memcpy(d.ptr, s.ptr, s.len as u64); }
+        return d;
+    }
+
+    !u8* dupz(str s) {
+        const auto d = this->alloc<u8>(s.len + 1)?;
+        if (s.len > 0) { memcpy(d.ptr, s.ptr, s.len as u64); }
+        return d.ptr;
     }
 }
 
 // -- libc heap
-fn __c_alloc(ctx: *void, n: u64, align: u64) *void { return calloc(1, n) }
-fn __c_free(ctx: *void, p: *void, n: u64) { free(p) }
-fn c_allocator() Allocator {
-    return Allocator{ ctx: null, alloc_fn: __c_alloc, free_fn: __c_free }
-}
+void* __c_alloc(void* ctx, u64 n, u64 align) { return calloc(1, n); }
+void __c_free(void* ctx, void* p, u64 n) { free(p); }
+Allocator c_allocator() {
+    return Allocator{ .ctx = null, .alloc_fn = __c_alloc, .free_fn = __c_free };
+};
 
 // -- bump allocator over a buffer you own (stack, static, or anything). Never touches the heap.
 struct FixedBuf {
-    buf: []u8
-    used: i64
+    u8[] buf;
+    i64 used;
+
+    static Self init(u8[] buf) { return Self{ .buf = buf, .used = 0 } };
+    Allocator allocator() {
+        return Allocator{ .ctx = this, .alloc_fn = __fixed_alloc, .free_fn = __fixed_free };
+    };
+    void reset() { this->used = 0; }
+    i64 remaining() { return this->buf.len - this->used; }
 }
 
-impl FixedBuf {
-    fn init(buf: []u8) Self { return Self{ buf: buf, used: 0 } }
-    fn allocator(self) Allocator {
-        return Allocator{ ctx: self, alloc_fn: __fixed_alloc, free_fn: __fixed_free }
-    }
-    fn reset(self) { self.used = 0 }
-    fn remaining(self) i64 { return self.buf.len - self.used }
+void* __fixed_alloc(void* ctx, u64 n, u64 align) {
+    const auto fb = ctx as *FixedBuf;
+    const auto base = fb.buf.ptr as u64;
+    const auto addr = base + (fb.used as u64);
+    const auto aligned = (addr + align - 1) / align * align;
+    const auto off = (aligned - base) as i64;
+    if (off + (n as i64) > fb.buf.len) { return null; }
+    fb.used = off + n as i64;
+    const auto p = fb.buf.ptr + off;
+    memset(p, 0, n);
+    return p;
 }
 
-fn __fixed_alloc(ctx: *void, n: u64, align: u64) *void {
-    let fb = ctx as *FixedBuf
-    let base = fb.buf.ptr as u64
-    let addr = base + (fb.used as u64)
-    let aligned = (addr + align - 1) / align * align
-    let off = (aligned - base) as i64
-    if off + (n as i64) > fb.buf.len { return null }
-    fb.used = off + n as i64
-    let p = fb.buf.ptr + off
-    memset(p, 0, n)
-    return p
-}
-
-fn __fixed_free(ctx: *void, p: *void, n: u64) {
+void __fixed_free(void* ctx, void* p, u64 n) {
     // only the most recent allocation can be given back
-    let fb = ctx as *FixedBuf
-    if (p as u64) + n == (fb.buf.ptr as u64) + (fb.used as u64) { fb.used -= n as i64 }
+    const auto fb = ctx as *FixedBuf;
+    if ((p as u64) + n == (fb.buf.ptr as u64) + (fb.used as u64)) { fb.used -= n as i64; }
 }
 
 // ================================================================ generic helpers
 
-fn min[T](a: T, b: T) T { if a < b { return a } return b }
-fn max[T](a: T, b: T) T { if a > b { return a } return b }
-fn abs[T](a: T) T { if a < 0 { return -a } return a }
-fn swap[T](a: *T, b: *T) { let t = *a; *a = *b; *b = t }
+template<T> T min(T a, T b) { if (a < b) { return a; } return b; }
+template<T> T max(T a, T b) { if (a > b) { return a; } return b; }
+template<T> T abs(T a) { if (a < 0) { return -a; } return a; }
+template<T> void swap(T* a, T* b) { const auto t = *a; *a = *b; *b = t; }
 
 /// in-place quicksort of any slice whose elements support < and >
-fn sort[T](s: []T) { if s.len > 1 { __qsort(s.ptr, 0, s.len - 1) } }
+template<T> void sort(T[] s) { if (s.len > 1) { __qsort(s.ptr, 0, s.len - 1); } }
 
-fn __qsort[T](a: *T, lo: i64, hi: i64) {
-    if lo >= hi { return }
-    let pivot = a[(lo + hi) / 2]
-    var i = lo
-    var j = hi
-    while i <= j {
-        while a[i] < pivot { i += 1 }
-        while a[j] > pivot { j -= 1 }
-        if i <= j {
-            swap(&a[i], &a[j])
-            i += 1
-            j -= 1
+template<T> void __qsort(T* a, i64 lo, i64 hi) {
+    if (lo >= hi) { return; }
+    const auto pivot = a[(lo + hi) / 2];
+    auto i = lo;
+    auto j = hi;
+    while (i <= j) {
+        while (a[i] < pivot) { i += 1; }
+        while (a[j] > pivot) { j -= 1; }
+        if (i <= j) {
+            swap(&a[i], &a[j]);
+            i += 1;
+            j -= 1;
         }
     }
-    __qsort(a, lo, j)
-    __qsort(a, i, hi)
+    __qsort(a, lo, j);
+    __qsort(a, i, hi);
 }
 
 // ================================================================ strings (no allocation)
 
-fn cstr(p: *u8) str { return p[0..strlen(p) as i64] }
+str cstr(u8* p) { return p[0..strlen(p) as i64]; }
 
-fn str_starts_with(s: str, prefix: str) bool {
-    if prefix.len > s.len { return false }
-    return s[0..prefix.len] == prefix
+bool str_starts_with(str s, str prefix) {
+    if (prefix.len > s.len) { return false; }
+    return s[0..prefix.len] == prefix;
 }
 
-fn str_ends_with(s: str, suffix: str) bool {
-    if suffix.len > s.len { return false }
-    return s[s.len - suffix.len..] == suffix
+bool str_ends_with(str s, str suffix) {
+    if (suffix.len > s.len) { return false; }
+    return s[s.len - suffix.len..] == suffix;
 }
 
-fn str_find(s: str, needle: str) i64 {
-    if needle.len == 0 { return 0 }
-    var i = 0
-    while i + needle.len <= s.len {
-        if s[i..i + needle.len] == needle { return i }
-        i += 1
+i64 str_find(str s, str needle) {
+    if (needle.len == 0) { return 0; }
+    auto i = 0;
+    while (i + needle.len <= s.len) {
+        if (s[i..i + needle.len] == needle) { return i; }
+        i += 1;
     }
-    return -1
+    return -1;
 }
 
-fn __is_space(c: u8) bool { return c == ' ' || c == '\n' || c == '\t' || c == '\r' }
+bool __is_space(u8 c) { return c == ' ' || c == '\n' || c == '\t' || c == '\r'; }
 
-fn str_trim(s: str) str {
-    var a = 0
-    var b = s.len
-    while a < b && __is_space(s[a]) { a += 1 }
-    while b > a && __is_space(s[b - 1]) { b -= 1 }
-    return s[a..b]
+str str_trim(str s) {
+    auto a = 0;
+    auto b = s.len;
+    while (a < b && __is_space(s[a])) { a += 1; }
+    while (b > a && __is_space(s[b - 1])) { b -= 1; }
+    return s[a..b];
 }
 
-fn parse_int(s: str) !i64 {
-    let t = str_trim(s)
-    if t.len == 0 { return error.InvalidNumber }
-    var i = 0
-    var neg = false
-    if t[0] == '-' { neg = true; i = 1 }
-    if i >= t.len { return error.InvalidNumber }
-    var v = 0
-    while i < t.len {
-        let c = t[i]
-        if c < '0' || c > '9' { return error.InvalidNumber }
-        v = v * 10 + (c - '0') as i64
-        i += 1
+!i64 parse_int(str s) {
+    const auto t = str_trim(s);
+    if (t.len == 0) { return error.InvalidNumber; }
+    auto i = 0;
+    auto neg = false;
+    if (t[0] == '-') { neg = true; i = 1; }
+    if (i >= t.len) { return error.InvalidNumber; }
+    auto v = 0;
+    while (i < t.len) {
+        const auto c = t[i];
+        if (c < '0' || c > '9') { return error.InvalidNumber; }
+        v = v * 10 + (c - '0') as i64;
+        i += 1;
     }
-    if neg { return -v }
-    return v
+    if (neg) { return -v; }
+    return v;
 }
 
 /// read one line from stdin into `buf` (without the newline)
-fn read_line(buf: []u8) !str {
-    if __stdin == null { __stdin = fdopen(0, "r") }
-    if fgets(buf.ptr, buf.len as i32, __stdin) == null { return error.EndOfFile }
-    var s = cstr(buf.ptr)
-    if s.len > 0 && s[s.len - 1] == '\n' { s = s[0..s.len - 1] }
-    return s
+!str read_line(u8[] buf) {
+    if (__stdin == null) { __stdin = fdopen(0, "r"); }
+    if (fgets(buf.ptr, buf.len as i32, __stdin) == null) { return error.EndOfFile; }
+    auto s = cstr(buf.ptr);
+    if (s.len > 0 && s[s.len - 1] == '\n') { s = s[0..s.len - 1]; }
+    return s;
 }
 
 // ================================================================ List[T]
 
-struct List[T] {
-    items: []T   // capacity = items.len
-    len: i64
-    a: Allocator
-}
+struct List<T> {
+    T[] items;   // capacity = items.len
+    i64 len;
+    Allocator a;
 
-impl List[T] {
-    fn init(a: Allocator) Self { return Self{ a: a, .. } }
+    static Self init(Allocator a) { return Self{ .a = a } };
 
-    fn deinit(self) {
-        self.a.free(self.items)
-        self.items = self.items[0..0]
-        self.len = 0
+    void deinit() {
+        this->a.free(this->items);
+        this->items = this->items[0..0];
+        this->len = 0;
     }
 
-    fn reserve(self, n: i64) !void {
-        if n <= self.items.len { return }
-        var cap = self.items.len * 2
-        if cap < 8 { cap = 8 }
-        if cap < n { cap = n }
-        let fresh = self.a.alloc[T](cap)?
-        if self.len > 0 { memcpy(fresh.ptr, self.items.ptr, (self.len as u64) * sizeof(T)) }
-        self.a.free(self.items)
-        self.items = fresh
+    !void reserve(i64 n) {
+        if (n <= this->items.len) { return; }
+        auto cap = this->items.len * 2;
+        if (cap < 8) { cap = 8; }
+        if (cap < n) { cap = n; }
+        const auto fresh = this->a.alloc[T](cap)?;
+        if (this->len > 0) { memcpy(fresh.ptr, this->items.ptr, (this->len as u64) * sizeof(T)); }
+        this->a.free(this->items);
+        this->items = fresh;
     }
 
-    fn push(self, v: T) !void {
-        self.reserve(self.len + 1)?
-        self.items[self.len] = v
-        self.len += 1
+    !void push(T v) {
+        this->reserve(this->len + 1)?;
+        this->items[this->len] = v;
+        this->len += 1;
     }
 
-    fn append(self, xs: []T) !void {
-        self.reserve(self.len + xs.len)?
-        for x in xs {
-            self.items[self.len] = x
-            self.len += 1
+    !void append(T[] xs) {
+        this->reserve(this->len + xs.len)?;
+        for (auto x : xs) {
+            this->items[this->len] = x;
+            this->len += 1;
         }
     }
 
-    fn pop(self) !T {
-        if self.len == 0 { return error.Empty }
-        self.len -= 1
-        return self.items[self.len]
+    !T pop() {
+        if (this->len == 0) { return error.Empty; }
+        this->len -= 1;
+        return this->items[this->len];
     }
 
-    fn last(self) !T {
-        if self.len == 0 { return error.Empty }
-        return self.items[self.len - 1]
+    !T last() {
+        if (this->len == 0) { return error.Empty; }
+        return this->items[this->len - 1];
     }
 
-    fn get(self, i: i64) T { return self.slice()[i] }
-    fn set(self, i: i64, v: T) { self.slice()[i] = v }
-    fn slice(self) []T { return self.items[0..self.len] }
-    fn is_empty(self) bool { return self.len == 0 }
-    fn clear(self) { self.len = 0 }
+    T get(i64 i) { return this->slice()[i]; }
+    void set(i64 i, T v) { this->slice()[i] = v; }
+    T[] slice() { return this->items[0..this->len]; }
+    bool is_empty() { return this->len == 0; }
+    void clear() { this->len = 0; }
 
-    fn contains(self, v: T) bool {
-        for x in self.slice() { if x == v { return true } }
-        return false
+    bool contains(T v) {
+        for (auto x : this->slice()) { if (x == v) { return true; } }
+        return false;
     }
 
-    fn reverse(self) {
-        var i = 0
-        var j = self.len - 1
-        while i < j {
-            swap(&self.items[i], &self.items[j])
-            i += 1
-            j -= 1
+    void reverse() {
+        auto i = 0;
+        auto j = this->len - 1;
+        while (i < j) {
+            swap(&this->items[i], &this->items[j]);
+            i += 1;
+            j -= 1;
         }
     }
 
-    fn sort(self) { sort(self.slice()) }
+    void sort() { sort(this->slice()); }
 }
 
 // ================================================================ Map[V]
 // string-keyed hash map; keys are NOT copied (use Allocator.dup if you need ownership)
 
-struct MapEntry[V] { key: str, value: V, used: bool }
+struct MapEntry<V> { str key; V value; bool used; }
 
-struct Map[V] {
-    entries: []MapEntry[V]
-    len: i64
-    a: Allocator
+struct Map<V> {
+    MapEntry<V>[] entries;
+    i64 len;
+    Allocator a;
+
+    static Self init(Allocator a) { return Self{ .a = a } };
+
+    void deinit() {
+        this->a.free(this->entries);
+        this->entries = this->entries[0..0];
+        this->len = 0;
+    }
+
+    i64 __find(str key) {
+        const auto cap = this->entries.len;
+        auto i = (hash_str(key) % (cap as u64)) as i64;
+        while (true) {
+            const auto e = &this->entries[i];
+            if (!e.used || e.key == key) { return i; }
+            i = (i + 1) % cap;
+        }
+        return -1;
+    }
+
+    void __insert(str key, V value) {
+        const auto e = &this->entries[this->__find(key)];
+        if (!e.used) { this->len += 1; }
+        e.key = key;
+        e.value = value;
+        e.used = true;
+    }
+
+    !void __grow() {
+        const auto old = this->entries;
+        auto nc = old.len * 2;
+        if (nc < 16) { nc = 16; }
+        this->entries = this->a.alloc[MapEntry[V]](nc)?;
+        this->len = 0;
+        for (auto e : old) {
+            if (e.used) { this->__insert(e.key, e.value); }
+        }
+        this->a.free(old);
+    }
+
+    !void put(str key, V value) {
+        if ((this->len + 1) * 4 > this->entries.len * 3) { this->__grow()?; }
+        this->__insert(key, value);
+    }
+
+    !V get(str key) {
+        if (this->entries.len == 0) { return error.NotFound; }
+        const auto e = &this->entries[this->__find(key)];
+        if (!e.used) { return error.NotFound; }
+        return e.value;
+    }
+
+    bool has(str key) {
+        if (this->entries.len == 0) { return false; }
+        return this->entries[this->__find(key)].used;
+    }
 }
 
-fn hash_str(s: str) u64 {
-    var h: u64 = 14695981039346656037
-    for c in s {
-        h = h ^ (c as u64)
-        h = h * 1099511628211
+u64 hash_str(str s) {
+    u64 h = 14695981039346656037;
+    for (auto c : s) {
+        h = h ^ (c as u64);
+        h = h * 1099511628211;
     }
-    return h
-}
-
-impl Map[V] {
-    fn init(a: Allocator) Self { return Self{ a: a, .. } }
-
-    fn deinit(self) {
-        self.a.free(self.entries)
-        self.entries = self.entries[0..0]
-        self.len = 0
-    }
-
-    fn __find(self, key: str) i64 {
-        let cap = self.entries.len
-        var i = (hash_str(key) % (cap as u64)) as i64
-        while true {
-            let e = &self.entries[i]
-            if !e.used || e.key == key { return i }
-            i = (i + 1) % cap
-        }
-        return -1
-    }
-
-    fn __insert(self, key: str, value: V) {
-        let e = &self.entries[self.__find(key)]
-        if !e.used { self.len += 1 }
-        e.key = key
-        e.value = value
-        e.used = true
-    }
-
-    fn __grow(self) !void {
-        let old = self.entries
-        var nc = old.len * 2
-        if nc < 16 { nc = 16 }
-        self.entries = self.a.alloc[MapEntry[V]](nc)?
-        self.len = 0
-        for e in old {
-            if e.used { self.__insert(e.key, e.value) }
-        }
-        self.a.free(old)
-    }
-
-    fn put(self, key: str, value: V) !void {
-        if (self.len + 1) * 4 > self.entries.len * 3 { self.__grow()? }
-        self.__insert(key, value)
-    }
-
-    fn get(self, key: str) !V {
-        if self.entries.len == 0 { return error.NotFound }
-        let e = &self.entries[self.__find(key)]
-        if !e.used { return error.NotFound }
-        return e.value
-    }
-
-    fn has(self, key: str) bool {
-        if self.entries.len == 0 { return false }
-        return self.entries[self.__find(key)].used
-    }
+    return h;
 }
 
 // ================================================================ Option[T]
 
-union Option[T] {
-    Some: T
-    None
-}
+union Option<T> {
+    T Some;
+    None;
 
-impl Option[T] {
-    fn is_some(self) bool {
-        match *self {
-            .Some(_) => return true
-            .None => return false
+    bool is_some() {
+        match *this {
+            .Some(_) => return true;
+            .None => return false;
         }
-        return false
+        return false;
     }
-    fn unwrap_or(self, d: T) T {
-        match *self {
-            .Some(v) => return v
-            .None => return d
+    T unwrap_or(T d) {
+        match *this {
+            .Some(v) => return v;
+            .None => return d;
         }
-        return d
+        return d;
     }
 }
 
 // ================================================================ C strings
 
 /// copy `s` into `buf` and NUL-terminate it (no allocation)
-fn to_cstr(buf: []u8, s: str) !*u8 {
-    if s.len + 1 > buf.len { return error.NoSpace }
-    if s.len > 0 { memcpy(buf.ptr, s.ptr, s.len as u64) }
-    buf[s.len] = 0
-    return buf.ptr
-}
-
-impl Allocator {
-    /// NUL-terminated copy for passing to C
-    fn dupz(self, s: str) !*u8 {
-        let d = self.alloc[u8](s.len + 1)?
-        if s.len > 0 { memcpy(d.ptr, s.ptr, s.len as u64) }
-        return d.ptr
-    }
+!u8* to_cstr(u8[] buf, str s) {
+    if (s.len + 1 > buf.len) { return error.NoSpace; }
+    if (s.len > 0) { memcpy(buf.ptr, s.ptr, s.len as u64); }
+    buf[s.len] = 0;
+    return buf.ptr;
 }
 
 // ================================================================ characters
 
-fn is_digit(c: u8) bool { return c >= '0' && c <= '9' }
-fn is_alpha(c: u8) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
-fn is_alnum(c: u8) bool { return is_alpha(c) || is_digit(c) }
-fn is_upper(c: u8) bool { return c >= 'A' && c <= 'Z' }
-fn is_hex(c: u8) bool { return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') }
+bool is_digit(u8 c) { return c >= '0' && c <= '9'; }
+bool is_alpha(u8 c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+bool is_alnum(u8 c) { return is_alpha(c) || is_digit(c); }
+bool is_upper(u8 c) { return c >= 'A' && c <= 'Z'; }
+bool is_hex(u8 c) { return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
 // ================================================================ files
 
-extern fn fopen(path: *u8, mode: *u8) *void
-extern fn fclose(f: *void) i32
-extern fn fread(buf: *void, size: u64, n: u64, f: *void) u64
-extern fn fwrite(buf: *void, size: u64, n: u64, f: *void) u64
-extern fn fseek(f: *void, off: i64, whence: i32) i32
-extern fn ftell(f: *void) i64
-extern fn remove(path: *u8) i32
-extern fn mkdir(path: *u8, mode: u32) i32
+extern void* fopen(u8* path, u8* mode);
+extern i32 fclose(void* f);
+extern u64 fread(void* buf, u64 size, u64 n, void* f);
+extern u64 fwrite(void* buf, u64 size, u64 n, void* f);
+extern i32 fseek(void* f, i64 off, i32 whence);
+extern i64 ftell(void* f);
+extern i32 remove(u8* path);
+extern i32 mkdir(u8* path, u32 mode);
 
 /// read a whole file; memory comes from `a`
-fn read_file(a: Allocator, path: str) !str {
-    var pbuf: [4096]u8
-    let f = fopen(to_cstr(pbuf[..], path)?, "rb")
-    if f == null { return error.FileNotFound }
-    defer _ = fclose(f)
-    _ = fseek(f, 0, 2)
-    let n = ftell(f)
-    _ = fseek(f, 0, 0)
-    if n < 0 { return error.ReadFailed }
-    let buf = a.alloc[u8](n)?
-    if n > 0 && fread(buf.ptr, 1, n as u64, f) != n as u64 {
-        a.free(buf)
-        return error.ReadFailed
+!str read_file(Allocator a, str path) {
+    u8[4096] pbuf;
+    const auto f = fopen(to_cstr(pbuf[..], path)?, "rb");
+    if (f == null) { return error.FileNotFound; }
+    defer _ = fclose(f);
+    _ = fseek(f, 0, 2);
+    const auto n = ftell(f);
+    _ = fseek(f, 0, 0);
+    if (n < 0) { return error.ReadFailed; }
+    const auto buf = a.alloc<u8>(n)?;
+    if (n > 0 && fread(buf.ptr, 1, n as u64, f) != n as u64) {
+        a.free(buf);
+        return error.ReadFailed;
     }
-    return buf
+    return buf;
 }
 
-fn write_file(path: str, data: str) !void {
-    var pbuf: [4096]u8
-    let f = fopen(to_cstr(pbuf[..], path)?, "wb")
-    if f == null { return error.CannotOpen }
-    defer _ = fclose(f)
-    if data.len > 0 && fwrite(data.ptr, 1, data.len as u64, f) != data.len as u64 { return error.WriteFailed }
+!void write_file(str path, str data) {
+    u8[4096] pbuf;
+    const auto f = fopen(to_cstr(pbuf[..], path)?, "wb");
+    if (f == null) { return error.CannotOpen; }
+    defer _ = fclose(f);
+    if (data.len > 0 && fwrite(data.ptr, 1, data.len as u64, f) != data.len as u64) { return error.WriteFailed; }
 }
 
-fn file_exists(path: str) bool {
-    var pbuf: [4096]u8
-    let p = to_cstr(pbuf[..], path) catch return false
-    let f = fopen(p, "rb")
-    if f == null { return false }
-    _ = fclose(f)
-    return true
+bool file_exists(str path) {
+    u8[4096] pbuf;
+    const auto p = to_cstr(pbuf[..], path) catch return false;
+    const auto f = fopen(p, "rb");
+    if (f == null) { return false; }
+    _ = fclose(f);
+    return true;
 }
 
 // ================================================================ processes
 
-extern fn fork() i32
-extern fn execvp(file: *u8, argv: **u8) i32
-extern fn waitpid(pid: i32, status: *i32, options: i32) i32
-extern fn _exit(code: i32)
-extern fn getenv(name: *u8) *u8
-extern fn fflush(f: *void) i32
+extern i32 fork();
+extern i32 execvp(u8* file, u8**argv);
+extern i32 waitpid(i32 pid, i32* status, i32 options);
+extern void _exit(i32 code);
+extern u8* getenv(u8* name);
+extern i32 fflush(void* f);
 
 /// run a program (searched in PATH) and wait for it; returns its exit code
-fn run(a: Allocator, argv: []str) !i32 {
-    if argv.len == 0 { return error.NoProgram }
-    let cargs = a.alloc[*u8](argv.len + 1)?
-    defer a.free(cargs)
-    for i, s in argv { cargs[i] = a.dupz(s)? }
-    defer { for i in 0..argv.len { a.free_fn(a.ctx, cargs[i], (argv[i].len + 1) as u64) } }
-    _ = fflush(null)
-    let pid = fork()
-    if pid < 0 { return error.ForkFailed }
-    if pid == 0 {
-        _ = execvp(cargs[0], cargs.ptr)
-        eprintln("error: cannot run '{argv[0]}'")
-        _exit(127)
+!i32 run(Allocator a, str[] argv) {
+    if (argv.len == 0) { return error.NoProgram; }
+    const auto cargs = a.alloc<u8*>(argv.len + 1)?;
+    defer a.free(cargs);
+    for (auto [i, s] : argv) { cargs[i] = a.dupz(s)?; }
+    defer { for (auto i : 0..argv.len) { a.free_fn(a.ctx, cargs[i], (argv[i].len + 1) as u64); } }
+    _ = fflush(null);
+    const auto pid = fork();
+    if (pid < 0) { return error.ForkFailed; }
+    if (pid == 0) {
+        _ = execvp(cargs[0], cargs.ptr);
+        eprintln("error: cannot run '{argv[0]}'");
+        _exit(127);
     }
-    var status: i32 = 0
-    if waitpid(pid, &status, 0) < 0 { return error.WaitFailed }
-    if (status & 0x7f) != 0 { return error.Signaled }
-    return (status >> 8) & 0xff
+    i32 status = 0;
+    if (waitpid(pid, &status, 0) < 0) { return error.WaitFailed; }
+    if ((status & 0x7f) != 0) { return error.Signaled; }
+    return (status >> 8) & 0xff;
 }
 
-fn env(name: str) !str {
-    var nbuf: [256]u8
-    let p = getenv(to_cstr(nbuf[..], name)?)
-    if p == null { return error.NotFound }
-    return cstr(p)
+!str env(str name) {
+    u8[256] nbuf;
+    const auto p = getenv(to_cstr(nbuf[..], name)?);
+    if (p == null) { return error.NotFound; }
+    return cstr(p);
 }
 
 // ================================================================ Arena
 // Growable bump allocator on top of a parent allocator. free() is a no-op; deinit() releases everything.
 // Chunks are linked through a small header, so the arena itself never needs a container.
 
-struct __ChunkHdr { prev: *__ChunkHdr, size: u64 }
+struct __ChunkHdr { __ChunkHdr* prev; u64 size; }
 
 struct Arena {
-    parent: Allocator
-    head: *__ChunkHdr
-    used: u64      // bytes used in head chunk (after header)
-    cap: u64       // usable bytes in head chunk
-    total: u64     // bytes handed out overall
-}
+    Allocator parent;
+    __ChunkHdr* head;
+    u64 used;      // bytes used in head chunk (after header)
+    u64 cap;       // usable bytes in head chunk
+    u64 total;     // bytes handed out overall
 
-impl Arena {
-    fn init(parent: Allocator) Self { return Self{ parent: parent, .. } }
-    fn allocator(self) Allocator {
-        return Allocator{ ctx: self, alloc_fn: __arena_alloc, free_fn: __arena_free }
-    }
-    fn deinit(self) {
-        var c = self.head
-        while c != null {
-            let prev = c.prev
-            self.parent.free_fn(self.parent.ctx, c, c.size)
-            c = prev
+    static Self init(Allocator parent) { return Self{ .parent = parent } };
+    Allocator allocator() {
+        return Allocator{ .ctx = this, .alloc_fn = __arena_alloc, .free_fn = __arena_free };
+    };
+    void deinit() {
+        auto c = this->head;
+        while (c != null) {
+            const auto prev = c.prev;
+            this->parent.free_fn(this->parent.ctx, c, c.size);
+            c = prev;
         }
-        self.head = null
-        self.used = 0
-        self.cap = 0
+        this->head = null;
+        this->used = 0;
+        this->cap = 0;
     }
 }
 
-fn __arena_alloc(ctx: *void, n: u64, align: u64) *void {
-    let ar = ctx as *Arena
-    let hdr = sizeof(__ChunkHdr)
-    if ar.head != null {
-        let base = (ar.head as u64) + hdr
-        let at = (base + ar.used + align - 1) / align * align
-        if at + n <= base + ar.cap {
-            ar.used = at + n - base
-            ar.total += n
-            return at as *void
+void* __arena_alloc(void* ctx, u64 n, u64 align) {
+    const auto ar = ctx as *Arena;
+    const auto hdr = sizeof(__ChunkHdr);
+    if (ar.head != null) {
+        const auto base = (ar.head as u64) + hdr;
+        const auto at = (base + ar.used + align - 1) / align * align;
+        if (at + n <= base + ar.cap) {
+            ar.used = at + n - base;
+            ar.total += n;
+            return at as *void;
         }
     }
-    var size: u64 = 64 * 1024
-    while size < n + align + hdr { size *= 2 }
-    let mem = ar.parent.alloc_fn(ar.parent.ctx, size, 16)
-    if mem == null { return null }
-    let c = mem as *__ChunkHdr
-    c.prev = ar.head
-    c.size = size
-    ar.head = c
-    ar.used = 0
-    ar.cap = size - hdr
-    return __arena_alloc(ctx, n, align)
+    u64 size = 64 * 1024;
+    while (size < n + align + hdr) { size *= 2; }
+    const auto mem = ar.parent.alloc_fn(ar.parent.ctx, size, 16);
+    if (mem == null) { return null; }
+    const auto c = mem as *__ChunkHdr;
+    c.prev = ar.head;
+    c.size = size;
+    ar.head = c;
+    ar.used = 0;
+    ar.cap = size - hdr;
+    return __arena_alloc(ctx, n, align);
 }
 
-fn __arena_free(ctx: *void, p: *void, n: u64) {}
+void __arena_free(void* ctx, void* p, u64 n) {}
 
 // ================================================================ more string helpers
 
-fn str_rfind_byte(s: str, c: u8) i64 {
-    var i = s.len - 1
-    while i >= 0 {
-        if s[i] == c { return i }
-        i -= 1
+i64 str_rfind_byte(str s, u8 c) {
+    auto i = s.len - 1;
+    while (i >= 0) {
+        if (s[i] == c) { return i; }
+        i -= 1;
     }
-    return -1
+    return -1;
 }
 
-fn str_find_byte(s: str, c: u8) i64 {
-    for i, x in s { if x == c { return i } }
-    return -1
+i64 str_find_byte(str s, u8 c) {
+    for (auto [i, x] : s) { if (x == c) { return i; } }
+    return -1;
 }
 
 /// parse with an explicit radix (2..36); accepts an optional 0x/0b/0o prefix when radix == 0
-fn parse_int_radix(s: str, radix: i64) !u64 {
-    var t = s
-    var r = radix
-    if r == 0 {
-        r = 10
-        if t.len > 2 && t[0] == '0' {
-            if t[1] == 'x' { r = 16; t = t[2..] } else if t[1] == 'b' { r = 2; t = t[2..] } else if t[1] == 'o' { r = 8; t = t[2..] }
+!u64 parse_int_radix(str s, i64 radix) {
+    auto t = s;
+    auto r = radix;
+    if (r == 0) {
+        r = 10;
+        if (t.len > 2 && t[0] == '0') {
+            if (t[1] == 'x') { r = 16; t = t[2..]; } else if (t[1] == 'b') { r = 2; t = t[2..]; } else if (t[1] == 'o') { r = 8; t = t[2..]; }
         }
     }
-    if t.len == 0 { return error.InvalidNumber }
-    var v: u64 = 0
-    for c in t {
-        if c == '_' { continue }
-        var d: i64 = 99
-        if is_digit(c) { d = (c - '0') as i64 } else if c >= 'a' && c <= 'z' { d = (c - 'a') as i64 + 10 } else if c >= 'A' && c <= 'Z' { d = (c - 'A') as i64 + 10 }
-        if d >= r { return error.InvalidNumber }
-        v = v * (r as u64) + (d as u64)
+    if (t.len == 0) { return error.InvalidNumber; }
+    u64 v = 0;
+    for (auto c : t) {
+        if (c == '_') { continue; }
+        i64 d = 99;
+        if (is_digit(c)) { d = (c - '0') as i64; } else if (c >= 'a' && c <= 'z') { d = (c - 'a') as i64 + 10; } else if (c >= 'A' && c <= 'Z') { d = (c - 'A') as i64 + 10; }
+        if (d >= r) { return error.InvalidNumber; }
+        v = v * (r as u64) + (d as u64);
     }
-    return v
+    return v;
 }
 
-extern fn strtod(s: *u8, end: **u8) f64
+extern f64 strtod(u8* s, u8**end);
 
-fn parse_float(s: str) !f64 {
-    var buf: [128]u8
-    let p = to_cstr(buf[..], s)?
-    var end: *u8 = null
-    let v = strtod(p, &end)
-    if (end as u64) - (p as u64) != s.len as u64 { return error.InvalidNumber }
-    return v
+!f64 parse_float(str s) {
+    u8[128] buf;
+    const auto p = to_cstr(buf[..], s)?;
+    u8* end = null;
+    const auto v = strtod(p, &end);
+    if ((end as u64) - (p as u64) != s.len as u64) { return error.InvalidNumber; }
+    return v;
 }
 
 /// reinterpret the bits of a value (same size required at the call site)
-fn bits_f64(x: f64) u64 { var y = x; return *(&y as *u64) }
-fn f64_from_bits(x: u64) f64 { var y = x; return *(&y as *f64) }
+u64 bits_f64(f64 x) { auto y = x; return *(&y as *u64); }
+f64 f64_from_bits(u64 x) { auto y = x; return *(&y as *f64); }
 
 // ================================================================ time
-struct Timespec { sec: i64, nsec: i64 }
-extern fn clock_gettime(id: i32, ts: *Timespec) i32
+struct Timespec { i64 sec; i64 nsec; }
+extern i32 clock_gettime(i32 id, Timespec* ts);
 
 /// monotonic wall clock in nanoseconds
-fn now_ns() i64 {
-    var ts = Timespec{ sec: 0, nsec: 0 }
-    _ = clock_gettime(1, &ts)
-    return ts.sec * 1000000000 + ts.nsec
+i64 now_ns() {
+    auto ts = Timespec{ .sec = 0, .nsec = 0 };
+    _ = clock_gettime(1, &ts);
+    return ts.sec * 1000000000 + ts.nsec;
 }
 
 // ================================================================ formatting
 // The compiler only builds `Fmt` values at call sites whose last parameter is a `Fmt`
 // and calls the `__fmt_*` hooks below from the per-type thunks it generates.
 
-extern fn dprintf(fd: i32, fmt: *u8, ...) i32
-extern fn snprintf(buf: *u8, n: u64, fmt: *u8, ...) i32
+extern i32 dprintf(i32 fd, u8* fmt, ...);
+extern i32 snprintf(u8* buf, u64 n, u8* fmt, ...);
 
 struct Writer {
-    ctx: *void
-    write_fn: fn(*void, str) !void
+    void* ctx;
+    fn(void*, str) -> !void write_fn;
+
+    !void write(str s) {
+        if (s.len > 0) { this->write_fn(this->ctx, s)?; }
+    }
+
+    !void put(Fmt f) {
+        for (auto i : 0..f.pieces.len) {
+            const auto pc = &f.pieces[i];
+            this->write(pc.lit)?;
+            const auto r = pc.thunk(this, pc.value, pc.spec, 0);
+            r catch |e| {
+                if (e == error.BadFormat) { this->write("<bad format>")? } else { return e; }
+            }
+        }
+        this->write(f.tail)?;
+    }
 }
 
 struct FmtPiece {
-    lit: str
-    value: *void
-    thunk: fn(*Writer, *void, str, i64) !void
-    spec: str
+    str lit;
+    void* value;
+    fn(Writer*, void*, str, i64) -> !void thunk;
+    str spec;
 }
 
 struct Fmt {
-    pieces: []FmtPiece
-    tail: str
-}
+    FmtPiece[] pieces;
+    str tail;
 
-impl Writer {
-    fn write(self, s: str) !void {
-        if s.len > 0 { self.write_fn(self.ctx, s)? }
-    }
-
-    fn put(self, f: Fmt) !void {
-        for i in 0..f.pieces.len {
-            let pc = &f.pieces[i]
-            self.write(pc.lit)?
-            let r = pc.thunk(self, pc.value, pc.spec, 0)
-            r catch |e| {
-                if e == error.BadFormat { self.write("<bad format>")? } else { return e }
-            }
-        }
-        self.write(f.tail)?
-    }
-}
-
-impl Fmt {
-    fn fmt(self, w: *Writer, spec: str) !void { return w.put(*self) }
+    !void fmt(Writer* w, str spec) { return w.put(*this); }
 }
 
 struct OutBuf {
-    buf: [512]u8
-    n: i64
-    fd: i32
+    u8[512] buf;
+    i64 n;
+    i32 fd;
 }
 
-fn __ob_flush(b: *OutBuf) {
-    if b.n == 0 { return }
-    if b.fd == 1 {
-        printf("%.*s", b.n as i32, b.buf.ptr)
+void __ob_flush(OutBuf* b) {
+    if (b.n == 0) { return; }
+    if (b.fd == 1) {
+        printf("%.*s", b.n as i32, b.buf.ptr);
     } else {
-        fflush(null)
-        dprintf(2, "%.*s", b.n as i32, b.buf.ptr)
+        fflush(null);
+        dprintf(2, "%.*s", b.n as i32, b.buf.ptr);
     }
-    b.n = 0
+    b.n = 0;
 }
 
-fn __ob_write(ctx: *void, s: str) !void {
-    let b = ctx as *OutBuf
-    if b.n + s.len > 512 { __ob_flush(b) }
-    if s.len > 512 {
-        if b.fd == 1 { printf("%.*s", s.len as i32, s.ptr) } else {
-            fflush(null)
-            dprintf(2, "%.*s", s.len as i32, s.ptr)
+!void __ob_write(void* ctx, str s) {
+    const auto b = ctx as *OutBuf;
+    if (b.n + s.len > 512) { __ob_flush(b); }
+    if (s.len > 512) {
+        if (b.fd == 1) { printf("%.*s", s.len as i32, s.ptr); } else {
+            fflush(null);
+            dprintf(2, "%.*s", s.len as i32, s.ptr);
         }
-        return
+        return;
     }
-    memcpy(b.buf.ptr + b.n, s.ptr, s.len as u64)
-    b.n += s.len
+    memcpy(b.buf.ptr + b.n, s.ptr, s.len as u64);
+    b.n += s.len;
 }
 
-fn __emit_out(fd: i32, f: Fmt, nl: bool) {
-    var ob = OutBuf{ n: 0, fd: fd, .. }
-    var w = Writer{ ctx: &ob as *void, write_fn: __ob_write }
-    _ = w.put(f)
-    if nl { _ = w.write("\n") }
-    __ob_flush(&ob)
+void __emit_out(i32 fd, Fmt f, bool nl) {
+    auto ob = OutBuf{ .n = 0, .fd = fd };
+    auto w = Writer{ .ctx = &ob as *void, .write_fn = __ob_write };
+    _ = w.put(f);
+    if (nl) { _ = w.write("\n"); }
+    __ob_flush(&ob);
 }
 
-fn print(f: Fmt) { __emit_out(1, f, false) }
-fn println(f: Fmt) { __emit_out(1, f, true) }
-fn eprint(f: Fmt) { __emit_out(2, f, false) }
-fn eprintln(f: Fmt) { __emit_out(2, f, true) }
+void print(Fmt f) { __emit_out(1, f, false); }
+void println(Fmt f) { __emit_out(1, f, true); }
+void eprint(Fmt f) { __emit_out(2, f, false); }
+void eprintln(Fmt f) { __emit_out(2, f, true); }
 
-struct FmtBuf { buf: []u8, n: i64 }
+struct FmtBuf { u8[] buf; i64 n; }
 
-fn __buf_write(ctx: *void, s: str) !void {
-    let b = ctx as *FmtBuf
-    var room = b.buf.len - 1 - b.n
-    if room < 0 { room = 0 }
-    var k = s.len
-    if k > room { k = room }
-    if k > 0 { memcpy(b.buf.ptr + b.n, s.ptr, k as u64) }
-    b.n += s.len
+!void __buf_write(void* ctx, str s) {
+    const auto b = ctx as *FmtBuf;
+    auto room = b.buf.len - 1 - b.n;
+    if (room < 0) { room = 0; }
+    auto k = s.len;
+    if (k > room) { k = room; }
+    if (k > 0) { memcpy(b.buf.ptr + b.n, s.ptr, k as u64); }
+    b.n += s.len;
 }
 
-fn bprint(buf: []u8, f: Fmt) !str {
-    var bw = FmtBuf{ buf: buf, n: 0 }
-    var w = Writer{ ctx: &bw as *void, write_fn: __buf_write }
-    w.put(f)?
-    if bw.n >= buf.len { return error.NoSpace }
-    buf[bw.n] = 0
-    return buf[0..bw.n]
+!str bprint(u8[] buf, Fmt f) {
+    auto bw = FmtBuf{ .buf = buf, .n = 0 };
+    auto w = Writer{ .ctx = &bw as *void, .write_fn = __buf_write };
+    w.put(f)?;
+    if (bw.n >= buf.len) { return error.NoSpace; }
+    buf[bw.n] = 0;
+    return buf[0..bw.n];
 }
 
-fn __list_write(ctx: *void, s: str) !void {
-    let l = ctx as *List[u8]
-    l.append(s)?
+!void __list_write(void* ctx, str s) {
+    const auto l = ctx as *List<u8>;
+    l.append(s)?;
 }
 
-fn sprint(out: *List[u8], f: Fmt) !void {
-    var w = Writer{ ctx: out as *void, write_fn: __list_write }
-    w.put(f)?
+!void sprint(List<u8>*out, Fmt f) {
+    auto w = Writer{ .ctx = out as *void, .write_fn = __list_write };
+    w.put(f)?;
 }
 
-fn __panic(file: str, line: i64, is_assert: bool, f: Fmt) {
-    if is_assert {
-        eprint("assertion failed ({file}:{line})\n")
+void __panic(str file, i64 line, bool is_assert, Fmt f) {
+    if (is_assert) {
+        eprint("assertion failed ({file}:{line})\n");
     } else {
-        eprint("panic: {f} ({file}:{line})\n")
+        eprint("panic: {f} ({file}:{line})\n");
     }
-    exit(1)
+    exit(1);
 }
 
-fn __fmt_lit(w: *Writer, s: str) !void { return w.write(s) }
+!void __fmt_lit(Writer* w, str s) { return w.write(s); }
 
 struct FmtSpec {
-    left: bool
-    plus: bool
-    space: bool
-    zero: bool
-    alt: bool
-    width: i64
-    prec: i64
-    conv: u8
+    bool left;
+    bool plus;
+    bool space;
+    bool zero;
+    bool alt;
+    i64 width;
+    i64 prec;
+    u8 conv;
 }
 
-fn __spec(spec: str) !FmtSpec {
-    var s = FmtSpec{ left: false, plus: false, space: false, zero: false, alt: false, width: 0, prec: -1, conv: 0 }
-    var i = 0
-    while i < spec.len {
-        let c = spec[i]
-        if c == '-' { s.left = true } else if c == '+' { s.plus = true } else if c == ' ' { s.space = true } else if c == '0' { s.zero = true } else if c == '#' { s.alt = true } else { break }
-        i += 1
+!FmtSpec __spec(str spec) {
+    auto s = FmtSpec{ .left = false, .plus = false, .space = false, .zero = false, .alt = false, .width = 0, .prec = -1, .conv = 0 };
+    auto i = 0;
+    while (i < spec.len) {
+        const auto c = spec[i];
+        if (c == '-') { s.left = true; } else if (c == '+') { s.plus = true; } else if (c == ' ') { s.space = true; } else if (c == '0') { s.zero = true; } else if (c == '#') { s.alt = true; } else { break; }
+        i += 1;
     }
-    while i < spec.len && is_digit(spec[i]) {
-        s.width = s.width * 10 + (spec[i] - '0') as i64
-        i += 1
+    while (i < spec.len && is_digit(spec[i])) {
+        s.width = s.width * 10 + (spec[i] - '0') as i64;
+        i += 1;
     }
-    if i < spec.len && spec[i] == '.' {
-        i += 1
-        s.prec = 0
-        while i < spec.len && is_digit(spec[i]) {
-            s.prec = s.prec * 10 + (spec[i] - '0') as i64
-            i += 1
+    if (i < spec.len && spec[i] == '.') {
+        i += 1;
+        s.prec = 0;
+        while (i < spec.len && is_digit(spec[i])) {
+            s.prec = s.prec * 10 + (spec[i] - '0') as i64;
+            i += 1;
         }
     }
-    if i < spec.len && is_alpha(spec[i]) {
-        s.conv = spec[i]
-        i += 1
+    if (i < spec.len && is_alpha(spec[i])) {
+        s.conv = spec[i];
+        i += 1;
     }
-    if i != spec.len || s.width > 4096 || s.prec > 4096 { return error.BadFormat }
-    return s
+    if (i != spec.len || s.width > 4096 || s.prec > 4096) { return error.BadFormat; }
+    return s;
+};
+
+!void __pad(Writer* w, bool zero, i64 n) {
+    const auto blanks = "                                ";
+    const auto zeros = "00000000000000000000000000000000";
+    auto left = n;
+    while (left > 0) {
+        auto k = left;
+        if (k > 32) { k = 32; }
+        if (zero) { w.write(zeros[0..k])?; } else { w.write(blanks[0..k])?; }
+        left -= k;
+    }
 }
 
-fn __pad(w: *Writer, zero: bool, n: i64) !void {
-    let blanks = "                                "
-    let zeros = "00000000000000000000000000000000"
-    var left = n
-    while left > 0 {
-        var k = left
-        if k > 32 { k = 32 }
-        if zero { w.write(zeros[0..k])? } else { w.write(blanks[0..k])? }
-        left -= k
+!void __emit(Writer* w, FmtSpec sp, str prefix, str body, i64 zeros, bool zero_ok) {
+    const auto total = prefix.len + zeros + body.len;
+    auto fill = sp.width - total;
+    if (fill < 0) { fill = 0; }
+    if (sp.left) {
+        w.write(prefix)?;
+        __pad(w, true, zeros)?;
+        w.write(body)?;
+        return __pad(w, false, fill);
     }
+    if (sp.zero && zero_ok) {
+        w.write(prefix)?;
+        __pad(w, true, fill + zeros)?;
+        return w.write(body);
+    }
+    __pad(w, false, fill)?;
+    w.write(prefix)?;
+    __pad(w, true, zeros)?;
+    return w.write(body);
 }
 
-fn __emit(w: *Writer, sp: FmtSpec, prefix: str, body: str, zeros: i64, zero_ok: bool) !void {
-    let total = prefix.len + zeros + body.len
-    var fill = sp.width - total
-    if fill < 0 { fill = 0 }
-    if sp.left {
-        w.write(prefix)?
-        __pad(w, true, zeros)?
-        w.write(body)?
-        return __pad(w, false, fill)
+!void __fmt_num(Writer* w, u64 bits, bool signed, str spec) {
+    const auto sp = __spec(spec)?;
+    auto conv = sp.conv;
+    if (conv == 0) {
+        if (signed) { conv = 'd'; } else { conv = 'u'; }
     }
-    if sp.zero && zero_ok {
-        w.write(prefix)?
-        __pad(w, true, fill + zeros)?
-        return w.write(body)
+    if (conv == 'c') {
+        u8[1] one;
+        one[0] = bits as u8;
+        return __emit(w, sp, "", one[..], 0, false);
     }
-    __pad(w, false, fill)?
-    w.write(prefix)?
-    __pad(w, true, zeros)?
-    return w.write(body)
+    if (str_find_byte("dixXou", conv) < 0) { return error.BadFormat; }
+    u64 base = 10;
+    if (conv == 'x' || conv == 'X') { base = 16; }
+    if (conv == 'o') { base = 8; }
+    auto neg = false;
+    auto mag = bits;
+    if (conv == 'd' || conv == 'i') {
+        if ((bits as i64) < 0) {
+            neg = true;
+            mag = 0 - bits;
+        }
+    }
+    u8[72] digits;
+    auto n = 72;
+    const auto hex = "0123456789abcdef";
+    const auto hexu = "0123456789ABCDEF";
+    if (mag == 0) {
+        n -= 1;
+        digits[n] = '0';
+    }
+    while (mag > 0) {
+        n -= 1;
+        const auto dgt = (mag % base) as i64;
+        if (conv == 'X') { digits[n] = hexu[dgt]; } else { digits[n] = hex[dgt]; }
+        mag = mag / base;
+    }
+    auto body = digits[n..];
+    i64 zeros = 0;
+    if (sp.prec > body.len) { zeros = sp.prec - body.len; }
+    auto prefix = "";
+    if (neg) {
+        prefix = "-";
+    } else if (base == 10 && sp.plus) {
+        prefix = "+";
+    } else if (base == 10 && sp.space) {
+        prefix = " ";
+    } else if (sp.alt && base == 16 && bits != 0) {
+        if (conv == 'X') { prefix = "0X"; } else { prefix = "0x"; }
+    } else if (sp.alt && base == 8 && zeros == 0) {
+        prefix = "0";
+    }
+    return __emit(w, sp, prefix, body, zeros, sp.prec < 0);
 }
 
-fn __fmt_num(w: *Writer, bits: u64, signed: bool, spec: str) !void {
-    let sp = __spec(spec)?
-    var conv = sp.conv
-    if conv == 0 {
-        if signed { conv = 'd' } else { conv = 'u' }
-    }
-    if conv == 'c' {
-        var one: [1]u8
-        one[0] = bits as u8
-        return __emit(w, sp, "", one[..], 0, false)
-    }
-    if str_find_byte("dixXou", conv) < 0 { return error.BadFormat }
-    var base: u64 = 10
-    if conv == 'x' || conv == 'X' { base = 16 }
-    if conv == 'o' { base = 8 }
-    var neg = false
-    var mag = bits
-    if conv == 'd' || conv == 'i' {
-        if (bits as i64) < 0 {
-            neg = true
-            mag = 0 - bits
+!void __fmt_int(Writer* w, i64 v, str spec) {
+    if (spec.len == 0) {
+        u8[24] digits;
+        auto n = 24;
+        auto neg = false;
+        auto mag = v as u64;
+        if (v < 0) {
+            neg = true;
+            mag = 0 - mag;
         }
+        if (mag == 0) {
+            n -= 1;
+            digits[n] = '0';
+        }
+        while (mag > 0) {
+            n -= 1;
+            digits[n] = '0' + (mag % 10) as u8;
+            mag = mag / 10;
+        }
+        if (neg) {
+            n -= 1;
+            digits[n] = '-';
+        }
+        return w.write(digits[n..]);
     }
-    var digits: [72]u8
-    var n = 72
-    let hex = "0123456789abcdef"
-    let hexu = "0123456789ABCDEF"
-    if mag == 0 {
-        n -= 1
-        digits[n] = '0'
-    }
-    while mag > 0 {
-        n -= 1
-        let dgt = (mag % base) as i64
-        if conv == 'X' { digits[n] = hexu[dgt] } else { digits[n] = hex[dgt] }
-        mag = mag / base
-    }
-    var body = digits[n..]
-    var zeros: i64 = 0
-    if sp.prec > body.len { zeros = sp.prec - body.len }
-    var prefix = ""
-    if neg {
-        prefix = "-"
-    } else if base == 10 && sp.plus {
-        prefix = "+"
-    } else if base == 10 && sp.space {
-        prefix = " "
-    } else if sp.alt && base == 16 && bits != 0 {
-        if conv == 'X' { prefix = "0X" } else { prefix = "0x" }
-    } else if sp.alt && base == 8 && zeros == 0 {
-        prefix = "0"
-    }
-    return __emit(w, sp, prefix, body, zeros, sp.prec < 0)
+    return __fmt_num(w, v as u64, true, spec);
 }
 
-fn __fmt_int(w: *Writer, v: i64, spec: str) !void {
-    if spec.len == 0 {
-        var digits: [24]u8
-        var n = 24
-        var neg = false
-        var mag = v as u64
-        if v < 0 {
-            neg = true
-            mag = 0 - mag
+!void __fmt_uint(Writer* w, u64 v, str spec) {
+    if (spec.len == 0) {
+        u8[24] digits;
+        auto n = 24;
+        auto mag = v;
+        if (mag == 0) {
+            n -= 1;
+            digits[n] = '0';
         }
-        if mag == 0 {
-            n -= 1
-            digits[n] = '0'
+        while (mag > 0) {
+            n -= 1;
+            digits[n] = '0' + (mag % 10) as u8;
+            mag = mag / 10;
         }
-        while mag > 0 {
-            n -= 1
-            digits[n] = '0' + (mag % 10) as u8
-            mag = mag / 10
-        }
-        if neg {
-            n -= 1
-            digits[n] = '-'
-        }
-        return w.write(digits[n..])
+        return w.write(digits[n..]);
     }
-    return __fmt_num(w, v as u64, true, spec)
+    return __fmt_num(w, v, false, spec);
 }
 
-fn __fmt_uint(w: *Writer, v: u64, spec: str) !void {
-    if spec.len == 0 {
-        var digits: [24]u8
-        var n = 24
-        var mag = v
-        if mag == 0 {
-            n -= 1
-            digits[n] = '0'
-        }
-        while mag > 0 {
-            n -= 1
-            digits[n] = '0' + (mag % 10) as u8
-            mag = mag / 10
-        }
-        return w.write(digits[n..])
-    }
-    return __fmt_num(w, v, false, spec)
-}
-
-fn __fmt_float(w: *Writer, v: f64, spec: str) !void {
-    var f: [48]u8
-    var out: [512]u8
-    var n = 0
-    f[n] = '%'
-    n += 1
-    if spec.len == 0 {
-        f[n] = 'g'
-        n += 1
+!void __fmt_float(Writer* w, f64 v, str spec) {
+    u8[48] f;
+    u8[512] out;
+    auto n = 0;
+    f[n] = '%';
+    n += 1;
+    if (spec.len == 0) {
+        f[n] = 'g';
+        n += 1;
     } else {
-        let sp = __spec(spec)?
-        for c in spec {
-            if is_alpha(c) { break }
-            if n >= 40 { return error.BadFormat }
-            f[n] = c
-            n += 1
+        const auto sp = __spec(spec)?;
+        for (auto c : spec) {
+            if (is_alpha(c)) { break; }
+            if (n >= 40) { return error.BadFormat; }
+            f[n] = c;
+            n += 1;
         }
-        var conv = sp.conv
-        if conv == 0 { conv = 'f' }
-        if str_find_byte("eEfFgGaA", conv) < 0 { return error.BadFormat }
-        f[n] = conv
-        n += 1
+        auto conv = sp.conv;
+        if (conv == 0) { conv = 'f'; }
+        if (str_find_byte("eEfFgGaA", conv) < 0) { return error.BadFormat; }
+        f[n] = conv;
+        n += 1;
     }
-    f[n] = 0
-    let len = snprintf(out.ptr, 512, f.ptr, v)
-    if len < 0 || len >= 512 { return error.BadFormat }
-    return w.write(out[0..len as i64])
+    f[n] = 0;
+    const auto len = snprintf(out.ptr, 512, f.ptr, v);
+    if (len < 0 || len >= 512) { return error.BadFormat; }
+    return w.write(out[0..len as i64]);
 }
 
-fn __fmt_str(w: *Writer, s: str, spec: str, quoted: bool) !void {
-    if quoted {
-        w.write("\"")?
-        w.write(s)?
-        return w.write("\"")
+!void __fmt_str(Writer* w, str s, str spec, bool quoted) {
+    if (quoted) {
+        w.write("\"")?;
+        w.write(s)?;
+        return w.write("\"");
     }
-    if spec.len == 0 { return w.write(s) }
-    let sp = __spec(spec)?
-    if sp.conv != 0 { return error.BadFormat }
-    var body = s
-    if sp.prec >= 0 && sp.prec < body.len { body = body[0..sp.prec] }
-    return __emit(w, sp, "", body, 0, false)
+    if (spec.len == 0) { return w.write(s); }
+    const auto sp = __spec(spec)?;
+    if (sp.conv != 0) { return error.BadFormat; }
+    auto body = s;
+    if (sp.prec >= 0 && sp.prec < body.len) { body = body[0..sp.prec]; }
+    return __emit(w, sp, "", body, 0, false);
 }
 
-fn __fmt_bool(w: *Writer, b: bool, spec: str) !void {
-    if b { return __fmt_str(w, "true", spec, false) }
-    return __fmt_str(w, "false", spec, false)
+!void __fmt_bool(Writer* w, bool b, str spec) {
+    if (b) { return __fmt_str(w, "true", spec, false); }
+    return __fmt_str(w, "false", spec, false);
 }
 
-fn __fmt_ptr(w: *Writer, v: u64, spec: str) !void {
-    if v == 0 { return w.write("(nil)") }
-    w.write("0x")?
-    return __fmt_num(w, v, false, "x")
+!void __fmt_ptr(Writer* w, u64 v, str spec) {
+    if (v == 0) { return w.write("(nil)"); }
+    w.write("0x")?;
+    return __fmt_num(w, v, false, "x");
 }

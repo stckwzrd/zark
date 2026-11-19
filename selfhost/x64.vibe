@@ -1,501 +1,495 @@
 // x86-64 machine code encoder and ELF64 relocatable object writer. No external assembler.
 
-const RAX = 0
-const RCX = 1
-const RDX = 2
-const RBX = 3
-const RSP = 4
-const RBP = 5
-const RSI = 6
-const RDI = 7
-const R8 = 8
-const R9 = 9
-const R10 = 10
-const R11 = 11
-const R12 = 12
-const R13 = 13
-const R14 = 14
-const R15 = 15
+const auto RAX = 0;
+const auto RCX = 1;
+const auto RDX = 2;
+const auto RBX = 3;
+const auto RSP = 4;
+const auto RBP = 5;
+const auto RSI = 6;
+const auto RDI = 7;
+const auto R8 = 8;
+const auto R9 = 9;
+const auto R10 = 10;
+const auto R11 = 11;
+const auto R12 = 12;
+const auto R13 = 13;
+const auto R14 = 14;
+const auto R15 = 15;
 
 // condition codes
-const CC_B = 2
-const CC_AE = 3
-const CC_E = 4
-const CC_NE = 5
-const CC_BE = 6
-const CC_A = 7
-const CC_S = 8
-const CC_P = 10
-const CC_NP = 11
-const CC_L = 12
-const CC_GE = 13
-const CC_LE = 14
-const CC_G = 15
+const auto CC_B = 2;
+const auto CC_AE = 3;
+const auto CC_E = 4;
+const auto CC_NE = 5;
+const auto CC_BE = 6;
+const auto CC_A = 7;
+const auto CC_S = 8;
+const auto CC_P = 10;
+const auto CC_NP = 11;
+const auto CC_L = 12;
+const auto CC_GE = 13;
+const auto CC_LE = 14;
+const auto CC_G = 15;
 
 // relocation types
-const R_X86_64_64 = 1
-const R_X86_64_PC32 = 2
-const R_X86_64_PLT32 = 4
+const auto R_X86_64_64 = 1;
+const auto R_X86_64_PC32 = 2;
+const auto R_X86_64_PLT32 = 4;
 
-struct Reloc { off: i64, sym: str, kind: i64, addend: i64 }
-struct Fixup { off: i64, label: str }
+struct Reloc { i64 off; str sym; i64 kind; i64 addend; }
+struct Fixup { i64 off; str label; }
 
 struct Asm {
-    code: List[u8]
-    relocs: List[Reloc]
-    fixups: List[Fixup]     // jumps to labels in the current function
-    labels: Map[i64]
-}
+    List<u8> code;
+    List<Reloc> relocs;
+    List<Fixup> fixups;     // jumps to labels in the current function
+    Map<i64> labels;
 
-fn new_asm(a: Allocator) Asm {
-    return Asm{ code: List[u8].init(a), relocs: List[Reloc].init(a), fixups: List[Fixup].init(a), labels: Map[i64].init(a) }
-}
-
-fn put_u32(buf: *List[u8], v: i64) !void {
-    buf.push((v & 0xff) as u8)?
-    buf.push(((v >> 8) & 0xff) as u8)?
-    buf.push(((v >> 16) & 0xff) as u8)?
-    buf.push(((v >> 24) & 0xff) as u8)?
-}
-
-fn put_u64(buf: *List[u8], v: i64) !void {
-    put_u32(buf, v & 0xffffffff)?
-    put_u32(buf, (v >> 32) & 0xffffffff)?
-}
-
-fn put_u16(buf: *List[u8], v: i64) !void {
-    buf.push((v & 0xff) as u8)?
-    buf.push(((v >> 8) & 0xff) as u8)?
-}
-
-fn patch_u32(buf: *List[u8], at: i64, v: i64) {
-    buf.items[at] = (v & 0xff) as u8
-    buf.items[at + 1] = ((v >> 8) & 0xff) as u8
-    buf.items[at + 2] = ((v >> 16) & 0xff) as u8
-    buf.items[at + 3] = ((v >> 24) & 0xff) as u8
-}
-
-impl Asm {
-    fn pos(self) i64 { return self.code.len }
-    fn b(self, x: i64) !void { self.code.push((x & 0xff) as u8)? }
-    fn d32(self, x: i64) !void { put_u32(&self.code, x)? }
+    i64 pos() { return this->code.len; }
+    !void b(i64 x) { this->code.push((x & 0xff) as u8)?; }
+    !void d32(i64 x) { put_u32(&this->code, x)?; }
 
     /// opcode bytes packed big-endian into an int: 0x0FAF -> 0F AF
-    fn opc(self, op: i64) !void {
-        if op > 0xffff { self.b(op >> 16)? }
-        if op > 0xff { self.b(op >> 8)? }
-        self.b(op)?
+    !void opc(i64 op) {
+        if (op > 0xffff) { this->b(op >> 16)?; }
+        if (op > 0xff) { this->b(op >> 8)?; }
+        this->b(op)?;
     }
 
-    fn rex(self, w: bool, r: i64, b: i64, force: bool) !void {
-        var x = 0x40
-        if w { x = x | 8 }
-        if r >= 8 { x = x | 4 }
-        if b >= 8 { x = x | 1 }
-        if x != 0x40 || force { self.b(x)? }
+    !void rex(bool w, i64 r, i64 b, bool force) {
+        auto x = 0x40;
+        if (w) { x = x | 8; }
+        if (r >= 8) { x = x | 4; }
+        if (b >= 8) { x = x | 1; }
+        if (x != 0x40 || force) { this->b(x)?; }
     }
 
     /// [base + disp32]
-    fn mem(self, reg: i64, base: i64, disp: i64) !void {
-        self.b(0x80 | ((reg & 7) << 3) | (base & 7))?
-        if (base & 7) == 4 { self.b(0x24)? }
-        self.d32(disp)?
+    !void mem(i64 reg, i64 base, i64 disp) {
+        this->b(0x80 | ((reg & 7) << 3) | (base & 7))?;
+        if ((base & 7) == 4) { this->b(0x24)?; }
+        this->d32(disp)?;
     }
 
     /// generic  [pfx] [REX] op  modrm(mem)
-    fn rm_mem(self, pfx: i64, w: bool, op: i64, reg: i64, base: i64, disp: i64, byte_reg: bool) !void {
-        if pfx >= 0 { self.b(pfx)? }
-        self.rex(w, reg, base, byte_reg && reg >= 4 && reg < 8)?
-        self.opc(op)?
-        self.mem(reg, base, disp)?
+    !void rm_mem(i64 pfx, bool w, i64 op, i64 reg, i64 base, i64 disp, bool byte_reg) {
+        if (pfx >= 0) { this->b(pfx)?; }
+        this->rex(w, reg, base, byte_reg && reg >= 4 && reg < 8)?;
+        this->opc(op)?;
+        this->mem(reg, base, disp)?;
     }
 
     /// generic  [pfx] [REX] op  modrm(reg, rm)
-    fn rm_reg(self, pfx: i64, w: bool, op: i64, reg: i64, rm: i64) !void {
-        if pfx >= 0 { self.b(pfx)? }
-        self.rex(w, reg, rm, false)?
-        self.opc(op)?
-        self.b(0xC0 | ((reg & 7) << 3) | (rm & 7))?
+    !void rm_reg(i64 pfx, bool w, i64 op, i64 reg, i64 rm) {
+        if (pfx >= 0) { this->b(pfx)?; }
+        this->rex(w, reg, rm, false)?;
+        this->opc(op)?;
+        this->b(0xC0 | ((reg & 7) << 3) | (rm & 7))?;
     }
 
     // ---------------------------------------------------------------- moves
     /// load `size` bytes from [base+disp] into reg (zero or sign extended to 64 bits)
-    fn ld(self, reg: i64, base: i64, disp: i64, size: i64, sign: bool) !void {
-        if size == 8 {
-            self.rm_mem(-1, true, 0x8B, reg, base, disp, false)?
-        } else if size == 4 {
-            if sign { self.rm_mem(-1, true, 0x63, reg, base, disp, false)? } else { self.rm_mem(-1, false, 0x8B, reg, base, disp, false)? }
-        } else if size == 2 {
-            if sign { self.rm_mem(-1, true, 0x0FBF, reg, base, disp, false)? } else { self.rm_mem(-1, false, 0x0FB7, reg, base, disp, false)? }
+    !void ld(i64 reg, i64 base, i64 disp, i64 size, bool sign) {
+        if (size == 8) {
+            this->rm_mem(-1, true, 0x8B, reg, base, disp, false)?;
+        } else if (size == 4) {
+            if (sign) { this->rm_mem(-1, true, 0x63, reg, base, disp, false)?; } else { this->rm_mem(-1, false, 0x8B, reg, base, disp, false)?; }
+        } else if (size == 2) {
+            if (sign) { this->rm_mem(-1, true, 0x0FBF, reg, base, disp, false)?; } else { this->rm_mem(-1, false, 0x0FB7, reg, base, disp, false)?; }
         } else {
-            if sign { self.rm_mem(-1, true, 0x0FBE, reg, base, disp, false)? } else { self.rm_mem(-1, false, 0x0FB6, reg, base, disp, false)? }
+            if (sign) { this->rm_mem(-1, true, 0x0FBE, reg, base, disp, false)?; } else { this->rm_mem(-1, false, 0x0FB6, reg, base, disp, false)?; }
         }
     }
 
-    fn st(self, reg: i64, base: i64, disp: i64, size: i64) !void {
-        if size == 8 {
-            self.rm_mem(-1, true, 0x89, reg, base, disp, false)?
-        } else if size == 4 {
-            self.rm_mem(-1, false, 0x89, reg, base, disp, false)?
-        } else if size == 2 {
-            self.rm_mem(0x66, false, 0x89, reg, base, disp, false)?
+    !void st(i64 reg, i64 base, i64 disp, i64 size) {
+        if (size == 8) {
+            this->rm_mem(-1, true, 0x89, reg, base, disp, false)?;
+        } else if (size == 4) {
+            this->rm_mem(-1, false, 0x89, reg, base, disp, false)?;
+        } else if (size == 2) {
+            this->rm_mem(0x66, false, 0x89, reg, base, disp, false)?;
         } else {
-            self.rm_mem(-1, false, 0x88, reg, base, disp, true)?
+            this->rm_mem(-1, false, 0x88, reg, base, disp, true)?;
         }
     }
 
-    fn lea(self, reg: i64, base: i64, disp: i64) !void { self.rm_mem(-1, true, 0x8D, reg, base, disp, false)? }
+    !void lea(i64 reg, i64 base, i64 disp) { this->rm_mem(-1, true, 0x8D, reg, base, disp, false)?; }
 
     /// lea reg, [rip + sym]
-    fn lea_sym(self, reg: i64, sym: str) !void {
-        self.rex(true, reg, 0, false)?
-        self.b(0x8D)?
-        self.b(((reg & 7) << 3) | 5)?
-        self.relocs.push(Reloc{ off: self.pos(), sym: sym, kind: R_X86_64_PC32, addend: -4 })?
-        self.d32(0)?
+    !void lea_sym(i64 reg, str sym) {
+        this->rex(true, reg, 0, false)?;
+        this->b(0x8D)?;
+        this->b(((reg & 7) << 3) | 5)?;
+        this->relocs.push(Reloc{ .off = this->pos(), .sym = sym, .kind = R_X86_64_PC32, .addend = -4 })?;
+        this->d32(0)?;
     }
 
-    fn mov_imm(self, reg: i64, v: i64) !void {
-        if v >= 0 && v <= 0xffffffff {
+    !void mov_imm(i64 reg, i64 v) {
+        if (v >= 0 && v <= 0xffffffff) {
             // mov r32, imm32 (zero-extends)
-            self.rex(false, 0, reg, false)?
-            self.b(0xB8 + (reg & 7))?
-            self.d32(v)?
-        } else if v >= -2147483648 && v < 0 {
-            self.rex(true, 0, reg, false)?
-            self.b(0xC7)?
-            self.b(0xC0 | (reg & 7))?
-            self.d32(v)?
+            this->rex(false, 0, reg, false)?;
+            this->b(0xB8 + (reg & 7))?;
+            this->d32(v)?;
+        } else if (v >= -2147483648 && v < 0) {
+            this->rex(true, 0, reg, false)?;
+            this->b(0xC7)?;
+            this->b(0xC0 | (reg & 7))?;
+            this->d32(v)?;
         } else {
-            self.rex(true, 0, reg, false)?
-            self.b(0xB8 + (reg & 7))?
-            put_u64(&self.code, v)?
+            this->rex(true, 0, reg, false)?;
+            this->b(0xB8 + (reg & 7))?;
+            put_u64(&this->code, v)?;
         }
     }
 
-    fn mov_rr(self, dst: i64, src: i64) !void { self.rm_reg(-1, true, 0x89, src, dst)? }
+    !void mov_rr(i64 dst, i64 src) { this->rm_reg(-1, true, 0x89, src, dst)?; }
 
     // ---------------------------------------------------------------- integer ALU (64-bit)
-    fn alu(self, op: i64, dst: i64, src: i64) !void { self.rm_reg(-1, true, op, src, dst)? }
-    fn add(self, dst: i64, src: i64) !void { self.alu(0x01, dst, src)? }
-    fn sub(self, dst: i64, src: i64) !void { self.alu(0x29, dst, src)? }
-    fn and_(self, dst: i64, src: i64) !void { self.alu(0x21, dst, src)? }
-    fn or_(self, dst: i64, src: i64) !void { self.alu(0x09, dst, src)? }
-    fn xor_(self, dst: i64, src: i64) !void { self.alu(0x31, dst, src)? }
-    fn cmp(self, a: i64, b: i64) !void { self.alu(0x39, a, b)? }
-    fn test(self, a: i64, b: i64) !void { self.alu(0x85, a, b)? }
-    fn imul(self, dst: i64, src: i64) !void { self.rm_reg(-1, true, 0x0FAF, dst, src)? }
-    fn grp3(self, n: i64, r: i64) !void { self.rm_reg(-1, true, 0xF7, n, r)? }   // 3 neg, 6 div, 7 idiv
-    fn shift_cl(self, n: i64, r: i64) !void { self.rm_reg(-1, true, 0xD3, n, r)? } // 4 shl, 5 shr, 7 sar
-    fn cqo(self) !void {
-        self.b(0x48)?
-        self.b(0x99)?
+    !void alu(i64 op, i64 dst, i64 src) { this->rm_reg(-1, true, op, src, dst)?; }
+    !void add(i64 dst, i64 src) { this->alu(0x01, dst, src)?; }
+    !void sub(i64 dst, i64 src) { this->alu(0x29, dst, src)?; }
+    !void and_(i64 dst, i64 src) { this->alu(0x21, dst, src)?; }
+    !void or_(i64 dst, i64 src) { this->alu(0x09, dst, src)?; }
+    !void xor_(i64 dst, i64 src) { this->alu(0x31, dst, src)?; }
+    !void cmp(i64 a, i64 b) { this->alu(0x39, a, b)?; }
+    !void test(i64 a, i64 b) { this->alu(0x85, a, b)?; }
+    !void imul(i64 dst, i64 src) { this->rm_reg(-1, true, 0x0FAF, dst, src)?; }
+    !void grp3(i64 n, i64 r) { this->rm_reg(-1, true, 0xF7, n, r)?; }   // 3 neg, 6 div, 7 idiv
+    !void shift_cl(i64 n, i64 r) { this->rm_reg(-1, true, 0xD3, n, r)?; } // 4 shl, 5 shr, 7 sar
+    !void cqo() {
+        this->b(0x48)?;
+        this->b(0x99)?;
     }
-    fn add_imm(self, r: i64, v: i64) !void {
-        self.rex(true, 0, r, false)?
-        self.b(0x81)?
-        self.b(0xC0 | (r & 7))?
-        self.d32(v)?
+    !void add_imm(i64 r, i64 v) {
+        this->rex(true, 0, r, false)?;
+        this->b(0x81)?;
+        this->b(0xC0 | (r & 7))?;
+        this->d32(v)?;
     }
-    fn alu_imm(self, n: i64, r: i64, v: i64) !void {
-        self.rex(true, 0, r, false)?
-        if v >= -128 && v <= 127 {
-            self.b(0x83)?
-            self.b(0xC0 | (n << 3) | (r & 7))?
-            self.b(v)?
+    !void alu_imm(i64 n, i64 r, i64 v) {
+        this->rex(true, 0, r, false)?;
+        if (v >= -128 && v <= 127) {
+            this->b(0x83)?;
+            this->b(0xC0 | (n << 3) | (r & 7))?;
+            this->b(v)?;
         } else {
-            self.b(0x81)?
-            self.b(0xC0 | (n << 3) | (r & 7))?
-            self.d32(v)?
+            this->b(0x81)?;
+            this->b(0xC0 | (n << 3) | (r & 7))?;
+            this->d32(v)?;
         }
     }
-    fn shift_imm(self, n: i64, r: i64, v: i64) !void {
-        self.rex(true, 0, r, false)?
-        self.b(0xC1)?
-        self.b(0xC0 | (n << 3) | (r & 7))?
-        self.b(v)?
+    !void shift_imm(i64 n, i64 r, i64 v) {
+        this->rex(true, 0, r, false)?;
+        this->b(0xC1)?;
+        this->b(0xC0 | (n << 3) | (r & 7))?;
+        this->b(v)?;
     }
-    fn imul_rri(self, dst: i64, src: i64, v: i64) !void {
-        self.rex(true, dst, src, false)?
-        self.b(0x69)?
-        self.b(0xC0 | ((dst & 7) << 3) | (src & 7))?
-        self.d32(v)?
+    !void imul_rri(i64 dst, i64 src, i64 v) {
+        this->rex(true, dst, src, false)?;
+        this->b(0x69)?;
+        this->b(0xC0 | ((dst & 7) << 3) | (src & 7))?;
+        this->d32(v)?;
     }
-    fn imul_imm(self, r: i64, v: i64) !void {
+    !void imul_imm(i64 r, i64 v) {
         // imul r, r, imm32
-        self.rex(true, r, r, false)?
-        self.b(0x69)?
-        self.b(0xC0 | ((r & 7) << 3) | (r & 7))?
-        self.d32(v)?
+        this->rex(true, r, r, false)?;
+        this->b(0x69)?;
+        this->b(0xC0 | ((r & 7) << 3) | (r & 7))?;
+        this->d32(v)?;
     }
-    fn setcc(self, cc: i64, r: i64) !void {
-        self.rex(false, 0, r, r >= 4)?
-        self.b(0x0F)?
-        self.b(0x90 + cc)?
-        self.b(0xC0 | (r & 7))?
+    !void setcc(i64 cc, i64 r) {
+        this->rex(false, 0, r, r >= 4)?;
+        this->b(0x0F)?;
+        this->b(0x90 + cc)?;
+        this->b(0xC0 | (r & 7))?;
     }
-    fn movzx_b(self, dst: i64, src: i64) !void {
-        self.rex(false, dst, src, src >= 4)?
-        self.b(0x0F)?
-        self.b(0xB6)?
-        self.b(0xC0 | ((dst & 7) << 3) | (src & 7))?
+    !void movzx_b(i64 dst, i64 src) {
+        this->rex(false, dst, src, src >= 4)?;
+        this->b(0x0F)?;
+        this->b(0xB6)?;
+        this->b(0xC0 | ((dst & 7) << 3) | (src & 7))?;
     }
-    fn cmov(self, cc: i64, dst: i64, src: i64) !void { self.rm_reg(-1, true, 0x0F40 + cc, dst, src)? }
+    !void cmov(i64 cc, i64 dst, i64 src) { this->rm_reg(-1, true, 0x0F40 + cc, dst, src)?; }
 
     // ---------------------------------------------------------------- SSE
-    fn movq_x_r(self, x: i64, r: i64, wide: bool) !void { self.rm_reg(0x66, wide, 0x0F6E, x, r)? }
-    fn movq_r_x(self, r: i64, x: i64, wide: bool) !void { self.rm_reg(0x66, wide, 0x0F7E, x, r)? }
-    fn sse(self, pfx: i64, op: i64, x: i64, y: i64) !void { self.rm_reg(pfx, false, op, x, y)? }
-    fn cvtsi2f(self, dbl: bool, x: i64, r: i64) !void {
-        var p = 0xF3
-        if dbl { p = 0xF2 }
-        self.rm_reg(p, true, 0x0F2A, x, r)?
+    !void movq_x_r(i64 x, i64 r, bool wide) { this->rm_reg(0x66, wide, 0x0F6E, x, r)?; }
+    !void movq_r_x(i64 r, i64 x, bool wide) { this->rm_reg(0x66, wide, 0x0F7E, x, r)?; }
+    !void sse(i64 pfx, i64 op, i64 x, i64 y) { this->rm_reg(pfx, false, op, x, y)?; }
+    !void cvtsi2f(bool dbl, i64 x, i64 r) {
+        auto p = 0xF3;
+        if (dbl) { p = 0xF2; }
+        this->rm_reg(p, true, 0x0F2A, x, r)?;
     }
-    fn cvttf2si(self, dbl: bool, r: i64, x: i64) !void {
-        var p = 0xF3
-        if dbl { p = 0xF2 }
-        self.rm_reg(p, true, 0x0F2C, r, x)?
+    !void cvttf2si(bool dbl, i64 r, i64 x) {
+        auto p = 0xF3;
+        if (dbl) { p = 0xF2; }
+        this->rm_reg(p, true, 0x0F2C, r, x)?;
     }
 
     // ---------------------------------------------------------------- control flow
-    fn jmp(self, label: str) !void {
-        self.b(0xE9)?
-        self.fixups.push(Fixup{ off: self.pos(), label: label })?
-        self.d32(0)?
+    !void jmp(str label) {
+        this->b(0xE9)?;
+        this->fixups.push(Fixup{ .off = this->pos(), .label = label })?;
+        this->d32(0)?;
     }
-    fn jcc(self, cc: i64, label: str) !void {
-        self.b(0x0F)?
-        self.b(0x80 + cc)?
-        self.fixups.push(Fixup{ off: self.pos(), label: label })?
-        self.d32(0)?
+    !void jcc(i64 cc, str label) {
+        this->b(0x0F)?;
+        this->b(0x80 + cc)?;
+        this->fixups.push(Fixup{ .off = this->pos(), .label = label })?;
+        this->d32(0)?;
     }
-    fn call_sym(self, sym: str) !void {
-        self.b(0xE8)?
-        self.relocs.push(Reloc{ off: self.pos(), sym: sym, kind: R_X86_64_PLT32, addend: -4 })?
-        self.d32(0)?
+    !void call_sym(str sym) {
+        this->b(0xE8)?;
+        this->relocs.push(Reloc{ .off = this->pos(), .sym = sym, .kind = R_X86_64_PLT32, .addend = -4 })?;
+        this->d32(0)?;
     }
-    fn call_reg(self, r: i64) !void { self.rm_reg(-1, false, 0xFF, 2, r)? }
-    fn bind(self, label: str) !void { self.labels.put(label, self.pos())? }
+    !void call_reg(i64 r) { this->rm_reg(-1, false, 0xFF, 2, r)?; }
+    !void bind(str label) { this->labels.put(label, this->pos())?; }
 
-    fn resolve_fixups(self) !void {
-        for f in self.fixups {
-            let target = self.labels.get(f.label) catch {
-                eprintln("native: unknown label '{f.label}'")
-                return error.CompileFailed
+    !void resolve_fixups() {
+        for (auto f : this->fixups) {
+            const auto target = this->labels.get(f.label) catch {
+                eprintln("native: unknown label '{f.label}'");
+                return error.CompileFailed;
             }
-            patch_u32(&self.code, f.off, target - (f.off + 4))
+            patch_u32(&this->code, f.off, target - (f.off + 4));
         }
-        self.fixups.clear()
-        self.labels.clear_all()
+        this->fixups.clear();
+        this->labels.clear_all();
     }
 }
 
-impl Map[V] {
-    fn clear_all(self) {
-        if self.entries.len > 0 { memset(self.entries.ptr, 0, (self.entries.len as u64) * sizeof(MapEntry[V])) }
-        self.len = 0
-    }
+Asm new_asm(Allocator a) {
+    return Asm{ .code = List<u8>::init(a), .relocs = List<Reloc>::init(a), .fixups = List<Fixup>::init(a), .labels = Map<i64>::init(a) };
+};
+
+!void put_u32(List<u8>*buf, i64 v) {
+    buf.push((v & 0xff) as u8)?;
+    buf.push(((v >> 8) & 0xff) as u8)?;
+    buf.push(((v >> 16) & 0xff) as u8)?;
+    buf.push(((v >> 24) & 0xff) as u8)?;
+}
+
+!void put_u64(List<u8>*buf, i64 v) {
+    put_u32(buf, v & 0xffffffff)?;
+    put_u32(buf, (v >> 32) & 0xffffffff)?;
+}
+
+!void put_u16(List<u8>*buf, i64 v) {
+    buf.push((v & 0xff) as u8)?;
+    buf.push(((v >> 8) & 0xff) as u8)?;
+}
+
+void patch_u32(List<u8>*buf, i64 at, i64 v) {
+    buf.items[at] = (v & 0xff) as u8;
+    buf.items[at + 1] = ((v >> 8) & 0xff) as u8;
+    buf.items[at + 2] = ((v >> 16) & 0xff) as u8;
+    buf.items[at + 3] = ((v >> 24) & 0xff) as u8;
+}
+
+template<V> void Map<V>::clear_all() {
+    if (this->entries.len > 0) { memset(this->entries.ptr, 0, (this->entries.len as u64) * sizeof(MapEntry<V>)); }
+    this->len = 0;
 }
 
 // ==================================================================== ELF64 writer
 
 struct Sym {
-    name: str
-    sec: i64        // 0 = undefined, else section index
-    value: i64
-    size: i64
-    global: bool
-    func: bool
+    str name;
+    i64 sec;        // 0 = undefined, else section index
+    i64 value;
+    i64 size;
+    bool global;
+    bool func;
 }
 
 struct ObjFile {
-    a: Allocator
-    text: Asm
-    rodata: List[u8]
-    data: List[u8]
-    data_relocs: List[Reloc]
-    syms: List[Sym]
-    sym_index: Map[i64]   // name -> index in syms
-}
+    Allocator a;
+    Asm text;
+    List<u8> rodata;
+    List<u8> data;
+    List<Reloc> data_relocs;
+    List<Sym> syms;
+    Map<i64> sym_index;   // name -> index in syms
 
-const SEC_TEXT = 1
-const SEC_RODATA = 2
-const SEC_DATA = 3
-
-fn new_obj(a: Allocator) ObjFile {
-    return ObjFile{ a: a, text: new_asm(a), rodata: List[u8].init(a), data: List[u8].init(a), data_relocs: List[Reloc].init(a), syms: List[Sym].init(a), sym_index: Map[i64].init(a) }
-}
-
-fn align_buf(buf: *List[u8], al: i64) !void {
-    while buf.len % al != 0 { buf.push(0)? }
-}
-
-impl ObjFile {
-    fn define(self, name: str, sec: i64, value: i64, size: i64, global: bool, func: bool) !void {
-        if self.sym_index.has(name) {
-            let i = self.sym_index.get(name)?
-            let s = &self.syms.items[i]
-            s.sec = sec
-            s.value = value
-            s.size = size
-            s.global = global
-            s.func = func
-            return
+    !void define(str name, i64 sec, i64 value, i64 size, bool global, bool func) {
+        if (this->sym_index.has(name)) {
+            const auto i = this->sym_index.get(name)?;
+            const auto s = &this->syms.items[i];
+            s.sec = sec;
+            s.value = value;
+            s.size = size;
+            s.global = global;
+            s.func = func;
+            return;
         }
-        self.sym_index.put(name, self.syms.len)?
-        self.syms.push(Sym{ name: name, sec: sec, value: value, size: size, global: global, func: func })?
+        this->sym_index.put(name, this->syms.len)?;
+        this->syms.push(Sym{ .name = name, .sec = sec, .value = value, .size = size, .global = global, .func = func })?;
     }
 
-    fn reference(self, name: str) !void {
-        if self.sym_index.has(name) { return }
-        self.sym_index.put(name, self.syms.len)?
-        self.syms.push(Sym{ name: name, sec: 0, value: 0, size: 0, global: true, func: false })?
+    !void reference(str name) {
+        if (this->sym_index.has(name)) { return; }
+        this->sym_index.put(name, this->syms.len)?;
+        this->syms.push(Sym{ .name = name, .sec = 0, .value = 0, .size = 0, .global = true, .func = false })?;
     }
 
-    fn write(self, path: str) !void {
-        let a = self.a
-        for r in self.text.relocs { self.reference(r.sym)? }
-        for r in self.data_relocs { self.reference(r.sym)? }
+    !void write(str path) {
+        const auto a = this->a;
+        for (auto r : this->text.relocs) { this->reference(r.sym)?; }
+        for (auto r : this->data_relocs) { this->reference(r.sym)?; }
         // symbol order: null, locals, globals
-        var order = List[i64].init(a)
-        for i, s in self.syms { if !s.global && s.sec != 0 { order.push(i)? } }
-        let first_global = order.len + 1
-        for i, s in self.syms { if s.global || s.sec == 0 { order.push(i)? } }
-        var final_index = List[i64].init(a)
-        for _i in 0..self.syms.len { final_index.push(0)? }
-        for k, i in order { final_index.set(i, k + 1) }
+        auto order = List<i64>::init(a);
+        for (auto [i, s] : this->syms) { if (!s.global && s.sec != 0) { order.push(i)?; } }
+        const auto first_global = order.len + 1;
+        for (auto [i, s] : this->syms) { if (s.global || s.sec == 0) { order.push(i)?; } }
+        auto final_index = List<i64>::init(a);
+        for (auto _i : 0..this->syms.len) { final_index.push(0)?; }
+        for (auto [k, i] : order) { final_index.set(i, k + 1); }
 
-        var strtab = List[u8].init(a)
-        strtab.push(0)?
-        var symtab = List[u8].init(a)
-        for _k in 0..24 { symtab.push(0)? }
-        for i in order {
-            let s = self.syms.get(i)
-            let name_off = strtab.len
-            strtab.append(s.name)?
-            strtab.push(0)?
-            put_u32(&symtab, name_off)?
-            var bind = 0
-            if s.global || s.sec == 0 { bind = 1 }
-            var typ = 0
-            if s.sec != 0 {
-                typ = 1
-                if s.func { typ = 2 }
+        auto strtab = List<u8>::init(a);
+        strtab.push(0)?;
+        auto symtab = List<u8>::init(a);
+        for (auto _k : 0..24) { symtab.push(0)?; }
+        for (auto i : order) {
+            const auto s = this->syms.get(i);
+            const auto name_off = strtab.len;
+            strtab.append(s.name)?;
+            strtab.push(0)?;
+            put_u32(&symtab, name_off)?;
+            auto bind = 0;
+            if (s.global || s.sec == 0) { bind = 1; }
+            auto typ = 0;
+            if (s.sec != 0) {
+                typ = 1;
+                if (s.func) { typ = 2; }
             }
-            symtab.push(((bind << 4) | typ) as u8)?
-            symtab.push(0)?
-            put_u16(&symtab, s.sec)?
-            put_u64(&symtab, s.value)?
-            put_u64(&symtab, s.size)?
+            symtab.push(((bind << 4) | typ) as u8)?;
+            symtab.push(0)?;
+            put_u16(&symtab, s.sec)?;
+            put_u64(&symtab, s.value)?;
+            put_u64(&symtab, s.size)?;
         }
 
-        var rela_text = List[u8].init(a)
-        for r in self.text.relocs {
-            put_u64(&rela_text, r.off)?
-            put_u64(&rela_text, (final_index.get(self.sym_index.get(r.sym)?) << 32) | r.kind)?
-            put_u64(&rela_text, r.addend)?
+        auto rela_text = List<u8>::init(a);
+        for (auto r : this->text.relocs) {
+            put_u64(&rela_text, r.off)?;
+            put_u64(&rela_text, (final_index.get(this->sym_index.get(r.sym)?) << 32) | r.kind)?;
+            put_u64(&rela_text, r.addend)?;
         }
-        var rela_data = List[u8].init(a)
-        for r in self.data_relocs {
-            put_u64(&rela_data, r.off)?
-            put_u64(&rela_data, (final_index.get(self.sym_index.get(r.sym)?) << 32) | r.kind)?
-            put_u64(&rela_data, r.addend)?
+        auto rela_data = List<u8>::init(a);
+        for (auto r : this->data_relocs) {
+            put_u64(&rela_data, r.off)?;
+            put_u64(&rela_data, (final_index.get(this->sym_index.get(r.sym)?) << 32) | r.kind)?;
+            put_u64(&rela_data, r.addend)?;
         }
 
         // section names
-        var shstr = List[u8].init(a)
-        shstr.push(0)?
-        let n_text = shstr.len
-        shstr.append(".text\x00")?
-        let n_rodata = shstr.len
-        shstr.append(".rodata\x00")?
-        let n_data = shstr.len
-        shstr.append(".data\x00")?
-        let n_rtext = shstr.len
-        shstr.append(".rela.text\x00")?
-        let n_rdata = shstr.len
-        shstr.append(".rela.data\x00")?
-        let n_symtab = shstr.len
-        shstr.append(".symtab\x00")?
-        let n_strtab = shstr.len
-        shstr.append(".strtab\x00")?
-        let n_shstr = shstr.len
-        shstr.append(".shstrtab\x00")?
-        let n_note = shstr.len
-        shstr.append(".note.GNU-stack\x00")?
+        auto shstr = List<u8>::init(a);
+        shstr.push(0)?;
+        const auto n_text = shstr.len;
+        shstr.append(".text\x00")?;
+        const auto n_rodata = shstr.len;
+        shstr.append(".rodata\x00")?;
+        const auto n_data = shstr.len;
+        shstr.append(".data\x00")?;
+        const auto n_rtext = shstr.len;
+        shstr.append(".rela.text\x00")?;
+        const auto n_rdata = shstr.len;
+        shstr.append(".rela.data\x00")?;
+        const auto n_symtab = shstr.len;
+        shstr.append(".symtab\x00")?;
+        const auto n_strtab = shstr.len;
+        shstr.append(".strtab\x00")?;
+        const auto n_shstr = shstr.len;
+        shstr.append(".shstrtab\x00")?;
+        const auto n_note = shstr.len;
+        shstr.append(".note.GNU-stack\x00")?;
 
         // layout: header, then sections
-        var f = List[u8].init(a)
-        for _k in 0..64 { f.push(0)? }
-        align_buf(&f, 16)?
-        let o_text = f.len
-        f.append(self.text.code.slice())?
-        align_buf(&f, 16)?
-        let o_rodata = f.len
-        f.append(self.rodata.slice())?
-        align_buf(&f, 16)?
-        let o_data = f.len
-        f.append(self.data.slice())?
-        align_buf(&f, 8)?
-        let o_rtext = f.len
-        f.append(rela_text.slice())?
-        let o_rdata = f.len
-        f.append(rela_data.slice())?
-        let o_symtab = f.len
-        f.append(symtab.slice())?
-        let o_strtab = f.len
-        f.append(strtab.slice())?
-        let o_shstr = f.len
-        f.append(shstr.slice())?
-        align_buf(&f, 8)?
-        let o_sh = f.len
+        auto f = List<u8>::init(a);
+        for (auto _k : 0..64) { f.push(0)?; }
+        align_buf(&f, 16)?;
+        const auto o_text = f.len;
+        f.append(this->text.code.slice())?;
+        align_buf(&f, 16)?;
+        const auto o_rodata = f.len;
+        f.append(this->rodata.slice())?;
+        align_buf(&f, 16)?;
+        const auto o_data = f.len;
+        f.append(this->data.slice())?;
+        align_buf(&f, 8)?;
+        const auto o_rtext = f.len;
+        f.append(rela_text.slice())?;
+        const auto o_rdata = f.len;
+        f.append(rela_data.slice())?;
+        const auto o_symtab = f.len;
+        f.append(symtab.slice())?;
+        const auto o_strtab = f.len;
+        f.append(strtab.slice())?;
+        const auto o_shstr = f.len;
+        f.append(shstr.slice())?;
+        align_buf(&f, 8)?;
+        const auto o_sh = f.len;
 
         // section headers: 0 null, 1 text, 2 rodata, 3 data, 4 rela.text, 5 rela.data, 6 symtab, 7 strtab, 8 shstrtab, 9 note
-        for _k in 0..64 { f.push(0)? }
-        sec_hdr(&f, n_text, 1, 6, o_text, self.text.code.len, 0, 0, 16, 0)?
-        sec_hdr(&f, n_rodata, 1, 2, o_rodata, self.rodata.len, 0, 0, 16, 0)?
-        sec_hdr(&f, n_data, 1, 3, o_data, self.data.len, 0, 0, 16, 0)?
-        sec_hdr(&f, n_rtext, 4, 0x40, o_rtext, rela_text.len, 6, 1, 8, 24)?
-        sec_hdr(&f, n_rdata, 4, 0x40, o_rdata, rela_data.len, 6, 3, 8, 24)?
-        sec_hdr(&f, n_symtab, 2, 0, o_symtab, symtab.len, 7, first_global, 8, 24)?
-        sec_hdr(&f, n_strtab, 3, 0, o_strtab, strtab.len, 0, 0, 1, 0)?
-        sec_hdr(&f, n_shstr, 3, 0, o_shstr, shstr.len, 0, 0, 1, 0)?
-        sec_hdr(&f, n_note, 1, 0, o_shstr, 0, 0, 0, 1, 0)?
+        for (auto _k : 0..64) { f.push(0)?; }
+        sec_hdr(&f, n_text, 1, 6, o_text, this->text.code.len, 0, 0, 16, 0)?;
+        sec_hdr(&f, n_rodata, 1, 2, o_rodata, this->rodata.len, 0, 0, 16, 0)?;
+        sec_hdr(&f, n_data, 1, 3, o_data, this->data.len, 0, 0, 16, 0)?;
+        sec_hdr(&f, n_rtext, 4, 0x40, o_rtext, rela_text.len, 6, 1, 8, 24)?;
+        sec_hdr(&f, n_rdata, 4, 0x40, o_rdata, rela_data.len, 6, 3, 8, 24)?;
+        sec_hdr(&f, n_symtab, 2, 0, o_symtab, symtab.len, 7, first_global, 8, 24)?;
+        sec_hdr(&f, n_strtab, 3, 0, o_strtab, strtab.len, 0, 0, 1, 0)?;
+        sec_hdr(&f, n_shstr, 3, 0, o_shstr, shstr.len, 0, 0, 1, 0)?;
+        sec_hdr(&f, n_note, 1, 0, o_shstr, 0, 0, 0, 1, 0)?;
 
         // ELF header
-        var h = List[u8].init(a)
-        h.append("\x7fELF")?
-        h.push(2)?   // 64-bit
-        h.push(1)?   // little endian
-        h.push(1)?   // version
-        for _k in 0..9 { h.push(0)? }
-        put_u16(&h, 1)?      // ET_REL
-        put_u16(&h, 62)?     // EM_X86_64
-        put_u32(&h, 1)?
-        put_u64(&h, 0)?      // entry
-        put_u64(&h, 0)?      // phoff
-        put_u64(&h, o_sh)?   // shoff
-        put_u32(&h, 0)?      // flags
-        put_u16(&h, 64)?     // ehsize
-        put_u16(&h, 0)?
-        put_u16(&h, 0)?
-        put_u16(&h, 64)?     // shentsize
-        put_u16(&h, 10)?     // shnum
-        put_u16(&h, 8)?      // shstrndx
-        for k in 0..64 { f.items[k] = h.get(k) }
-        write_file(path, f.slice())?
+        auto h = List<u8>::init(a);
+        h.append("\x7fELF")?;
+        h.push(2)?;   // 64-bit
+        h.push(1)?;   // little endian
+        h.push(1)?;   // version
+        for (auto _k : 0..9) { h.push(0)?; }
+        put_u16(&h, 1)?;      // ET_REL
+        put_u16(&h, 62)?;     // EM_X86_64
+        put_u32(&h, 1)?;
+        put_u64(&h, 0)?;      // entry
+        put_u64(&h, 0)?;      // phoff
+        put_u64(&h, o_sh)?;   // shoff
+        put_u32(&h, 0)?;      // flags
+        put_u16(&h, 64)?;     // ehsize
+        put_u16(&h, 0)?;
+        put_u16(&h, 0)?;
+        put_u16(&h, 64)?;     // shentsize
+        put_u16(&h, 10)?;     // shnum
+        put_u16(&h, 8)?;      // shstrndx
+        for (auto k : 0..64) { f.items[k] = h.get(k); }
+        write_file(path, f.slice())?;
     }
 }
 
-fn sec_hdr(f: *List[u8], name: i64, typ: i64, flags: i64, off: i64, size: i64, link: i64, info: i64, align: i64, entsize: i64) !void {
-    put_u32(f, name)?
-    put_u32(f, typ)?
-    put_u64(f, flags)?
-    put_u64(f, 0)?
-    put_u64(f, off)?
-    put_u64(f, size)?
-    put_u32(f, link)?
-    put_u32(f, info)?
-    put_u64(f, align)?
-    put_u64(f, entsize)?
+const auto SEC_TEXT = 1;
+const auto SEC_RODATA = 2;
+const auto SEC_DATA = 3;
+
+ObjFile new_obj(Allocator a) {
+    return ObjFile{ .a = a, .text = new_asm(a), .rodata = List<u8>::init(a), .data = List<u8>::init(a), .data_relocs = List<Reloc>::init(a), .syms = List<Sym>::init(a), .sym_index = Map<i64>::init(a) };
+};
+
+!void align_buf(List<u8>*buf, i64 al) {
+    while (buf.len % al != 0) { buf.push(0)?; }
+}
+
+!void sec_hdr(List<u8>*f, i64 name, i64 typ, i64 flags, i64 off, i64 size, i64 link, i64 info, i64 align, i64 entsize) {
+    put_u32(f, name)?;
+    put_u32(f, typ)?;
+    put_u64(f, flags)?;
+    put_u64(f, 0)?;
+    put_u64(f, off)?;
+    put_u64(f, size)?;
+    put_u32(f, link)?;
+    put_u32(f, info)?;
+    put_u64(f, align)?;
+    put_u64(f, entsize)?;
 }

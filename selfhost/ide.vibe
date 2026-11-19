@@ -1,851 +1,849 @@
 // Editor features built on the analysis: hover, definition, references, rename, highlights.
 
-import "analysis.vibe"
-import "textpos.vibe"
+import "analysis.vibe";
+import "textpos.vibe";
 
-fn put(b: *List[u8], s: str) {
-    b.append(s) catch return
+void put(List<u8>*b, str s) {
+    b.append(s) catch return;
 }
 
-fn put_type(b: *List[u8], te: *TypeExpr) {
-    if te == null {
-        put(b, "?")
-        return
+void put_type(List<u8>*b, TypeExpr* te) {
+    if (te == null) {
+        put(b, "?");
+        return;
     }
     match te.k {
         .Name => {
-            if te.name == "Option" && te.args.len == 1 {
-                put(b, "?")
-                put_type(b, te.args.get(0))
-                return
+            if (te.name == "Option" && te.args.len == 1) {
+                put(b, "?");
+                put_type(b, te.args.get(0));
+                return;
             }
-            put(b, te.name)
-            if te.args.len > 0 {
-                put(b, "[")
-                for i, x in te.args {
-                    if i > 0 { put(b, ", ") }
-                    put_type(b, x)
+            put(b, te.name);
+            if (te.args.len > 0) {
+                put(b, "[");
+                for (auto [i, x] : te.args) {
+                    if (i > 0) { put(b, ", "); }
+                    put_type(b, x);
                 }
-                put(b, "]")
+                put(b, "]");
             }
         }
         .Ptr => {
-            put(b, "*")
-            put_type(b, te.elem)
+            put(b, "*");
+            put_type(b, te.elem);
         }
         .Slice => {
-            put(b, "[]")
-            put_type(b, te.elem)
+            put(b, "[]");
+            put_type(b, te.elem);
         }
         .Array => {
-            put(b, "[")
-            if te.len != null && te.len.k == .IntLit {
-                sprint(b, "{te.len.ival}") catch return
-            } else if te.len != null && te.len.k == .Ident {
-                put(b, te.len.name)
+            put(b, "[");
+            if (te.len != null && te.len.k == .IntLit) {
+                sprint(b, "{te.len.ival}") catch return;
+            } else if (te.len != null && te.len.k == .Ident) {
+                put(b, te.len.name);
             } else {
-                put(b, "N")
+                put(b, "N");
             }
-            put(b, "]")
-            put_type(b, te.elem)
+            put(b, "]");
+            put_type(b, te.elem);
         }
         .Errun => {
-            put(b, "!")
-            put_type(b, te.elem)
+            put(b, "!");
+            put_type(b, te.elem);
         }
         .Func => {
-            put(b, "fn")
-            if te.closure { put(b, "[]") }
-            put(b, "(")
-            for i, x in te.args {
-                if i > 0 { put(b, ", ") }
-                put_type(b, x)
+            put(b, "fn");
+            if (te.closure) { put(b, "[]"); }
+            put(b, "(");
+            for (auto [i, x] : te.args) {
+                if (i > 0) { put(b, ", "); }
+                put_type(b, x);
             }
-            put(b, ")")
-            if te.ret != null {
-                put(b, " ")
-                put_type(b, te.ret)
+            put(b, ")");
+            if (te.ret != null) {
+                put(b, " ");
+                put_type(b, te.ret);
             }
         }
     }
 }
 
-fn type_str(a: Allocator, te: *TypeExpr) str {
-    var b = List[u8].init(a)
-    put_type(&b, te)
-    return b.slice()
+str type_str(Allocator a, TypeExpr* te) {
+    auto b = List<u8>::init(a);
+    put_type(&b, te);
+    return b.slice();
 }
 
-fn put_params(b: *List[u8], f: *FnDecl, skip_self: bool) {
-    var first = true
-    for p in f.params {
-        if skip_self && p.name == "self" { continue }
-        if !first { put(b, ", ") }
-        first = false
-        put(b, p.name)
-        if p.name == "self" && p.ty != null && p.ty.k == .Ptr && p.ty.elem.k == .Name && p.ty.elem.name == "Self" { continue }
-        put(b, ": ")
-        put_type(b, p.ty)
+void put_params(List<u8>*b, FnDecl* f, bool skip_self) {
+    auto first = true;
+    for (auto p : f.params) {
+        if (skip_self && p.name == "self") { continue; }
+        if (!first) { put(b, ", "); }
+        first = false;
+        put(b, p.name);
+        if (p.name == "self" && p.ty != null && p.ty.k == .Ptr && p.ty.elem.k == .Name && p.ty.elem.name == "Self") { continue; }
+        put(b, ": ");
+        put_type(b, p.ty);
     }
 }
 
-fn put_generics(b: *List[u8], names: List[str], cons: List[str]) {
-    if names.len == 0 { return }
-    put(b, "[")
-    for i, n in names {
-        if i > 0 { put(b, ", ") }
-        put(b, n)
-        if i < cons.len && cons.get(i).len > 0 {
-            put(b, ": ")
-            put(b, cons.get(i))
+void put_generics(List<u8>*b, List<str> names, List<str> cons) {
+    if (names.len == 0) { return; }
+    put(b, "[");
+    for (auto [i, n] : names) {
+        if (i > 0) { put(b, ", "); }
+        put(b, n);
+        if (i < cons.len && cons.get(i).len > 0) {
+            put(b, ": ");
+            put(b, cons.get(i));
         }
     }
-    put(b, "]")
+    put(b, "]");
 }
 
-fn fn_signature(a: Allocator, f: *FnDecl, skip_self: bool) str {
-    var b = List[u8].init(a)
-    put(&b, "fn ")
-    if f.receiver.len > 0 && !skip_self {
-        put(&b, last_segment(f.receiver))
-        put(&b, ".")
+str fn_signature(Allocator a, FnDecl* f, bool skip_self) {
+    auto b = List<u8>::init(a);
+    put(&b, "fn ");
+    if (f.receiver.len > 0 && !skip_self) {
+        put(&b, last_segment(f.receiver));
+        put(&b, ".");
     }
-    put(&b, last_segment(f.name))
-    put_generics(&b, f.type_params, f.constraints)
-    put(&b, "(")
-    put_params(&b, f, skip_self)
-    if f.variadic { put(&b, ", ...") }
-    put(&b, ")")
-    if f.ret != null {
-        put(&b, " ")
-        put_type(&b, f.ret)
+    put(&b, last_segment(f.name));
+    put_generics(&b, f.type_params, f.constraints);
+    put(&b, "(");
+    put_params(&b, f, skip_self);
+    if (f.variadic) { put(&b, ", ..."); }
+    put(&b, ")");
+    if (f.ret != null) {
+        put(&b, " ");
+        put_type(&b, f.ret);
     }
-    return b.slice()
+    return b.slice();
 }
 
-fn sym_detail(a: Allocator, s: *Symbol) str {
-    var b = List[u8].init(a)
+str sym_detail(Allocator a, Symbol* s) {
+    auto b = List<u8>::init(a);
     match s.k {
-        .Fn, .Method => return fn_signature(a, s.fd, false)
+        .Fn, .Method => return fn_signature(a, s.fd, false);
         .Struct, .Union => {
-            let sd = s.sd
-            if sd.is_union { put(&b, "union ") } else { put(&b, "struct ") }
-            put(&b, s.name)
-            put_generics(&b, sd.type_params, sd.constraints)
-            put(&b, " ")
-            b.push('{') catch return ""
-            put(&b, " ")
-            for i, f in sd.fields {
-                if i >= 6 {
-                    put(&b, ", ...")
-                    break
+            const auto sd = s.sd;
+            if (sd.is_union) { put(&b, "union "); } else { put(&b, "struct "); }
+            put(&b, s.name);
+            put_generics(&b, sd.type_params, sd.constraints);
+            put(&b, " ");
+            b.push('{') catch return "";
+            put(&b, " ");
+            for (auto [i, f] : sd.fields) {
+                if (i >= 6) {
+                    put(&b, ", ...");
+                    break;
                 }
-                if i > 0 { put(&b, ", ") }
-                put(&b, f.name)
-                if !(sd.is_union && f.ty != null && f.ty.k == .Name && f.ty.name == "void") {
-                    put(&b, ": ")
-                    put_type(&b, f.ty)
+                if (i > 0) { put(&b, ", "); }
+                put(&b, f.name);
+                if (!(sd.is_union && f.ty != null && f.ty.k == .Name && f.ty.name == "void")) {
+                    put(&b, ": ");
+                    put_type(&b, f.ty);
                 }
             }
-            put(&b, " ")
-            b.push('}') catch return ""
+            put(&b, " ");
+            b.push('}') catch return "";
         }
         .Enum => {
-            put(&b, "enum ")
-            put(&b, s.name)
-            put(&b, " ")
-            b.push('{') catch return ""
-            put(&b, " ")
-            for i, v in s.ed.variants {
-                if i >= 8 {
-                    put(&b, ", ...")
-                    break
+            put(&b, "enum ");
+            put(&b, s.name);
+            put(&b, " ");
+            b.push('{') catch return "";
+            put(&b, " ");
+            for (auto [i, v] : s.ed.variants) {
+                if (i >= 8) {
+                    put(&b, ", ...");
+                    break;
                 }
-                if i > 0 { put(&b, ", ") }
-                put(&b, v)
+                if (i > 0) { put(&b, ", "); }
+                put(&b, v);
             }
-            put(&b, " ")
-            b.push('}') catch return ""
+            put(&b, " ");
+            b.push('}') catch return "";
         }
         .Const, .Var => {
-            if s.k == .Const { put(&b, "const ") } else { put(&b, "var ") }
-            put(&b, s.name)
-            if s.ty != null {
-                put(&b, ": ")
-                put_type(&b, s.ty)
+            if (s.k == .Const) { put(&b, "const ") } else { put(&b, "var "); }
+            put(&b, s.name);
+            if (s.ty != null) {
+                put(&b, ": ");
+                put_type(&b, s.ty);
             }
         }
         .Alias => {
-            put(&b, "type ")
-            put(&b, s.name)
-            put(&b, " = ")
-            put_type(&b, s.ty)
+            put(&b, "type ");
+            put(&b, s.name);
+            put(&b, " = ");
+            put_type(&b, s.ty);
         }
         .Field => {
-            put(&b, "(field) ")
-            put(&b, s.owner)
-            put(&b, ".")
-            put(&b, s.name)
-            put(&b, ": ")
-            put_type(&b, s.ty)
+            put(&b, "(field) ");
+            put(&b, s.owner);
+            put(&b, ".");
+            put(&b, s.name);
+            put(&b, ": ");
+            put_type(&b, s.ty);
         }
         .Variant => {
-            put(&b, "(variant) ")
-            put(&b, s.owner)
-            put(&b, ".")
-            put(&b, s.name)
+            put(&b, "(variant) ");
+            put(&b, s.owner);
+            put(&b, ".");
+            put(&b, s.name);
         }
         .Param => {
-            put(&b, "(parameter) ")
-            put(&b, s.name)
-            if s.ty != null {
-                put(&b, ": ")
-                put_type(&b, s.ty)
+            put(&b, "(parameter) ");
+            put(&b, s.name);
+            if (s.ty != null) {
+                put(&b, ": ");
+                put_type(&b, s.ty);
             }
         }
         .Local => {
-            if s.mutable { put(&b, "var ") } else { put(&b, "let ") }
-            put(&b, s.name)
-            if s.ty != null {
-                put(&b, ": ")
-                put_type(&b, s.ty)
+            if (s.mutable) { put(&b, "var "); } else { put(&b, "let "); }
+            put(&b, s.name);
+            if (s.ty != null) {
+                put(&b, ": ");
+                put_type(&b, s.ty);
             }
         }
         .TypeParam => {
-            put(&b, "(type parameter) ")
-            put(&b, s.name)
+            put(&b, "(type parameter) ");
+            put(&b, s.name);
         }
         .Module => {
-            put(&b, "module ")
-            put(&b, s.name)
+            put(&b, "module ");
+            put(&b, s.name);
         }
     }
-    return b.slice()
+    return b.slice();
 }
 
-fn doc_above(a: Allocator, src: str, off: i64) str {
-    var ls = off
-    while ls > 0 && src[ls - 1] != '\n' { ls -= 1 }
-    var lines = List[str].init(a)
-    var end = ls
-    while end > 0 {
-        var st = end - 1
-        while st > 0 && src[st - 1] != '\n' { st -= 1 }
-        let ln = str_trim(src[st..end - 1])
-        if !str_starts_with(ln, "//") { break }
-        var t = ln[2..]
-        if str_starts_with(t, "/") { t = t[1..] }
-        lines.push(str_trim(t)) catch return ""
-        end = st
+str doc_above(Allocator a, str src, i64 off) {
+    auto ls = off;
+    while (ls > 0 && src[ls - 1] != '\n') { ls -= 1; }
+    auto lines = List<str>::init(a);
+    auto end = ls;
+    while (end > 0) {
+        auto st = end - 1;
+        while (st > 0 && src[st - 1] != '\n') { st -= 1; }
+        const auto ln = str_trim(src[st..end - 1]);
+        if (!str_starts_with(ln, "//")) { break; }
+        auto t = ln[2..];
+        if (str_starts_with(t, "/")) { t = t[1..]; }
+        lines.push(str_trim(t)) catch return "";
+        end = st;
     }
-    var b = List[u8].init(a)
-    var i = lines.len
-    while i > 0 {
-        i -= 1
-        put(&b, lines.get(i))
-        put(&b, "\n")
+    auto b = List<u8>::init(a);
+    auto i = lines.len;
+    while (i > 0) {
+        i -= 1;
+        put(&b, lines.get(i));
+        put(&b, "\n");
     }
-    return b.slice()
+    return b.slice();
 }
 
-fn sym_decl_off(s: *Symbol) i64 {
-    if s.fd != null && s.fd.name_off >= 0 { return s.fd.name_off }
-    return s.off
+i64 sym_decl_off(Symbol* s) {
+    if (s.fd != null && s.fd.name_off >= 0) { return s.fd.name_off; }
+    return s.off;
 }
 
-fn hover_markdown(a: Allocator, p: *Project, s: *Symbol) str {
-    var b = List[u8].init(a)
-    put(&b, "```vibe\n")
-    put(&b, sym_detail(a, s))
-    put(&b, "\n```")
-    if s.file != "<std>" && s.off >= 0 && p.by_path.has(s.file) {
-        let fi = p.by_path.get(s.file) catch null
-        if fi != null {
-            let d = doc_above(a, fi.src, s.off)
-            if d.len > 0 {
-                put(&b, "\n\n")
-                put(&b, d)
+str hover_markdown(Allocator a, Project* p, Symbol* s) {
+    auto b = List<u8>::init(a);
+    put(&b, "```vibe\n");
+    put(&b, sym_detail(a, s));
+    put(&b, "\n```");
+    if (s.file != "<std>" && s.off >= 0 && p.by_path.has(s.file)) {
+        const auto fi = p.by_path.get(s.file) catch null;
+        if (fi != null) {
+            const auto d = doc_above(a, fi.src, s.off);
+            if (d.len > 0) {
+                put(&b, "\n\n");
+                put(&b, d);
             }
         }
     }
-    return b.slice()
+    return b.slice();
 }
 
-fn occ_at(p: *Project, path: str, off: i64) *Occ {
-    var best: *Occ = null
-    for i in 0..p.occs.len {
-        let o = &p.occs.items[i]
-        if o.file != path || off < o.off || off > o.off + o.len { continue }
-        if best == null || o.len < best.len { best = o }
+Occ* occ_at(Project* p, str path, i64 off) {
+    Occ* best = null;
+    for (auto i : 0..p.occs.len) {
+        const auto o = &p.occs.items[i];
+        if (o.file != path || off < o.off || off > o.off + o.len) { continue; }
+        if (best == null || o.len < best.len) { best = o; }
     }
-    return best
+    return best;
+};
+
+str word_at(str src, i64 off) {
+    auto s = off;
+    auto e = off;
+    while (s > 0 && (is_alnum(src[s - 1]) || src[s - 1] == '_')) { s -= 1; }
+    while (e < src.len && (is_alnum(src[e]) || src[e] == '_')) { e += 1; }
+    return src[s..e];
 }
 
-fn word_at(src: str, off: i64) str {
-    var s = off
-    var e = off
-    while s > 0 && (is_alnum(src[s - 1]) || src[s - 1] == '_') { s -= 1 }
-    while e < src.len && (is_alnum(src[e]) || src[e] == '_') { e += 1 }
-    return src[s..e]
+Symbol* sym_for(Project* p, str path, str src, i64 off) {
+    const auto o = occ_at(p, path, off);
+    if (o != null) { return o.sym; }
+    const auto w = word_at(src, off);
+    if (w.len == 0) { return null; }
+    return p.flat.get(w) catch null;
+};
+
+!Text text_of(Allocator a, Project* p, str path) {
+    const auto fi = p.by_path.get(path)?;
+    return Text{ .text = fi.src, .starts = compute_starts(a, fi.src)? };
+};
+
+!void range_json(Allocator a, JW* w, Project* p, str path, i64 off, i64 len) {
+    const auto t = text_of(a, p, path)?;
+    try_range(w, t, off, off + len)?;
 }
 
-fn sym_for(p: *Project, path: str, src: str, off: i64) *Symbol {
-    let o = occ_at(p, path, off)
-    if o != null { return o.sym }
-    let w = word_at(src, off)
-    if w.len == 0 { return null }
-    return p.flat.get(w) catch null
+!void location(Allocator a, JW* w, Project* p, str path, i64 off, i64 len) {
+    w.obj()?;
+    w.key("uri")?;
+    w.str(path_to_uri(a, path)?)?;
+    w.key("range")?;
+    auto rw = new_jw(a);
+    range_json(a, &rw, p, path, off, len)?;
+    w.raw(rw.text())?;
+    w.end()?;
 }
 
-fn text_of(a: Allocator, p: *Project, path: str) !Text {
-    let fi = p.by_path.get(path)?
-    return Text{ text: fi.src, starts: compute_starts(a, fi.src)? }
-}
-
-fn range_json(a: Allocator, w: *JW, p: *Project, path: str, off: i64, len: i64) !void {
-    let t = text_of(a, p, path)?
-    try_range(w, t, off, off + len)?
-}
-
-fn location(a: Allocator, w: *JW, p: *Project, path: str, off: i64, len: i64) !void {
-    w.obj()?
-    w.key("uri")?
-    w.str(path_to_uri(a, path)?)?
-    w.key("range")?
-    var rw = new_jw(a)
-    range_json(a, &rw, p, path, off, len)?
-    w.raw(rw.text())?
-    w.end()?
-}
-
-fn hover(a: Allocator, p: *Project, path: str, src: str, off: i64) !str {
-    let s = sym_for(p, path, src, off)
-    if s == null { return "null" }
-    let o = occ_at(p, path, off)
-    var w = new_jw(a)
-    w.obj()?
-    w.key("contents")?
-    w.obj()?
-    w.key("kind")?
-    w.str("markdown")?
-    w.key("value")?
-    w.str(hover_markdown(a, p, s))?
-    w.end()?
-    if o != null {
-        w.key("range")?
-        var rw = new_jw(a)
-        range_json(a, &rw, p, path, o.off, o.len)?
-        w.raw(rw.text())?
+!str hover(Allocator a, Project* p, str path, str src, i64 off) {
+    const auto s = sym_for(p, path, src, off);
+    if (s == null) { return "null"; }
+    const auto o = occ_at(p, path, off);
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("contents")?;
+    w.obj()?;
+    w.key("kind")?;
+    w.str("markdown")?;
+    w.key("value")?;
+    w.str(hover_markdown(a, p, s))?;
+    w.end()?;
+    if (o != null) {
+        w.key("range")?;
+        auto rw = new_jw(a);
+        range_json(a, &rw, p, path, o.off, o.len)?;
+        w.raw(rw.text())?;
     }
-    w.end()?
-    return w.text()
+    w.end()?;
+    return w.text();
 }
 
-fn definition(a: Allocator, p: *Project, path: str, src: str, off: i64) !str {
-    var w = new_jw(a)
-    w.arr()?
-    let fi = p.by_path.get(path) catch null
-    if fi != null {
-        for d in fi.decls {
-            if d.k == .Import && off >= d.path_off && off <= d.path_off + d.path.len {
-                let full = canonical(a, join_path(a, dir_of(path), d.path)?)?
-                if p.by_path.has(full) { location(a, &w, p, full, 0, 0)? }
-                w.end()?
-                return w.text()
+!str definition(Allocator a, Project* p, str path, str src, i64 off) {
+    auto w = new_jw(a);
+    w.arr()?;
+    const auto fi = p.by_path.get(path) catch null;
+    if (fi != null) {
+        for (auto d : fi.decls) {
+            if (d.k == .Import && off >= d.path_off && off <= d.path_off + d.path.len) {
+                const auto full = canonical(a, join_path(a, dir_of(path), d.path)?)?;
+                if (p.by_path.has(full)) { location(a, &w, p, full, 0, 0)?; }
+                w.end()?;
+                return w.text();
             }
         }
     }
-    let s = sym_for(p, path, src, off)
-    if s != null && s.file != "<std>" && s.off >= 0 && p.by_path.has(s.file) { location(a, &w, p, s.file, s.off, s.len)? }
-    w.end()?
-    return w.text()
+    const auto s = sym_for(p, path, src, off);
+    if (s != null && s.file != "<std>" && s.off >= 0 && p.by_path.has(s.file)) { location(a, &w, p, s.file, s.off, s.len)?; }
+    w.end()?;
+    return w.text();
 }
 
-fn references(a: Allocator, p: *Project, path: str, src: str, off: i64, decl: bool) !str {
-    let s = sym_for(p, path, src, off)
-    var w = new_jw(a)
-    w.arr()?
-    if s != null {
-        for o in p.occs {
-            if o.sym != s || !p.by_path.has(o.file) { continue }
-            if !decl && o.off == s.off && o.file == s.file { continue }
-            location(a, &w, p, o.file, o.off, o.len)?
+!str references(Allocator a, Project* p, str path, str src, i64 off, bool decl) {
+    const auto s = sym_for(p, path, src, off);
+    auto w = new_jw(a);
+    w.arr()?;
+    if (s != null) {
+        for (auto o : p.occs) {
+            if (o.sym != s || !p.by_path.has(o.file)) { continue; }
+            if (!decl && o.off == s.off && o.file == s.file) { continue; }
+            location(a, &w, p, o.file, o.off, o.len)?;
         }
     }
-    w.end()?
-    return w.text()
+    w.end()?;
+    return w.text();
 }
 
-fn highlights(a: Allocator, p: *Project, path: str, src: str, off: i64) !str {
-    let s = sym_for(p, path, src, off)
-    var w = new_jw(a)
-    w.arr()?
-    if s != null {
-        for o in p.occs {
-            if o.sym != s || o.file != path { continue }
-            w.obj()?
-            w.key("range")?
-            var rw = new_jw(a)
-            range_json(a, &rw, p, path, o.off, o.len)?
-            w.raw(rw.text())?
-            w.key("kind")?
-            if o.off == s.off && o.file == s.file { w.int(3)? } else { w.int(2)? }
-            w.end()?
+!str highlights(Allocator a, Project* p, str path, str src, i64 off) {
+    const auto s = sym_for(p, path, src, off);
+    auto w = new_jw(a);
+    w.arr()?;
+    if (s != null) {
+        for (auto o : p.occs) {
+            if (o.sym != s || o.file != path) { continue; }
+            w.obj()?;
+            w.key("range")?;
+            auto rw = new_jw(a);
+            range_json(a, &rw, p, path, o.off, o.len)?;
+            w.raw(rw.text())?;
+            w.key("kind")?;
+            if (o.off == s.off && o.file == s.file) { w.int(3)?; } else { w.int(2)?; }
+            w.end()?;
         }
     }
-    w.end()?
-    return w.text()
+    w.end()?;
+    return w.text();
 }
 
-fn valid_ident(n: str) bool {
-    if n.len == 0 || is_digit(n[0]) { return false }
-    for c in n { if !(is_alnum(c) || c == '_') { return false } }
-    return keyword(n) == .ident
+bool valid_ident(str n) {
+    if (n.len == 0 || is_digit(n[0])) { return false; }
+    for (auto c : n) { if (!(is_alnum(c) || c == '_')) { return false; } }
+    return keyword(n) == .ident;
 }
 
-fn prepare_rename(a: Allocator, p: *Project, path: str, src: str, off: i64) !str {
-    let o = occ_at(p, path, off)
-    if o == null || o.sym.file == "<std>" || o.sym.k == .TypeParam && o.sym.off < 0 { return "null" }
-    var w = new_jw(a)
-    w.obj()?
-    w.key("range")?
-    var rw = new_jw(a)
-    range_json(a, &rw, p, path, o.off, o.len)?
-    w.raw(rw.text())?
-    w.key("placeholder")?
-    w.str(o.sym.name)?
-    w.end()?
-    return w.text()
+!str prepare_rename(Allocator a, Project* p, str path, str src, i64 off) {
+    const auto o = occ_at(p, path, off);
+    if (o == null || o.sym.file == "<std>" || o.sym.k == .TypeParam && o.sym.off < 0) { return "null"; }
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("range")?;
+    auto rw = new_jw(a);
+    range_json(a, &rw, p, path, o.off, o.len)?;
+    w.raw(rw.text())?;
+    w.key("placeholder")?;
+    w.str(o.sym.name)?;
+    w.end()?;
+    return w.text();
 }
 
-fn rename(a: Allocator, p: *Project, path: str, src: str, off: i64, new_name: str) !str {
-    let s = sym_for(p, path, src, off)
-    if s == null || s.file == "<std>" || !valid_ident(new_name) { return "null" }
-    var files = List[str].init(a)
-    for o in p.occs {
-        if o.sym == s && !contains_str(files, o.file) { files.push(o.file)? }
+!str rename(Allocator a, Project* p, str path, str src, i64 off, str new_name) {
+    const auto s = sym_for(p, path, src, off);
+    if (s == null || s.file == "<std>" || !valid_ident(new_name)) { return "null"; }
+    auto files = List<str>::init(a);
+    for (auto o : p.occs) {
+        if (o.sym == s && !contains_str(files, o.file)) { files.push(o.file)?; }
     }
-    var w = new_jw(a)
-    w.obj()?
-    w.key("changes")?
-    w.obj()?
-    for f in files {
-        w.key(path_to_uri(a, f)?)?
-        w.arr()?
-        for o in p.occs {
-            if o.sym != s || o.file != f { continue }
-            w.obj()?
-            w.key("range")?
-            var rw = new_jw(a)
-            range_json(a, &rw, p, f, o.off, o.len)?
-            w.raw(rw.text())?
-            w.key("newText")?
-            w.str(new_name)?
-            w.end()?
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("changes")?;
+    w.obj()?;
+    for (auto f : files) {
+        w.key(path_to_uri(a, f)?)?;
+        w.arr()?;
+        for (auto o : p.occs) {
+            if (o.sym != s || o.file != f) { continue; }
+            w.obj()?;
+            w.key("range")?;
+            auto rw = new_jw(a);
+            range_json(a, &rw, p, f, o.off, o.len)?;
+            w.raw(rw.text())?;
+            w.key("newText")?;
+            w.str(new_name)?;
+            w.end()?;
         }
-        w.end()?
+        w.end()?;
     }
-    w.end()?
-    w.end()?
-    return w.text()
+    w.end()?;
+    w.end()?;
+    return w.text();
 }
 
-fn is_idc(c: u8) bool { return is_alnum(c) || c == '_' }
+bool is_idc(u8 c) { return is_alnum(c) || c == '_'; }
 
-fn back_chain(text: str, end: i64) i64 {
-    var i = end
-    while i > 0 {
-        let c = text[i - 1]
-        if is_idc(c) || c == '.' {
-            i -= 1
-            continue
+i64 back_chain(str text, i64 end) {
+    auto i = end;
+    while (i > 0) {
+        const auto c = text[i - 1];
+        if (is_idc(c) || c == '.') {
+            i -= 1;
+            continue;
         }
-        if c == ')' || c == ']' {
-            var depth = 0
-            var j = i
-            var found = false
-            while j > 0 {
-                let d = text[j - 1]
-                if d == ')' || d == ']' { depth += 1 }
-                if d == '(' || d == '[' {
-                    depth -= 1
-                    if depth == 0 {
-                        found = true
-                        break
+        if (c == ')' || c == ']') {
+            auto depth = 0;
+            auto j = i;
+            auto found = false;
+            while (j > 0) {
+                const auto d = text[j - 1];
+                if (d == ')' || d == ']') { depth += 1; }
+                if (d == '(' || d == '[') {
+                    depth -= 1;
+                    if (depth == 0) {
+                        found = true;
+                        break;
                     }
                 }
-                j -= 1
+                j -= 1;
             }
-            if !found { return i }
-            i = j - 1
-            continue
+            if (!found) { return i; }
+            i = j - 1;
+            continue;
         }
-        break
+        break;
     }
-    while i < end && text[i] == '.' { i += 1 }
-    return i
+    while (i < end && text[i] == '.') { i += 1; }
+    return i;
 }
 
-fn parse_expr_text(a: Allocator, p: *Project, text: str) *Expr {
-    let toks = tokenize(a, text, "<expr>") catch return null
-    var ps = new_parser(a, toks.slice(), "<expr>")
-    for e in p.flat.entries {
-        if e.used && e.value.k == .Module { ps.aliases.push(e.key) catch return null }
+Expr* parse_expr_text(Allocator a, Project* p, str text) {
+    const auto toks = tokenize(a, text, "<expr>") catch return null;
+    auto ps = new_parser(a, toks.slice(), "<expr>");
+    for (auto e : p.flat.entries) {
+        if (e.used && e.value.k == .Module) { ps.aliases.push(e.key) catch return null };
     }
-    return ps.parse_expr() catch null
-}
+    return ps.parse_expr() catch null;
+};
 
 struct Cand {
-    label: str
-    kind: i64
-    detail: str
-    insert: str
+    str label;
+    i64 kind;
+    str detail;
+    str insert;
 }
 
-struct Items { list: List[Cand], seen: Map[bool], a: Allocator }
-
-impl Items {
-    fn add(self, label: str, kind: i64, detail: str, insert: str) {
-        if label.len == 0 || self.seen.has(label) { return }
-        self.seen.put(label, true) catch return
-        self.list.push(Cand{ label: label, kind: kind, detail: detail, insert: insert }) catch return
+struct Items { List<Cand> list; Map<bool> seen; Allocator a;
+    void add(str label, i64 kind, str detail, str insert) {
+        if (label.len == 0 || this->seen.has(label)) { return; }
+        this->seen.put(label, true) catch return;
+        this->list.push(Cand{ .label = label, .kind = kind, .detail = detail, .insert = insert }) catch return;
     }
 }
 
-fn sym_kind(k: SymK) i64 {
+i64 sym_kind(SymK k) {
     match k {
-        .Fn => return 3
-        .Method => return 2
-        .Struct, .Union => return 22
-        .Enum => return 13
-        .Const, .Var => return 21
-        .Alias => return 7
-        .Field => return 5
-        .Variant => return 20
-        .Param, .Local => return 6
-        .TypeParam => return 25
-        .Module => return 9
+        .Fn => return 3;
+        .Method => return 2;
+        .Struct, .Union => return 22;
+        .Enum => return 13;
+        .Const, .Var => return 21;
+        .Alias => return 7;
+        .Field => return 5;
+        .Variant => return 20;
+        .Param, .Local => return 6;
+        .TypeParam => return 25;
+        .Module => return 9;
     }
-    return 1
+    return 1;
 }
 
-fn add_symbol(it: *Items, s: *Symbol, label: str, skip_self: bool) {
-    var detail = ""
-    if s.k == .Fn || s.k == .Method { detail = fn_signature(it.a, s.fd, skip_self) } else { detail = sym_detail(it.a, s) }
-    it.add(label, sym_kind(s.k), detail, "")
+void add_symbol(Items* it, Symbol* s, str label, bool skip_self) {
+    auto detail = "";
+    if (s.k == .Fn || s.k == .Method) { detail = fn_signature(it.a, s.fd, skip_self) } else { detail = sym_detail(it.a, s); }
+    it.add(label, sym_kind(s.k), detail, "");
 }
 
-fn add_members_of(it: *Items, p: *Project, owner: str, with_self_only: bool) {
-    let prefix = qname(p.a, owner, "")
-    for e in p.members.entries {
-        if !e.used || !str_starts_with(e.key, prefix) { continue }
-        let s = e.value
-        if s.k == .Method && with_self_only && (s.fd.params.len == 0 || s.fd.params.get(0).name != "self") { continue }
-        add_symbol(it, s, s.name, true)
-    }
-}
-
-fn add_module_members(it: *Items, p: *Project, alias: str) {
-    let prefix = qname(p.a, alias, "")
-    for e in p.flat.entries {
-        if !e.used || !str_starts_with(e.key, prefix) { continue }
-        let rest = e.key[prefix.len..]
-        if str_find_byte(rest, '.') >= 0 { continue }
-        add_symbol(it, e.value, rest, false)
+void add_members_of(Items* it, Project* p, str owner, bool with_self_only) {
+    const auto prefix = qname(p.a, owner, "");
+    for (auto e : p.members.entries) {
+        if (!e.used || !str_starts_with(e.key, prefix)) { continue; }
+        const auto s = e.value;
+        if (s.k == .Method && with_self_only && (s.fd.params.len == 0 || s.fd.params.get(0).name != "self")) { continue; }
+        add_symbol(it, s, s.name, true);
     }
 }
 
-fn add_static_members(it: *Items, p: *Project, owner: str) {
-    let prefix = qname(p.a, owner, "")
-    for e in p.members.entries {
-        if !e.used || !str_starts_with(e.key, prefix) { continue }
-        let s = e.value
-        if s.k == .Field { continue }
-        add_symbol(it, s, s.name, false)
+void add_module_members(Items* it, Project* p, str alias) {
+    const auto prefix = qname(p.a, alias, "");
+    for (auto e : p.flat.entries) {
+        if (!e.used || !str_starts_with(e.key, prefix)) { continue; }
+        const auto rest = e.key[prefix.len..];
+        if (str_find_byte(rest, '.') >= 0) { continue; }
+        add_symbol(it, e.value, rest, false);
     }
 }
 
-fn add_user_members(it: *Items, p: *Project) {
-    for e in p.members.entries {
-        if !e.used || e.value.file == "<std>" { continue }
-        add_symbol(it, e.value, e.value.name, true)
+void add_static_members(Items* it, Project* p, str owner) {
+    const auto prefix = qname(p.a, owner, "");
+    for (auto e : p.members.entries) {
+        if (!e.used || !str_starts_with(e.key, prefix)) { continue; }
+        const auto s = e.value;
+        if (s.k == .Field) { continue };
+        add_symbol(it, s, s.name, false);
     }
 }
 
-fn add_all_variants(it: *Items, p: *Project) {
-    for e in p.members.entries {
-        if !e.used { continue }
-        let s = e.value
-        if s.k != .Variant && !(s.k == .Field && s.sd != null && s.sd.is_union) { continue }
-        it.add(s.name, 20, s.owner, "")
+void add_user_members(Items* it, Project* p) {
+    for (auto e : p.members.entries) {
+        if (!e.used || e.value.file == "<std>") { continue; }
+        add_symbol(it, e.value, e.value.name, true);
     }
 }
 
-const KEYWORDS = ["fn", "let", "var", "const", "if", "else", "while", "for", "in", "return", "break", "continue", "struct", "enum", "union", "impl", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "test"]
-const PRIMS = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "void", "str"]
-const BUILTINS = ["panic", "assert", "embed"]
-
-fn add_globals(it: *Items, p: *Project, near: List[*Symbol], types_only: bool) {
-    if !types_only {
-        for s in near { add_symbol(it, s, s.name, false) }
+void add_all_variants(Items* it, Project* p) {
+    for (auto e : p.members.entries) {
+        if (!e.used) { continue; }
+        const auto s = e.value;
+        if (s.k != .Variant && !(s.k == .Field && s.sd != null && s.sd.is_union)) { continue; }
+        it.add(s.name, 20, s.owner, "");
     }
-    for e in p.flat.entries {
-        if !e.used || str_find_byte(e.key, '.') >= 0 || str_starts_with(e.key, "__") { continue }
-        let s = e.value
-        let is_type = s.k == .Struct || s.k == .Union || s.k == .Enum || s.k == .Alias || s.k == .Module
-        if types_only && !is_type { continue }
-        add_symbol(it, s, e.key, false)
-    }
-    for x in PRIMS { it.add(x, 25, "primitive type", "") }
-    if types_only { return }
-    for x in BUILTINS { it.add(x, 3, "builtin", "") }
-    for x in KEYWORDS { it.add(x, 14, "keyword", "") }
 }
 
-fn prev_sig(text: str, from: i64) u8 {
-    var i = from
-    while i > 0 && (text[i - 1] == ' ' || text[i - 1] == '\t' || text[i - 1] == '\n' || text[i - 1] == '\r') { i -= 1 }
-    if i == 0 { return 0 }
-    return text[i - 1]
+const auto KEYWORDS = ["fn", "let", "var", "const", "if", "else", "while", "for", "in", "return", "break", "continue", "struct", "enum", "union", "impl", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "test"];
+const auto PRIMS = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "void", "str"];
+const auto BUILTINS = ["panic", "assert", "embed"];
+
+void add_globals(Items* it, Project* p, List<Symbol*> near, bool types_only) {
+    if (!types_only) {
+        for (auto s : near) { add_symbol(it, s, s.name, false); }
+    }
+    for (auto e : p.flat.entries) {
+        if (!e.used || str_find_byte(e.key, '.') >= 0 || str_starts_with(e.key, "__")) { continue; }
+        const auto s = e.value;
+        const auto is_type = s.k == .Struct || s.k == .Union || s.k == .Enum || s.k == .Alias || s.k == .Module;
+        if (types_only && !is_type) { continue; }
+        add_symbol(it, s, e.key, false);
+    }
+    for (auto x : PRIMS) { it.add(x, 25, "primitive type", ""); }
+    if (types_only) { return; }
+    for (auto x : BUILTINS) { it.add(x, 3, "builtin", ""); }
+    for (auto x : KEYWORDS) { it.add(x, 14, "keyword", ""); }
 }
 
-fn enclosing_open(text: str, from: i64) i64 {
-    var depth = 0
-    var i = from
-    while i > 0 {
-        let c = text[i - 1]
-        if c == ')' || c == ']' || c == '}' { depth += 1 }
-        if c == '(' || c == '[' || c == '{' {
-            if depth == 0 { return i - 1 }
-            depth -= 1
+u8 prev_sig(str text, i64 from) {
+    auto i = from;
+    while (i > 0 && (text[i - 1] == ' ' || text[i - 1] == '\t' || text[i - 1] == '\n' || text[i - 1] == '\r')) { i -= 1; }
+    if (i == 0) { return 0; }
+    return text[i - 1];
+}
+
+i64 enclosing_open(str text, i64 from) {
+    auto depth = 0;
+    auto i = from;
+    while (i > 0) {
+        const auto c = text[i - 1];
+        if (c == ')' || c == ']' || c == '}') { depth += 1; }
+        if (c == '(' || c == '[' || c == '{') {
+            if (depth == 0) { return i - 1; }
+            depth -= 1;
         }
-        i -= 1
+        i -= 1;
     }
-    return -1
+    return -1;
 }
 
-fn in_line_comment(text: str, off: i64) bool {
-    var ls = off
-    while ls > 0 && text[ls - 1] != '\n' { ls -= 1 }
-    var quotes = 0
-    var i = ls
-    while i + 1 < off {
-        if text[i] == '"' && (i == ls || text[i - 1] != '\\') { quotes += 1 }
-        if text[i] == '/' && text[i + 1] == '/' && quotes % 2 == 0 { return true }
-        i += 1
+bool in_line_comment(str text, i64 off) {
+    auto ls = off;
+    while (ls > 0 && text[ls - 1] != '\n') { ls -= 1; }
+    auto quotes = 0;
+    auto i = ls;
+    while (i + 1 < off) {
+        if (text[i] == '"' && (i == ls || text[i - 1] != '\\')) { quotes += 1; }
+        if (text[i] == '/' && text[i + 1] == '/' && quotes % 2 == 0) { return true; }
+        i += 1;
     }
-    return false
+    return false;
 }
 
-fn in_plain_string(text: str, off: i64) bool {
-    var ls = off
-    while ls > 0 && text[ls - 1] != '\n' { ls -= 1 }
-    var quotes = 0
-    var brace = 0
-    var i = ls
-    while i < off {
-        if text[i] == '"' && (i == ls || text[i - 1] != '\\') {
-            quotes += 1
-            brace = 0
-        } else if quotes % 2 == 1 {
-            if text[i] == '{' && !(i + 1 < off && text[i + 1] == '{') { brace += 1 }
-            if text[i] == '}' && brace > 0 { brace -= 1 }
+bool in_plain_string(str text, i64 off) {
+    auto ls = off;
+    while (ls > 0 && text[ls - 1] != '\n') { ls -= 1; }
+    auto quotes = 0;
+    auto brace = 0;
+    auto i = ls;
+    while (i < off) {
+        if (text[i] == '"' && (i == ls || text[i - 1] != '\\')) {
+            quotes += 1;
+            brace = 0;
+        } else if (quotes % 2 == 1) {
+            if (text[i] == '{' && !(i + 1 < off && text[i + 1] == '{')) { brace += 1; }
+            if (text[i] == '}' && brace > 0) { brace -= 1; }
         }
-        i += 1
+        i += 1;
     }
-    return quotes % 2 == 1 && brace == 0
+    return quotes % 2 == 1 && brace == 0;
 }
 
-fn candidates(a: Allocator, p: *Project, path: str, text: str, off: i64) !Items {
-    var it = Items{ list: List[Cand].init(a), seen: Map[bool].init(a), a: a }
-    if in_line_comment(text, off) || in_plain_string(text, off) { return it }
-    var ps = off
-    while ps > 0 && is_idc(text[ps - 1]) { ps -= 1 }
-    let fi = p.by_path.get(path) catch null
-    var w = Walker{ p: p, fi: fi, locals: p.near, tps: List[*Symbol].init(a), self_ty: null }
-    if ps > 0 && text[ps - 1] == '.' {
-        let dot = ps - 1
-        let before = prev_sig(text, dot)
-        let tight = dot > 0 && (is_idc(text[dot - 1]) || text[dot - 1] == ')' || text[dot - 1] == ']')
-        if !tight || before == 0 || before == '(' || before == ',' || before == '=' || before == '{' {
-            add_all_variants(&it, p)
-            return it
+!Items candidates(Allocator a, Project* p, str path, str text, i64 off) {
+    auto it = Items{ .list = List<Cand>::init(a), .seen = Map<bool>::init(a), .a = a };
+    if (in_line_comment(text, off) || in_plain_string(text, off)) { return it; }
+    auto ps = off;
+    while (ps > 0 && is_idc(text[ps - 1])) { ps -= 1; }
+    const auto fi = p.by_path.get(path) catch null;
+    auto w = Walker{ .p = p, .fi = fi, .locals = p.near, .tps = List<Symbol*>::init(a), .self_ty = null };
+    if (ps > 0 && text[ps - 1] == '.') {
+        const auto dot = ps - 1;
+        const auto before = prev_sig(text, dot);
+        const auto tight = dot > 0 && (is_idc(text[dot - 1]) || text[dot - 1] == ')' || text[dot - 1] == ']');
+        if (!tight || before == 0 || before == '(' || before == ',' || before == '=' || before == '{') {
+            add_all_variants(&it, p);
+            return it;
         }
-        let start = back_chain(text, dot)
-        let e = parse_expr_text(a, p, text[start..dot])
-        if e != null && e.k == .Ident {
-            let s = w.find(e.name)
-            if s != null && s.k == .Module {
-                add_module_members(&it, p, e.name)
-                return it
+        const auto start = back_chain(text, dot);
+        const auto e = parse_expr_text(a, p, text[start..dot]);
+        if (e != null && e.k == .Ident) {
+            const auto s = w.find(e.name);
+            if (s != null && s.k == .Module) {
+                add_module_members(&it, p, e.name);
+                return it;
+            };
+            if (s != null && (s.k == .Struct || s.k == .Union || s.k == .Enum)) {
+                add_static_members(&it, p, e.name);
+                return it;
             }
-            if s != null && (s.k == .Struct || s.k == .Union || s.k == .Enum) {
-                add_static_members(&it, p, e.name)
-                return it
-            }
+        };
+        const auto ty = w.peel(w.infer(e));
+        if (ty != null && ty.k == .Name) {
+            add_members_of(&it, p, ty.name, true);
+            return it;
+        };
+        if (ty != null && (ty.k == .Slice || ty.k == .Array)) {
+            it.add("len", 5, "i64", "");
+            it.add("ptr", 5, "pointer to the first element", "");
+            return it;
         }
-        let ty = w.peel(w.infer(e))
-        if ty != null && ty.k == .Name {
-            add_members_of(&it, p, ty.name, true)
-            return it
-        }
-        if ty != null && (ty.k == .Slice || ty.k == .Array) {
-            it.add("len", 5, "i64", "")
-            it.add("ptr", 5, "pointer to the first element", "")
-            return it
-        }
-        add_user_members(&it, p)
-        return it
+        add_user_members(&it, p);
+        return it;
     }
-    let open = enclosing_open(text, ps)
-    let prev = prev_sig(text, ps)
-    if open >= 0 && text[open] == '{' && (prev == '{' || prev == ',') {
-        var e = open
-        while e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t') { e -= 1 }
-        var s = e
-        while s > 0 && (is_idc(text[s - 1]) || text[s - 1] == '.') { s -= 1 }
-        let tn = text[s..e]
-        if tn.len > 0 && is_upper(last_segment(tn)[0]) {
-            let sym = p.flat.get(tn) catch null
-            if sym != null && sym.sd != null {
-                for f in sym.sd.fields { it.add(f.name, 5, type_str(a, f.ty), "") }
-                return it
+    const auto open = enclosing_open(text, ps);
+    const auto prev = prev_sig(text, ps);
+    if (open >= 0 && text[open] == '{' && (prev == '{' || prev == ',')) {
+        auto e = open;
+        while (e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t')) { e -= 1; }
+        auto s = e;
+        while (s > 0 && (is_idc(text[s - 1]) || text[s - 1] == '.')) { s -= 1; }
+        const auto tn = text[s..e];
+        if (tn.len > 0 && is_upper(last_segment(tn)[0])) {
+            const auto sym = p.flat.get(tn) catch null;
+            if (sym != null && sym.sd != null) {
+                for (auto f : sym.sd.fields) { it.add(f.name, 5, type_str(a, f.ty), ""); }
+                return it;
             }
         }
     }
-    var lit_brace = false
-    if open >= 0 && text[open] == '{' {
-        var e = open
-        while e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t') { e -= 1 }
-        var st = e
-        while st > 0 && (is_idc(text[st - 1]) || text[st - 1] == '.') { st -= 1 }
-        lit_brace = e > st && is_upper(last_segment(text[st..e])[0])
+    auto lit_brace = false;
+    if (open >= 0 && text[open] == '{') {
+        auto e = open;
+        while (e > 0 && (text[e - 1] == ' ' || text[e - 1] == '\t')) { e -= 1; }
+        auto st = e;
+        while (st > 0 && (is_idc(text[st - 1]) || text[st - 1] == '.')) { st -= 1; }
+        lit_brace = e > st && is_upper(last_segment(text[st..e])[0]);
     }
-    let in_expr_brace = lit_brace && prev == ':'
-    let types_only = (prev == ':' && !in_expr_brace) || prev == '*' || prev == '!' || prev == '?'
-    add_globals(&it, p, p.near, types_only)
-    return it
+    const auto in_expr_brace = lit_brace && prev == ':';
+    const auto types_only = (prev == ':' && !in_expr_brace) || prev == '*' || prev == '!' || prev == '?';
+    add_globals(&it, p, p.near, types_only);
+    return it;
+};
+
+!str completion(Allocator a, Project* p, str path, str text, i64 off) {
+    const auto it = candidates(a, p, path, text, off)?;
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("isIncomplete")?;
+    w.bool(false)?;
+    w.key("items")?;
+    w.arr()?;
+    for (auto c : it.list) {
+        w.obj()?;
+        w.key("label")?;
+        w.str(c.label)?;
+        w.key("kind")?;
+        w.int(c.kind)?;
+        if (c.detail.len > 0) {
+            w.key("detail")?;
+            w.str(c.detail)?;
+        }
+        w.end()?;
+    }
+    w.end()?;
+    w.end()?;
+    return w.text();
 }
 
-fn completion(a: Allocator, p: *Project, path: str, text: str, off: i64) !str {
-    let it = candidates(a, p, path, text, off)?
-    var w = new_jw(a)
-    w.obj()?
-    w.key("isIncomplete")?
-    w.bool(false)?
-    w.key("items")?
-    w.arr()?
-    for c in it.list {
-        w.obj()?
-        w.key("label")?
-        w.str(c.label)?
-        w.key("kind")?
-        w.int(c.kind)?
-        if c.detail.len > 0 {
-            w.key("detail")?
-            w.str(c.detail)?
-        }
-        w.end()?
-    }
-    w.end()?
-    w.end()?
-    return w.text()
-}
-
-fn signature_help(a: Allocator, p: *Project, path: str, text: str, off: i64) !str {
-    var depth = 0
-    var commas = 0
-    var i = off
-    var open = -1
-    while i > 0 {
-        let c = text[i - 1]
-        if c == ')' || c == ']' || c == '}' { depth += 1 }
-        if c == '(' || c == '[' || c == '{' {
-            if depth == 0 {
-                if c == '(' { open = i - 1 }
-                break
+!str signature_help(Allocator a, Project* p, str path, str text, i64 off) {
+    auto depth = 0;
+    auto commas = 0;
+    auto i = off;
+    auto open = -1;
+    while (i > 0) {
+        const auto c = text[i - 1];
+        if (c == ')' || c == ']' || c == '}') { depth += 1; }
+        if (c == '(' || c == '[' || c == '{') {
+            if (depth == 0) {
+                if (c == '(') { open = i - 1; }
+                break;
             }
-            depth -= 1
+            depth -= 1;
         }
-        if c == ',' && depth == 0 { commas += 1 }
-        i -= 1
+        if (c == ',' && depth == 0) { commas += 1; }
+        i -= 1;
     }
-    if open < 0 { return "null" }
-    let start = back_chain(text, open)
-    let fi = p.by_path.get(path) catch null
-    var w = Walker{ p: p, fi: fi, locals: p.near, tps: List[*Symbol].init(a), self_ty: null }
-    let e = parse_expr_text(a, p, text[start..open])
-    if e == null { return "null" }
-    var fd: *FnDecl = null
-    var skip_self = false
-    if e.k == .Ident {
-        let s = w.find(e.name)
-        if s != null && s.k == .Fn { fd = s.fd }
-    } else if e.k == .Field {
-        var ms: *Symbol = null
-        if e.l.k == .Ident {
-            let ts = w.find(e.l.name)
-            if ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum) { ms = w.member(p.mk_name(e.l.name) catch null, e.name) }
+    if (open < 0) { return "null"; }
+    const auto start = back_chain(text, open);
+    const auto fi = p.by_path.get(path) catch null;
+    auto w = Walker{ .p = p, .fi = fi, .locals = p.near, .tps = List<Symbol*>::init(a), .self_ty = null };
+    const auto e = parse_expr_text(a, p, text[start..open]);
+    if (e == null) { return "null"; }
+    FnDecl* fd = null;
+    auto skip_self = false;
+    if (e.k == .Ident) {
+        const auto s = w.find(e.name);
+        if (s != null && s.k == .Fn) { fd = s.fd };
+    } else if (e.k == .Field) {
+        Symbol* ms = null;
+        if (e.l.k == .Ident) {
+            const auto ts = w.find(e.l.name);
+            if (ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum)) { ms = w.member(p.mk_name(e.l.name) catch null, e.name); }
+        };
+        if (ms == null) {
+            ms = w.member(w.infer(e.l), e.name);
+            skip_self = true;
         }
-        if ms == null {
-            ms = w.member(w.infer(e.l), e.name)
-            skip_self = true
+        if (ms != null && ms.k == .Method) { fd = ms.fd };
+    };
+    if (fd == null) { return "null"; }
+    if (skip_self && (fd.params.len == 0 || fd.params.get(0).name != "self")) { skip_self = false; }
+    auto label = List<u8>::init(a);
+    put(&label, "fn ");
+    put(&label, last_segment(fd.name));
+    put_generics(&label, fd.type_params, fd.constraints);
+    put(&label, "(");
+    auto ranges = List<i64>::init(a);
+    auto first = true;
+    for (auto pr : fd.params) {
+        if (skip_self && pr.name == "self") { continue; }
+        if (!first) { put(&label, ", "); }
+        first = false;
+        ranges.push(label.len)?;
+        put(&label, pr.name);
+        if (!(pr.name == "self" && pr.ty != null && pr.ty.k == .Ptr && pr.ty.elem.k == .Name && pr.ty.elem.name == "Self")) {
+            put(&label, ": ");
+            put_type(&label, pr.ty);
         }
-        if ms != null && ms.k == .Method { fd = ms.fd }
+        ranges.push(label.len)?;
     }
-    if fd == null { return "null" }
-    if skip_self && (fd.params.len == 0 || fd.params.get(0).name != "self") { skip_self = false }
-    var label = List[u8].init(a)
-    put(&label, "fn ")
-    put(&label, last_segment(fd.name))
-    put_generics(&label, fd.type_params, fd.constraints)
-    put(&label, "(")
-    var ranges = List[i64].init(a)
-    var first = true
-    for pr in fd.params {
-        if skip_self && pr.name == "self" { continue }
-        if !first { put(&label, ", ") }
-        first = false
-        ranges.push(label.len)?
-        put(&label, pr.name)
-        if !(pr.name == "self" && pr.ty != null && pr.ty.k == .Ptr && pr.ty.elem.k == .Name && pr.ty.elem.name == "Self") {
-            put(&label, ": ")
-            put_type(&label, pr.ty)
-        }
-        ranges.push(label.len)?
+    put(&label, ")");
+    if (fd.ret != null) {
+        put(&label, " ");
+        put_type(&label, fd.ret);
     }
-    put(&label, ")")
-    if fd.ret != null {
-        put(&label, " ")
-        put_type(&label, fd.ret)
+    auto sw = new_jw(a);
+    sw.obj()?;
+    sw.key("signatures")?;
+    sw.arr()?;
+    sw.obj()?;
+    sw.key("label")?;
+    sw.str(label.slice())?;
+    sw.key("parameters")?;
+    sw.arr()?;
+    auto k = 0;
+    while (k + 1 < ranges.len) {
+        sw.obj()?;
+        sw.key("label")?;
+        sw.arr()?;
+        sw.int(ranges.get(k))?;
+        sw.int(ranges.get(k + 1))?;
+        sw.end()?;
+        sw.end()?;
+        k += 2;
     }
-    var sw = new_jw(a)
-    sw.obj()?
-    sw.key("signatures")?
-    sw.arr()?
-    sw.obj()?
-    sw.key("label")?
-    sw.str(label.slice())?
-    sw.key("parameters")?
-    sw.arr()?
-    var k = 0
-    while k + 1 < ranges.len {
-        sw.obj()?
-        sw.key("label")?
-        sw.arr()?
-        sw.int(ranges.get(k))?
-        sw.int(ranges.get(k + 1))?
-        sw.end()?
-        sw.end()?
-        k += 2
-    }
-    sw.end()?
-    sw.end()?
-    sw.end()?
-    sw.key("activeSignature")?
-    sw.int(0)?
-    sw.key("activeParameter")?
-    sw.int(min(commas, max(ranges.len / 2 - 1, 0)))?
-    sw.end()?
-    return sw.text()
+    sw.end()?;
+    sw.end()?;
+    sw.end()?;
+    sw.key("activeSignature")?;
+    sw.int(0)?;
+    sw.key("activeParameter")?;
+    sw.int(min(commas, max(ranges.len / 2 - 1, 0)))?;
+    sw.end()?;
+    return sw.text();
 }
