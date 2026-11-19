@@ -1,0 +1,46 @@
+packed struct Descriptor {
+    u64 addr;
+    u32 len;
+    u16 flags;
+    u16 next;
+}
+
+struct Uart {
+    volatile u32 data;
+    volatile u32 status;
+    volatile u32 control;
+}
+
+const auto TX_READY = 1;
+const auto RX_FULL = 2;
+
+void uart_send(Uart* u, u8 byte) {
+    while ((u.status & TX_READY) == 0) { Cpu::pause(); }
+    u.data = byte;
+}
+
+void main() {
+    Uart dev;
+    dev.status = TX_READY;
+    dev.control = 0;
+    uart_send(&dev, 'V');
+    println(dev.data, sizeof(Descriptor), alignof(Descriptor));
+
+    volatile u32* ctrl = &dev.control;
+    *ctrl = Bits::set(*ctrl, 7, 4, 0xA) as u32;
+    *ctrl |= Bits::bit(0) as u32;
+    println(*ctrl, Bits::get(*ctrl, 7, 4), Bits::mask(15, 8));
+
+    Descriptor d;
+    d.addr = 0x1000;
+    d.len = 512;
+    d.flags = 0x8001;
+    d.next = 3;
+    volatile u8* raw = &d as *u8;
+    println(raw[0], raw[1], raw[8], raw[9], raw[12], d.flags);
+
+    Cpu::fence();
+    const auto t0 = Cpu::rdtsc();
+    const auto t1 = Cpu::rdtsc();
+    println(t1 >= t0);
+}

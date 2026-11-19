@@ -1,0 +1,10 @@
+export void probe(void* d, u64 v) {
+    Cpu::cli(); Cpu::sti(); Cpu::halt(); Cpu::pause(); Cpu::nop(); Cpu::fence(); Cpu::load_fence(); Cpu::store_fence();
+    Cpu::set_cr3(Cpu::cr3()); Cpu::set_cr0(Cpu::cr0()); Cpu::set_cr4(Cpu::cr4() | Cpu::cr2());
+    Cpu::load_idt(d); Cpu::load_gdt(d); Cpu::invlpg(d);
+    Cpu::wrmsr(0xC0000080, Cpu::rdmsr(0xC0000080) | v);
+    Port::out8(0x3F8, 65); Port::out16(0x1F0, 7); Port::out32(0xCF8, 0x80000000);
+    const auto a = Port::in8(0x3F8); const auto b = Port::in16(0x1F0); const auto c = Port::in32(0xCFC);
+    Port::out8(0x80, (a + b + c) as u8);
+}
+void main() {}

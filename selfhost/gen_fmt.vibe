@@ -35,7 +35,7 @@ struct FPiece { str lit; str ptr; str thunk; str spec; bool has; }
 
 bool Gen::is_builtin(str name) {
     match name {
-        "panic", "assert", "embed", "__errname" => return true;
+        "panic", "assert", "embed", "asm", "__errname" => return true;
     }
     return false;
 }
@@ -69,6 +69,7 @@ bool Gen::is_builtin(str name) {
         sprint(&b, "{{ ptr {gname}, i64 {data.len} }}")?;
         return Value{ .ty = this->t_str, .v = b.slice() };
     }
+    if (name == "asm") { return this->gen_asm(this->no_types(), args, line); }
     if (name == "__errname") {
         if (args.len != 1) { this->err(line); eprintln("__errname takes one argument"); return error.CompileFailed; }
         const auto v = this->gen_expr(args.get(0), null)?;
@@ -101,6 +102,36 @@ bool Gen::is_builtin(str name) {
     this->err(line); eprintln("unknown builtin '{name}'");
     return error.CompileFailed;
 }
+
+!Value Gen::gen_asm(List<Type*> targs, List<Expr*> args, i64 line) {
+    if (args.len < 2 || args.get(0).k != .StrLit || args.get(1).k != .StrLit) {
+        this->err(line); eprintln("asm takes a template string, a constraint string and the operands");
+        return error.CompileFailed;
+    }
+    auto ret = this->t_void;
+    if (targs.len > 0) { ret = targs.get(0); }
+    auto vals = this->sb();
+    for (auto [i, x] : args) {
+        if (i < 2) { continue; }
+        const auto v = this->gen_expr(x, null)?;
+        if (v.ty.k == .Void || is_agg_type(v.ty)) { this->err(line); eprintln("asm operands must be scalars"); return error.CompileFailed; }
+        if (vals.len > 0) { vals.append(", ")?; }
+        sprint(&vals, "{this->llty(v.ty)?} {v.v}")?;
+    }
+    auto tmpl = this->sb();
+    for (auto c : args.get(0).name) {
+        if (c == '"' || c == '\\') { sprint(&tmpl, "\\{c:02X}")?; } else if (c == '\n') { tmpl.append("\\0A")?; } else { tmpl.push(c)?; }
+    }
+    if (ret.k == .Void) {
+        sprint(this->ins()?, "  call void asm sideeffect \"{tmpl.slice()}\", \"{args.get(1).name}\"({vals.slice()})\n")?;
+        return Value{ .ty = this->t_void, .v = "" };
+    }
+    const auto t = this->tmp()?;
+    sprint(this->ins()?, "  {t} = call {this->llty(ret)?} asm sideeffect \"{tmpl.slice()}\", \"{args.get(1).name}\"({vals.slice()})\n")?;
+    return Value{ .ty = ret, .v = t };
+}
+
+bool is_agg_type(Type* t) { return t.k == .Strct || t.k == .Array || t.k == .Slice || t.k == .Closure || t.k == .Errun; }
 
 !void Gen::gen_fail(List<Expr*> args, i64 from, bool is_assert, i64 line) {
     if (!is_assert && args.len != 1) { this->err(line); eprintln("panic takes one argument"); return error.CompileFailed; }

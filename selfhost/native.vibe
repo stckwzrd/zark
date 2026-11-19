@@ -1090,7 +1090,11 @@ struct Native {
             }
             c.ws();
             const auto st = c.i;
-            while (c.peek() != '(') { c.i += 1; }
+            auto quoted = false;
+            while (quoted || c.peek() != '(') {
+                if (c.peek() == '"') { quoted = !quoted; }
+                c.i += 1;
+            }
             ins.callee = c.s[st..c.i];
             c.i += 1;
             while (!c.eat(')')) {
@@ -1631,6 +1635,56 @@ struct Native {
     }
 
     // ------------------------------------------------------------------ calls
+    /// inline asm templates the native backend can encode itself; operands arrive in the C argument registers
+    !void emit_asm(str callee) {
+        const auto asm = &this->obj.text;
+        const auto q1 = str_find_byte(callee, '"');
+        const auto rest = callee[q1 + 1..];
+        const auto q2 = str_find_byte(rest, '"');
+        const auto t = rest[0..q2];
+        if (t == "cli") { asm.b(0xFA)?; return; }
+        if (t == "sti") { asm.b(0xFB)?; return; }
+        if (t == "hlt") { asm.b(0xF4)?; return; }
+        if (t == "nop") { asm.b(0x90)?; return; }
+        if (t == "int3") { asm.b(0xCC)?; return; }
+        if (t == "pause") { asm.b(0xF3)?; asm.b(0x90)?; return; }
+        if (t == "mfence") { asm.opc(0x0FAEF0)?; return; }
+        if (t == "lfence") { asm.opc(0x0FAEE8)?; return; }
+        if (t == "sfence") { asm.opc(0x0FAEF8)?; return; }
+        if (str_starts_with(t, "rdtsc")) {
+            asm.opc(0x0F31)?;
+            asm.opc(0x48C1E2)?; asm.b(32)?;
+            asm.opc(0x4809D0)?;
+            return;
+        }
+        if (str_starts_with(t, "inb ")) { asm.opc(0x89FA)?; asm.b(0xEC)?; asm.opc(0x0FB6C0)?; return; }
+        if (str_starts_with(t, "inw ")) { asm.opc(0x89FA)?; asm.opc(0x66ED)?; asm.opc(0x0FB7C0)?; return; }
+        if (str_starts_with(t, "inl ")) { asm.opc(0x89FA)?; asm.b(0xED)?; return; }
+        if (str_starts_with(t, "outb ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.b(0xEE)?; return; }
+        if (str_starts_with(t, "outw ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.opc(0x66EF)?; return; }
+        if (str_starts_with(t, "outl ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.b(0xEF)?; return; }
+        if (t == "lidt ($0)") { asm.opc(0x0F011F)?; return; }
+        if (t == "lgdt ($0)") { asm.opc(0x0F0117)?; return; }
+        if (t == "invlpg ($0)") { asm.opc(0x0F013F)?; return; }
+        if (t == "mov %cr0, $0") { asm.opc(0x0F20C0)?; return; }
+        if (t == "mov %cr2, $0") { asm.opc(0x0F20D0)?; return; }
+        if (t == "mov %cr3, $0") { asm.opc(0x0F20D8)?; return; }
+        if (t == "mov %cr4, $0") { asm.opc(0x0F20E0)?; return; }
+        if (t == "mov $0, %cr0") { asm.opc(0x0F22C7)?; return; }
+        if (t == "mov $0, %cr3") { asm.opc(0x0F22DF)?; return; }
+        if (t == "mov $0, %cr4") { asm.opc(0x0F22E7)?; return; }
+        if (t == "wrmsr") { asm.opc(0x89F9)?; asm.opc(0x89F0)?; asm.opc(0x0F30)?; return; }
+        if (str_starts_with(t, "rdmsr")) {
+            asm.opc(0x89F9)?;
+            asm.opc(0x0F32)?;
+            asm.opc(0x48C1E2)?; asm.b(32)?;
+            asm.opc(0x4809D0)?;
+            return;
+        }
+        eprintln("native backend: cannot encode inline asm '{t}'; build with --llvm");
+        return error.CompileFailed;
+    }
+
     !void emit_call(Ins* ins) {
         const auto asm = &this->obj.text;
         auto callee = ins.callee;
@@ -1696,7 +1750,9 @@ struct Native {
             }
         }
         if (sret) { asm.lea(RDI, RBP, this->loc(ins.dest))?; }
-        if (callee[0] == '%') {
+        if (str_starts_with(callee, "asm ")) {
+            this->emit_asm(callee)?;
+        } else if (callee[0] == '%') {
             this->load_op(R11, this->t_ptr, callee, false)?;
             if (ins.variadic) { asm.mov_imm(RAX, nf)?; }
             asm.call_reg(R11)?;

@@ -973,3 +973,47 @@ struct FmtSpec {
     w.write("0x")?;
     return __fmt_num(w, v, false, "x");
 }
+
+struct Cpu {
+    static void cli() { asm("cli", "~\{memory\}"); }
+    static void sti() { asm("sti", "~\{memory\}"); }
+    static void halt() { asm("hlt", "~\{memory\}"); }
+    static void pause() { asm("pause", "~\{memory\}"); }
+    static void nop() { asm("nop", ""); }
+    static void breakpoint() { asm("int3", ""); }
+    static void fence() { asm("mfence", "~\{memory\}"); }
+    static void load_fence() { asm("lfence", "~\{memory\}"); }
+    static void store_fence() { asm("sfence", "~\{memory\}"); }
+    static u64 rdtsc() { return asm<u64>("rdtsc; shlq $$32, %rdx; orq %rdx, %rax", "=\{rax\},~\{rdx\}"); }
+    static u64 cr0() { return asm<u64>("mov %cr0, $0", "=r"); }
+    static u64 cr2() { return asm<u64>("mov %cr2, $0", "=r"); }
+    static u64 cr3() { return asm<u64>("mov %cr3, $0", "=r"); }
+    static u64 cr4() { return asm<u64>("mov %cr4, $0", "=r"); }
+    static void set_cr0(u64 v) { asm("mov $0, %cr0", "r,~\{memory\}", v); }
+    static void set_cr3(u64 v) { asm("mov $0, %cr3", "r,~\{memory\}", v); }
+    static void set_cr4(u64 v) { asm("mov $0, %cr4", "r,~\{memory\}", v); }
+    static void load_idt(void* descriptor) { asm("lidt ($0)", "r,~\{memory\}", descriptor); }
+    static void load_gdt(void* descriptor) { asm("lgdt ($0)", "r,~\{memory\}", descriptor); }
+    static void invlpg(void* addr) { asm("invlpg ($0)", "r,~\{memory\}", addr); }
+    static u64 rdmsr(u32 msr) { return asm<u64>("rdmsr; shlq $$32, %rdx; orq %rdx, %rax", "=\{rax\},\{ecx\},~\{rdx\}", msr); }
+    static void wrmsr(u32 msr, u64 v) { asm("wrmsr", "\{ecx\},\{eax\},\{edx\},~\{memory\}", msr, v as u32, (v >> 32) as u32); }
+}
+
+struct Port {
+    static u8 in8(u16 port) { return asm<u8>("inb %dx, %al", "=\{al\},\{dx\}", port); }
+    static u16 in16(u16 port) { return asm<u16>("inw %dx, %ax", "=\{ax\},\{dx\}", port); }
+    static u32 in32(u16 port) { return asm<u32>("inl %dx, %eax", "=\{eax\},\{dx\}", port); }
+    static void out8(u16 port, u8 v) { asm("outb %al, %dx", "\{al\},\{dx\},~\{memory\}", v, port); }
+    static void out16(u16 port, u16 v) { asm("outw %ax, %dx", "\{ax\},\{dx\},~\{memory\}", v, port); }
+    static void out32(u16 port, u32 v) { asm("outl %eax, %dx", "\{eax\},\{dx\},~\{memory\}", v, port); }
+}
+
+struct Bits {
+    static u64 mask(u64 hi, u64 lo) {
+        if (hi >= 63) { return ~(0 as u64) << lo; }
+        return (((1 as u64) << (hi + 1)) - 1) & (~(0 as u64) << lo);
+    }
+    static u64 bit(u64 n) { return (1 as u64) << n; }
+    static u64 get(u64 v, u64 hi, u64 lo) { return (v & Bits::mask(hi, lo)) >> lo; }
+    static u64 set(u64 v, u64 hi, u64 lo, u64 x) { return (v & ~Bits::mask(hi, lo)) | ((x << lo) & Bits::mask(hi, lo)); }
+}

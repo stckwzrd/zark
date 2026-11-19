@@ -97,6 +97,7 @@ bool Gen::names_type(Expr* e) {
     }
     if (callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field)) {
         if (callee.op != .lt) { this->err(e.line); eprintln("type arguments are written with '<...>', as in 'max<i64>(a, b)'"); return error.CompileFailed; }
+        if (callee.l.k == .Ident && callee.l.name == "asm" && !this->fns.has("asm")) { return this->gen_asm(this->type_args(callee.args, e.line)?, e.args, e.line); }
         if (callee.l.k == .Field) {
             const auto targs = this->type_args(callee.args, e.line)?;
             return this->gen_field_call(callee.l, e.args, targs, expected, e.line);
