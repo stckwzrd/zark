@@ -14,6 +14,7 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 - `bootstrap/seed.ll.gz`: the bootstrap seed, the LLVM IR of the compiler itself. `./bootstrap.sh` builds stage1 from it with clang; no other compiler is needed.
 - `legacy/zig-stage0/`: the old Zig compiler, kept for history only. It is not built and not maintained.
 - `tools/update-seed.sh`: regenerates the seed from a stage that passed the fixed-point check.
+- `examples/baremetal/`: an x86-64 kernel in Vibe that boots in QEMU (`tests/baremetal.sh`); `tests/asm_encoding.sh` checks the native encodings of the privileged instructions against LLVM.
 - `examples/`, `tests/run.sh` + `tests/expected/`, `tests/errors/` (programs that must fail to compile), `tests/tokens/` (golden token dumps of the examples).
 - `bench/compile_speed.sh`: compile time against gcc and clang.
 - Docs: `SPEC.md` (the language contract), `BOOTSTRAP.md`, `ROADMAP.md` (next steps).

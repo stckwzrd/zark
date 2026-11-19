@@ -124,6 +124,20 @@ extern f64 vec3_dot(Vec3* a, Vec3* b);
 ```
 `vibe run main.vibe mathlib.c engine.cpp` compiles everything and links with `clang++` automatically. C++ is reached through an `extern "C"` facade: see `examples/interop/`. String literals pass as `const char*` directly.
 
+## Drivers and bare metal
+
+`volatile` registers and fields, `packed struct`, `Port`, `Cpu`, `Bits`, `Atomic` and `Spinlock` in the prelude, inline `asm<T>("...", "...", args)`, and `--freestanding` builds without libc. The same code runs on the native and the LLVM backend. `examples/baremetal/` is an x86-64 kernel written in Vibe that boots in QEMU (`examples/baremetal/run.sh`): serial output through `Fmt`, an IDT built from a `packed struct`, an exception handled in Vibe.
+
+```vibe
+packed struct Descriptor { u64 addr; u32 len; u16 flags; u16 next; }
+struct Uart { volatile u32 data; volatile u32 status; }
+
+void send(Uart* u, u8 byte) {
+    while ((u.status & 1) == 0) { Cpu::pause(); }
+    u.data = byte;
+}
+```
+
 ## Memory: no hidden allocations
 
 ```vibe

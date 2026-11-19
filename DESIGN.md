@@ -100,4 +100,12 @@ Migration notes (S2/S3a): the compiler (11.8k lines), std, examples and tests we
 - [x] S4 remove the old syntax (`;` is mandatory except before `}`)
 - [x] S5 guide, editor grammar and snippets
 
+### Phase D: low-level programming (drivers, kernels)
+- [x] `volatile` (pointees, fields, variables), `packed struct`
+- [x] `asm<R>(template, constraints, args...)` with native encodings for the prelude templates
+- [x] prelude: `Cpu`, `Port`, `Bits`, `Atomic`, `Spinlock`
+- [x] `--freestanding`, linker script and `.S` passthrough, `export` replaces an `extern` of the same name
+- [x] `examples/baremetal`: boots in QEMU, serial through `Fmt`, IDT and an exception handled in Vibe; tested on both backends
+- [ ] `align(N)`, an `interrupt` function attribute, bitfields, 8/16-bit atomics, aarch64/riscv targets
+
 ### Phase 4 (only when asked): MIR and backend work

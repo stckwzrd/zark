@@ -155,6 +155,14 @@ Format specs: `{v:x}` `{v:08X}` `{v:5}` `{v:-10}` `{v:+}` `{v:.3}` (string preci
 
 Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` as true/false, `str` as text (quoted inside aggregates), pointers as `0x...` (`(nil)` for null), enums as `.Name`, errors as `error.Name`, structs as `S{ f: v }`, unions as `U.V(payload)` (`U.V` when nested), arrays as `[a, b]` (at most 32 elements), slices as `[a, b]` (`[]T(len=N)` when nested), `void` as `void`.
 
+## 6b. Low-level code
+
+- `volatile T`: a type qualifier for pointees, fields and variables (`volatile u32* p`, `volatile u32 ctrl;`). Every access through such an lvalue is emitted as a volatile load or store of the exact width of `T`. Type equality ignores `volatile`.
+- `packed struct` and `packed union`: fields without padding, alignment 1.
+- `asm<R>("template", "constraints", args...)` (`R` defaults to `void`): LLVM inline asm with `sideeffect`. Braces in the strings are written `\{` and `\}`. The native backend encodes the templates used by the prelude (`Cpu`, `Port`, `Atomic`) and rejects others with a message; `--llvm` accepts any.
+- `--freestanding` links with `-nostdlib -static`, disables bounds checks, and accepts `-Wl,...`, `-T...`, `.S`, `.c`, `.o` arguments. An `export` function with a body replaces an `extern` declaration of the same name (for `memset`, `memcpy`).
+- Prelude: `Cpu`, `Port`, `Bits`, `Atomic`, `Spinlock`.
+
 ## 7. Memory
 
 ```vibe
