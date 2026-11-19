@@ -583,7 +583,7 @@ fn add_all_variants(it: *Items, p: *Project) {
 
 const KEYWORDS = ["fn", "let", "var", "const", "if", "else", "while", "for", "in", "return", "break", "continue", "struct", "enum", "union", "impl", "extern", "export", "defer", "errdefer", "catch", "orelse", "match", "is", "as", "import", "type", "sizeof", "alignof", "true", "false", "null", "test"]
 const PRIMS = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "void", "str"]
-const BUILTINS = ["print", "println", "eprint", "eprintln", "sprint", "bprint", "panic", "assert", "embed"]
+const BUILTINS = ["panic", "assert", "embed"]
 
 fn add_globals(it: *Items, p: *Project, near: List[*Symbol], types_only: bool) {
     if !types_only {

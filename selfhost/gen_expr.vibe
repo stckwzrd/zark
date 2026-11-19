@@ -93,9 +93,10 @@ impl Gen {
                 return Value{ ty: self.t_str, v: b.slice() }
             }
             .Interp => {
-                self.err(e.line); eprintln("string interpolation never allocates: use it inside print/println/eprintln/panic, or format into a buffer with bprint(buf, \"...\")")
+                self.err(e.line); eprintln("string interpolation never allocates: use it as an argument of a function whose last parameter is a Fmt (print, println, bprint, ...)")
                 return error.CompileFailed
             }
+            .Pre => return self.pre_vals.get(e.ival as i64),
             .Ident => {
                 let n = e.name
                 if self.has_var(n) {

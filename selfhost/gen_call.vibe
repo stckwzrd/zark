@@ -224,6 +224,32 @@ impl Gen {
     fn call_decl(self, decl: *FnDecl, base_env: Env, recv: *Addr, args: List[*Expr], explicit: List[*Type], expected: *Type, line: i64) !Value {
         var off = 0
         if recv != null { off = 1 }
+        let np = decl.params.len
+        if np == 0 { return self.call_decl_core(decl, base_env, recv, args, explicit, expected, line) }
+        let lt = decl.params.get(np - 1).ty
+        if lt.k != .Name || lt.name != "Fmt" || lt.args.len != 0 { return self.call_decl_core(decl, base_env, recv, args, explicit, expected, line) }
+        let nfixed = np - off - 1
+        if args.len < nfixed { self.err(line); eprintln("'{decl.name}' expects at least {nfixed} argument(s)"); return error.CompileFailed }
+        var first = Value{ ty: null, v: "" }
+        if args.len == nfixed + 1 && args.get(nfixed).k != .Interp && args.get(nfixed).k != .StrLit {
+            first = self.gen_expr(args.get(nfixed), null)?
+            if first.ty.k == .Strct && first.ty.si.decl.name == "Fmt" {
+                var na = List[*Expr].init(self.a)
+                for i in 0..nfixed { na.push(args.get(i))? }
+                na.push(self.mk_pre(first, line)?)?
+                return self.call_decl_core(decl, base_env, recv, na, explicit, expected, line)
+            }
+        }
+        let fv = self.gen_fmt(args, nfixed, first)?
+        var na = List[*Expr].init(self.a)
+        for i in 0..nfixed { na.push(args.get(i))? }
+        na.push(self.mk_pre(fv, line)?)?
+        return self.call_decl_core(decl, base_env, recv, na, explicit, expected, line)
+    }
+
+    fn call_decl_core(self, decl: *FnDecl, base_env: Env, recv: *Addr, args: List[*Expr], explicit: List[*Type], expected: *Type, line: i64) !Value {
+        var off = 0
+        if recv != null { off = 1 }
         if !decl.variadic && args.len + off != decl.params.len { self.err(line); eprintln("'{decl.name}' expects {decl.params.len - off} argument(s), got {args.len}"); return error.CompileFailed }
         if decl.variadic && args.len + off < decl.params.len { self.err(line); eprintln("'{decl.name}' expects at least {decl.params.len - off} argument(s)"); return error.CompileFailed }
 

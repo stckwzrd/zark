@@ -29,6 +29,8 @@ build/native2 build selfhost/main.vibe --native -o build/native3
 if cmp -s build/native2 build/native3; then echo "== native fixed point reached: native2 == native3"; else echo "!! native2 and native3 differ"; exit 1; fi
 VIBE=build/native2 tests/run.sh | tail -1
 
+tests/no_magic_names.sh
+
 echo "== test suite with the self-hosted compiler"
 VIBE=build/stage2 tests/run.sh
 cp build/stage2 build/vibe

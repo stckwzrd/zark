@@ -40,7 +40,7 @@ fn token_start(t: Token) i64 {
     return t.off
 }
 
-struct Fmt {
+struct Formatter {
     a: Allocator
     src: str
     out: List[u8]
@@ -48,7 +48,7 @@ struct Fmt {
     indent: i64
 }
 
-impl Fmt {
+impl Formatter {
     fn newline(self, n: i64) !void {
         self.out.push('\n')?
         if n > 1 { self.out.push('\n')? }
@@ -181,7 +181,7 @@ fn format_source(a: Allocator, src: str, file: str) !str {
         if t.tag == .semi && (t.text == "\\n" || t.text == "") { continue }
         toks.push(t)?
     }
-    var f = Fmt{ a: a, src: src, out: List[u8].init(a), stack: List[i64].init(a), indent: 0 }
+    var f = Formatter{ a: a, src: src, out: List[u8].init(a), stack: List[i64].init(a), indent: 0 }
     var prev = Token{ tag: .eof, text: "", line: 0, off: 0 }
     var prev2 = Token{ tag: .eof, text: "", line: 0, off: 0 }
     var prev_orig = false

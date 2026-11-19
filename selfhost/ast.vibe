@@ -19,7 +19,7 @@ struct TypeExpr {
 enum EK {
     IntLit, FloatLit, BoolLit, StrLit, Interp, NullLit, Ident, EnumLit, ErrorVal,
     Binary, Unary, Call, Field, Index, Slice, StructLit, ArrayLit, Cast, Try, Catch,
-    Sizeof, Alignof, Is, Match, Orelse, Closure,
+    Sizeof, Alignof, Is, Match, Orelse, Closure, Pre,
 }
 
 struct FieldInit { name: str, value: *Expr, off: i64 }

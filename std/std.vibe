@@ -633,3 +633,363 @@ fn now_ns() i64 {
     _ = clock_gettime(1, &ts)
     return ts.sec * 1000000000 + ts.nsec
 }
+
+// ================================================================ formatting
+// The compiler only builds `Fmt` values at call sites whose last parameter is a `Fmt`
+// and calls the `__fmt_*` hooks below from the per-type thunks it generates.
+
+extern fn dprintf(fd: i32, fmt: *u8, ...) i32
+extern fn snprintf(buf: *u8, n: u64, fmt: *u8, ...) i32
+
+struct Writer {
+    ctx: *void
+    write_fn: fn(*void, str) !void
+}
+
+struct FmtPiece {
+    lit: str
+    value: *void
+    thunk: fn(*Writer, *void, str, i64) !void
+    spec: str
+}
+
+struct Fmt {
+    pieces: []FmtPiece
+    tail: str
+}
+
+impl Writer {
+    fn write(self, s: str) !void {
+        if s.len > 0 { self.write_fn(self.ctx, s)? }
+    }
+
+    fn put(self, f: Fmt) !void {
+        for i in 0..f.pieces.len {
+            let pc = &f.pieces[i]
+            self.write(pc.lit)?
+            let r = pc.thunk(self, pc.value, pc.spec, 0)
+            r catch |e| {
+                if e == error.BadFormat { self.write("<bad format>")? } else { return e }
+            }
+        }
+        self.write(f.tail)?
+    }
+}
+
+impl Fmt {
+    fn fmt(self, w: *Writer, spec: str) !void { return w.put(*self) }
+}
+
+struct OutBuf {
+    buf: [512]u8
+    n: i64
+    fd: i32
+}
+
+fn __ob_flush(b: *OutBuf) {
+    if b.n == 0 { return }
+    if b.fd == 1 {
+        printf("%.*s", b.n as i32, b.buf.ptr)
+    } else {
+        fflush(null)
+        dprintf(2, "%.*s", b.n as i32, b.buf.ptr)
+    }
+    b.n = 0
+}
+
+fn __ob_write(ctx: *void, s: str) !void {
+    let b = ctx as *OutBuf
+    if b.n + s.len > 512 { __ob_flush(b) }
+    if s.len > 512 {
+        if b.fd == 1 { printf("%.*s", s.len as i32, s.ptr) } else {
+            fflush(null)
+            dprintf(2, "%.*s", s.len as i32, s.ptr)
+        }
+        return
+    }
+    memcpy(b.buf.ptr + b.n, s.ptr, s.len as u64)
+    b.n += s.len
+}
+
+fn __emit_out(fd: i32, f: Fmt, nl: bool) {
+    var ob = OutBuf{ n: 0, fd: fd, .. }
+    var w = Writer{ ctx: &ob as *void, write_fn: __ob_write }
+    _ = w.put(f)
+    if nl { _ = w.write("\n") }
+    __ob_flush(&ob)
+}
+
+fn print(f: Fmt) { __emit_out(1, f, false) }
+fn println(f: Fmt) { __emit_out(1, f, true) }
+fn eprint(f: Fmt) { __emit_out(2, f, false) }
+fn eprintln(f: Fmt) { __emit_out(2, f, true) }
+
+struct FmtBuf { buf: []u8, n: i64 }
+
+fn __buf_write(ctx: *void, s: str) !void {
+    let b = ctx as *FmtBuf
+    var room = b.buf.len - 1 - b.n
+    if room < 0 { room = 0 }
+    var k = s.len
+    if k > room { k = room }
+    if k > 0 { memcpy(b.buf.ptr + b.n, s.ptr, k as u64) }
+    b.n += s.len
+}
+
+fn bprint(buf: []u8, f: Fmt) !str {
+    var bw = FmtBuf{ buf: buf, n: 0 }
+    var w = Writer{ ctx: &bw as *void, write_fn: __buf_write }
+    w.put(f)?
+    if bw.n >= buf.len { return error.NoSpace }
+    buf[bw.n] = 0
+    return buf[0..bw.n]
+}
+
+fn __list_write(ctx: *void, s: str) !void {
+    let l = ctx as *List[u8]
+    l.append(s)?
+}
+
+fn sprint(out: *List[u8], f: Fmt) !void {
+    var w = Writer{ ctx: out as *void, write_fn: __list_write }
+    w.put(f)?
+}
+
+fn __panic(file: str, line: i64, is_assert: bool, f: Fmt) {
+    if is_assert {
+        eprint("assertion failed ({file}:{line})\n")
+    } else {
+        eprint("panic: {f} ({file}:{line})\n")
+    }
+    exit(1)
+}
+
+fn __fmt_lit(w: *Writer, s: str) !void { return w.write(s) }
+
+struct FmtSpec {
+    left: bool
+    plus: bool
+    space: bool
+    zero: bool
+    alt: bool
+    width: i64
+    prec: i64
+    conv: u8
+}
+
+fn __spec(spec: str) !FmtSpec {
+    var s = FmtSpec{ left: false, plus: false, space: false, zero: false, alt: false, width: 0, prec: -1, conv: 0 }
+    var i = 0
+    while i < spec.len {
+        let c = spec[i]
+        if c == '-' { s.left = true } else if c == '+' { s.plus = true } else if c == ' ' { s.space = true } else if c == '0' { s.zero = true } else if c == '#' { s.alt = true } else { break }
+        i += 1
+    }
+    while i < spec.len && is_digit(spec[i]) {
+        s.width = s.width * 10 + (spec[i] - '0') as i64
+        i += 1
+    }
+    if i < spec.len && spec[i] == '.' {
+        i += 1
+        s.prec = 0
+        while i < spec.len && is_digit(spec[i]) {
+            s.prec = s.prec * 10 + (spec[i] - '0') as i64
+            i += 1
+        }
+    }
+    if i < spec.len && is_alpha(spec[i]) {
+        s.conv = spec[i]
+        i += 1
+    }
+    if i != spec.len || s.width > 4096 || s.prec > 4096 { return error.BadFormat }
+    return s
+}
+
+fn __pad(w: *Writer, zero: bool, n: i64) !void {
+    let blanks = "                                "
+    let zeros = "00000000000000000000000000000000"
+    var left = n
+    while left > 0 {
+        var k = left
+        if k > 32 { k = 32 }
+        if zero { w.write(zeros[0..k])? } else { w.write(blanks[0..k])? }
+        left -= k
+    }
+}
+
+fn __emit(w: *Writer, sp: FmtSpec, prefix: str, body: str, zeros: i64, zero_ok: bool) !void {
+    let total = prefix.len + zeros + body.len
+    var fill = sp.width - total
+    if fill < 0 { fill = 0 }
+    if sp.left {
+        w.write(prefix)?
+        __pad(w, true, zeros)?
+        w.write(body)?
+        return __pad(w, false, fill)
+    }
+    if sp.zero && zero_ok {
+        w.write(prefix)?
+        __pad(w, true, fill + zeros)?
+        return w.write(body)
+    }
+    __pad(w, false, fill)?
+    w.write(prefix)?
+    __pad(w, true, zeros)?
+    return w.write(body)
+}
+
+fn __fmt_num(w: *Writer, bits: u64, signed: bool, spec: str) !void {
+    let sp = __spec(spec)?
+    var conv = sp.conv
+    if conv == 0 {
+        if signed { conv = 'd' } else { conv = 'u' }
+    }
+    if conv == 'c' {
+        var one: [1]u8
+        one[0] = bits as u8
+        return __emit(w, sp, "", one[..], 0, false)
+    }
+    if str_find_byte("dixXou", conv) < 0 { return error.BadFormat }
+    var base: u64 = 10
+    if conv == 'x' || conv == 'X' { base = 16 }
+    if conv == 'o' { base = 8 }
+    var neg = false
+    var mag = bits
+    if conv == 'd' || conv == 'i' {
+        if (bits as i64) < 0 {
+            neg = true
+            mag = 0 - bits
+        }
+    }
+    var digits: [72]u8
+    var n = 72
+    let hex = "0123456789abcdef"
+    let hexu = "0123456789ABCDEF"
+    if mag == 0 {
+        n -= 1
+        digits[n] = '0'
+    }
+    while mag > 0 {
+        n -= 1
+        let dgt = (mag % base) as i64
+        if conv == 'X' { digits[n] = hexu[dgt] } else { digits[n] = hex[dgt] }
+        mag = mag / base
+    }
+    var body = digits[n..]
+    var zeros: i64 = 0
+    if sp.prec > body.len { zeros = sp.prec - body.len }
+    var prefix = ""
+    if neg {
+        prefix = "-"
+    } else if base == 10 && sp.plus {
+        prefix = "+"
+    } else if base == 10 && sp.space {
+        prefix = " "
+    } else if sp.alt && base == 16 && bits != 0 {
+        if conv == 'X' { prefix = "0X" } else { prefix = "0x" }
+    } else if sp.alt && base == 8 && zeros == 0 {
+        prefix = "0"
+    }
+    return __emit(w, sp, prefix, body, zeros, sp.prec < 0)
+}
+
+fn __fmt_int(w: *Writer, v: i64, spec: str) !void {
+    if spec.len == 0 {
+        var digits: [24]u8
+        var n = 24
+        var neg = false
+        var mag = v as u64
+        if v < 0 {
+            neg = true
+            mag = 0 - mag
+        }
+        if mag == 0 {
+            n -= 1
+            digits[n] = '0'
+        }
+        while mag > 0 {
+            n -= 1
+            digits[n] = '0' + (mag % 10) as u8
+            mag = mag / 10
+        }
+        if neg {
+            n -= 1
+            digits[n] = '-'
+        }
+        return w.write(digits[n..])
+    }
+    return __fmt_num(w, v as u64, true, spec)
+}
+
+fn __fmt_uint(w: *Writer, v: u64, spec: str) !void {
+    if spec.len == 0 {
+        var digits: [24]u8
+        var n = 24
+        var mag = v
+        if mag == 0 {
+            n -= 1
+            digits[n] = '0'
+        }
+        while mag > 0 {
+            n -= 1
+            digits[n] = '0' + (mag % 10) as u8
+            mag = mag / 10
+        }
+        return w.write(digits[n..])
+    }
+    return __fmt_num(w, v, false, spec)
+}
+
+fn __fmt_float(w: *Writer, v: f64, spec: str) !void {
+    var f: [48]u8
+    var out: [512]u8
+    var n = 0
+    f[n] = '%'
+    n += 1
+    if spec.len == 0 {
+        f[n] = 'g'
+        n += 1
+    } else {
+        let sp = __spec(spec)?
+        for c in spec {
+            if is_alpha(c) { break }
+            if n >= 40 { return error.BadFormat }
+            f[n] = c
+            n += 1
+        }
+        var conv = sp.conv
+        if conv == 0 { conv = 'f' }
+        if str_find_byte("eEfFgGaA", conv) < 0 { return error.BadFormat }
+        f[n] = conv
+        n += 1
+    }
+    f[n] = 0
+    let len = snprintf(out.ptr, 512, f.ptr, v)
+    if len < 0 || len >= 512 { return error.BadFormat }
+    return w.write(out[0..len as i64])
+}
+
+fn __fmt_str(w: *Writer, s: str, spec: str, quoted: bool) !void {
+    if quoted {
+        w.write("\"")?
+        w.write(s)?
+        return w.write("\"")
+    }
+    if spec.len == 0 { return w.write(s) }
+    let sp = __spec(spec)?
+    if sp.conv != 0 { return error.BadFormat }
+    var body = s
+    if sp.prec >= 0 && sp.prec < body.len { body = body[0..sp.prec] }
+    return __emit(w, sp, "", body, 0, false)
+}
+
+fn __fmt_bool(w: *Writer, b: bool, spec: str) !void {
+    if b { return __fmt_str(w, "true", spec, false) }
+    return __fmt_str(w, "false", spec, false)
+}
+
+fn __fmt_ptr(w: *Writer, v: u64, spec: str) !void {
+    if v == 0 { return w.write("(nil)") }
+    w.write("0x")?
+    return __fmt_num(w, v, false, "x")
+}

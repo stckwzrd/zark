@@ -53,8 +53,6 @@ struct FnInst {
     caps: List[CapInfo]
 }
 
-struct FmtB { fmt: List[u8], args: List[u8], string_mode: bool }
-
 struct Gen {
     a: Allocator
     safety: bool
@@ -75,6 +73,9 @@ struct Gen {
     declared: Map[bool]
     errors: Map[i64]
     error_names: List[str]
+    pre_vals: List[Value]
+    thunks: Map[i64]
+    rtypes: Map[*Type]
 
     types_out: List[u8]
     globals_out: List[u8]
@@ -137,6 +138,9 @@ fn new_gen(a: Allocator, safety: bool) !*Gen {
     g.declared = Map[bool].init(a)
     g.errors = Map[i64].init(a)
     g.error_names = List[str].init(a)
+    g.pre_vals = List[Value].init(a)
+    g.thunks = Map[i64].init(a)
+    g.rtypes = Map[*Type].init(a)
     g.types_out = List[u8].init(a)
     g.globals_out = List[u8].init(a)
     g.decls_out = List[u8].init(a)
@@ -557,6 +561,7 @@ impl Gen {
             .Name => {
                 if te.args.len == 0 {
                     if env.has(te.name) { return env.get(te.name) }
+                    if self.rtypes.has(te.name) { return self.rtypes.get(te.name) }
                     let bt = self.builtin_type(te.name)?
                     if bt != null { return bt }
                     if self.enums.has(te.name) {
@@ -1039,6 +1044,12 @@ impl Gen {
             sprint(&refs, "ptr {s}")?
         }
         sprint(&self.globals_out, "@__vibe_errnames = private constant [{self.error_names.len} x ptr] [{refs.slice()}]\n")?
+        var lens = self.sb()
+        for i, n in self.error_names {
+            if i > 0 { lens.append(", ")? }
+            sprint(&lens, "i64 {n.len}")?
+        }
+        sprint(&self.globals_out, "@__vibe_errlens = private constant [{self.error_names.len} x i64] [{lens.slice()}]\n")?
     }
 
     fn output(self, out: *List[u8]) !void {
