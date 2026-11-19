@@ -1,15 +1,15 @@
-1 .kw_fn fn
+1 .bang !
+1 .ident i64
 1 .ident f
 1 .lparen (
 1 .rparen )
-1 .bang !
-1 .ident i64
 1 .lbrace {
 1 .kw_return return
 1 .int_lit 1
+1 .semi ;
 1 .rbrace }
 1 .semi \n
-2 .kw_fn fn
+2 .ident void
 2 .ident main
 2 .lparen (
 2 .rparen )
@@ -17,6 +17,7 @@
 2 .ident f
 2 .lparen (
 2 .rparen )
+2 .semi ;
 2 .rbrace }
 2 .semi \n
 3 .semi 

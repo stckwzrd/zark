@@ -1,1 +1,1 @@
-fn main() { let x = 1; x = 2 }
+void main() { const auto x = 1; x = 2; }

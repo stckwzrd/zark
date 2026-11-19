@@ -1,2 +1,2 @@
-union U { A: i64, B }
-fn main() { let u = U.B(3) }
+union U { i64 A; B; }
+void main() { const auto u = U.B(3); }

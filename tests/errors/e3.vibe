@@ -1,1 +1,1 @@
-fn main() { let s: str = 5 }
+void main() { const str s = 5; }

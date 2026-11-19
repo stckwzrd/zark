@@ -1,9 +1,10 @@
-1 .kw_fn fn
+1 .ident void
 1 .ident main
 1 .lparen (
 1 .rparen )
 1 .lbrace {
-1 .kw_let let
+1 .kw_const const
+1 .ident auto
 1 .ident a
 1 .eq =
 1 .lbracket [
@@ -14,13 +15,15 @@
 1 .int_lit 3
 1 .rbracket ]
 1 .semi ;
-1 .kw_var var
+1 .ident auto
 1 .ident i
 1 .eq =
 1 .int_lit 1
 1 .semi ;
 1 .kw_while while
+1 .lparen (
 1 .kw_true true
+1 .rparen )
 1 .lbrace {
 1 .ident print
 1 .lparen (
@@ -35,6 +38,7 @@
 1 .ident i
 1 .plus_eq +=
 1 .int_lit 1
+1 .semi ;
 1 .rbrace }
 1 .rbrace }
 1 .semi \n

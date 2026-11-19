@@ -1,43 +1,46 @@
-1 .kw_fn fn
+1 .bang !
+1 .ident void
 1 .ident main
 1 .lparen (
 1 .rparen )
-1 .bang !
-1 .ident void
 1 .lbrace {
-2 .kw_let let
+2 .kw_const const
+2 .ident auto
 2 .ident a
 2 .eq =
 2 .ident c_allocator
 2 .lparen (
 2 .rparen )
-2 .semi \n
-3 .kw_var var
+2 .semi ;
+3 .ident auto
 3 .ident out
 3 .eq =
 3 .ident List
-3 .lbracket [
+3 .lt <
 3 .ident u8
-3 .rbracket ]
-3 .dot .
+3 .gt >
+3 .coloncolon ::
 3 .ident init
 3 .lparen (
 3 .ident a
 3 .rparen )
-3 .semi \n
+3 .semi ;
 4 .kw_defer defer
 4 .ident out
 4 .dot .
 4 .ident deinit
 4 .lparen (
 4 .rparen )
-4 .semi \n
+4 .semi ;
 5 .kw_for for
+5 .lparen (
+5 .ident auto
 5 .ident i
-5 .kw_in in
+5 .colon :
 5 .int_lit 0
 5 .dotdot ..
 5 .int_lit 3
+5 .rparen )
 5 .lbrace {
 5 .ident sprint
 5 .lparen (
@@ -47,6 +50,7 @@
 5 .str_lit line {i}: {i * i}\n
 5 .rparen )
 5 .question ?
+5 .semi ;
 5 .rbrace }
 5 .semi \n
 6 .ident sprint
@@ -57,7 +61,7 @@
 6 .str_lit pi={PI} ok={true}\n
 6 .rparen )
 6 .question ?
-6 .semi \n
+6 .semi ;
 7 .ident write_file
 7 .lparen (
 7 .str_lit .vibe-cache/vibe_io.txt
@@ -69,8 +73,9 @@
 7 .rparen )
 7 .rparen )
 7 .question ?
-7 .semi \n
-8 .kw_let let
+7 .semi ;
+8 .kw_const const
+8 .ident auto
 8 .ident back
 8 .eq =
 8 .ident read_file
@@ -80,7 +85,7 @@
 8 .str_lit .vibe-cache/vibe_io.txt
 8 .rparen )
 8 .question ?
-8 .semi \n
+8 .semi ;
 9 .kw_defer defer
 9 .ident a
 9 .dot .
@@ -88,18 +93,19 @@
 9 .lparen (
 9 .ident back
 9 .rparen )
-9 .semi \n
+9 .semi ;
 10 .ident print
 10 .lparen (
 10 .ident back
 10 .rparen )
-10 .semi \n
+10 .semi ;
 11 .ident println
 11 .lparen (
 11 .str_lit exists: {file_exists(".vibe-cache/vibe_io.txt")} {file_exists("/nope")}
 11 .rparen )
-11 .semi \n
-12 .kw_let let
+11 .semi ;
+12 .kw_const const
+12 .ident auto
 12 .ident code
 12 .eq =
 12 .ident run
@@ -115,13 +121,14 @@
 12 .rbracket ]
 12 .rparen )
 12 .question ?
-12 .semi \n
+12 .semi ;
 13 .ident println
 13 .lparen (
 13 .str_lit child exit = {code}
 13 .rparen )
-13 .semi \n
-14 .kw_let let
+13 .semi ;
+14 .kw_const const
+14 .ident auto
 14 .ident missing
 14 .eq =
 14 .ident read_file
@@ -141,6 +148,7 @@
 14 .rparen )
 14 .semi ;
 14 .str_lit 
+14 .semi ;
 14 .rbrace }
 14 .semi \n
 15 .ident println
@@ -151,7 +159,7 @@
 15 .comma ,
 15 .str_lit \x41\x42
 15 .rparen )
-15 .semi \n
+15 .semi ;
 16 .rbrace }
 16 .semi \n
 17 .semi 

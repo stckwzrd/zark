@@ -1,2 +1,2 @@
-extern fn puts(s: *u8) i32
-fn main() { let s = "hi"; puts(s) }
+extern i32 puts(u8* s);
+void main() { const auto s = "hi"; puts(s); }

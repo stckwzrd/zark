@@ -1,1 +1,1 @@
-fn main() { var a = 1; let p: *u8 = &a }
+void main() { auto a = 1; const u8* p = &a; }

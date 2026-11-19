@@ -1,9 +1,10 @@
-1 .kw_fn fn
+1 .ident void
 1 .ident main
 1 .lparen (
 1 .rparen )
 1 .lbrace {
-1 .kw_let let
+1 .kw_const const
+1 .ident auto
 1 .ident x
 1 .eq =
 1 .int_lit 1
@@ -11,6 +12,7 @@
 1 .ident x
 1 .eq =
 1 .int_lit 2
+1 .semi ;
 1 .rbrace }
 1 .semi \n
 2 .semi 

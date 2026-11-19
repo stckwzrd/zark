@@ -1,2 +1,2 @@
-struct P { x: i64, y: i64 }
-fn main() { let p = P{ x: 1 } }
+struct P { i64 x; i64 y; }
+void main() { const auto p = P{ x: 1; } }
