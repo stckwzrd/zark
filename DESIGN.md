@@ -74,11 +74,9 @@ Goal: code that reads like C++ for someone who writes C++ every day, while keepi
 
 ### Phase 3: semantic layer
 - [x] `sema*.vibe`: types and layouts (`sema_types.vibe`, moved out of `gen.vibe` unchanged, IR byte-identical)
-- [ ] expression typing
-- [ ] calls and generics
-- [ ] statements
-- [ ] delete duplicated logic in `gen*.vibe`
-- [x] several errors per run (up to 10); the column is shown by the caret line, not in the header
+- [ ] expression typing, calls and generics, statements: still interleaved with IR emission in `gen*.vibe`; splitting them is the next big step and needs a typed AST
+- [x] no duplicated logic found to delete (the old parser paths were removed in S4)
+- [x] several errors per run (up to 10); decided: the column stays in the caret line, the header keeps `file:line:` (the LSP and the guide builder parse it)
 - [x] `const` methods cannot assign fields (and call non-const methods through `this`; calls on const variables are allowed)
 - [x] constraints `T: Ord` checked at the declaration (`sema_check.vibe`: operators on values of type `T` against the declared constraint; unconstrained parameters are still checked at the instantiation)
 - [ ] interfaces defined in std
