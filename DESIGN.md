@@ -56,6 +56,22 @@ Phase 2 decisions and measurements:
 - Compile time (min of 15 interleaved runs, old vs new): `bench/w.vibe` frontend 76 -> 57 ms, backend 44 -> 44 ms; `selfhost/main.vibe` frontend 113 -> 99 ms, backend 97 -> 104 ms (+7%); `examples/hello.vibe` frontend 1.7 -> 3.2 ms and backend 0.7 -> 2.5 ms (the std formatting code is now compiled when used; absolute cost about 3 ms).
 - Run time: 300k `println("line {i} value {i*3:08x} and {i % 7}")` takes 90 ms before and 450 ms with the default native backend (its code is unoptimised) and 99 ms with `-O`. Output is byte-identical (same md5).
 
+### Phase S: C++-like surface syntax (decided with the owner, not started)
+
+Goal: code that reads like C++ for someone who writes C++ every day, while keeping Vibe's semantics. Decisions:
+
+- **Declarations are type-first.** `i64 add(i64 a, i64 b) { ... }`, `i64 x = 5;`, `auto p = Point{ .x = 3, .y = 4 };`. No `fn`, `let`, `var`. A statement starting with `Type name` is a declaration; Vibe has no expression statements besides calls and assignments, so `Type* p` is unambiguous with a short lookahead.
+- **Mutable by default, `const` for immutable.** Parameters are mutable local copies. `const` keeps today's `let` rules (no change through fields or elements). Closure captures are written `[&k](i64 x) -> i64 { ... }` (by reference, context on the stack, as today).
+- **Semicolons are mandatory** in the new syntax. This removes the "operator at the start of a line" trap.
+- **Parentheses in `if`/`while`/`for`, braces stay mandatory.** `for (i64 i = 0; i < n; i++)`, range form `for (auto x : xs)` and `for (i64 i : 0..n)`. `++`, `--`, and all compound assignments (`|= &= ^= <<= >>=`) are added.
+- **Types:** `T*` pointer, `T[]` slice, `T[N]` array, `!T` error union, `?T` optional, `nullptr`. Only the explicit names `i8..i64`, `u8..u64`, `f32`, `f64`, `bool`, `str`, plus `auto`. No `int`/`long`/`double` aliases.
+- **Methods live inside `struct`** (also `union`, `enum`): `i64 len2() const { return x * x + y * y; }`. Fields are visible by bare name and as `this->x` (`.` also works). `const` methods get a read-only receiver; others get `*Self`. `static` marks functions without a receiver. `impl` blocks go away.
+- **Generics use `template`:** `template<T: Ord> T max(T a, T b)`, `struct Pair<A, B> { ... }`, `List<i64>`, `max<i64>(1, 2)`. Angle brackets are parsed by speculation (`name <` types `> (`), not by symbol lookup.
+- **Scope:** `Color::Red`, `net::connect(...)`; `->` is accepted for member access through pointers (same as `.`).
+- **Kept as they are:** `match`, `defer`/`errdefer`, `?`/`catch`/`orelse`, `is`, string interpolation, `import "file" as name;`, `test "name" { }`, `sizeof`/`alignof`, `as` casts, `extern`/`export`.
+- **Migration:** the parser accepts both syntaxes and produces the same AST. `vibe fmt --to-new` rewrites sources from the AST. Steps: (1) the parser learns the new syntax (two-step seed workflow), (2) the converter rewrites `selfhost/`, `std/`, `examples/`, `tests/` and the guide, (3) the old syntax is removed. Bare member names need a small name-resolution hook in `gen` first and move into `sema` in Phase 3.
+- Steps S1 parser, S2 converter, S3 migrate everything, S4 remove the old syntax, S5 guide and editor grammar. Each step green: tests, both fixed points, `tests/no_magic_names.sh`.
+
 ### Phase 3: semantic layer
 - [ ] `sema*.vibe`: types and layouts
 - [ ] expression typing
@@ -65,5 +81,12 @@ Phase 2 decisions and measurements:
 - [ ] several errors per run (up to 10) with `file:line:col`
 - [ ] constraints `T: Ord` checked at the declaration, interfaces defined in std
 - [ ] all tests on three backends, fixed points, compile time within +10%
+
+### Phase S checklist
+- [ ] S1 parser accepts the new syntax
+- [ ] S2 `vibe fmt --to-new`
+- [ ] S3 migrate selfhost, std, examples, tests, guide
+- [ ] S4 remove the old syntax
+- [ ] S5 guide, editor grammar and snippets
 
 ### Phase 4 (only when asked): MIR and backend work
