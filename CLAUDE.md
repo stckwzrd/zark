@@ -35,16 +35,16 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 4. The lexer output must match `tests/tokens/*.tok`. After an intended lexer change, regenerate them with `build/vibe tokens FILE > tests/tokens/NAME.tok` (NAME is the path with `/` replaced by `_`) and review the diff.
 
 ## Syntax
-The repository is written in the C++-style syntax (type-first declarations, `template<T>`, methods inside `struct` or out of class as `R Type::name()`, `[&k](T x) -> R {}`). The old `fn`/`let`/`var`/`impl` spelling is still accepted until Phase S4. `python3 tools/convert-syntax.py FILE` converts old code.
+The language is written C++-style: type-first declarations, `auto`/`const`, `template<T>`, methods inside `struct` or out of class as `R Type::name()`, `[&k](T x) -> R {}`, `for (T x : seq)`, `T{ .f = v }` (rest zeroed), mandatory `;` (not needed before `}`). The old `fn`/`let`/`var`/`impl` spelling is gone. `tools/convert-syntax.py FILE` converts old code.
 
 ## Gotchas when writing Vibe (the compiler is written in it too)
 - `{` inside a string starts interpolation. For a literal brace write `{{` / `}}`. IR text like `"{{ ptr, i64 }}"` is the usual case.
-- A struct literal must list all fields, or end with `..` to zero the rest. `T{` is only recognized when the type name starts with an uppercase letter.
-- `create[T]()` returns zeroed memory. A zero `List`/`Map` has no allocator, so call `.init(a)` before `push`.
+- A struct literal sets the listed fields with `.f = v` and zeroes the rest. `T{` is only recognized when the type name starts with an uppercase letter.
+- `create<T>()` returns zeroed memory. A zero `List`/`Map` has no allocator, so call `.init(a)` before `push`.
 - `Map.get` returns a copy (`!V`). To modify a value in place, use `&m.entries[m.__find(k)]`.
 - `as` binds weaker than prefix operators: `&x as *T` means `(&x) as *T`. Write `(e catch 0) as i64` with the parentheses.
 - Enum and union literals `.X` need a type known from context. `x is .X` tests a variant.
-- `let` forbids changes through fields as well. Use `var` for mutable values.
+- `const` forbids changes through fields as well. Variables are mutable by default.
 
 ## Status and next steps (details in ROADMAP.md)
 - Compile time for 10k lines: about 95 ms (clang -O0 about 220 ms, gcc -O0 about 670 ms).
