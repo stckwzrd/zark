@@ -1017,3 +1017,24 @@ struct Bits {
     static u64 get(u64 v, u64 hi, u64 lo) { return (v & Bits::mask(hi, lo)) >> lo; }
     static u64 set(u64 v, u64 hi, u64 lo, u64 x) { return (v & ~Bits::mask(hi, lo)) | ((x << lo) & Bits::mask(hi, lo)); }
 }
+
+struct Atomic {
+    static u32 fetch_add32(u32* p, u32 v) { return asm<u32>("lock xaddl $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u64 fetch_add64(u64* p, u64 v) { return asm<u64>("lock xaddq $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u32 swap32(u32* p, u32 v) { return asm<u32>("xchgl $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u64 swap64(u64* p, u64 v) { return asm<u64>("xchgq $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u32 cas32(u32* p, u32 expected, u32 desired) { return asm<u32>("lock cmpxchgl $2, ($1)", "=\{ax\},r,r,0,~\{memory\}", p, desired, expected); }
+    static u64 cas64(u64* p, u64 expected, u64 desired) { return asm<u64>("lock cmpxchgq $2, ($1)", "=\{rax\},r,r,0,~\{memory\}", p, desired, expected); }
+}
+
+struct Spinlock {
+    volatile u32 state;
+
+    void lock() {
+        while (Atomic::swap32(&state as *u32, 1) != 0) { Cpu::pause(); }
+    }
+
+    bool try_lock() { return Atomic::swap32(&state as *u32, 1) == 0; }
+
+    void unlock() { Atomic::swap32(&state as *u32, 0); }
+}

@@ -127,6 +127,10 @@ struct Iv { str name; i64 start; i64 end; i64 w; i64 reg; bool alloca; bool bad;
 struct LoopR { i64 s; i64 e; }
 struct Save { i64 reg; i64 off; }
 
+!void put_bytes(Asm* a, u8[] bs) {
+    for (auto x : bs) { a.b(x)?; }
+}
+
 struct Native {
     Allocator a;
     ObjFile obj;
@@ -1663,6 +1667,12 @@ struct Native {
         if (str_starts_with(t, "outb ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.b(0xEE)?; return; }
         if (str_starts_with(t, "outw ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.opc(0x66EF)?; return; }
         if (str_starts_with(t, "outl ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.b(0xEF)?; return; }
+        if (t == "lock xaddl $0, ($1)") { put_bytes(asm, [0xF0, 0x0F, 0xC1, 0x37])?; asm.opc(0x89F0)?; return; }
+        if (t == "lock xaddq $0, ($1)") { put_bytes(asm, [0xF0, 0x48, 0x0F, 0xC1, 0x37])?; asm.opc(0x4889F0)?; return; }
+        if (t == "xchgl $0, ($1)") { asm.opc(0x8737)?; asm.opc(0x89F0)?; return; }
+        if (t == "xchgq $0, ($1)") { asm.opc(0x488737)?; asm.opc(0x4889F0)?; return; }
+        if (t == "lock cmpxchgl $2, ($1)") { asm.opc(0x89D0)?; put_bytes(asm, [0xF0, 0x0F, 0xB1, 0x37])?; return; }
+        if (t == "lock cmpxchgq $2, ($1)") { asm.opc(0x4889D0)?; put_bytes(asm, [0xF0, 0x48, 0x0F, 0xB1, 0x37])?; return; }
         if (t == "lidt ($0)") { asm.opc(0x0F011F)?; return; }
         if (t == "lgdt ($0)") { asm.opc(0x0F0117)?; return; }
         if (t == "invlpg ($0)") { asm.opc(0x0F013F)?; return; }

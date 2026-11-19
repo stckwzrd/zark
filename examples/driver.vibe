@@ -43,4 +43,19 @@ void main() {
     const auto t0 = Cpu::rdtsc();
     const auto t1 = Cpu::rdtsc();
     println(t1 >= t0);
+
+    u32 counter = 5;
+    const auto old = Atomic::fetch_add32(&counter, 3);
+    const auto prev = Atomic::swap32(&counter, 100);
+    const auto hit = Atomic::cas32(&counter, 100, 7);
+    const auto miss = Atomic::cas32(&counter, 100, 9);
+    u64 wide = 1;
+    Atomic::fetch_add64(&wide, 0xFFFFFFFF);
+    println(old, prev, hit, miss, counter, wide, Atomic::cas64(&wide, 0x100000000, 2), wide);
+
+    Spinlock lock;
+    lock.lock();
+    println(lock.try_lock(), lock.state);
+    lock.unlock();
+    println(lock.try_lock());
 }
