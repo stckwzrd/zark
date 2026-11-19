@@ -129,20 +129,27 @@ match v {
 
 Arms are tested top to bottom, there is no fall-through, and a `match` is not required to be exhaustive.
 
-## 6. Builtins
+## 6. Builtins and formatting
+
+The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__str_eq`, `__errname`. Everything else is ordinary code in `std/std.vibe`.
 
 | Builtin | Notes |
 |---|---|
-| `print(...)`, `println(...)`, `eprint(...)`, `eprintln(...)` | arguments are joined by spaces; any type is formatted |
 | `embed("file")` | the file's bytes as a `str` constant, path relative to the source file (read at compile time) |
-| `bprint(buf: []u8, ...) !str` | formats into `buf`; `error.NoSpace` if it does not fit |
-| `sprint(out: *List[u8], ...) !void` | appends formatted text; growth goes through the list's own allocator |
-| `panic(msg)` | prints the message with file:line, exits 1 |
-| `assert(cond)` | panics with file:line |
+| `panic(...)` | prints `panic: ` and the formatted arguments with file:line, exits 1; lowers to `__panic` |
+| `assert(cond)` | prints `assertion failed (file:line)`, exits 1 |
 
-Format specs: `{v:x}` `{v:08X}` `{v:5}` `{v:-10}` (str padding) `{v:.3}` `{v:e}` `{c:c}`. These are printf flags, width and precision, followed by an optional conversion letter.
+### `Fmt`
 
-Formatting: ints in decimal, floats with `%g`, `bool` as true/false, `str` as text, pointers as `%p`, enums as `.Name`, errors as `error.Name`, structs as `S{ f: v }`, unions as `U.V(payload)`, arrays and slices as `[a, b]`.
+A call whose callee has a last parameter of type `Fmt` receives **all remaining arguments** as one `Fmt` value: a string literal is parsed for `{expr}` / `{expr:spec}` holes, every other expression becomes one hole, and the pieces are joined by single spaces. A `Fmt` lives on the stack of the caller (no heap, no `printf`); it is only built at call sites. An interpolated string anywhere else is a compile error. If the only remaining argument already is a `Fmt`, it is passed through.
+
+The std defines, in plain Vibe: `print`, `println`, `eprint`, `eprintln`, `bprint(buf: []u8, f: Fmt) !str` (`error.NoSpace` if it does not fit, one byte is kept for a NUL), `sprint(out: *List[u8], f: Fmt) !void`, and `Writer { ctx, write_fn }`. Your own functions can take a `Fmt` too. Arguments are evaluated before the fixed arguments of the same call.
+
+Each hole is formatted by a generated thunk that calls the std hooks `__fmt_int`, `__fmt_uint`, `__fmt_float`, `__fmt_bool`, `__fmt_str`, `__fmt_ptr`, `__fmt_lit`. A struct, union or enum that has a method `fmt(self, w: *Writer, spec: str) !void` is formatted by it; otherwise the compiler derives the output below.
+
+Format specs: `{v:x}` `{v:08X}` `{v:5}` `{v:-10}` `{v:+}` `{v:.3}` (string precision truncates) `{v:e}` `{c:c}`: flags `-+ 0#`, width, `.precision`, then an optional conversion letter. A spec that does not fit the type prints `<bad format>` at run time.
+
+Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` as true/false, `str` as text (quoted inside aggregates), pointers as `0x...` (`(nil)` for null), enums as `.Name`, errors as `error.Name`, structs as `S{ f: v }`, unions as `U.V(payload)` (`U.V` when nested), arrays as `[a, b]` (at most 32 elements), slices as `[a, b]` (`[]T(len=N)` when nested), `void` as `void`.
 
 ## 7. Memory
 

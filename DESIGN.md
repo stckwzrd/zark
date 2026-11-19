@@ -36,17 +36,25 @@ The compiler stops knowing standard-library names and is split into layers: `par
 - [x] language-change workflow documented in `CLAUDE.md`
 
 ### Phase 2: `Fmt`, `print` and friends move to std
-- [ ] `Fmt` type and lowering of literals with `{...}` holes
-- [ ] variadic-by-`Fmt` call rule (last parameter of type `Fmt` receives the remaining arguments)
-- [ ] std: `Writer`, `print`, `println`, `eprint`, `eprintln`, `bprint`, `sprint` in plain Vibe
-- [ ] std: per-type `fmt` for ints, bool, str, pointers, chars; spec parser
-- [ ] compiler-synthesized `fmt` for structs, unions, enums, arrays, slices, errors (one file)
-- [ ] floats through libc `snprintf` (TODO libc-free)
-- [ ] stdout writer keeps ordering with C stdio
-- [ ] `panic`/`assert` lower to `__panic(file, line, Fmt)`
-- [ ] delete `gen_fmt.vibe` except Fmt lowering, `embed`, `sizeof`, `fmt` synthesis
-- [ ] `tests/no_magic_names.sh` wired into `bootstrap.sh`
-- [ ] byte-identical test output on default, `--llvm`, `-O`; fixed points; compile time within +10%
+- [x] `Fmt` type and lowering of literals with `{...}` holes
+- [x] variadic-by-`Fmt` call rule (last parameter of type `Fmt` receives the remaining arguments)
+- [x] std: `Writer`, `print`, `println`, `eprint`, `eprintln`, `bprint`, `sprint` in plain Vibe
+- [x] std: per-type `fmt` for ints, bool, str, pointers, chars; spec parser
+- [x] compiler-synthesized `fmt` for structs, unions, enums, arrays, slices, errors (one file)
+- [x] floats through libc `snprintf` (TODO libc-free)
+- [x] stdout writer keeps ordering with C stdio
+- [x] `panic`/`assert` lower to `__panic(file, line, Fmt)`
+- [x] delete `gen_fmt.vibe` except Fmt lowering, `embed`, `sizeof`, `fmt` synthesis
+- [x] `tests/no_magic_names.sh` wired into `bootstrap.sh`
+- [x] byte-identical test output on default, `--llvm`, `-O`; fixed points; compile time within +10%
+
+Phase 2 decisions and measurements:
+- Per-type formatting is generated as Vibe source text (`fn __ff<N>(w, p, spec, depth)`), parsed and added like any declaration, so `?`, `match` and loops come for free. Hole types are named in that text through `rtypes` aliases (`__ft<N>`). Only one file (`gen_fmt.vibe`) knows about this. The protocol names the compiler may use are `Fmt`, `Writer`, `__fmt_*`, `__panic`, `__errname`, `__oob`, `__str_eq` and `Option`; `tests/no_magic_names.sh` guards the rest (it covers `gen*`, `parser`, `loader`, `resolve`, `lexer`; `analysis.vibe` and `ide.vibe` are editor tooling and still mention `List`/`Option` for hover).
+- Struct and union display is generated; `fmt` methods written by the user win. Primitive leaves are std functions called by name from the thunks (`__fmt_int` ...), not methods, so no `impl i64` is needed.
+- Behaviour changes, all intended: a bad spec is a run-time `<bad format>` (it was a compile error); `{s:.3}` truncates (it printed garbage); `bprint`/`sprint` now format slices, unions and `!T` like `print` does (they used a reduced form); `!void` prints as `void`; a call evaluates its `Fmt` holes before its fixed arguments.
+- Name clash fixed: the formatter in `selfhost/fmt.vibe` used a struct called `Fmt`; it is now `Formatter`.
+- Compile time (min of 15 interleaved runs, old vs new): `bench/w.vibe` frontend 76 -> 57 ms, backend 44 -> 44 ms; `selfhost/main.vibe` frontend 113 -> 99 ms, backend 97 -> 104 ms (+7%); `examples/hello.vibe` frontend 1.7 -> 3.2 ms and backend 0.7 -> 2.5 ms (the std formatting code is now compiled when used; absolute cost about 3 ms).
+- Run time: 300k `println("line {i} value {i*3:08x} and {i % 7}")` takes 90 ms before and 450 ms with the default native backend (its code is unoptimised) and 99 ms with `-O`. Output is byte-identical (same md5).
 
 ### Phase 3: semantic layer
 - [ ] `sema*.vibe`: types and layouts

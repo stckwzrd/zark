@@ -30,7 +30,8 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 ## Invariants (do not break)
 1. The fixed points must hold: stage2 == stage3, native2 == native3.
 2. **New syntax or builtins reach `selfhost/` in two steps.** (a) Teach the compiler the feature without using it in `selfhost/`, run `./bootstrap.sh`, then `tools/update-seed.sh` and commit the new seed. (b) Only then use the feature in `selfhost/`. Using it earlier makes the old seed unable to build stage1.
-3. The language rule: **no hidden allocations**. Memory goes only through an explicit `Allocator`. String interpolation is allowed only in `print/println/eprint/eprintln/panic/bprint/sprint`.
+3. The language rule: **no hidden allocations**. Memory goes only through an explicit `Allocator`. String interpolation is allowed only as an argument of a function whose last parameter is a `Fmt` (the std print family, your own).
+5. The compiler must not know std names (`tests/no_magic_names.sh`, run by `bootstrap.sh`). The protocol names it may use are listed in `SPEC.md` section 6.
 4. The lexer output must match `tests/tokens/*.tok`. After an intended lexer change, regenerate them with `build/vibe tokens FILE > tests/tokens/NAME.tok` (NAME is the path with `/` replaced by `_`) and review the diff.
 
 ## Gotchas when writing Vibe (the compiler is written in it too)
