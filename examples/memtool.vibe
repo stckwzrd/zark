@@ -1,0 +1,22 @@
+!void main() {
+    auto page = Mapping::anonymous(4096)?;
+    defer _ = page.unmap();
+    page.write32(0, 0xCAFEBABE)?;
+    page.write8(4095, 0x7F)?;
+    println(page.read32(0)?, page.read16(2)?, page.read8(4095)?);
+    const auto oob = page.read32(4094) catch 0;
+    println(oob, page.read64(4088)?);
+
+    u32[4] secret = [11, 22, 33, 44];
+    u8[16] copy;
+    const auto n = Proc::read(Sys::getpid(), &secret[0] as u64, copy[..])?;
+    println(n, copy[0], copy[4], copy[8], copy[12]);
+
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto maps = Proc::maps(arena.allocator(), Sys::getpid())?;
+    println(maps.len > 0, str_find(maps, "[stack]") >= 0);
+
+    const auto devices = Pci::list(arena.allocator())?;
+    println(devices.len >= 0);
+}

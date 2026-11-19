@@ -1640,7 +1640,7 @@ struct Native {
 
     // ------------------------------------------------------------------ calls
     /// inline asm templates the native backend can encode itself; operands arrive in the C argument registers
-    !void emit_asm(str callee) {
+    !void emit_asm(str callee, i64 nargs) {
         const auto asm = &this->obj.text;
         const auto q1 = str_find_byte(callee, '"');
         const auto rest = callee[q1 + 1..];
@@ -1667,6 +1667,12 @@ struct Native {
         if (str_starts_with(t, "outb ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.b(0xEE)?; return; }
         if (str_starts_with(t, "outw ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.opc(0x66EF)?; return; }
         if (str_starts_with(t, "outl ")) { asm.opc(0x89F8)?; asm.opc(0x89F2)?; asm.b(0xEF)?; return; }
+        if (t == "syscall") {
+            put_bytes(asm, [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF7, 0x48, 0x89, 0xD6, 0x48, 0x89, 0xCA, 0x4D, 0x89, 0xC2, 0x4D, 0x89, 0xC8])?;
+            if (nargs > 6) { put_bytes(asm, [0x4C, 0x8B, 0x0C, 0x24])?; }
+            asm.opc(0x0F05)?;
+            return;
+        }
         if (t == "lock xaddl $0, ($1)") { put_bytes(asm, [0xF0, 0x0F, 0xC1, 0x37])?; asm.opc(0x89F0)?; return; }
         if (t == "lock xaddq $0, ($1)") { put_bytes(asm, [0xF0, 0x48, 0x0F, 0xC1, 0x37])?; asm.opc(0x4889F0)?; return; }
         if (t == "xchgl $0, ($1)") { asm.opc(0x8737)?; asm.opc(0x89F0)?; return; }
@@ -1761,7 +1767,7 @@ struct Native {
         }
         if (sret) { asm.lea(RDI, RBP, this->loc(ins.dest))?; }
         if (str_starts_with(callee, "asm ")) {
-            this->emit_asm(callee)?;
+            this->emit_asm(callee, nargs)?;
         } else if (callee[0] == '%') {
             this->load_op(R11, this->t_ptr, callee, false)?;
             if (ins.variadic) { asm.mov_imm(RAX, nf)?; }

@@ -1038,3 +1038,218 @@ struct Spinlock {
 
     void unlock() { Atomic::swap32(&state as *u32, 0); }
 }
+
+
+!i64 __sys_result(i64 r) {
+    if (r >= 0) { return r; }
+    match -r {
+        1, 13 => return error.PermissionDenied;
+        2 => return error.NotFound;
+        3 => return error.NoProcess;
+        5 => return error.IoError;
+        12 => return error.OutOfMemory;
+        14 => return error.BadAddress;
+        22 => return error.InvalidArgument;
+        _ => return error.SystemCall;
+    }
+    return error.SystemCall;
+}
+
+struct Sys {
+    static i64 raw(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6) {
+        return asm<i64>("syscall", "=\{rax\},\{rax\},\{rdi\},\{rsi\},\{rdx\},\{r10\},\{r8\},\{r9\},~\{rcx\},~\{r11\},~\{memory\}", nr, a1, a2, a3, a4, a5, a6);
+    }
+    static !i64 call(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6) { return __sys_result(Sys::raw(nr, a1, a2, a3, a4, a5, a6)); }
+    static !i64 read(i64 fd, void* buf, u64 n) { return Sys::call(0, fd, buf as i64, n as i64, 0, 0, 0); }
+    static !i64 write(i64 fd, void* buf, u64 n) { return Sys::call(1, fd, buf as i64, n as i64, 0, 0, 0); }
+    static !i64 open(u8* path, i64 flags, i64 mode) { return Sys::call(2, path as i64, flags, mode, 0, 0, 0); }
+    static !i64 close(i64 fd) { return Sys::call(3, fd, 0, 0, 0, 0, 0); }
+    static !i64 pread(i64 fd, void* buf, u64 n, i64 off) { return Sys::call(17, fd, buf as i64, n as i64, off, 0, 0); }
+    static !i64 pwrite(i64 fd, void* buf, u64 n, i64 off) { return Sys::call(18, fd, buf as i64, n as i64, off, 0, 0); }
+    static !i64 mmap(void* addr, u64 len, i64 prot, i64 flags, i64 fd, i64 off) { return Sys::call(9, addr as i64, len as i64, prot, flags, fd, off); }
+    static !i64 munmap(void* addr, u64 len) { return Sys::call(11, addr as i64, len as i64, 0, 0, 0, 0); }
+    static !i64 ioctl(i64 fd, u64 req, i64 arg) { return Sys::call(16, fd, req as i64, arg, 0, 0, 0); }
+    static !str slurp(Allocator a, str path) {
+        u8[256] pb;
+        const auto p = to_cstr(pb[..], path)?;
+        const auto fd = Sys::open(p, 0, 0)?;
+        defer _ = Sys::close(fd);
+        auto out = List<u8>::init(a);
+        u8[4096] chunk;
+        while (true) {
+            const auto n = Sys::read(fd, &chunk[0], 4096)?;
+            if (n == 0) { break; }
+            out.append(chunk[0..n])?;
+        }
+        return out.slice();
+    }
+    static !u64 file_size(str path) {
+        u8[256] pb;
+        const auto p = to_cstr(pb[..], path)?;
+        u64[18] st;
+        _ = Sys::call(4, p as i64, &st[0] as i64, 0, 0, 0, 0)?;
+        return st[6];
+    }
+    static i64 getpid() { return Sys::raw(39, 0, 0, 0, 0, 0, 0); }
+    static void exit(i64 code) { _ = Sys::raw(231, code, 0, 0, 0, 0, 0); }
+}
+
+struct Iovec { void* base; u64 len; }
+
+struct Mapping {
+    u8* base;
+    u64 len;
+
+    static !Mapping file(str path, u64 offset, u64 len, bool write) {
+        u8[256] pb;
+        const auto p = to_cstr(pb[..], path)?;
+        auto flags = 0x101000;
+        auto prot = 1;
+        if (write) {
+            flags |= 2;
+            prot = 3;
+        }
+        const auto fd = Sys::open(p, flags, 0)?;
+        defer _ = Sys::close(fd);
+        const auto a = Sys::mmap(null, len, prot, 1, fd, offset as i64)?;
+        return Mapping{ .base = a as *u8, .len = len };
+    }
+
+    static !Mapping anonymous(u64 len) {
+        const auto a = Sys::mmap(null, len, 3, 0x22, -1, 0)?;
+        return Mapping{ .base = a as *u8, .len = len };
+    }
+
+    !void unmap() {
+        _ = Sys::munmap(this->base, this->len)?;
+        this->base = null;
+        this->len = 0;
+    }
+
+    !void check(u64 off, u64 size) {
+        if (off + size > this->len || off + size < off) { return error.OutOfRange; }
+    }
+
+    !u8 read8(u64 off) {
+        this->check(off, 1)?;
+        volatile u8* p = this->base + off;
+        return *p;
+    }
+    !u16 read16(u64 off) {
+        this->check(off, 2)?;
+        volatile u16* p = (this->base + off) as *u16;
+        return *p;
+    }
+    !u32 read32(u64 off) {
+        this->check(off, 4)?;
+        volatile u32* p = (this->base + off) as *u32;
+        return *p;
+    }
+    !u64 read64(u64 off) {
+        this->check(off, 8)?;
+        volatile u64* p = (this->base + off) as *u64;
+        return *p;
+    }
+    !void write8(u64 off, u8 v) {
+        this->check(off, 1)?;
+        volatile u8* p = this->base + off;
+        *p = v;
+    }
+    !void write16(u64 off, u16 v) {
+        this->check(off, 2)?;
+        volatile u16* p = (this->base + off) as *u16;
+        *p = v;
+    }
+    !void write32(u64 off, u32 v) {
+        this->check(off, 4)?;
+        volatile u32* p = (this->base + off) as *u32;
+        *p = v;
+    }
+    !void write64(u64 off, u64 v) {
+        this->check(off, 8)?;
+        volatile u64* p = (this->base + off) as *u64;
+        *p = v;
+    }
+    !u64 read_into(u64 off, u8[] out) {
+        this->check(off, out.len as u64)?;
+        volatile u8* src = this->base + off;
+        for (auto i : 0..out.len) { out[i] = src[i]; }
+        return out.len as u64;
+    }
+}
+
+struct Proc {
+    static !u64 read(i64 pid, u64 addr, u8[] out) {
+        auto local = Iovec{ .base = out.ptr, .len = out.len as u64 };
+        auto remote = Iovec{ .base = addr as *void, .len = out.len as u64 };
+        const auto n = Sys::call(310, pid, &local as i64, 1, &remote as i64, 1, 0)?;
+        return n as u64;
+    }
+
+    static !u64 write(i64 pid, u64 addr, u8[] data) {
+        auto local = Iovec{ .base = data.ptr, .len = data.len as u64 };
+        auto remote = Iovec{ .base = addr as *void, .len = data.len as u64 };
+        const auto n = Sys::call(311, pid, &local as i64, 1, &remote as i64, 1, 0)?;
+        return n as u64;
+    }
+
+    static !str maps(Allocator a, i64 pid) {
+        u8[64] pb;
+        const auto path = bprint(pb[..], "/proc/{pid}/maps")?;
+        return Sys::slurp(a, path);
+    }
+}
+
+struct Msr {
+    static !u64 read(i64 cpu, u32 msr) {
+        u8[64] pb;
+        const auto path = bprint(pb[..], "/dev/cpu/{cpu}/msr")?;
+        const auto p = to_cstr(pb[..], path)?;
+        const auto fd = Sys::open(p, 0, 0)?;
+        defer _ = Sys::close(fd);
+        u64 v = 0;
+        const auto n = Sys::pread(fd, &v, 8, msr as i64)?;
+        if (n != 8) { return error.IoError; }
+        return v;
+    }
+}
+
+struct Pci {
+    static !Mapping bar(str device, i64 n, bool write) {
+        u8[96] pb;
+        const auto path = bprint(pb[..], "/sys/bus/pci/devices/{device}/resource{n}")?;
+        const auto len = Sys::file_size(path)?;
+        return Mapping::file(path, 0, len, write);
+    }
+
+    static !u32 config32(str device, u64 off) {
+        u8[96] pb;
+        const auto path = bprint(pb[..], "/sys/bus/pci/devices/{device}/config")?;
+        const auto p = to_cstr(pb[..], path)?;
+        const auto fd = Sys::open(p, 0, 0)?;
+        defer _ = Sys::close(fd);
+        u32 v = 0;
+        const auto n = Sys::pread(fd, &v, 4, off as i64)?;
+        if (n != 4) { return error.IoError; }
+        return v;
+    }
+
+    static !List<str> list(Allocator a) {
+        auto out = List<str>::init(a);
+        const auto fd = Sys::open("/sys/bus/pci/devices\0".ptr, 0x10000, 0)?;
+        defer _ = Sys::close(fd);
+        u8[4096] buf;
+        while (true) {
+            const auto n = Sys::call(217, fd, &buf[0] as i64, 4096, 0, 0, 0)?;
+            if (n == 0) { break; }
+            auto pos = 0;
+            while (pos < n) {
+                const auto reclen = (buf[pos + 16] as i64) | ((buf[pos + 17] as i64) << 8);
+                const auto name = cstr(&buf[pos + 19]);
+                if (name[0] != '.') { out.push(a.dup(name)?)?; }
+                pos += reclen;
+            }
+        }
+        return out;
+    }
+}
