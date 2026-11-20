@@ -1,0 +1,4 @@
+ok   vector arithmetic
+ok   length and reflection
+ok   clamp works for any ordered type
+3 passed, 0 failed
