@@ -1,32 +1,32 @@
 ---
-title: Типы
+title: Types
 order: 11
-section: Язык
-description: Все типы Vibe: целые, дробные, bool, указатели, срезы, массивы, str, error union, функции, размеры и преобразования
+section: Language
+description: All Vibe types: integers, floats, bool, pointers, slices, arrays, str, error unions, functions, sizes and conversions
 ---
 
-Vibe — язык со статической типизацией. Тип каждого выражения известен во время компиляции, а раскладка в памяти предсказуема: **что видите, то и лежит** (структуры устроены как в C).
+Vibe is statically typed. The type of every expression is known at compile time, and the memory layout is predictable: **what you see is what is in memory** (structs are laid out as in C).
 
-## Обзор
+## Overview
 
-| Тип | Что это | Размер |
+| Type | What it is | Size |
 |---|---|---|
-| `i8 i16 i32 i64` | знаковые целые | 1, 2, 4, 8 байт |
-| `u8 u16 u32 u64` | беззнаковые целые | 1, 2, 4, 8 байт |
-| `isize usize` | целые размером с указатель | 8 байт |
-| `f32 f64` | числа с плавающей точкой | 4, 8 байт |
-| `bool` | `true` / `false` | 1 байт |
-| `void` | «ничего» | — |
-| `T*` | указатель на `T` | 8 байт |
-| `T[]` | срез: указатель и длина | 16 байт |
-| `str` | то же, что `u8[]` | 16 байт |
-| `T[N]` | массив из `N` элементов | `N * sizeof(T)` |
-| `!T` | значение `T` или ошибка | зависит от `T` |
-| `?T` | значение `T` или ничего | зависит от `T` |
-| `fn(A, B) -> R` | указатель на функцию | 8 байт |
-| `struct`, `union`, `enum` | свои типы | см. [структуры](structs-unions-enums.md) |
+| `i8 i16 i32 i64` | signed integers | 1, 2, 4, 8 bytes |
+| `u8 u16 u32 u64` | unsigned integers | 1, 2, 4, 8 bytes |
+| `isize usize` | pointer-sized integers | 8 bytes |
+| `f32 f64` | floating-point numbers | 4, 8 bytes |
+| `bool` | `true` / `false` | 1 byte |
+| `void` | "nothing" | none |
+| `T*` | pointer to `T` | 8 bytes |
+| `T[]` | slice: pointer and length | 16 bytes |
+| `str` | the same as `u8[]` | 16 bytes |
+| `T[N]` | an array of `N` elements | `N * sizeof(T)` |
+| `!T` | a value of `T` or an error | depends on `T` |
+| `?T` | a value of `T` or nothing | depends on `T` |
+| `fn(A, B) -> R` | pointer to a function | 8 bytes |
+| `struct`, `union`, `enum` | your own types | see [structs](structs-unions-enums.md) |
 
-Размер любого типа можно узнать через `sizeof`, выравнивание — через `alignof`. Оба значения вычисляются при компиляции и имеют тип `u64`.
+The size of any type is available through `sizeof`, and the alignment through `alignof`. Both are computed at compile time and have the type `u64`.
 
 ```vibe run
 struct Pair { u8 a; i64 b; }
@@ -39,9 +39,9 @@ void main() {
 }
 ```
 
-Обратите внимание на `Pair`: после `u8` стоят 7 байт выравнивания, как в C.
+Note `Pair`: after the `u8` there are 7 bytes of padding, as in C.
 
-## Целые числа
+## Integers
 
 ```vibe run
 void main() {
@@ -53,7 +53,7 @@ void main() {
 }
 ```
 
-Литерал без контекста — `i64`. Литерал с подходящим контекстом принимает его тип:
+A literal without a context is `i64`. A literal with a suitable context takes its type:
 
 ```vibe run
 u8 takes_u8(u8 x) { return x; }
@@ -65,9 +65,9 @@ void main() {
 }
 ```
 
-### Переполнение
+### Overflow
 
-Арифметика над целыми «заворачивается» в пределах типа — без паники, как в C для беззнаковых:
+Integer arithmetic wraps around within the type, without a panic, like unsigned arithmetic in C:
 
 ```vibe run
 void main() {
@@ -80,13 +80,13 @@ void main() {
 }
 ```
 
-> **Ловушка.** Переполнения не обнаруживаются. Если нужна проверка, сравнивайте заранее или берите тип шире.
+> **Gotcha:** overflow is not detected by default. Compile with `--check-overflow` to make `+`, `-` and `*` stop the program with a file and line, or compare in advance, or use a wider type.
 
-Деление на ноль целых чисел аварийно завершает программу (сигнал процессора): `vibe run` покажет `error: error.Signaled`. Проверяйте делитель сами.
+Integer division by zero crashes the program (a processor signal): `vibe run` shows `error: error.Signaled`. Check the divisor yourself.
 
-### Неявное расширение
+### Implicit widening
 
-Целое неявно превращается в более широкое **без потерь**:
+An integer is implicitly converted to a wider one **without loss**:
 
 ```vibe run
 i64 wide(i64 x) { return x * 2; }
@@ -98,7 +98,7 @@ void main() {
 }
 ```
 
-А сужение, смена знака и целое → дробное требуют явного `as`:
+Narrowing, a change of sign and integer → float need an explicit `as`:
 
 ```vibe error fragment
 const i64 big = 5;
@@ -110,9 +110,9 @@ const i32 n = 5;
 const u32 u = n;
 ```
 
-Подробно о `as` — ниже, в разделе «Преобразования».
+`as` is described in detail below, in the "Conversions" section.
 
-## Дробные числа
+## Floating-point numbers
 
 ```vibe run
 void main() {
@@ -123,7 +123,7 @@ void main() {
 }
 ```
 
-Печать идёт через `%g`: до шести значащих цифр. Деление дробного на ноль не падает:
+Printing goes through `%g`: up to six significant digits. Floating-point division by zero does not crash:
 
 ```vibe run
 void main() {
@@ -132,26 +132,26 @@ void main() {
 }
 ```
 
-Смешивать `f32` и `f64` без `as` нельзя, как и целые с дробными.
+You cannot mix `f32` and `f64` without `as`, and the same goes for integers and floats.
 
 ## bool
 
-Только `true` и `false`. Условия в `if` и `while` обязаны быть `bool`: «ненулевое число — истина» не работает.
+Only `true` and `false`. The conditions of `if` and `while` must be `bool`: "a nonzero number is true" does not work.
 
 ```vibe error fragment
 const auto n = 1;
-if (n) { println("да"); }
+if (n) { println("yes"); }
 ```
 
-Пишите явное сравнение: `if (n != 0)`.
+Write an explicit comparison: `if (n != 0)`.
 
 ## void
 
-Функция без возвращаемого типа возвращает `void`. Переменную такого типа завести нельзя.
+A function without a return type returns `void`. You cannot declare a variable of that type.
 
-## Указатели
+## Pointers
 
-`T*` — адрес значения типа `T`. Взять адрес — `&x`, прочитать значение по адресу — `*p`.
+`T*` is the address of a value of type `T`. Take an address with `&x`, read the value at an address with `*p`.
 
 ```vibe run
 void main() {
@@ -162,7 +162,7 @@ void main() {
 }
 ```
 
-У указателей есть арифметика: `p + n` сдвигает на `n` **элементов**, а не байтов. Индексация `p[i]` — то же самое, что `*(p + i)`.
+Pointers have arithmetic: `p + n` moves by `n` **elements**, not bytes. Indexing `p[i]` is the same as `*(p + i)`.
 
 ```vibe run
 void main() {
@@ -174,7 +174,7 @@ void main() {
 }
 ```
 
-Доступ к полям через указатель — прямо через точку, разыменовывать не нужно:
+Fields are accessed through a pointer with a plain dot, with no need to dereference:
 
 ```vibe run
 struct Point { i64 x; i64 y; }
@@ -187,11 +187,11 @@ void main() {
 }
 ```
 
-> **Ловушка.** Указатели не проверяются: выйти за границы или использовать указатель на уже завершённую функцию можно. Для безопасной работы с данными используйте срезы.
+> **Gotcha:** pointers are not checked: you can go out of bounds or use a pointer to a function that has already returned. For safe work with data, use slices.
 
-### `void*` и `null`
+### `void*` and `null`
 
-`void*` — «любой указатель». Он неявно превращается в `T*` и обратно, что нужно для работы с аллокаторами и C. `null` — нулевой указатель; его можно присвоить любому указателю и функции.
+`void*` is "any pointer". It converts implicitly to `T*` and back, which is needed for allocators and C. `null` is the null pointer; it can be assigned to any pointer or function.
 
 ```vibe run
 void main() {
@@ -203,9 +203,9 @@ void main() {
 }
 ```
 
-## Массивы `T[N]`
+## Arrays `T[N]`
 
-Размер массива — константа времени компиляции (число или `const`). Это значение: присваивание копирует все элементы.
+The size of an array is a compile-time constant (a number or a `const`). An array is a value: assignment copies all the elements.
 
 ```vibe run
 const auto N = 3;
@@ -223,9 +223,9 @@ void main() {
 }
 ```
 
-`T[N] a;` без инициализатора заполняется нулями. Литерал `[1, 2, 3]` даёт `i64[3]`, если контекст не подсказывает другое.
+`T[N] a;` without an initializer is filled with zeros. The literal `[1, 2, 3]` gives `i64[3]` unless the context suggests something else.
 
-Выход за границы — аварийный останов с точным местом. Проверка включена по умолчанию и отключается флагом `--release`:
+Going out of bounds is an emergency stop with the exact location. The check is on by default and is turned off by the `--release` flag:
 
 ```vibe run panic
 void main() {
@@ -235,9 +235,9 @@ void main() {
 }
 ```
 
-## Срезы `T[]`
+## Slices `T[]`
 
-Срез — это «окно» в чужую память: указатель и длина. Сам он ничего не владеет и не освобождает.
+A slice is a "window" into someone else's memory: a pointer and a length. It owns nothing and frees nothing.
 
 ```vibe run
 void main() {
@@ -253,9 +253,9 @@ void main() {
 }
 ```
 
-Границы среза включают начало и не включают конец (как `a..b` в циклах). Все формы: `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]`.
+The bounds of a slice include the start and exclude the end (like `a..b` in loops). All forms: `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]`.
 
-Срез можно создать из массива, другого среза или указателя. Для указателя конец обязателен, потому что длина неизвестна:
+A slice can be made from an array, from another slice or from a pointer. For a pointer the end is mandatory because the length is unknown:
 
 ```vibe run
 void main() {
@@ -266,7 +266,7 @@ void main() {
 }
 ```
 
-Литерал массива там, где ожидается срез, превращается в срез поверх памяти на стеке:
+Where a slice is expected, an array literal becomes a slice over memory on the stack:
 
 ```vibe run
 i64 total(i64[] xs) {
@@ -281,11 +281,11 @@ void main() {
 }
 ```
 
-> **Ловушка.** Срез не продлевает жизнь данным. Срез, указывающий на локальный массив, нельзя возвращать из функции: после возврата стек освободится.
+> **Gotcha:** a slice does not extend the life of the data. A slice that points at a local array must not be returned from a function: the stack is freed after the return.
 
 ## str
 
-`str` — это то же самое, что `u8[]`: указатель на байты и длина. Строка — не особый тип, а срез байтов, поэтому работают `.len`, индексация и срезы:
+`str` is the same thing as `u8[]`: a pointer to bytes and a length. A string is not a special type but a slice of bytes, so `.len`, indexing and slicing work:
 
 ```vibe run
 void main() {
@@ -295,7 +295,7 @@ void main() {
 }
 ```
 
-Это байты, а не символы Юникода: русская буква занимает два байта.
+These are bytes, not Unicode characters: a Cyrillic letter takes two bytes.
 
 ```vibe run
 void main() {
@@ -304,11 +304,11 @@ void main() {
 }
 ```
 
-`==` на `str` сравнивает содержимое (внутри — `memcmp`), а не адреса. Подробнее — на странице [строки и форматирование](strings.md).
+`==` on `str` compares the contents (with `memcmp` inside), not the addresses. More on the page [strings and formatting](strings.md).
 
 ## Error union `!T`
 
-`!T` — либо значение `T`, либо ошибка. Подробно — в [ошибках и опциональных значениях](errors-and-optionals.md).
+`!T` is either a value of `T` or an error. Described in detail in [errors and optional values](errors-and-optionals.md).
 
 ```vibe run
 !i64 half(i64 n) {
@@ -321,11 +321,11 @@ void main() {
 }
 ```
 
-`T` неявно превращается в `!T`, а `error.Имя` — в любой `!T`.
+`T` converts implicitly to `!T`, and `error.Name` converts to any `!T`.
 
-## Опциональный `?T`
+## Optional `?T`
 
-`?T` — значение или «ничего». Это `Option<T>` из стандартной библиотеки:
+`?T` is a value or "nothing". It is the `Option<T>` of the standard library:
 
 ```vibe run
 ?i64 first_even(i64[] xs) {
@@ -341,9 +341,9 @@ void main() {
 }
 ```
 
-## Указатели на функции
+## Function pointers
 
-Тип `fn(A, B) -> R` — адрес функции. Для функции без результата пишите `fn(A, B) -> void`.
+The type `fn(A, B) -> R` is the address of a function. For a function without a result write `fn(A, B) -> void`.
 
 ```vibe run
 i64 double(i64 x) { return x * 2; }
@@ -360,11 +360,11 @@ void main() {
 }
 ```
 
-Указатель на функцию не хранит окружения. Если функции нужны переменные вокруг, используйте [замыкание](functions.md#замыкания).
+A function pointer does not hold an environment. If a function needs the variables around it, use a [closure](functions.md#closures).
 
-## Псевдонимы типов
+## Type aliases
 
-`type Имя = Тип;` даёт новое имя, а не новый тип: они взаимозаменяемы.
+`type Name = Type;` gives a new name, not a new type: the two are interchangeable.
 
 ```vibe run
 type Bytes = u8[];
@@ -383,29 +383,29 @@ void main() {
 }
 ```
 
-## Преобразования: `as`
+## Conversions: `as`
 
-Все неявные преобразования (их немного):
+All the implicit conversions (there are few):
 
-- целое → более широкое целое без потерь;
-- `T` → `!T` и `T` → `?T`;
+- an integer → a wider integer without loss;
+- `T` → `!T` and `T` → `?T`;
 - `error.X` → `!T`;
-- `null` → указатель, функция или `?T`;
+- `null` → a pointer, a function or `?T`;
 - `T*` ↔ `void*`;
-- литерал массива → срез.
+- an array literal → a slice.
 
-Остальное делается явно, через `as`:
+Everything else is done explicitly, with `as`:
 
-| Откуда → куда | Пример | Результат |
+| From → to | Example | Result |
 |---|---|---|
-| целое → целое | `300 as u8` (из переменной) | старшие биты отбрасываются |
-| целое → дробное | `n as f64` | ближайшее значение |
-| дробное → целое | `3.99 as i64` | отбрасывание дробной части: 3 |
-| дробное → дробное | `x as f32` | с округлением |
-| указатель → указатель | `p as *u8` | тот же адрес |
-| указатель ↔ целое | `p as i64` | адрес как число |
-| enum ↔ целое | `Color.Blue as i64` | порядковый номер |
-| `T[]` → `T*` | `s as *T` | указатель на первый элемент |
+| integer → integer | `300 as u8` (from a variable) | the high bits are dropped |
+| integer → float | `n as f64` | the nearest value |
+| float → integer | `3.99 as i64` | the fractional part is dropped: 3 |
+| float → float | `x as f32` | with rounding |
+| pointer → pointer | `p as *u8` | the same address |
+| pointer ↔ integer | `p as i64` | the address as a number |
+| enum ↔ integer | `Color.Blue as i64` | the ordinal number |
+| `T[]` → `T*` | `s as *T` | a pointer to the first element |
 
 ```vibe run
 enum Color { Red, Green, Blue }
@@ -420,10 +420,10 @@ void main() {
 }
 ```
 
-`as` связывает слабее унарных операторов, иначе, чем в C++: `-a as i64` значит `(-a) as i64`, а `&x as *u8` — `(&x) as *u8`. Подробнее — на странице [операторов](operators.md#as-и-приоритет).
+`as` binds more weakly than the unary operators, unlike in C++: `-a as i64` means `(-a) as i64`, and `&x as *u8` means `(&x) as *u8`. More on the [operators](operators.md#as-and-precedence) page.
 
-## Что дальше
+## What next
 
-- Как объявлять значения и зачем нужен `const`: [переменные и константы](variables.md).
-- Операторы и приоритет: [операторы](operators.md).
-- Составные типы: [структуры, union и enum](structs-unions-enums.md).
+- How to declare values and why `const` exists: [variables and constants](variables.md).
+- Operators and precedence: [operators](operators.md).
+- Composite types: [structs, unions and enums](structs-unions-enums.md).

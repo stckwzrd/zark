@@ -1,17 +1,17 @@
 ---
-title: Структуры, union и enum
+title: Structs, unions and enums
 order: 16
-section: Язык
-description: struct и методы, enum, tagged union, дженерик-структуры, раскладка в памяти и разбор через match
+section: Language
+description: struct and methods, enum, tagged union, generic structs, memory layout and taking them apart with match
 ---
 
-Три способа описать собственный тип данных:
+There are three ways to describe your own data type:
 
-| | Что хранит | Пример |
+| | What it stores | Example |
 |---|---|---|
-| `struct` | **все** поля сразу | точка с `x` и `y` |
-| `enum` | один из набора **имён** | направление: север, юг |
-| `union` | один из **вариантов**, каждый со своими данными | фигура: круг с радиусом или прямоугольник |
+| `struct` | **all** the fields at once | a point with `x` and `y` |
+| `enum` | one of a set of **names** | a direction: north, south |
+| `union` | one of several **variants**, each with its own data | a shape: a circle with a radius or a rectangle |
 
 ## `struct`
 
@@ -28,9 +28,9 @@ void main() {
 }
 ```
 
-Поле объявляется как переменная: тип, имя, `;`. Структура печатается как `Имя{ поле: значение }`.
+A field is declared like a variable: type, name, `;`. A struct is printed as `Name{ field: value }`.
 
-Все структуры раскладываются в памяти так же, как в C: поля идут по порядку, между ними добавляется выравнивание. Размер можно узнать через `sizeof`:
+All structs are laid out in memory as in C: the fields go in order, with padding added between them. The size is available through `sizeof`:
 
 ```vibe run
 struct Small { u8 a; u8 b; u8 c; }
@@ -41,13 +41,13 @@ void main() {
 }
 ```
 
-Порядок полей влияет на размер: сначала крупные поля, потом мелкие, и структура будет компактнее.
+The order of fields affects the size: big fields first, small ones after, and the struct will be more compact.
 
-### Литерал структуры
+### The struct literal
 
-Литерал пишется как `Имя{ .поле = значение, ... }`. Он распознаётся, только если имя типа начинается с **заглавной** буквы.
+A literal is written as `Name{ .field = value, ... }`. It is recognized only if the type name starts with a **capital** letter.
 
-Поля, которых в литерале нет, заполняются нулями. `Имя{}` — все поля нулевые:
+Fields that are missing from the literal are filled with zeros. `Name{}` has all fields zero:
 
 ```vibe run
 struct Config {
@@ -58,7 +58,7 @@ struct Config {
 }
 
 void main() {
-    const auto a = Config{ .width = 800, .height = 600, .title = "окно", .visible = true };
+    const auto a = Config{ .width = 800, .height = 600, .title = "window", .visible = true };
     const auto b = Config{ .width = 100 };
     const auto c = Config{};
     println(a);
@@ -67,7 +67,7 @@ void main() {
 }
 ```
 
-Опечатка в имени поля — ошибка компиляции:
+A typo in a field name is a compile error:
 
 ```vibe error
 struct P { i64 x; i64 y; }
@@ -77,11 +77,11 @@ void main() {
 }
 ```
 
-Значений по умолчанию в объявлении поля нет: пропущенное поле всегда ноль. Если нужны другие умолчания, пишите функцию `new`.
+Defaults can be given in the field declaration (see [defaults and constructors](#defaults-and-constructors)); a field without one is always zero.
 
-### Структуры копируются
+### Structs are copied
 
-Присваивание и передача в функцию копируют все поля:
+Assignment and passing to a function copy all the fields:
 
 ```vibe run
 struct P { i64 x; i64 y; }
@@ -94,9 +94,9 @@ void main() {
 }
 ```
 
-Чтобы работать с одним объектом, передавайте указатель `P*` (поля через него читаются прямо через точку).
+To work with one object, pass a pointer `P*` (fields are read through it with a plain dot).
 
-### Вложенные структуры и массивы
+### Nested structs and arrays
 
 ```vibe run
 struct Point { i64 x; i64 y; }
@@ -113,9 +113,9 @@ void main() {
 }
 ```
 
-### Ссылка на себя
+### Referring to itself
 
-Структура не может содержать **саму себя** по значению, но может содержать указатель на себя:
+A struct cannot contain **itself** by value, but it can contain a pointer to itself:
 
 ```vibe run
 struct Node {
@@ -130,9 +130,9 @@ void main() {
 }
 ```
 
-### Сравнение
+### Comparison
 
-`==` для структур не определён. Сравнивайте поля:
+`==` is not defined for structs. Compare the fields:
 
 ```vibe error
 struct A { i64 x; }
@@ -143,9 +143,9 @@ void main() {
 }
 ```
 
-## Методы
+## Methods
 
-Функции, привязанные к типу, пишутся прямо внутри `struct`. Поля внутри метода доступны по голому имени, а также через `this`.
+Functions tied to a type are written right inside the `struct`. Inside a method the fields are available by their bare names, and also through `this`.
 
 ```vibe run
 struct Counter {
@@ -174,10 +174,10 @@ void main() {
 }
 ```
 
-- `Self` внутри `struct` — это сам тип.
-- Метод с `static` — статический, без `this`: вызывается как `Тип::имя(...)`.
-- Остальные методы получают `this` — **указатель** на объект — и могут менять поля. Вызывать их можно и у значения, и у указателя.
-- Копии вместо указателя нет: если метод не должен менять объект, возьмите копию сами: `auto c = *this;`.
+- `Self` inside a `struct` is the type itself.
+- A method with `static` is static, without `this`: it is called as `Type::name(...)`.
+- Other methods receive `this`, a **pointer** to the object, and can change the fields. They can be called on a value and on a pointer.
+- There is no by-copy form: if a method must not change the object, make a copy yourself: `auto c = *this;`.
 
 ```vibe run
 struct V {
@@ -197,11 +197,11 @@ void main() {
 }
 ```
 
-> **Ловушка.** Метод меняет объект даже тогда, когда он объявлен с `const`: компилятор отдаёт методу указатель и не проверяет изменяемость. Метод с `const` после списка параметров не может присваивать поля и вызывать неконстантные методы через `this`. Снаружи компилятор проверяет объект только при прямом присваивании `p.x = ...`: вызов метода у `const`-переменной разрешён. Если объект не должен меняться, не вызывайте на нём мутирующих методов.
+> **Gotcha:** a method changes the object even when it is declared with `const`: the compiler hands the method a pointer and does not check mutability. A method with `const` after the parameter list cannot assign fields or call non-const methods through `this`. From outside, the compiler checks the object only for direct assignment `p.x = ...`: calling a method on a `const` variable is allowed. If an object must not change, do not call mutating methods on it.
 
 ## `enum`
 
-Перечисление — набор имён. Значение хранится как целое число (порядковый номер варианта с нуля).
+An enumeration is a set of names. The value is stored as an integer (the ordinal number of the variant, from zero).
 
 ```vibe run
 enum Color { Red, Green, Blue }
@@ -213,11 +213,11 @@ void main() {
 }
 ```
 
-Литерал `.Имя` работает, когда тип известен из контекста: у `const Color c`, у параметра функции, у `return`, у второго операнда сравнения. Если контекста нет, пишите `Color::Green`.
+The literal `.Name` works when the type is known from the context: for `const Color c`, for a function parameter, for a `return`, for the second operand of a comparison. Without a context, write `Color::Green`.
 
-Номера варианта задавать (`A = 5`) нельзя: всегда 0, 1, 2 и т. д.
+You cannot set the number of a variant (`A = 5`): it is always 0, 1, 2 and so on.
 
-Перебрать все значения можно через преобразование из целого:
+You can walk over all the values through a conversion from an integer:
 
 ```vibe run
 enum Day { Mon, Tue, Wed }
@@ -230,9 +230,9 @@ void main() {
 }
 ```
 
-> **Ловушка.** Преобразование `число as Enum` не проверяет диапазон: `7 as Day` даст значение «не из списка», а `match` на нём не найдёт совпадения.
+> **Gotcha:** the conversion `number as Enum` does not check the range: `7 as Day` gives a value "not from the list", and `match` will not find a match for it.
 
-### `match` по enum
+### `match` on an enum
 
 ```vibe run
 enum Dir { North, East, South, West }
@@ -255,9 +255,9 @@ void main() {
 }
 ```
 
-Как `match`-выражение он обязан покрывать все варианты. Подробнее: [управление потоком](control-flow.md#match).
+As a `match` expression it must cover all the variants. More: [control flow](control-flow.md#match).
 
-### Методы у enum
+### Methods on an enum
 
 ```vibe run
 enum Level {
@@ -265,8 +265,8 @@ enum Level {
 
     str label() {
         return match *this {
-            .Low => "низкий",
-            .High => "высокий",
+            .Low => "low",
+            .High => "high",
         };
     }
 
@@ -284,11 +284,11 @@ void main() {
 }
 ```
 
-Внутри метода `this` — указатель, поэтому разыменовывайте: `match *this { ... }`.
+Inside a method `this` is a pointer, so dereference it: `match *this { ... }`.
 
-## `union` — тип-сумма (tagged union)
+## `union`: a sum type (tagged union)
 
-Union хранит **один из вариантов**, и вместе с ним — тег, который говорит какой. У варианта может быть payload (данные) любого типа, а может не быть.
+A union stores **one of its variants**, and together with it a tag that says which one. A variant can have a payload (data) of any type, or none.
 
 ```vibe run
 union Shape {
@@ -305,7 +305,7 @@ void main() {
 }
 ```
 
-Раскладка: `{ i32 tag, payload }`, размер определяется самым большим вариантом.
+Layout: `{ i32 tag, payload }`; the size is determined by the largest variant.
 
 ```vibe run
 union V { i64 I; f64 F; str S; N; }
@@ -315,9 +315,9 @@ void main() {
 }
 ```
 
-### Разбор через `match`
+### Taking it apart with `match`
 
-Образец `.Вариант(имя)` привязывает payload. Привязанное значение — копия, только для чтения.
+The pattern `.Variant(name)` binds the payload. The bound value is a copy, read-only.
 
 ```vibe run
 union Shape {
@@ -339,7 +339,7 @@ void main() {
 }
 ```
 
-Проверка одного варианта без разбора — `is`:
+Testing a single variant without taking it apart is `is`:
 
 ```vibe run
 union Msg { str Text; Quit; }
@@ -350,9 +350,9 @@ void main() {
 }
 ```
 
-### Union как состояние и результат
+### A union as state and as a result
 
-Union удобен там, где значение бывает разных видов. Например, разбор токена:
+A union is convenient where a value comes in different kinds. For example, parsing a token:
 
 ```vibe run
 union Token {
@@ -364,10 +364,10 @@ union Token {
 
 void show(Token t) {
     match t {
-        .Num(n) => println("число {n}");
+        .Num(n) => println("number {n}");
         .Plus => println("+");
         .Minus => println("-");
-        .End => println("конец");
+        .End => println("end");
     }
 }
 
@@ -377,7 +377,7 @@ void main() {
 }
 ```
 
-### Методы у union
+### Methods on a union
 
 ```vibe run
 union Shape {
@@ -401,11 +401,11 @@ void main() {
 }
 ```
 
-## Значения по умолчанию и конструкторы
+## Defaults and constructors
 
-У поля можно задать значение по умолчанию. Оно применяется, когда структура создаётся литералом (`T{}`, `T{ .x = 1 }`) или объявляется без значения (`T x;`). Остальные поля, как и раньше, нули.
+A field can have a default value. It is applied when a struct is created with a literal (`T{}`, `T{ .x = 1 }`) or declared without a value (`T x;`). The other fields are zeros, as before.
 
-Конструктор — это метод с именем структуры, без типа результата. Вызывается как функция: `Circle(2.0)`. Он получает уже заполненный значениями по умолчанию объект и дописывает остальное. Память при этом нигде не выделяется.
+A constructor is a method named like the struct, without a result type. It is called like a function: `Circle(2.0)`. It receives an object already filled with the defaults and fills in the rest. No memory is allocated anywhere.
 
 ```vibe run
 struct Config {
@@ -441,11 +441,11 @@ void main() {
 }
 ```
 
-Вложенные структуры тоже получают свои значения по умолчанию. Деструкторов нет: освобождайте ресурсы через `defer` (см. [управление потоком](control-flow.md#defer-и-errdefer)).
+Nested structs get their own defaults too. There are no destructors: release resources with `defer` (see [control flow](control-flow.md#defer-and-errdefer)).
 
-## Интерфейсы
+## Interfaces
 
-Интерфейс описывает набор методов. Структура реализует его, если у неё есть все эти методы с теми же типами: объявлять «наследование» не нужно.
+An interface describes a set of methods. A struct implements it if it has all those methods with the same types: there is no need to declare "inheritance".
 
 ```vibe run
 interface Shape {
@@ -482,13 +482,13 @@ void main() {
 }
 ```
 
-Значение типа `Shape` — это пара из двух указателей: на объект и на таблицу методов. Её строит компилятор при преобразовании `&c` в `Shape`. Вызов метода — одна косвенная загрузка и один косвенный вызов, как у таблицы функций в C. Объект не копируется и не выделяется: интерфейс хранит указатель, поэтому объект должен жить дольше интерфейса. Если метода не хватает, ошибка сообщает, какого именно: `'Circle' does not implement 'Shape': missing method 'perimeter'`.
+A value of type `Shape` is a pair of two pointers: to the object and to the method table. The compiler builds it when `&c` is converted to `Shape`. A method call is one indirect load and one indirect call, like a function table in C. The object is neither copied nor allocated: the interface stores a pointer, so the object must outlive the interface. If a method is missing, the error says which one: `'Circle' does not implement 'Shape': missing method 'perimeter'`.
 
-Наследования реализации нет: общий код выносят в функцию или в структуру-поле.
+There is no implementation inheritance: shared code goes into a function or into a struct field.
 
-## Перегрузка операторов
+## Operator overloading
 
-Для структур можно определить `+ - * / %`, сравнения `== != < <= > >=` и унарный `-`. Это обычные методы с именем `operator+` и так далее, компилятор превращает `a + b` в `a.operator+(b)`. `!=` берётся из `==`, если не определён.
+For structs you can define `+ - * / %`, the comparisons `== != < <= > >=` and unary `-`. These are ordinary methods named `operator+` and so on, and the compiler turns `a + b` into `a.operator+(b)`. `!=` is taken from `==` if it is not defined.
 
 ```vibe run
 struct Vec2 {
@@ -510,11 +510,11 @@ void main() {
 }
 ```
 
-Операторы `[]`, `()`, `->`, `<<` и присваивание перегружать нельзя: действие должно быть видно в коде.
+The operators `[]`, `()`, `->`, `<<` and assignment cannot be overloaded: an action must be visible in the code.
 
-## Дженерик-структуры и union
+## Generic structs and unions
 
-Параметры типа пишутся в угловых скобках после имени: `struct Pair<A, B>`. Методы лежат внутри, отдельно перечислять параметры не нужно.
+Type parameters are written in angle brackets after the name: `struct Pair<A, B>`. The methods live inside, and the parameters need not be listed separately.
 
 ```vibe run
 struct Pair<A, B> {
@@ -527,16 +527,16 @@ struct Pair<A, B> {
 }
 
 void main() {
-    const auto p = Pair<i64, str>{ .first = 1, .second = "один" };
+    const auto p = Pair<i64, str>{ .first = 1, .second = "one" };
     const auto q = p.swap();
     println(p);
     println(q);
 }
 ```
 
-Для каждой комбинации аргументов компилятор делает отдельную копию типа. Так устроены `List<T>`, `Map<V>` и `Option<T>` из [стандартной библиотеки](stdlib.md).
+For every combination of arguments the compiler makes a separate copy of the type. This is how `List<T>`, `Map<V>` and `Option<T>` from the [standard library](stdlib.md) work.
 
-Структура-стек с массивом фиксированного размера и методами:
+A stack struct with a fixed-size array and methods:
 
 ```vibe run
 struct Stack<T> {
@@ -561,9 +561,9 @@ void main() {
 }
 ```
 
-Ограничения параметров записываются так же, как у функций: `struct Sorted<T: Ord> { ... }`. Нарушение ловится при создании типа.
+Constraints on the parameters are written as for functions: `struct Sorted<T: Ord> { ... }`. A violation is caught when the type is created.
 
-## Что дальше
+## What next
 
-- Как хранить такие значения в куче: [память и аллокаторы](memory.md), [коллекции](collections.md).
-- Как возвращать «значение или ошибку»: [ошибки и опциональные значения](errors-and-optionals.md).
+- How to keep such values on the heap: [memory and allocators](memory.md), [collections](collections.md).
+- How to return "a value or an error": [errors and optional values](errors-and-optionals.md).

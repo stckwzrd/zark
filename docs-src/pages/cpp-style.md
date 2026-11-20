@@ -1,13 +1,13 @@
 ---
-title: Vibe для C++-программиста
+title: Vibe for C++ programmers
 order: 3
-section: Старт
-description: Синтаксис Vibe глазами C++-программиста: типы впереди, template, методы внутри struct, лямбды, for с круглыми скобками и список отличий от C++
+section: Start
+description: Vibe syntax through the eyes of a C++ programmer: types first, template, methods inside struct, lambdas, for with parentheses and a list of differences from C++
 ---
 
-Vibe записывается почти как C++: типы пишутся впереди, дженерики — через `template` и `<...>`, методы лежат внутри `struct`, захват в лямбдах — `[&k]`. Эта страница показывает всё основное и перечисляет, чем язык отличается от C++.
+Vibe is written almost like C++: types go first, generics use `template` and `<...>`, methods live inside `struct`, and a lambda capture is `[&k]`. This page shows all the essentials and lists how the language differs from C++.
 
-## Объявления: тип впереди
+## Declarations: the type comes first
 
 ```vibe run
 const i64 LIMIT = 4;
@@ -28,17 +28,17 @@ i32 main() {
 }
 ```
 
-Правила:
+The rules:
 
-- Тип пишется перед именем: `i64 x = 5;`. Вместо типа можно написать `auto`.
-- Переменные и параметры **изменяемы** по умолчанию. `const` делает значение неизменяемым.
-- Результат функции стоит перед её именем. Функция без результата называется `void`.
-- Точка с запятой обязательна, как в C++. После `}` блока, функции или `struct` она не нужна.
-- `nullptr` — то же, что `null`.
+- The type is written before the name: `i64 x = 5;`. You can write `auto` instead of a type.
+- Variables and parameters are **mutable** by default. `const` makes a value immutable.
+- The result of a function stands before its name. A function without a result is `void`.
+- The semicolon is mandatory, as in C++. It is not needed after the `}` of a block, function or `struct`.
+- `nullptr` is the same as `null`.
 
-Типы: `T*` указатель, `T[]` срез, `T[N]` массив, `!T` ошибка, `?T` опциональное значение. Число или константа в скобках — всегда размер массива: `i64[4]`, `Point[4]`.
+Types: `T*` is a pointer, `T[]` a slice, `T[N]` an array, `!T` an error, `?T` an optional value. A number or constant in brackets is always an array size: `i64[4]`, `Point[4]`.
 
-## Структуры и методы внутри struct
+## Structs and methods inside struct
 
 ```vibe run
 struct Point {
@@ -58,12 +58,12 @@ i32 main() {
 }
 ```
 
-- Методы лежат внутри `struct`. Поля доступны по голому имени (`x`) и через `this->x` (или `this.x`). Локальная переменная с тем же именем перекрывает поле.
-- `static` объявляет функцию без `this`: `Point::origin()`.
-- `const` после списка параметров запрещает методу менять поля через `this` (присваивание и `+=` дают ошибку). Вызвать из него неконстантный метод через `this` тоже нельзя.
-- Литерал с точками, `Point{ .x = 3 }`, обнуляет остальные поля, как в C++. `Point{}` — все поля нулевые.
+- Methods live inside `struct`. The fields are available by the bare name (`x`) and through `this->x` (or `this.x`). A local variable with the same name shadows the field.
+- `static` declares a function without `this`: `Point::origin()`.
+- `const` after the parameter list forbids the method to change fields through `this` (assignment and `+=` give an error). It also cannot call a non-const method through `this`.
+- A literal with dots, `Point{ .x = 3 }`, zeroes the other fields, as in C++. `Point{}` has all fields zero.
 
-## Union, enum и `::`
+## Union, enum and `::`
 
 ```vibe run
 union Shape {
@@ -90,9 +90,9 @@ i32 main() {
 }
 ```
 
-Варианты union пишутся как поля: `тип Имя;`. Вариант без данных — просто `Имя;`. `::` равнозначно `.`: `Color::Green`, `net::connect(...)`, `Point::origin()`.
+The variants of a union are written like fields: `type Name;`. A variant without data is simply `Name;`. `::` is equivalent to `.`: `Color::Green`, `net::connect(...)`, `Point::origin()`.
 
-## Шаблоны
+## Templates
 
 ```vibe run
 struct Pair<A, B> {
@@ -114,11 +114,11 @@ i32 main() {
 }
 ```
 
-Параметры обобщённых функций пишутся в `template<...>`, обобщённых типов — прямо после имени: `struct Pair<A, B>`. Ограничения: `T: Ord`. Явные аргументы: `largest<f64>(...)`, `List<i64>::init(a)`.
+The parameters of generic functions are written in `template<...>`, and those of generic types right after the name: `struct Pair<A, B>`. Constraints: `T: Ord`. Explicit arguments: `largest<f64>(...)`, `List<i64>::init(a)`.
 
-## Управление потоком
+## Control flow
 
-В `if` и `while` условие в круглых скобках, фигурные скобки остаются обязательными.
+In `if` and `while` the condition is in parentheses, and the curly braces remain mandatory.
 
 ```vibe run
 i64 sum(i64[] xs) {
@@ -142,17 +142,19 @@ i32 main() {
 }
 ```
 
-Формы `for`:
+The forms of `for`:
 
-- `for (T x : seq)` — перебор массива, среза или списка;
-- `for (T i : a..b)` — диапазон от `a` до `b`, `b` не включается;
-- `for (T i = a; i < b; i++)` и `i <= b`, шаг только `i++`, `++i` или `i += 1`. Это тот же диапазон. Любые другие C-циклы пишите через `while`.
+- `for (T x : seq)` iterates over an array, slice or list;
+- `for (T i : a..b)` is a range from `a` to `b`, with `b` excluded;
+- `for (T i = a; i < b; i++)` and `i <= b`, with a step of only `i++`, `++i` or `i += 1`. It is the same range. Write any other C loops with `while`.
 
-Появились `++`, `--` и все составные присваивания: `+= -= *= /= %= |= &= ^= <<= >>=`. `i++` — оператор, а не выражение.
+`++`, `--` and all the compound assignments are there: `+= -= *= /= %= |= &= ^= <<= >>=`. `i++` is a statement, not an expression.
 
-`match` остаётся прежним, как и `defer`, `errdefer`, `?`, `catch`, `orelse`, `is`, интерполяция строк и `as`.
+A loop can carry a label (`outer: for (...)`) for `break outer;` and `continue outer;`.
 
-## Ошибки и опциональные значения
+`match` stays as it was, as do `defer`, `errdefer`, `?`, `catch`, `orelse`, `is`, string interpolation and `as`.
+
+## Errors and optional values
 
 ```vibe run
 !i64 parse(str s) {
@@ -175,9 +177,9 @@ i32 main() {
 }
 ```
 
-## Лямбды
+## Lambdas
 
-Захват записывается как в C++, `[&k]`: переменные захватываются **по ссылке**, контекст лежит на стеке, замыкание нельзя возвращать из функции.
+The capture is written as in C++, `[&k]`: variables are captured **by reference**, the context lives on the stack, and a closure must not be returned from a function.
 
 ```vibe run
 i32 main() {
@@ -192,9 +194,9 @@ i32 main() {
 }
 ```
 
-Тип замыкания пишется `fn[](i64) -> i64`, функции — `fn(i64) -> i64`.
+The type of a closure is written `fn[](i64) -> i64`, and that of a function `fn(i64) -> i64`.
 
-## Модули
+## Modules
 
 ```vibe file=cpp_lib.vibe
 i64 twice(i64 x) { return x * 2; }
@@ -209,23 +211,23 @@ i32 main() {
 }
 ```
 
-## Чего пока нет
+## What is not there
 
-- Нет `class`, `public:`, конструкторов и деструкторов, наследования и перегрузки.
-- В приведении указатель пишется префиксом: `p as *u8`.
+- There is no `class` or `public:`, no implicit destructors and no inheritance. Constructors, operator overloading and interfaces do exist (see [structs, unions and enums](structs-unions-enums.md)).
+- In a cast, a pointer type is written as a prefix: `p as *u8`.
 
-## Таблица отличий
+## Table of differences
 
 | C++ | Vibe |
 |---|---|
 | `int`, `long`, `double` | `i32`, `i64`, `f64` |
-| `T* p`, `const T& r` | `T* p`; ссылок нет, только указатели и срезы |
-| `std::vector<T>` | `List<T>` с явным аллокатором: `List<T>::init(a)` |
-| `std::string`, `std::string_view` | `str`: срез байтов, строки не владеют памятью |
-| `try`/`catch`, `throw` | `!T`, `error.Имя`, `?` и `catch` |
+| `T* p`, `const T& r` | `T* p`; there are no references, only pointers and slices |
+| `std::vector<T>` | `List<T>` with an explicit allocator: `List<T>::init(a)` |
+| `std::string`, `std::string_view` | `str`: a slice of bytes, strings do not own memory |
+| `try`/`catch`, `throw` | `!T`, `error.Name`, `?` and `catch` |
 | `std::optional<T>` | `?T` |
-| `std::variant`, `switch` | `union` и `match` |
+| `std::variant`, `switch` | `union` and `match` |
 | `new`/`delete`, RAII | `a.create<T>()`, `defer a.destroy(p)` |
-| `std::cout << x` | `println(x)` и `"{x}"` в строках |
+| `std::cout << x` | `println(x)` and `"{x}"` in strings |
 | `(T)x`, `static_cast<T>(x)` | `x as T` |
 | `x ? a : b` | `match` |

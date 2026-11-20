@@ -1,22 +1,22 @@
 ---
-title: Коллекции: List, Map, Option
+title: "Collections: List, Map, Option"
 order: 21
-section: Память и данные
-description: Динамический массив List<T>, хеш-таблица Map<V>, Option<T>, сортировка и вспомогательные функции стандартной библиотеки Vibe
+section: Memory and data
+description: The dynamic array List<T>, the hash table Map<V>, Option<T>, sorting and the helper functions of the Vibe standard library
 ---
 
-Контейнеры в Vibe — обычные дженерик-структуры, написанные на самом Vibe (исходник — `src/std.vibe`, он подключается автоматически). Магии в них нет, и они подчиняются главному правилу: **память берут только через явный аллокатор**.
+Containers in Vibe are ordinary generic structs written in Vibe itself (the source is `std/std.vibe`, which is included automatically). There is no magic in them, and they obey the main rule: **memory is taken only through an explicit allocator**.
 
-Какой контейнер выбрать:
+Which container to choose:
 
-| Нужно | Берите |
+| You need | Take |
 |---|---|
-| набор элементов известного размера | массив `T[N]` на стеке |
-| набор элементов, размер которого растёт | `List<T>` |
-| поиск значения по строковому ключу | `Map<V>` |
-| «значение или ничего» | `?T` / `Option<T>` |
+| a set of elements of known size | an array `T[N]` on the stack |
+| a set of elements whose size grows | `List<T>` |
+| looking up a value by a string key | `Map<V>` |
+| "a value or nothing" | `?T` / `Option<T>` |
 
-## `List<T>` — динамический массив
+## `List<T>`: a dynamic array
 
 ```vibe run
 !void main() {
@@ -30,43 +30,43 @@ description: Динамический массив List<T>, хеш-таблиц�
 }
 ```
 
-Три правила:
+Three rules:
 
-1. `List<T>::init(a)` запоминает аллокатор. До `init` у списка аллокатора нет, и `push` в «нулевой» список работать не будет.
-2. Любое **растущее** действие возвращает `!void`: память может кончиться. Пишите `?` или `catch`.
-3. В конце вызовите `deinit()`. Для арены он не нужен (см. [память](memory.md#arena-выделять-много-освободить-разом)).
+1. `List<T>::init(a)` remembers the allocator. Before `init` a list has no allocator, and `push` on a "zero" list will not work.
+2. Any **growing** action returns `!void`: memory can run out. Write `?` or `catch`.
+3. At the end call `deinit()`. For an arena it is not needed (see [memory](memory.md#arena-allocate-a-lot-free-at-once)).
 
-### Структура списка
+### The structure of a list
 
 ```vibe
 struct List<T> {
-    T[] items;   // выделенный буфер, items.len — ёмкость
-    i64 len;     // сколько элементов реально лежит
+    T[] items;   // the allocated buffer, items.len is the capacity
+    i64 len;     // how many elements are actually there
     Allocator a;
 }
 ```
 
-Поэтому `xs.len` — число элементов, а `xs.items.len` — ёмкость. Буфер растёт по удвоению: 8, 16, 32 и так далее.
+So `xs.len` is the number of elements, and `xs.items.len` is the capacity. The buffer grows by doubling: 8, 16, 32 and so on.
 
-### Методы
+### Methods
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `init(a)` | создаёт пустой список |
-| `deinit()` | освобождает буфер |
-| `!void push(v)` | добавляет в конец |
-| `!void append(slice)` | добавляет несколько |
-| `!T pop()` | убирает и возвращает последний; `error.Empty` на пустом |
-| `!T last()` | последний, не убирая; `error.Empty` на пустом |
-| `T get(i)` | элемент (с проверкой границ) |
-| `set(i, v)` | записывает элемент |
-| `T[] slice()` | текущие элементы как срез |
-| `bool is_empty()` | пуст ли |
-| `clear()` | обнуляет длину, память остаётся |
-| `bool contains(v)` | есть ли такой элемент (нужен `==`) |
-| `reverse()` | переворачивает на месте |
-| `sort()` | сортирует на месте (нужны `<`, `>`) |
-| `!void reserve(n)` | заранее выделяет ёмкость |
+| `init(a)` | creates an empty list |
+| `deinit()` | frees the buffer |
+| `!void push(v)` | appends to the end |
+| `!void append(slice)` | appends several |
+| `!T pop()` | removes and returns the last; `error.Empty` on an empty list |
+| `!T last()` | the last one without removing it; `error.Empty` on an empty list |
+| `T get(i)` | an element (with a bounds check) |
+| `set(i, v)` | writes an element |
+| `T[] slice()` | the current elements as a slice |
+| `bool is_empty()` | whether it is empty |
+| `clear()` | resets the length to zero, the memory stays |
+| `bool contains(v)` | whether there is such an element (needs `==`) |
+| `reverse()` | reverses in place |
+| `sort()` | sorts in place (needs `<`, `>`) |
+| `!void reserve(n)` | allocates capacity in advance |
 
 ```vibe run
 !void main() {
@@ -94,9 +94,9 @@ struct List<T> {
 }
 ```
 
-### Перебор
+### Iterating
 
-`for` умеет перебирать всё, у чего есть `slice()`, поэтому список идёт прямо в цикл:
+`for` can iterate over anything that has `slice()`, so a list goes straight into a loop:
 
 ```vibe run
 !void main() {
@@ -113,9 +113,9 @@ struct List<T> {
 }
 ```
 
-### Изменение элементов на месте
+### Changing elements in place
 
-`get` возвращает **копию**. Чтобы менять элементы структур, берите указатель на элемент:
+`get` returns a **copy**. To change the elements of structs, take a pointer to the element:
 
 ```vibe run
 struct Player { str name; i64 score; }
@@ -139,11 +139,11 @@ struct Player { str name; i64 score; }
 }
 ```
 
-> **Ловушка.** Указатель на элемент (`&ps.items[0]`) недействителен после `push`: список мог перенести буфер в другое место. Не держите такие указатели, если будете добавлять элементы.
+> **Gotcha:** a pointer to an element (`&ps.items[0]`) is invalid after a `push`: the list may have moved its buffer to another place. Do not keep such pointers if you are going to add elements.
 
-### Стек, очередь, срезы
+### Stack, queue, slices
 
-Стек — это `push` + `pop`:
+A stack is `push` + `pop`:
 
 ```vibe run
 !void main() {
@@ -158,9 +158,9 @@ struct Player { str name; i64 score; }
 }
 ```
 
-Срез от списка (`xs.slice()`) тоже можно резать (`xs.slice()[1..3]`), но он «следит» за теми же данными и устаревает вместе с буфером.
+A slice of a list (`xs.slice()`) can be sliced further too (`xs.slice()[1..3]`), but it "watches" the same data and becomes stale together with the buffer.
 
-### Список в списке
+### A list in a list
 
 ```vibe run
 !void main() {
@@ -178,11 +178,11 @@ struct Player { str name; i64 score; }
 }
 ```
 
-Здесь арена освобождает всё сразу, поэтому `deinit` у вложенных списков не нужен.
+Here the arena frees everything at once, so the nested lists do not need `deinit`.
 
-## `Map<V>` — хеш-таблица со строковыми ключами
+## `Map<V>`: a hash table with string keys
 
-Ключ — всегда `str`, значение — любой тип `V`.
+The key is always a `str`, and the value is any type `V`.
 
 ```vibe run
 !void main() {
@@ -199,22 +199,22 @@ struct Player { str name; i64 score; }
 }
 ```
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `init(a)` | пустая таблица |
-| `deinit()` | освобождает память |
-| `!void put(key, value)` | добавляет или заменяет |
-| `!V get(key)` | значение или `error.NotFound` |
-| `bool has(key)` | есть ли ключ |
-| `len` | число ключей |
+| `init(a)` | an empty table |
+| `deinit()` | frees the memory |
+| `!void put(key, value)` | adds or replaces |
+| `!V get(key)` | the value or `error.NotFound` |
+| `bool has(key)` | whether the key exists |
+| `len` | the number of keys |
 
-> **Ловушка.** Ключи **не копируются**: таблица хранит срез, который вы дали. Если ключ собирается из временного буфера, скопируйте его через `a.dup(key)`, иначе он испортится, когда буфер перезапишут.
+> **Gotcha:** keys are **not copied**: the table stores the slice you gave it. If a key is built from a temporary buffer, copy it with `a.dup(key)`, otherwise it will be corrupted when the buffer is overwritten.
 
-Удалять ключи нельзя (метода `remove` нет). `get` возвращает копию значения: чтобы изменить значение на месте, нужно работать с `m.entries`.
+You cannot delete keys (there is no `remove` method). `get` returns a copy of the value: to change a value in place you need to work with `m.entries`.
 
-### Перебор
+### Iterating
 
-Специального итератора нет, но таблица — это массив записей `entries`, и занятые записи помечены `used`:
+There is no special iterator, but the table is an array of records `entries`, and the occupied records are marked `used`:
 
 ```vibe run
 !void main() {
@@ -233,16 +233,16 @@ struct Player { str name; i64 score; }
     println(total, m.len);
 
     for (auto e : m.entries) {
-        if (e.used && e.key == "b") { println("нашли {e.key} = {e.value}"); }
+        if (e.used && e.key == "b") { println("found {e.key} = {e.value}"); }
     }
 }
 ```
 
-Порядок обхода — порядок слотов хеш-таблицы, а не порядок вставки. Не рассчитывайте на него.
+The order of traversal is the order of the hash table's slots, not the order of insertion. Do not rely on it.
 
-### Счётчик слов
+### A word counter
 
-Типичная задача: посчитать, сколько раз встретилось каждое слово.
+A typical task: count how many times each word occurs.
 
 ```vibe run
 !void main() {
@@ -265,9 +265,9 @@ struct Player { str name; i64 score; }
 }
 ```
 
-Ключи здесь — срезы `text`, а `text` — литерал, который живёт всё время работы, поэтому копировать ключи не нужно.
+The keys here are slices of `text`, and `text` is a literal that lives for the whole run, so the keys do not need copying.
 
-### Значения-структуры
+### Struct values
 
 ```vibe run
 struct Stat { i64 count; i64 sum; }
@@ -281,9 +281,9 @@ struct Stat { i64 count; i64 sum; }
 }
 ```
 
-## `Option<T>` и `?T`
+## `Option<T>` and `?T`
 
-`?T` — запись для `Option<T>`: union с вариантами `Some: T` и `None`. Подробно — в [ошибках и опциональных значениях](errors-and-optionals.md#опциональные-значения-t).
+`?T` is the notation for `Option<T>`: a union with the variants `Some: T` and `None`. Described in detail in [errors and optional values](errors-and-optionals.md#optional-values-t).
 
 ```vibe run
 void main() {
@@ -294,14 +294,14 @@ void main() {
 }
 ```
 
-## Сортировка и вспомогательные функции
+## Sorting and helper functions
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `sort(slice)` | быстрая сортировка на месте; нужны `<` и `>` у элементов |
-| `min(a, b)`, `max(a, b)` | меньшее и большее |
-| `abs(x)` | модуль числа |
-| `swap(&a, &b)` | меняет два значения местами |
+| `sort(slice)` | a fast in-place sort; the elements need `<` and `>` |
+| `min(a, b)`, `max(a, b)` | the smaller and the larger |
+| `abs(x)` | the absolute value of a number |
+| `swap(&a, &b)` | swaps two values |
 
 ```vibe run
 void main() {
@@ -319,9 +319,9 @@ void main() {
 }
 ```
 
-Сортировать строки или структуры `sort` не умеет (у них нет `<`). Для них напишите свой цикл со своей функцией сравнения.
+`sort` cannot sort strings or structs (they have no `<`). For them, write your own loop with your own comparison function.
 
-### Сортировка по ключу
+### Sorting by a key
 
 ```vibe run
 struct P { str name; i64 age; }
@@ -343,9 +343,9 @@ void main() {
 }
 ```
 
-## Массивы и срезы
+## Arrays and slices
 
-Если размер заранее известен, список не нужен. Массив на стеке быстрее, ничего не выделяет и не требует `deinit`:
+If the size is known in advance, you do not need a list. An array on the stack is faster, allocates nothing and needs no `deinit`:
 
 ```vibe run
 void main() {
@@ -360,7 +360,7 @@ void main() {
 }
 ```
 
-Функции принимают **срез**, поэтому одна и та же функция работает и с массивом, и со списком (`xs.slice()`):
+Functions take a **slice**, so the same function works with an array and with a list (`xs.slice()`):
 
 ```vibe run
 i64 total(i64[] xs) {
@@ -378,7 +378,7 @@ i64 total(i64[] xs) {
 }
 ```
 
-## Что дальше
+## What next
 
-- Сами аллокаторы: [память и аллокаторы](memory.md).
-- Справочник по всем функциям: [стандартная библиотека](stdlib.md).
+- The allocators themselves: [memory and allocators](memory.md).
+- A reference of all functions: [standard library](stdlib.md).

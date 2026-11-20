@@ -1,5 +1,6 @@
 (function () {
   var root = document.documentElement
+  var T = root.lang === "ru" ? { nothing: "Ничего не найдено", copy: "Копировать", copied: "Скопировано" } : { nothing: "Nothing found", copy: "Copy", copied: "Copied" }
   var saved = null
   try { saved = localStorage.getItem("theme") } catch (e) {}
   if (saved) root.setAttribute("data-theme", saved)
@@ -34,7 +35,7 @@
     hits.sort(function (a, b) { return b.score - a.score })
     box.innerHTML = hits.slice(0, 8).map(function (h) {
       return '<a href="' + h.p.url + (h.anchor ? "#" + h.anchor : "") + '"><b>' + h.p.title + "</b></a>"
-    }).join("") || "<span>Ничего не найдено</span>"
+    }).join("") || "<span>" + T.nothing + "</span>"
     box.style.display = "block"
   }
   q.addEventListener("input", function () { load(run) })
@@ -61,12 +62,12 @@
   document.querySelectorAll(".code").forEach(function (c) {
     var b = document.createElement("button")
     b.className = "copy"
-    b.textContent = "Копировать"
+    b.textContent = T.copy
     b.addEventListener("click", function () {
       var t = c.querySelector("pre").innerText
       if (navigator.clipboard) navigator.clipboard.writeText(t)
-      b.textContent = "Скопировано"
-      setTimeout(function () { b.textContent = "Копировать" }, 1200)
+      b.textContent = T.copied
+      setTimeout(function () { b.textContent = T.copy }, 1200)
     })
     c.appendChild(b)
   })

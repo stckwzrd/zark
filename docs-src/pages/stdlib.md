@@ -1,35 +1,35 @@
 ---
-title: Справочник стандартной библиотеки
+title: Standard library reference
 order: 40
-section: Справочник
-description: Все функции и типы прелюдии Vibe: вывод, строки, числа, аллокаторы, List, Map, Option, файлы, процессы, время и математика
+section: Reference
+description: All the functions and types of the Vibe prelude: output, strings, numbers, allocators, List, Map, Option, files, processes, time and math
 ---
 
-Стандартная библиотека — один файл `std/std.vibe`, написанный на самом Vibe. Он подключается к каждой программе **автоматически** (прелюдия). Ничего импортировать не нужно.
+The standard library is a single file, `std/std.vibe`, written in Vibe itself. It is attached to every program **automatically** (the prelude). Nothing needs to be imported.
 
-Имена из прелюдии занимают общее пространство имён с вашими: свою функцию с именем `min`, `max`, `abs`, `sort`, `swap`, `run`, `env`, `cstr`, `arg` и т. п. объявить нельзя, будет ошибка «duplicate function».
+The names from the prelude share a namespace with yours: you cannot declare your own function named `min`, `max`, `abs`, `sort`, `swap`, `run`, `env`, `cstr`, `arg` and so on; you will get the error "duplicate function".
 
-Имена с префиксом `__` (`__find`, `__qsort`) внутренние. Не вызывайте их.
+Names with the prefix `__` (`__find`, `__qsort`) are internal. Do not call them.
 
-Сигнатуры пишутся как в коде: результат, имя, параметры. `!T` — функция может вернуть ошибку; `a` — значение типа `Allocator`.
+Signatures are written as in code: the result, the name, the parameters. `!T` means the function can return an error; `a` is a value of type `Allocator`.
 
-## Вывод и форматирование
+## Output and formatting
 
-Это **встроенные** функции компилятора. Формат: `println("x = {x}")`, подробности — на странице [строки](strings.md#форматирование).
+These are **built-in** functions of the compiler. The format is `println("x = {x}")`; details are on the page [strings](strings.md#formatting).
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `print(...)` | печатает аргументы через пробел |
-| `println(...)` | то же и перевод строки |
-| `eprint(...)`, `eprintln(...)` | то же в stderr |
-| `!str bprint(u8[] buf, ...)` | форматирует в буфер; `error.NoSpace`, если не влезло |
-| `!void sprint(List<u8>* out, ...)` | дописывает в список |
-| `panic(msg)` | печатает сообщение и место, завершает с кодом 1 |
-| `assert(cond)` | `panic` с местом, если `cond` ложно |
-| `embed("файл")` | байты файла как константа `str`, читается при компиляции |
-| `sizeof(T)`, `alignof(T)` | размер и выравнивание типа, `u64`, при компиляции |
+| `print(...)` | prints the arguments separated by spaces |
+| `println(...)` | the same plus a newline |
+| `eprint(...)`, `eprintln(...)` | the same to stderr |
+| `!str bprint(u8[] buf, ...)` | formats into a buffer; `error.NoSpace` if it does not fit |
+| `!void sprint(List<u8>* out, ...)` | appends to a list |
+| `panic(msg)` | prints the message and the location, exits with code 1 |
+| `assert(cond)` | `panic` with a location if `cond` is false |
+| `embed("file")` | the bytes of a file as a `str` constant, read at compile time |
+| `sizeof(T)`, `alignof(T)` | the size and alignment of a type, `u64`, at compile time |
 
-## Аллокаторы
+## Allocators
 
 ```vibe
 struct Allocator {
@@ -39,68 +39,68 @@ struct Allocator {
 }
 ```
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
 | `Allocator c_allocator()` | `calloc` / `free` |
-| `!T[] a.alloc<T>(i64 n)` | `n` элементов, зануленных; `error.OutOfMemory` |
-| `a.free(slice)` | освобождает срез от `alloc` |
-| `!T* a.create<T>()` | один зануленный `T` |
-| `a.destroy(p)` | освобождает `create` |
-| `!str a.dup(str s)` | копия строки |
-| `!u8* a.dupz(str s)` | копия с нулевым байтом, для C |
+| `!T[] a.alloc<T>(i64 n)` | `n` elements, zeroed; `error.OutOfMemory` |
+| `a.free(slice)` | frees a slice from `alloc` |
+| `!T* a.create<T>()` | one zeroed `T` |
+| `a.destroy(p)` | frees a `create` |
+| `!str a.dup(str s)` | a copy of a string |
+| `!u8* a.dupz(str s)` | a copy with a zero byte, for C |
 
 ### `FixedBuf`
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `FixedBuf FixedBuf::init(u8[] buf)` | аллокатор поверх вашего буфера |
-| `Allocator fb.allocator()` | сам аллокатор |
-| `fb.reset()` | считает весь буфер свободным |
-| `i64 fb.remaining()` | сколько байт осталось |
+| `FixedBuf FixedBuf::init(u8[] buf)` | an allocator over your buffer |
+| `Allocator fb.allocator()` | the allocator itself |
+| `fb.reset()` | treats the whole buffer as free |
+| `i64 fb.remaining()` | how many bytes are left |
 
 ### `Arena`
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `Arena Arena::init(Allocator parent)` | арена поверх родителя |
-| `Allocator ar.allocator()` | сам аллокатор |
-| `ar.deinit()` | освобождает всё разом |
+| `Arena Arena::init(Allocator parent)` | an arena over a parent |
+| `Allocator ar.allocator()` | the allocator itself |
+| `ar.deinit()` | frees everything at once |
 
-Подробнее: [память](memory.md).
+More: [memory](memory.md).
 
 ## `List<T>`
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `List<T>::init(a)` | пустой список |
-| `deinit()` | освобождает буфер |
-| `!void reserve(n)` | выделяет ёмкость |
-| `!void push(v)` | добавляет |
-| `!void append(T[] xs)` | добавляет несколько |
-| `!T pop()` | убирает последний, `error.Empty` |
-| `!T last()` | последний, `error.Empty` |
-| `T get(i)` | элемент |
-| `set(i, v)` | записывает |
-| `T[] slice()` | элементы как срез |
-| `bool is_empty()` | пуст ли |
-| `clear()` | длина в ноль |
-| `bool contains(v)` | есть ли |
-| `reverse()` | разворот |
-| `sort()` | сортировка |
-| поля `items`, `len`, `a` | буфер, число элементов, аллокатор |
+| `List<T>::init(a)` | an empty list |
+| `deinit()` | frees the buffer |
+| `!void reserve(n)` | allocates capacity |
+| `!void push(v)` | appends |
+| `!void append(T[] xs)` | appends several |
+| `!T pop()` | removes the last, `error.Empty` |
+| `!T last()` | the last, `error.Empty` |
+| `T get(i)` | an element |
+| `set(i, v)` | writes |
+| `T[] slice()` | the elements as a slice |
+| `bool is_empty()` | whether it is empty |
+| `clear()` | length to zero |
+| `bool contains(v)` | whether it is there |
+| `reverse()` | reverses |
+| `sort()` | sorts |
+| fields `items`, `len`, `a` | the buffer, the number of elements, the allocator |
 
 ## `Map<V>`
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `Map<V>::init(a)` | пустая таблица |
-| `deinit()` | освобождает память |
-| `!void put(str key, v)` | вставка или замена |
-| `!V get(str key)` | значение, `error.NotFound` |
-| `bool has(str key)` | есть ли ключ |
-| поля `len`, `entries` | число ключей; записи `{ key, value, used }` |
+| `Map<V>::init(a)` | an empty table |
+| `deinit()` | frees the memory |
+| `!void put(str key, v)` | inserts or replaces |
+| `!V get(str key)` | the value, `error.NotFound` |
+| `bool has(str key)` | whether the key exists |
+| fields `len`, `entries` | the number of keys; records `{ key, value, used }` |
 
-Ключи не копируются.
+Keys are not copied.
 
 ## `Option<T>`
 
@@ -111,24 +111,24 @@ union Option<T> {
 }
 ```
 
-`?T` — запись для `Option<T>`.
+`?T` is the notation for `Option<T>`.
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `bool is_some()` | есть ли значение |
-| `T unwrap_or(d)` | значение или `d` |
+| `bool is_some()` | whether there is a value |
+| `T unwrap_or(d)` | the value or `d` |
 
-## Математические и общие функции
+## Math and general functions
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `min(a, b)`, `max(a, b)` | меньшее, большее |
-| `abs(x)` | модуль числа |
-| `void swap(T* a, T* b)` | обмен значений |
-| `void sort(T[] s)` | сортировка на месте |
+| `min(a, b)`, `max(a, b)` | the smaller, the larger |
+| `abs(x)` | the absolute value of a number |
+| `void swap(T* a, T* b)` | swaps values |
+| `void sort(T[] s)` | sorts in place |
 | `sqrt`, `sin`, `cos`, `tan`, `exp`, `log` | `f64 → f64` |
-| `pow(x, y)` | степень |
-| `floor`, `ceil`, `fabs` | округление вниз, вверх, модуль |
+| `pow(x, y)` | a power |
+| `floor`, `ceil`, `fabs` | round down, round up, absolute value |
 | `PI` | 3.141592653589793 |
 
 ```vibe run
@@ -139,28 +139,28 @@ void main() {
 }
 ```
 
-## Строки и символы
+## Strings and characters
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `i64 str_find(s, needle)` | позиция подстроки, `-1` |
-| `i64 str_find_byte(s, c)` | позиция байта, `-1` |
-| `i64 str_rfind_byte(s, c)` | последняя позиция байта, `-1` |
-| `str_starts_with(s, p)`, `str_ends_with(s, p)` | начало и конец |
-| `str str_trim(s)` | убрать пробелы по краям |
-| `str cstr(u8* p)` | C-строка в `str` |
-| `!u8* to_cstr(buf, s)` | C-строка в вашем буфере, `error.NoSpace` |
-| `is_digit`, `is_alpha`, `is_alnum`, `is_upper`, `is_hex` | классы символа (`u8`) |
+| `i64 str_find(s, needle)` | the position of a substring, `-1` |
+| `i64 str_find_byte(s, c)` | the position of a byte, `-1` |
+| `i64 str_rfind_byte(s, c)` | the last position of a byte, `-1` |
+| `str_starts_with(s, p)`, `str_ends_with(s, p)` | the start and the end |
+| `str str_trim(s)` | strips whitespace from both ends |
+| `str cstr(u8* p)` | a C string as a `str` |
+| `!u8* to_cstr(buf, s)` | a C string in your buffer, `error.NoSpace` |
+| `is_digit`, `is_alpha`, `is_alnum`, `is_upper`, `is_hex` | character classes (`u8`) |
 
-## Числа из текста
+## Numbers from text
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `!i64 parse_int(s)` | целое, допускает знак и пробелы; `error.InvalidNumber` |
-| `!u64 parse_int_radix(s, radix)` | по основанию; `radix` 0 — автоопределение `0x`, `0b`, `0o` |
-| `!f64 parse_float(s)` | дробное, `error.InvalidNumber` |
-| `u64 bits_f64(x)` | биты числа |
-| `f64 f64_from_bits(x)` | число из бит |
+| `!i64 parse_int(s)` | an integer, allows a sign and spaces; `error.InvalidNumber` |
+| `!u64 parse_int_radix(s, radix)` | in a radix; `radix` 0 autodetects `0x`, `0b`, `0o` |
+| `!f64 parse_float(s)` | a float, `error.InvalidNumber` |
+| `u64 bits_f64(x)` | the bits of a number |
+| `f64 f64_from_bits(x)` | a number from bits |
 
 ```vibe run
 void main() {
@@ -173,76 +173,76 @@ void main() {
 }
 ```
 
-## Файлы
+## Files
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `!str read_file(a, path)` | весь файл в память; `error.FileNotFound`, `error.ReadFailed` |
-| `!void write_file(path, data)` | записать с заменой; `error.CannotOpen`, `error.WriteFailed` |
-| `bool file_exists(path)` | существует ли |
-| `i32 remove(u8* path)` | удалить (C-функция) |
-| `i32 mkdir(u8* path, u32 mode)` | создать каталог (C-функция) |
+| `!str read_file(a, path)` | the whole file into memory; `error.FileNotFound`, `error.ReadFailed` |
+| `!void write_file(path, data)` | writes, replacing; `error.CannotOpen`, `error.WriteFailed` |
+| `bool file_exists(path)` | whether it exists |
+| `i32 remove(u8* path)` | deletes (a C function) |
+| `i32 mkdir(u8* path, u32 mode)` | creates a directory (a C function) |
 
-Результат `read_file` выделен через `a`: освободите его (или используйте арену).
+The result of `read_file` is allocated through `a`: free it (or use an arena).
 
 ```vibe run
 !void main() {
     const auto a = c_allocator();
-    write_file("demo.txt", "строка 1\nстрока 2\n")?;
+    write_file("demo.txt", "line 1\nline 2\n")?;
     println(file_exists("demo.txt"));
 
     const auto text = read_file(a, "demo.txt")?;
     defer a.free(text);
     println(text.len);
 
-    const auto missing = read_file(a, "net-takogo.txt") catch |e| {
-        println("нет файла: {e}");
+    const auto missing = read_file(a, "no-such-file.txt") catch |e| {
+        println("no file: {e}");
         return;
     };
     println(missing.len);
 }
 ```
 
-## Ввод
+## Input
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `!str read_line(u8[] buf)` | одна строка из stdin без `\n`; `error.EndOfFile` |
+| `!str read_line(u8[] buf)` | one line from stdin without `\n`; `error.EndOfFile` |
 
-## Процессы и окружение
+## Processes and environment
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `!i32 run(a, str[] argv)` | запускает процесс, ждёт, возвращает код выхода; `error.Signaled`, если убит сигналом |
-| `!str env(name)` | переменная окружения; `error.NotFound` |
-| `i64 arg_count()` | число аргументов (вместе с именем программы) |
-| `str arg(i)` | аргумент по номеру; `arg(0)` — путь программы |
-| `void exit(i32 code)` | завершить программу |
+| `!i32 run(a, str[] argv)` | starts a process, waits, returns the exit code; `error.Signaled` if killed by a signal |
+| `!str env(name)` | an environment variable; `error.NotFound` |
+| `i64 arg_count()` | the number of arguments (including the program name) |
+| `str arg(i)` | an argument by number; `arg(0)` is the program path |
+| `void exit(i32 code)` | ends the program |
 
 ```vibe run
 !void main() {
     const auto a = c_allocator();
     const auto code = run(a, ["/bin/echo", "hi", "there"])?;
-    println("код", code);
+    println("code", code);
     const auto bad = run(a, ["/bin/sh", "-c", "exit 3"])?;
-    println("код", bad);
-    println(env("NO_SUCH_VAR_HERE") catch "не задана");
+    println("code", bad);
+    println(env("NO_SUCH_VAR_HERE") catch "not set");
     println(arg_count());
 }
 ```
 
-Аргументы программы при `vibe run` идут после `--`: `vibe run main.vibe -- a b`.
+Program arguments with `vibe run` go after `--`: `vibe run main.vibe -- a b`.
 
-## Время и случайные числа
+## Time and random numbers
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `i64 now_ns()` | монотонное время в наносекундах (для замеров) |
-| `i64 clock()` | процессорное время (C-функция) |
-| `i64 time(null)` | секунды Unix (C-функция) |
-| `i32 rand()`, `srand(u32 seed)` | генератор C |
+| `i64 now_ns()` | monotonic time in nanoseconds (for measuring) |
+| `i64 clock()` | processor time (a C function) |
+| `i64 time(null)` | Unix seconds (a C function) |
+| `i32 rand()`, `srand(u32 seed)` | the C generator |
 
-Измерить время:
+Measuring time:
 
 ```vibe run
 void main() {
@@ -254,11 +254,11 @@ void main() {
 }
 ```
 
-## Функции libc, доступные без объявления
+## libc functions available without a declaration
 
-Из C-библиотеки в прелюдии уже объявлены: `printf`, `malloc`, `calloc`, `free`, `exit`, `memcmp`, `memcpy`, `memmove`, `memset`, `strlen`, `fdopen`, `fgets`, `fopen`, `fclose`, `fread`, `fwrite`, `fseek`, `ftell`, `remove`, `mkdir`, `fork`, `execvp`, `waitpid`, `getenv`, `fflush`, `strtod`, `clock_gettime`, `clock`, `rand`, `srand`, `time` и математика. Любую другую вызывайте через `extern fn` (см. [C](c-interop.md)).
+From the C library the prelude already declares: `printf`, `malloc`, `calloc`, `free`, `exit`, `memcmp`, `memcpy`, `memmove`, `memset`, `strlen`, `fdopen`, `fgets`, `fopen`, `fclose`, `fread`, `fwrite`, `fseek`, `ftell`, `remove`, `mkdir`, `fork`, `execvp`, `waitpid`, `getenv`, `fflush`, `strtod`, `clock_gettime`, `clock`, `rand`, `srand`, `time` and math. Call any other one through `extern` (see [C](c-interop.md)).
 
-## Что дальше
+## What next
 
-- Сквозные примеры с этими функциями: [рецепты](cookbook.md).
-- Если что-то не работает как ожидали: [ловушки и FAQ](gotchas.md).
+- End-to-end examples with these functions: [cookbook](cookbook.md).
+- If something does not work as expected: [pitfalls and FAQ](gotchas.md).

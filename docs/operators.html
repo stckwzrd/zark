@@ -1,79 +1,79 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Операторы и выражения · Vibe</title>
-<meta name="description" content="Арифметика, сравнения, логика, побитовые операторы, присваивание, приоритет, as, указатели и срезы в Vibe">
+<title>Operators and expressions · Vibe</title>
+<meta name="description" content="Arithmetic, comparisons, logic, bitwise operators, assignment, precedence, as, pointers and slices in Vibe">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/operators.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html" class="current">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html" class="current">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
-<h1>Операторы и выражения</h1>
-<p>Операторов в Vibe немного, а перегрузки нет: <code>+</code> всегда означает сложение чисел. Любое действие над значением видно в коде.</p>
-<h2 id="арифметика"><a class="anchor" href="#арифметика">#</a>Арифметика</h2>
+<h1>Operators and expressions</h1>
+<p>Vibe has few operators and no overloading of the built-in ones: <code>+</code> always means adding numbers. Every action on a value is visible in the code.</p>
+<h2 id="arithmetic"><a class="anchor" href="#arithmetic">#</a>Arithmetic</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Оператор</th>
-<th>Что делает</th>
+<th>Operator</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>+</code> <code>-</code> <code>*</code></td>
-<td>сложение, вычитание, умножение</td>
+<td>addition, subtraction, multiplication</td>
 </tr>
 <tr>
 <td><code>/</code></td>
-<td>деление (для целых — с отбрасыванием дробной части в сторону нуля)</td>
+<td>division (for integers the fraction is dropped towards zero)</td>
 </tr>
 <tr>
 <td><code>%</code></td>
-<td>остаток (знак совпадает со знаком делимого)</td>
+<td>remainder (the sign matches the sign of the dividend)</td>
 </tr>
 <tr>
 <td><code>-x</code></td>
-<td>смена знака</td>
+<td>negation</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7.0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> %</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> %</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> %</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>10 4 21
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>10 4 21
 3 -3 3.5
 1 -1 1</code></pre></div></div>
-<p>Оба операнда должны быть одного типа. Целое можно неявно расширить, но с дробным смешивать нельзя:</p>
+<p>Both operands must have the same type. An integer can be widened implicitly, but it cannot be mixed with a float:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:3: error: mismatched operand types 'i64' and 'f64'
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:3: error: mismatched operand types 'i64' and 'f64'
     3 | println(a + b);
       |           ^</code></pre></div></div>
-<p>Нужно привести явно: <code>a as f64 + b</code>.</p>
-<p>Строки операторами не склеиваются:</p>
-<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:1: error: arithmetic on 'str' is not supported
+<p>Convert explicitly: <code>a as f64 + b</code>.</p>
+<p>Strings are not joined with operators:</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:1: error: arithmetic on 'str' is not supported
     1 | void main() { println(&quot;a&quot; + &quot;b&quot;);
       |                           ^</code></pre></div></div>
-<p>Склейка делается интерполяцией и <a href="strings.html#сборка-строк">буфером</a>: <code>&quot;{a}{b}&quot;</code>.</p>
-<p>Деление целого на ноль аварийно завершает программу (см. <a href="types.html#переполнение">типы</a>), деление дробных на ноль даёт <code>inf</code> или <code>nan</code>.</p>
-<h2 id="сравнения"><a class="anchor" href="#сравнения">#</a>Сравнения</h2>
-<p><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> дают <code>bool</code>.</p>
+<p>Joining is done with interpolation and a <a href="strings.html#building-strings">buffer</a>: <code>&quot;{a}{b}&quot;</code>.</p>
+<p>Integer division by zero crashes the program (see <a href="types.html#overflow">types</a>); floating-point division by zero gives <code>inf</code> or <code>nan</code>.</p>
+<h2 id="comparisons"><a class="anchor" href="#comparisons">#</a>Comparisons</h2>
+<p><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> give <code>bool</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> !=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> >=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1.5</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2.5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">'a'</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 'b'</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"abc"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ==</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abc"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"abc"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> !=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abd"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true true false true
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true true false true
 true true
 true true</code></pre></div></div>
-<p>Для строк определены только <code>==</code> и <code>!=</code>. Упорядочивать строки через <code>&lt;</code> нельзя:</p>
-<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"abc"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abd"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:1: error: strings support only == and !=
+<p>Only <code>==</code> and <code>!=</code> are defined for strings. You cannot order strings with <code>&lt;</code>:</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"abc"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abd"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:1: error: strings support only == and !=
     1 | void main() { println(&quot;abc&quot; &lt; &quot;abd&quot;);
       |                             ^</code></pre></div></div>
-<p>Цепочки сравнений вроде <code>1 &lt; 2 &lt; 3</code> не работают: результат <code>1 &lt; 2</code> — это <code>bool</code>, а не число.</p>
-<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:1: error: mismatched operand types 'bool' and 'i64'
+<p>Chains of comparisons like <code>1 &lt; 2 &lt; 3</code> do not work: the result of <code>1 &lt; 2</code> is a <code>bool</code>, not a number.</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:1: error: mismatched operand types 'bool' and 'i64'
     1 | void main() { println(1 &lt; 2 &lt; 3);
       |                             ^</code></pre></div></div>
-<p>Сравниваются также enum-значения и указатели:</p>
+<p>Enum values and pointers can be compared too:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">enum</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Color</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Red</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Green</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -81,83 +81,83 @@ true true</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Green</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Red</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true true
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true true
 true</code></pre></div></div>
-<p>Для структур <code>==</code> не определён: сравнивайте поля вручную.</p>
-<h2 id="логика"><a class="anchor" href="#логика">#</a>Логика</h2>
-<p><code>&amp;&amp;</code> (и), <code>||</code> (или), <code>!</code> (не). Операнды обязаны быть <code>bool</code>, числа в роли условия не принимаются.</p>
-<p>Вычисление <strong>ленивое</strong>: правая часть выполняется, только если нужна для результата.</p>
+<p><code>==</code> is not defined for structs: compare the fields by hand.</p>
+<h2 id="logic"><a class="anchor" href="#logic">#</a>Logic</h2>
+<p><code>&amp;&amp;</code> (and), <code>||</code> (or), <code>!</code> (not). The operands must be <code>bool</code>; numbers are not accepted as conditions.</p>
+<p>Evaluation is <strong>lazy</strong>: the right-hand side runs only if it is needed for the result.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">bool </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">bool</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> v) {</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"вызван {name}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"called {name}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> v;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> false</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"первый"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ||</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"второй"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"третий"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">false</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> false</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"first"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ||</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"second"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> noisy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"third"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">false</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, b, c);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>вызван третий
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>called third
 false true false</code></pre></div></div>
-<p>Благодаря этому можно писать защиту и проверку в одном условии:</p>
+<p>This lets you write a guard and a check in one condition:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s.len </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s[i] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 'x'</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) {</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"нашли"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"found"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    } </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">else</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"нет, но и ошибки нет"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"no, but no error either"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>нет, но и ошибки нет</code></pre></div></div>
-<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:1: error: condition must be bool, got 'i64'
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>no, but no error either</code></pre></div></div>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:1: error: condition must be bool, got 'i64'
     1 | void main() { println(!5);
       |                       ^</code></pre></div></div>
-<h2 id="побитовые-операторы"><a class="anchor" href="#побитовые-операторы">#</a>Побитовые операторы</h2>
+<h2 id="bitwise-operators"><a class="anchor" href="#bitwise-operators">#</a>Bitwise operators</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Оператор</th>
-<th>Действие</th>
+<th>Operator</th>
+<th>Action</th>
 </tr>
 </thead><tbody><tr>
 <td><code>&amp;</code></td>
-<td>и</td>
+<td>and</td>
 </tr>
 <tr>
 <td><code>|</code></td>
-<td>или</td>
+<td>or</td>
 </tr>
 <tr>
 <td><code>^</code></td>
-<td>исключающее или</td>
+<td>exclusive or</td>
 </tr>
 <tr>
 <td><code>~x</code></td>
-<td>побитовое отрицание</td>
+<td>bitwise not</td>
 </tr>
 <tr>
 <td><code>&lt;&lt;</code> <code>&gt;&gt;</code></td>
-<td>сдвиги</td>
+<td>shifts</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> |</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ^</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">~</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;&#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0xff</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> >></span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> >></span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u64</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> >></span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1 7 6 -6
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1 7 6 -6
 16 15
 -3 3</code></pre></div></div>
-<p>Сдвиг вправо для знаковых — арифметический (знак сохраняется), для беззнаковых — логический.</p>
-<blockquote class="callout note"><p><strong>Примечание.</strong> В отличие от C, побитовые <code>&amp;</code>, <code>|</code>, <code>^</code> привязаны <strong>сильнее</strong> сравнений. Выражение <code>x &amp; 1 == 0</code> читается как <code>(x &amp; 1) == 0</code>, скобки не нужны.</p>
+<p>A right shift is arithmetic for signed types (the sign is kept) and logical for unsigned ones.</p>
+<blockquote class="callout note"><p><strong>Note:</strong> unlike C, the bitwise <code>&amp;</code>, <code>|</code>, <code>^</code> bind <strong>tighter</strong> than comparisons. The expression <code>x &amp; 1 == 0</code> reads as <code>(x &amp; 1) == 0</code>, and no parentheses are needed.</p>
 </blockquote>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 6</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"чётное"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"even"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> flags </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0b1010</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(flags </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0b0010</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> !=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, flags </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0b0100</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> !=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>чётное
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>even
 true false</code></pre></div></div>
-<h2 id="присваивание"><a class="anchor" href="#присваивание">#</a>Присваивание</h2>
-<p><code>=</code> кладёт значение в переменную, поле, элемент массива или по указателю. Присваивание — оператор, а не выражение: <code>a = b = 0</code> написать нельзя.</p>
-<p>Составные формы: <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>|=</code> <code>&amp;=</code> <code>^=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code>.</p>
+<h2 id="assignment"><a class="anchor" href="#assignment">#</a>Assignment</h2>
+<p><code>=</code> puts a value into a variable, a field, an array element or the target of a pointer. Assignment is a statement, not an expression: you cannot write <code>a = b = 0</code>.</p>
+<p>The compound forms: <code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>|=</code> <code>&amp;=</code> <code>^=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
@@ -169,74 +169,74 @@ true false</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;&#x3C;=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    x</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">++</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(x);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>21</code></pre></div></div>
-<p><code>x++</code> и <code>x--</code> тоже есть, но это оператор, а не выражение: <code>y = x++</code> написать нельзя. Одновременного присваивания <code>a, b = b, a</code> нет — используйте временную переменную или <code>swap</code>:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>21</code></pre></div></div>
+<p><code>x++</code> and <code>x--</code> exist too, but they are statements, not expressions: you cannot write <code>y = x++</code>. There is no simultaneous assignment <code>a, b = b, a</code>; use a temporary variable or <code>swap</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    swap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">a, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">b);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, b);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>2 1</code></pre></div></div>
-<p><code>_ = выражение</code> вычисляет выражение и отбрасывает результат. Вызвать функцию, вернувшую число, и не использовать результат можно и без <code>_</code>. А вот <code>!T</code> без <code>_</code> не проходит: <code>_ =</code> показывает, что ошибку вы игнорируете сознательно.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>2 1</code></pre></div></div>
+<p><code>_ = expression</code> evaluates the expression and discards the result. You can call a function that returns a number and ignore the result even without <code>_</code>. But a <code>!T</code> does not pass without <code>_</code>: <code>_ =</code> shows that you are ignoring the error on purpose.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">load</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 42</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> load</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"результат отброшен"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>результат отброшен</code></pre></div></div>
-<p>Игнорировать <code>!T</code> без <code>_</code>, <code>?</code> или <code>catch</code> нельзя: <a href="errors-and-optionals.html#нельзя-игнорировать-ошибку">ошибка компиляции</a>.</p>
-<h2 id="унарные-операторы"><a class="anchor" href="#унарные-операторы">#</a>Унарные операторы</h2>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"result discarded"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>result discarded</code></pre></div></div>
+<p>Ignoring a <code>!T</code> without <code>_</code>, <code>?</code> or <code>catch</code> is a <a href="errors-and-optionals.html#you-cannot-ignore-an-error">compile error</a>.</p>
+<h2 id="unary-operators"><a class="anchor" href="#unary-operators">#</a>Unary operators</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Запись</th>
-<th>Смысл</th>
+<th>Form</th>
+<th>Meaning</th>
 </tr>
 </thead><tbody><tr>
 <td><code>-x</code></td>
-<td>смена знака</td>
+<td>negation</td>
 </tr>
 <tr>
 <td><code>!b</code></td>
-<td>логическое «не»</td>
+<td>logical not</td>
 </tr>
 <tr>
 <td><code>~x</code></td>
-<td>побитовое «не»</td>
+<td>bitwise not</td>
 </tr>
 <tr>
 <td><code>&amp;x</code></td>
-<td>адрес переменной</td>
+<td>the address of a variable</td>
 </tr>
 <tr>
 <td><code>*p</code></td>
-<td>значение по адресу</td>
+<td>the value at an address</td>
 </tr>
 </tbody></table></div>
-<p><code>&amp;</code> берёт адрес только у того, что лежит в памяти: переменной, поля, элемента. Результат <code>&amp;x</code> имеет тип <code>T*</code>.</p>
-<h2 id="постфиксные-формы"><a class="anchor" href="#постфиксные-формы">#</a>Постфиксные формы</h2>
-<p>Эти операции стоят сразу после выражения и связывают сильнее всего:</p>
+<p><code>&amp;</code> takes the address only of something that lives in memory: a variable, a field, an element. The result of <code>&amp;x</code> has the type <code>T*</code>.</p>
+<h2 id="postfix-forms"><a class="anchor" href="#postfix-forms">#</a>Postfix forms</h2>
+<p>These operations stand right after an expression and bind the tightest:</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Запись</th>
-<th>Смысл</th>
+<th>Form</th>
+<th>Meaning</th>
 </tr>
 </thead><tbody><tr>
 <td><code>f(a, b)</code></td>
-<td>вызов</td>
+<td>call</td>
 </tr>
 <tr>
 <td><code>x[i]</code></td>
-<td>индекс</td>
+<td>index</td>
 </tr>
 <tr>
 <td><code>x[a..b]</code></td>
-<td>срез</td>
+<td>slice</td>
 </tr>
 <tr>
 <td><code>x.name</code></td>
-<td>поле или метод (<code>-&gt;</code> и <code>::</code> значат то же самое)</td>
+<td>a field or a method (<code>-&gt;</code> and <code>::</code> mean the same)</td>
 </tr>
 <tr>
 <td><code>x?</code></td>
-<td>пробросить ошибку</td>
+<td>propagate the error</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Box</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] items; }</span></span>
@@ -246,31 +246,31 @@ true false</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b.items[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], b.items[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], b.items.len);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">b;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p.items[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>20 [10, 20] 3
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>20 [10, 20] 3
 30</code></pre></div></div>
-<p>Цепочки <code>a.b.c(1)[2].d</code> читаются слева направо.</p>
-<h2 id="as-и-приоритет"><a class="anchor" href="#as-и-приоритет">#</a><code>as</code> и приоритет</h2>
-<p><code>as</code> приводит значение к другому типу (см. <a href="types.html#преобразования-as">типы</a>). Он связывает слабее унарных операторов, но сильнее арифметики:</p>
+<p>Chains like <code>a.b.c(1)[2].d</code> are read left to right.</p>
+<h2 id="as-and-precedence"><a class="anchor" href="#as-and-precedence">#</a><code>as</code> and precedence</h2>
+<p><code>as</code> converts a value to another type (see <a href="types.html#conversions-as">types</a>). It binds more weakly than the unary operators but more strongly than arithmetic:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>-2.5
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>-2.5
 2.5
 3</code></pre></div></div>
-<p>Здесь <code>-a as f64</code> значит <code>(-a) as f64</code>, а <code>1 + 2 as f64</code> — <code>1 + (2 as f64)</code>, поэтому результат дробный.</p>
-<p>Для указателя: <code>&amp;x as *u8</code> значит <code>(&amp;x) as *u8</code>.</p>
-<blockquote class="callout gotcha"><p><strong>Ловушка.</strong> С <code>catch</code> и <code>orelse</code> пишите скобки: <code>(f() catch 0) as i64</code>. Без них <code>catch</code> забирает всё правее себя.</p>
+<p>Here <code>-a as f64</code> means <code>(-a) as f64</code>, and <code>1 + 2 as f64</code> means <code>1 + (2 as f64)</code>, so the result is a float.</p>
+<p>For a pointer: <code>&amp;x as *u8</code> means <code>(&amp;x) as *u8</code>.</p>
+<blockquote class="callout gotcha"><p><strong>Gotcha:</strong> with <code>catch</code> and <code>orelse</code> write parentheses: <code>(f() catch 0) as i64</code>. Without them <code>catch</code> takes everything to its right.</p>
 </blockquote>
-<h2 id="приоритет"><a class="anchor" href="#приоритет">#</a>Приоритет</h2>
-<p>От самого слабого к самому сильному:</p>
+<h2 id="precedence"><a class="anchor" href="#precedence">#</a>Precedence</h2>
+<p>From the weakest to the strongest:</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Уровень</th>
-<th>Операторы</th>
+<th>Level</th>
+<th>Operators</th>
 </tr>
 </thead><tbody><tr>
-<td>1 (слабейший)</td>
+<td>1 (weakest)</td>
 <td><code>catch</code>, <code>orelse</code></td>
 </tr>
 <tr>
@@ -315,28 +315,28 @@ true false</code></pre></div></div>
 </tr>
 <tr>
 <td>12</td>
-<td>унарные <code>-</code> <code>!</code> <code>~</code> <code>&amp;</code> <code>*</code></td>
+<td>unary <code>-</code> <code>!</code> <code>~</code> <code>&amp;</code> <code>*</code></td>
 </tr>
 <tr>
-<td>13 (сильнейший)</td>
-<td>постфиксные: <code>()</code> <code>[]</code> <code>[a..b]</code> <code>.f</code> <code>-&gt;f</code> <code>::f</code> <code>?</code></td>
+<td>13 (strongest)</td>
+<td>postfix: <code>()</code> <code>[]</code> <code>[a..b]</code> <code>.f</code> <code>-&gt;f</code> <code>::f</code> <code>?</code></td>
 </tr>
 </tbody></table></div>
-<p>Все бинарные операторы левоассоциативны: <code>10 - 3 - 2</code> — это <code>(10 - 3) - 2</code>.</p>
+<p>All binary operators are left-associative: <code>10 - 3 - 2</code> is <code>(10 - 3) - 2</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, (</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">10</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x3C;&#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 3</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> %</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">true</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ||</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> false</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> false</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>7 9
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>7 9
 5
 8
 2
 true</code></pre></div></div>
-<p><code>1 &lt;&lt; 2 + 1</code> — это <code>1 &lt;&lt; (2 + 1)</code>, потому что <code>+</code> сильнее сдвига. Когда сомневаетесь, ставьте скобки: они бесплатны.</p>
-<h3 id="catch-и-orelse-забирают-вс-правее"><a class="anchor" href="#catch-и-orelse-забирают-вс-правее">#</a><code>catch</code> и <code>orelse</code> забирают всё правее</h3>
-<p><code>catch</code> и <code>orelse</code> — самые слабые операторы, поэтому их правая часть — всё выражение до конца:</p>
+<p><code>1 &lt;&lt; 2 + 1</code> is <code>1 &lt;&lt; (2 + 1)</code>, because <code>+</code> is stronger than a shift. When in doubt, add parentheses: they are free.</p>
+<h3 id="catch-and-orelse-take-everything-to-the-right"><a class="anchor" href="#catch-and-orelse-take-everything-to-the-right">#</a><code>catch</code> and <code>orelse</code> take everything to the right</h3>
+<p><code>catch</code> and <code>orelse</code> are the weakest operators, so their right-hand side is the whole expression to the end:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> error.Neg</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n;</span></span>
@@ -351,12 +351,12 @@ true</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">g</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">orelse</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">((</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>5
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>5
 5
 105</code></pre></div></div>
-<p>Первые две строки печатают <code>5</code>: успешный результат слева остаётся как есть, а <code>0 + 100</code> — запасное значение, которое не понадобилось. Если хотели прибавить 100 к результату, нужны скобки (третья строка).</p>
-<h2 id="is-проверка-варианта"><a class="anchor" href="#is-проверка-варианта">#</a><code>is</code> — проверка варианта</h2>
-<p><code>x is .Вариант</code> дает <code>bool</code>: проверяет enum или тег union.</p>
+<p>The first two lines print <code>5</code>: a successful result on the left stays as it is, and <code>0 + 100</code> is the fallback value that was not needed. If you wanted to add 100 to the result, you need parentheses (the third line).</p>
+<h2 id="is-testing-a-variant"><a class="anchor" href="#is-testing-a-variant">#</a><code>is</code>: testing a variant</h2>
+<p><code>x is .Variant</code> gives a <code>bool</code>: it tests an enum or the tag of a union.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">enum</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> State</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Idle</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Busy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">union</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Msg</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
@@ -369,17 +369,17 @@ true</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Msg</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> m </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Quit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">is</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Busy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">is</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Idle</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(m </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">is</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Quit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, m </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">is</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Text</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true false
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true false
 true false</code></pre></div></div>
-<p>Для извлечения содержимого используйте <a href="control-flow.html#match"><code>match</code></a>.</p>
-<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<p>To extract the contents, use <a href="control-flow.html#match"><code>match</code></a>.</p>
+<h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>
 <ul>
-<li>Условия и циклы: <a href="control-flow.html">управление потоком</a>.</li>
-<li>Как <code>?</code>, <code>catch</code> и <code>orelse</code> работают с ошибками: <a href="errors-and-optionals.html">ошибки и опциональные значения</a>.</li>
+<li>Conditions and loops: <a href="control-flow.html">control flow</a>.</li>
+<li>How <code>?</code>, <code>catch</code> and <code>orelse</code> work with errors: <a href="errors-and-optionals.html">errors and optional values</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="variables.html"><small>Назад</small>Переменные и константы</a><a class="next" href="control-flow.html"><small>Дальше</small>Управление потоком</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#арифметика">Арифметика</a><a class="l2" href="#сравнения">Сравнения</a><a class="l2" href="#логика">Логика</a><a class="l2" href="#побитовые-операторы">Побитовые операторы</a><a class="l2" href="#присваивание">Присваивание</a><a class="l2" href="#унарные-операторы">Унарные операторы</a><a class="l2" href="#постфиксные-формы">Постфиксные формы</a><a class="l2" href="#as-и-приоритет">as и приоритет</a><a class="l2" href="#приоритет">Приоритет</a><a class="l3" href="#catch-и-orelse-забирают-вс-правее">catch и orelse забирают всё правее</a><a class="l2" href="#is-проверка-варианта">is — проверка варианта</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+<div class="pager"><a class="prev" href="variables.html"><small>Previous</small>Variables and constants</a><a class="next" href="control-flow.html"><small>Next</small>Control flow</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#arithmetic">Arithmetic</a><a class="l2" href="#comparisons">Comparisons</a><a class="l2" href="#logic">Logic</a><a class="l2" href="#bitwise-operators">Bitwise operators</a><a class="l2" href="#assignment">Assignment</a><a class="l2" href="#unary-operators">Unary operators</a><a class="l2" href="#postfix-forms">Postfix forms</a><a class="l2" href="#as-and-precedence">as and precedence</a><a class="l2" href="#precedence">Precedence</a><a class="l3" href="#catch-and-orelse-take-everything-to-the-right">catch and orelse take everything to the right</a><a class="l2" href="#is-testing-a-variant">is: testing a variant</a><a class="l2" href="#what-next">What next</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

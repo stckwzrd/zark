@@ -14,6 +14,10 @@ const CACHE_FILE = process.env.DOCS_CACHE || path.join(__dirname, ".cache.json")
 const ONLY = process.env.DOCS_PAGES ? process.env.DOCS_PAGES.split(",") : null
 const cache = fs.existsSync(CACHE_FILE) ? JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) : {}
 const SITE = "Vibe"
+const LANGS = [
+  { code: "en", pages: "pages", dir: "", up: "", other: "ru", switchTo: "Русский", ui: { out: "Output", errOut: "Compiler output", testOut: "Test output", exit: "exit code", toc: "On this page", prev: "Previous", next: "Next", desc: "A guide to the Vibe programming language", search: "Search the guide (/)", nothing: "Nothing found", copy: "Copy", copied: "Copied", menu: "Menu", theme: "Toggle theme" } },
+  { code: "ru", pages: "pages-ru", dir: "ru", up: "../", other: "en", switchTo: "English", ui: { out: "Вывод", errOut: "Вывод компилятора", testOut: "Вывод тестов", exit: "код выхода", toc: "На этой странице", prev: "Назад", next: "Дальше", desc: "Руководство по языку программирования Vibe", search: "Поиск по руководству (/)", nothing: "Ничего не найдено", copy: "Копировать", copied: "Скопировано", menu: "Меню", theme: "Сменить тему" } },
+]
 const failures = []
 
 function esc(s) {
@@ -83,6 +87,28 @@ async function main() {
     langs: [{ ...grammar, name: "vibe" }, "sh", "c", "cpp", "json", "text", "zig", "rust", "go", "python", "javascript"],
   })
 
+  fs.rmSync(OUT, { recursive: true, force: true })
+  fs.mkdirSync(path.join(OUT, "assets"), { recursive: true })
+  fs.copyFileSync(path.join(__dirname, "style.css"), path.join(OUT, "assets", "style.css"))
+  fs.copyFileSync(path.join(__dirname, "site.js"), path.join(OUT, "assets", "site.js"))
+  fs.writeFileSync(path.join(OUT, ".nojekyll"), "")
+  fs.mkdirSync(TMP, { recursive: true })
+  for (const L of LANGS) {
+    if (fs.existsSync(path.join(__dirname, L.pages))) await buildSite(hl, L)
+  }
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache))
+  fs.rmSync(TMP, { recursive: true, force: true })
+  if (failures.length) {
+    console.log("PROBLEMS:")
+    for (const f of failures) console.log("  " + f)
+    process.exitCode = 1
+  }
+}
+
+async function buildSite(hl, L) {
+  const PAGES = path.join(__dirname, L.pages)
+  const OUTD = path.join(OUT, L.dir)
+  const U = L.ui
   const pages = []
   for (const f of fs.readdirSync(PAGES).filter((n) => n.endsWith(".md")).sort()) {
     const { meta, body } = frontMatter(fs.readFileSync(path.join(PAGES, f), "utf8"))
@@ -90,13 +116,7 @@ async function main() {
   }
   pages.sort((a, b) => a.order - b.order)
 
-  fs.rmSync(OUT, { recursive: true, force: true })
-  fs.mkdirSync(path.join(OUT, "assets"), { recursive: true })
-  fs.copyFileSync(path.join(__dirname, "style.css"), path.join(OUT, "assets", "style.css"))
-  fs.copyFileSync(path.join(__dirname, "site.js"), path.join(OUT, "assets", "site.js"))
-  fs.writeFileSync(path.join(OUT, ".nojekyll"), "")
-  fs.mkdirSync(TMP, { recursive: true })
-
+  fs.mkdirSync(OUTD, { recursive: true })
   const index = []
   for (const p of pages) {
     const headings = []
@@ -138,9 +158,9 @@ async function main() {
         const withArgs = opts.with ? opts.with.split(",") : []
         const res = runVibe(p.name, lineNo, src, mode, extraFiles, withArgs.filter((x) => x !== "allow-fail"))
         extraFiles = {}
-        const label = mode === "error" ? "Вывод компилятора" : mode === "test" ? "Вывод тестов" : "Вывод"
+        const label = mode === "error" ? U.errOut : mode === "test" ? U.testOut : U.out
         let tail = ""
-        if (res.code !== 0 && mode !== "error" && mode !== "test") tail = `<span class="exit">код выхода ${res.code}</span>`
+        if (res.code !== 0 && mode !== "error" && mode !== "test") tail = `<span class="exit">${U.exit} ${res.code}</span>`
         if (mode === "run" && res.code !== 0 && !flags.has("exit") && !flags.has("panic")) failures.push(`${p.name} ${lineNo}: exit ${res.code}: ${res.out.split("\n")[0]}`)
         if (mode === "test" && res.code !== 0 && !flags.has("fails")) failures.push(`${p.name} ${lineNo}: tests failed`)
         return `<div class="example">${codeHtml(hl, code, "vibe", opts.title || "")}<div class="out ${mode}"><div class="out-head"><span>${label}</span>${tail}</div><pre><code>${esc(res.out)}</code></pre></div></div>\n`
@@ -175,19 +195,19 @@ async function main() {
     const i = flat.indexOf(p)
     const prev = i > 0 ? flat[i - 1] : p.name !== "index" ? pages[0] : null
     const next = i >= 0 && i + 1 < flat.length ? flat[i + 1] : p.name === "index" ? flat[0] : null
-    const toc = p.headings.length ? `<aside class="toc"><div class="toc-title">На этой странице</div>` + p.headings.map((h) => `<a class="l${h.level}" href="#${h.id}">${esc(h.text)}</a>`).join("") + `</aside>` : ""
-    const pager = `<div class="pager">${prev ? `<a class="prev" href="${prev.name}.html"><small>Назад</small>${esc(prev.title)}</a>` : "<span></span>"}${next ? `<a class="next" href="${next.name}.html"><small>Дальше</small>${esc(next.title)}</a>` : "<span></span>"}</div>`
+    const toc = p.headings.length ? `<aside class="toc"><div class="toc-title">${U.toc}</div>` + p.headings.map((h) => `<a class="l${h.level}" href="#${h.id}">${esc(h.text)}</a>`).join("") + `</aside>` : ""
+    const pager = `<div class="pager">${prev ? `<a class="prev" href="${prev.name}.html"><small>${U.prev}</small>${esc(prev.title)}</a>` : "<span></span>"}${next ? `<a class="next" href="${next.name}.html"><small>${U.next}</small>${esc(next.title)}</a>` : "<span></span>"}</div>`
     const page = `<!doctype html>
-<html lang="ru">
+<html lang="${L.code}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(p.title)} · ${SITE}</title>
-<meta name="description" content="${esc(p.meta.description || "Руководство по языку программирования Vibe")}">
-<link rel="stylesheet" href="assets/style.css">
+<meta name="description" content="${esc(p.meta.description || U.desc)}">
+<link rel="stylesheet" href="${L.up}assets/style.css">
 </head>
 <body class="${p.name === "index" ? "home" : ""}">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">${SITE}</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="${U.menu}">☰</button><a class="logo" href="index.html">${SITE}</a><div class="search"><input id="q" type="search" placeholder="${U.search}" autocomplete="off"><div id="results"></div></div><a class="lang" href="${L.other === "ru" ? "ru/" : "../"}${p.name}.html">${L.switchTo}</a><button id="theme" aria-label="${U.theme}">◐</button></header>
 <div class="layout">
 ${nav(p.name)}
 <main><article>
@@ -196,21 +216,14 @@ ${p.html}
 ${pager}
 </article>${toc}</main>
 </div>
-<script src="assets/site.js"></script>
+<script src="${L.up}assets/site.js"></script>
 </body>
 </html>
 `
-    fs.writeFileSync(path.join(OUT, p.name + ".html"), page)
+    fs.writeFileSync(path.join(OUTD, p.name + ".html"), page)
   }
-  fs.writeFileSync(path.join(OUT, "search-index.json"), JSON.stringify(index))
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache))
-  fs.rmSync(TMP, { recursive: true, force: true })
-  console.log(`built ${pages.length} pages`)
-  if (failures.length) {
-    console.log("PROBLEMS:")
-    for (const f of failures) console.log("  " + f)
-    process.exitCode = 1
-  }
+  fs.writeFileSync(path.join(OUTD, "search-index.json"), JSON.stringify(index))
+  console.log(`built ${pages.length} pages (${L.code})`)
 }
 
 function codeHtml(hl, code, lang, title) {

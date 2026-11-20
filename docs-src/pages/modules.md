@@ -1,15 +1,15 @@
 ---
-title: Модули и импорт
+title: Modules and imports
 order: 19
-section: Язык
-description: Как разбить программу на файлы: import, import as, пространства имён, пути, циклы и правила видимости в Vibe
+section: Language
+description: How to split a program into files: import, import as, namespaces, paths, cycles and the visibility rules in Vibe
 ---
 
-Программа может состоять из нескольких файлов. Один файл подключает другой через `import`. Здесь описано, что именно подключается, как задаются имена и какие правила проверяет компилятор.
+A program can consist of several files. One file brings in another through `import`. This page describes what exactly is brought in, how names are assigned and which rules the compiler checks.
 
-## Простой импорт
+## A plain import
 
-Допустим, рядом лежат два файла. Первый — `shapes.vibe`:
+Suppose two files lie side by side. The first is `shapes.vibe`:
 
 ```vibe file=shapes.vibe
 struct Rect { i64 w; i64 h; }
@@ -21,7 +21,7 @@ i64 area(Rect r) {
 const auto SIDES = 4;
 ```
 
-Второй — главный файл. Импорт пишется в начале:
+The second is the main file. The import is written at the top:
 
 ```vibe run
 import "shapes.vibe";
@@ -32,19 +32,19 @@ void main() {
 }
 ```
 
-Простой `import "файл.vibe";` кладёт **все** имена файла (функции, структуры, union, enum, константы, глобальные переменные, псевдонимы типов) в общее пространство имён. Они используются без префикса.
+A plain `import "file.vibe";` puts **all** the names of the file (functions, structs, unions, enums, constants, global variables, type aliases) into the common namespace. They are used without a prefix.
 
-Свойства импорта:
+Properties of an import:
 
-- Путь — строка, **относительно файла, в котором написан `import`**, а не относительно места запуска.
-- Каждый файл загружается **один раз**, сколько бы раз и откуда его ни импортировали.
-- Импорты можно ставить в любом месте верхнего уровня, но по соглашению их пишут в начале.
-- Подкаталоги допустимы: `import "lib/util.vibe";`.
-- Циклические импорты допустимы: файл загружается один раз, поэтому цикл просто прекращается.
+- The path is a string, **relative to the file that contains the `import`**, not to the place where you run the compiler.
+- Each file is loaded **once**, however many times and from wherever it is imported.
+- Imports can be put anywhere at the top level, but by convention they are written at the start.
+- Subdirectories are allowed: `import "lib/util.vibe";`.
+- Cyclic imports are allowed: a file is loaded once, so the cycle simply stops.
 
-## `import ... as имя;`
+## `import ... as name;`
 
-Если имена из файла могут пересечься с вашими, импортируйте с псевдонимом. Тогда все его имена получают префикс `имя::`:
+If the names from a file might collide with yours, import it with an alias. Then all its names get the prefix `name::`:
 
 ```vibe file=geometry.vibe
 struct Point {
@@ -82,18 +82,18 @@ void main() {
 }
 ```
 
-Псевдоним ставится перед любым членом файла: функцией, типом, константой, глобальной переменной. Формат печати типов тоже показывает префикс (`geo::Point{ ... }` в сообщении ошибки или при печати структуры).
+The alias is put before any member of the file: a function, a type, a constant, a global variable. The printed form of types also shows the prefix (`geo::Point{ ... }` in an error message or when printing a struct).
 
-Внутри самого файла его имена работают **без префикса**: переименование видят только те, кто импортирует.
+Inside the file itself its names work **without a prefix**: the renaming is seen only by those who import it.
 
-Методы и литералы вариантов (`.Y`, `.Yes(5)`) не требуют префикса: они выводятся из типа.
+Methods and variant literals (`.Y`, `.Yes(5)`) do not need a prefix: they are inferred from the type.
 
-## Один и тот же файл — под одним именем
+## One file, one name
 
-Правила, которые проверяет компилятор:
+The rules the compiler checks:
 
-1. Файл подключается к программе под **одним** именем. Нельзя подключить `util.vibe` как `a` в одном месте и как `b` в другом.
-2. Имя принадлежит одному файлу.
+1. A file is attached to the program under **one** name. You cannot attach `util.vibe` as `a` in one place and as `b` in another.
+2. A name belongs to one file.
 
 ```vibe file=util.vibe
 i64 tool() { return 1; }
@@ -106,9 +106,9 @@ import "util.vibe" as b;
 void main() {}
 ```
 
-## Простой импорт «протекает»
+## A plain import "leaks"
 
-Если файл `util.vibe` сам делает **простой** `import "base.vibe"`, то имена из `base.vibe` оказываются в общем пространстве имён и становятся видны везде, в том числе в главном файле:
+If the file `util.vibe` itself does a **plain** `import "base.vibe"`, the names from `base.vibe` end up in the common namespace and become visible everywhere, including the main file:
 
 ```vibe file=lib/base.vibe
 i64 base_val() { return 41; }
@@ -129,13 +129,13 @@ void main() {
 }
 ```
 
-Имена из `util.vibe` получили префикс `u::`, а `base_val` из вложенного простого импорта — нет. Если хотите изолированный модуль, импортируйте всё через `as`, и тогда префикс везде будет явным.
+The names from `util.vibe` got the prefix `u::`, but `base_val` from the nested plain import did not. If you want an isolated module, import everything through `as`, and then the prefix is explicit everywhere.
 
-## Пути
+## Paths
 
-Путь в `import` читается от каталога **текущего файла**. Поэтому `lib/util.vibe`, подключая `"base.vibe"`, ищет его рядом с собой, в `lib/`, а не рядом с главным файлом.
+The path in `import` is read from the directory of the **current file**. So `lib/util.vibe`, bringing in `"base.vibe"`, looks for it next to itself, in `lib/`, not next to the main file.
 
-Отсутствующий файл — ошибка при компиляции:
+A missing file is a compile-time error:
 
 ```vibe error
 import "missing.vibe" as m;
@@ -143,13 +143,13 @@ import "missing.vibe" as m;
 void main() {}
 ```
 
-## `extern` и `export` не получают префикс
+## `extern` and `export` get no prefix
 
-Имена `extern` и `export` — это символы C, у них не может быть префикса. Они всегда глобальные, даже при `import ... as`. Подробнее — на странице [взаимодействие с C](c-interop.md).
+The names of `extern` and `export` are C symbols, and they cannot have a prefix. They are always global, even with `import ... as`. More on the page [interoperating with C](c-interop.md).
 
-## Конфликты имён
+## Name conflicts
 
-Если два простых импорта определяют одно имя, компилятор останавливается с сообщением о дубликате:
+If two plain imports define the same name, the compiler stops with a duplicate message:
 
 ```vibe file=one.vibe
 i64 helper() { return 1; }
@@ -168,41 +168,41 @@ void main() {
 }
 ```
 
-Решение: импортируйте оба с `as` или переименуйте функции.
+The solution: import both with `as`, or rename the functions.
 
-Ваши собственные имена и имена стандартной библиотеки тоже не должны совпадать: заводить свою `max` или `sort` нельзя (см. [справочник](stdlib.md)).
+Your own names and the names of the standard library must not coincide either: you cannot declare your own `max` or `sort` (see the [reference](stdlib.md)).
 
-## Как устроено разбиение на файлы
+## How splitting into files is organized
 
-Нет «пакетов» и файла манифеста. Модуль — это просто файл. Для небольшой программы хватает такой схемы:
+There are no "packages" and no manifest file. A module is simply a file. For a small program this layout is enough:
 
 ```text
 project/
-├── main.vibe        главный файл, содержит main()
-├── model.vibe       структуры и их методы
-├── parse.vibe       разбор входных данных
-└── util.vibe        мелкие помощники
+├── main.vibe        the main file, contains main()
+├── model.vibe       structs and their methods
+├── parse.vibe       parsing the input
+└── util.vibe        small helpers
 ```
 
-Главный файл подключает остальные:
+The main file brings in the others:
 
 ```text
-import "model.vibe" as model
-import "parse.vibe" as parse
-import "util.vibe"
+import "model.vibe" as model;
+import "parse.vibe" as parse;
+import "util.vibe";
 ```
 
-Запуск: `vibe run main.vibe`. Остальные файлы подтягиваются сами.
+Run it with `vibe run main.vibe`. The other files are pulled in by themselves.
 
-## Только достижимое компилируется
+## Only what is reachable is compiled
 
-Компилятор берёт из импортированных файлов только те функции, до которых можно добраться из `main`. Лишний импорт не раздувает бинарник, а неиспользуемая функция не проверяется на типы (если это не дженерик, ошибки в нём проявятся при первом использовании).
+From the imported files the compiler takes only the functions that can be reached from `main`. An extra import does not bloat the binary, and an unused function is not type-checked (unless it is a generic, whose errors show up on first use).
 
 ```vibe file=maybe.vibe
 i64 used() { return 1; }
 
 i64 never_called() {
-    return "это не число";
+    return "this is not a number";
 }
 ```
 
@@ -214,9 +214,9 @@ void main() {
 }
 ```
 
-> **Примечание.** Ошибка в `never_called` не обнаружена, пока функцию не вызовут. Если хотите проверку всего кода, вызывайте функции из тестов (см. [тестирование](testing.md)).
+> **Note:** the error in `never_called` is not detected until the function is called. If you want the whole code checked, call the functions from tests (see [testing](testing.md)).
 
-## Что дальше
+## What next
 
-- Как подключать C-файлы: [взаимодействие с C](c-interop.md).
-- Как проверять код по частям: [тестирование](testing.md).
+- How to bring in C files: [interoperating with C](c-interop.md).
+- How to check code in parts: [testing](testing.md).

@@ -1,113 +1,113 @@
 ---
-title: Тестирование
+title: Testing
 order: 31
-section: Интероп и инструменты
-description: Блоки test, assert, vibe test, как тестировать ошибки и память, организация тестов в Vibe
+section: Interop and tools
+description: test blocks, assert, vibe test, how to test errors and memory, and organizing tests in Vibe
 ---
 
-Тесты встроены в язык: специальный блок `test` пишется рядом с кодом, а команда `vibe test` запускает их. Отдельных библиотек и файлов конфигурации не нужно.
+Tests are built into the language: a special `test` block is written next to the code, and the command `vibe test` runs them. No separate libraries or configuration files are needed.
 
-## Первый тест
+## The first test
 
 ```vibe test
 i64 add(i64 a, i64 b) {
     return a + b;
 }
 
-test "складывает" {
+test "adds" {
     assert(add(2, 3) == 5);
 }
 
-test "ноль нейтрален" {
+test "zero is neutral" {
     assert(add(7, 0) == 7);
 }
 ```
 
-Запускается командой:
+Run it with the command:
 
 ```sh
 vibe test main.vibe
 ```
 
-`test "имя" { ... }` — объявление верхнего уровня. Внутри — обычный код. Тест — это функция, возвращающая `!void`, поэтому в нём работает `?`.
+`test "name" { ... }` is a top-level declaration. Inside is ordinary code. A test is a function that returns `!void`, so `?` works in it.
 
-Тест **проходит**, если блок дошёл до конца. Он **падает**, если сработал `assert`, `panic` или `?` получил ошибку.
+A test **passes** if the block reaches its end. It **fails** if an `assert` or `panic` fires, or if `?` receives an error.
 
-## Что делает `vibe test`
+## What `vibe test` does
 
-1. Компилирует файл со всеми блоками `test` (и со всеми его импортами).
-2. Запускает каждый тест **в отдельном процессе**. Падение одного (даже аварийное) не ломает остальных.
-3. Печатает `ok` или `FAIL` по каждому и итог.
-4. Для упавших тестов показывает всё, что они напечатали.
-5. Возвращает код выхода 0, если упавших нет, и 1, если есть.
+1. Compiles the file with all the `test` blocks (and with all its imports).
+2. Runs each test **in a separate process**. The failure of one (even a crash) does not break the others.
+3. Prints `ok` or `FAIL` for each and a summary.
+4. For failed tests, shows everything they printed.
+5. Returns exit code 0 if nothing failed, and 1 if something did.
 
-Блоки `test` **игнорируются** при `vibe run` и `vibe build`. Файл с тестами остаётся обычной программой.
+`test` blocks are **ignored** by `vibe run` and `vibe build`. A file with tests remains an ordinary program.
 
-## Как выглядят падения
+## What failures look like
 
 ```vibe test fails
 i64 add(i64 a, i64 b) { return a + b; }
 !i64 parse(str s) { return parse_int(s); }
 
-test "проходит" {
+test "passes" {
     assert(add(1, 2) == 3);
 }
 
-test "ошибка через ?" {
+test "error through ?" {
     const auto n = parse("zz")?;
     assert(n == 0);
 }
 
-test "ложное утверждение" {
+test "false assertion" {
     assert(add(1, 1) == 3);
 }
 
-test "паника" {
-    panic("упало: {1 + 1}");
+test "panic" {
+    panic("failed: {1 + 1}");
 }
 
-test "вывод виден только у упавшего" {
-    println("эта строка не будет показана");
+test "output is shown only for a failed test" {
+    println("this line will not be shown");
     assert(true);
 }
 ```
 
-Каждое падение показывает причину:
+Each failure shows its reason:
 
-- `error: Имя` — `?` пробросил ошибку;
-- `assertion failed (файл:строка)` — условие в `assert` ложно;
-- `panic: сообщение (файл:строка)` — вызван `panic`.
+- `error: Name`: `?` propagated an error;
+- `assertion failed (file:line)`: the condition in `assert` is false;
+- `panic: message (file:line)`: `panic` was called.
 
-Вывод **прошедших** тестов скрыт: он нужен только, когда что-то сломалось.
+The output of **passed** tests is hidden: it is needed only when something is broken.
 
 ## `assert`
 
-`assert(условие)` проверяет `bool`. Если условие ложно, программа завершается с сообщением и местом. Работает не только в тестах, но и в обычном коде:
+`assert(condition)` checks a `bool`. If the condition is false, the program ends with a message and a location. It works not only in tests but in ordinary code too:
 
 ```vibe run panic
 void main() {
     const auto xs = [1, 2, 3];
     assert(xs.len == 3);
-    println("первое утверждение выполнено");
+    println("the first assertion held");
     assert(xs[0] == 2);
-    println("сюда не дойдём");
+    println("we will not get here");
 }
 ```
 
-У `assert` нет отдельного сообщения. Если нужен контекст, используйте `panic` с форматом:
+`assert` has no separate message. If you need context, use `panic` with a format:
 
 ```vibe run panic
 void main() {
     const auto got = 41;
     if (got != 42) {
-        panic("ожидали 42, получили {got}");
+        panic("expected 42, got {got}");
     }
 }
 ```
 
-## Тестирование ошибок
+## Testing errors
 
-Ожидаемая ошибка проверяется через `catch`:
+An expected error is checked with `catch`:
 
 ```vibe test
 !i64 parse(str s) {
@@ -115,7 +115,7 @@ void main() {
     return parse_int(s);
 }
 
-test "пустая строка — ошибка Empty" {
+test "an empty string is the Empty error" {
     const auto r = parse("") catch |e| {
         assert(e == error.Empty);
         return;
@@ -123,7 +123,7 @@ test "пустая строка — ошибка Empty" {
     assert(false);
 }
 
-test "неверное число" {
+test "an invalid number" {
     const auto r = parse("x") catch |e| {
         assert(e == error.InvalidNumber);
         return;
@@ -131,20 +131,20 @@ test "неверное число" {
     assert(false);
 }
 
-test "корректное число" {
+test "a valid number" {
     const auto n = parse(" 42 ")?;
     assert(n == 42);
 }
 ```
 
-Шаблон такой: `catch |e|` проверяет ошибку и выходит через `return` из теста. Если ошибки не было, управление дойдёт до `assert(false)`, и тест упадёт.
+The pattern is this: `catch |e|` checks the error and leaves the test through `return`. If there was no error, control reaches `assert(false)` and the test fails.
 
-## Тестирование с памятью
+## Testing with memory
 
-Тесты могут выделять память как обычный код. Заводите аллокатор внутри теста и освобождайте через `defer`:
+Tests can allocate memory like ordinary code. Create an allocator inside the test and free through `defer`:
 
 ```vibe test
-test "список" {
+test "list" {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
     xs.push(1)?;
@@ -153,7 +153,7 @@ test "список" {
     assert(xs.get(1) == 2);
 }
 
-test "арена и строки" {
+test "arena and strings" {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
     const auto a = arena.allocator();
@@ -161,7 +161,7 @@ test "арена и строки" {
     assert(s == "hello");
 }
 
-test "нехватка памяти — обычная ошибка" {
+test "running out of memory is an ordinary error" {
     u8[16] mem;
     auto fb = FixedBuf::init(mem[..]);
     const auto a = fb.allocator();
@@ -174,13 +174,13 @@ test "нехватка памяти — обычная ошибка" {
 }
 ```
 
-Последний тест показывает преимущество явных аллокаторов: поведение при нехватке памяти проверяется детерминированно, без хаков.
+The last test shows the advantage of explicit allocators: the behavior when memory runs out is checked deterministically, with no hacks.
 
-## Организация
+## Organization
 
-Тесты принято писать **в том же файле**, под кодом, который они проверяют: тогда ничего не нужно импортировать.
+Tests are usually written **in the same file**, under the code they check: then nothing needs to be imported.
 
-Если тестов много, заведите отдельный файл и импортируйте модуль:
+If there are many tests, create a separate file and import the module:
 
 ```vibe file=mathx.vibe
 i64 clamp(i64 x, i64 lo, i64 hi) {
@@ -193,31 +193,31 @@ i64 clamp(i64 x, i64 lo, i64 hi) {
 ```vibe test
 import "mathx.vibe" as m;
 
-test "clamp внутри диапазона" {
+test "clamp inside the range" {
     assert(m::clamp(5, 0, 10) == 5);
 }
 
-test "clamp срезает края" {
+test "clamp cuts off the edges" {
     assert(m::clamp(-3, 0, 10) == 0);
     assert(m::clamp(30, 0, 10) == 10);
 }
 ```
 
-Запускаются только тесты **того файла, который вы указали**. Блоки `test` из импортированных файлов не запускаются.
+Only the tests of **the file you specified** are run. The `test` blocks of imported files are not run.
 
-Имена тестов могут повторяться (компилятор не проверяет), но лучше, чтобы они были уникальными: по имени вы находите упавший.
+Test names may repeat (the compiler does not check), but it is better if they are unique: you find the failed test by its name.
 
-## Файл без тестов
+## A file without tests
 
-Если в файле нет ни одного блока `test`, команда сообщит `0 passed, 0 failed` и завершится с кодом 0. Не путайте это с «все тесты прошли».
+If a file has no `test` blocks at all, the command reports `0 passed, 0 failed` and exits with code 0. Do not confuse this with "all tests passed".
 
-## Запуск из редактора и в CI
+## Running from an editor and in CI
 
-- В VS Code / code-oss расширение показывает над каждым `test` кнопку запуска (см. [инструменты](tooling.md#языковой-сервер-и-редактор)).
-- В CI достаточно одной команды: `vibe test main.vibe`. Код выхода 1 означает падение.
-- Режим оптимизации можно переключить: `vibe test main.vibe -O` запустит те же тесты через LLVM `-O2`. Полезно, чтобы убедиться, что оптимизации не меняют поведение.
+- In VS Code / code-oss the extension shows a run button above every `test` (see [tooling](tooling.md#language-server-and-editor)).
+- In CI one command is enough: `vibe test main.vibe`. Exit code 1 means a failure.
+- The optimization mode can be switched: `vibe test main.vibe -O` runs the same tests through LLVM `-O2`. Useful for making sure optimizations do not change the behavior.
 
-## Что дальше
+## What next
 
-- Падающие тесты часто упираются в ошибки: [ошибки и опциональные значения](errors-and-optionals.md).
-- Как устроен сам набор тестов компилятора: [как всё устроено](how-it-works.md).
+- Failing tests often come down to errors: [errors and optional values](errors-and-optionals.md).
+- How the compiler's own test suite is organized: [how it all works](how-it-works.md).

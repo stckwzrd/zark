@@ -1,42 +1,42 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Коллекции: List, Map, Option · Vibe</title>
-<meta name="description" content="Динамический массив List&lt;T&gt;, хеш-таблица Map&lt;V&gt;, Option&lt;T&gt;, сортировка и вспомогательные функции стандартной библиотеки Vibe">
+<title>Collections: List, Map, Option · Vibe</title>
+<meta name="description" content="The dynamic array List&lt;T&gt;, the hash table Map&lt;V&gt;, Option&lt;T&gt;, sorting and the helper functions of the Vibe standard library">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/collections.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html" class="current">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="collections.html" class="current">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
-<h1>Коллекции: List, Map, Option</h1>
-<p>Контейнеры в Vibe — обычные дженерик-структуры, написанные на самом Vibe (исходник — <code>src/std.vibe</code>, он подключается автоматически). Магии в них нет, и они подчиняются главному правилу: <strong>память берут только через явный аллокатор</strong>.</p>
-<p>Какой контейнер выбрать:</p>
+<h1>Collections: List, Map, Option</h1>
+<p>Containers in Vibe are ordinary generic structs written in Vibe itself (the source is <code>std/std.vibe</code>, which is included automatically). There is no magic in them, and they obey the main rule: <strong>memory is taken only through an explicit allocator</strong>.</p>
+<p>Which container to choose:</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Нужно</th>
-<th>Берите</th>
+<th>You need</th>
+<th>Take</th>
 </tr>
 </thead><tbody><tr>
-<td>набор элементов известного размера</td>
-<td>массив <code>T[N]</code> на стеке</td>
+<td>a set of elements of known size</td>
+<td>an array <code>T[N]</code> on the stack</td>
 </tr>
 <tr>
-<td>набор элементов, размер которого растёт</td>
+<td>a set of elements whose size grows</td>
 <td><code>List&lt;T&gt;</code></td>
 </tr>
 <tr>
-<td>поиск значения по строковому ключу</td>
+<td>looking up a value by a string key</td>
 <td><code>Map&lt;V&gt;</code></td>
 </tr>
 <tr>
-<td>«значение или ничего»</td>
+<td>&quot;a value or nothing&quot;</td>
 <td><code>?T</code> / <code>Option&lt;T&gt;</code></td>
 </tr>
 </tbody></table></div>
-<h2 id="listt-динамический-массив"><a class="anchor" href="#listt-динамический-массив">#</a><code>List&lt;T&gt;</code> — динамический массив</h2>
+<h2 id="listt-a-dynamic-array"><a class="anchor" href="#listt-a-dynamic-array">#</a><code>List&lt;T&gt;</code>: a dynamic array</h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> List</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -45,83 +45,83 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), xs.len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[5, 1, 3] 3</code></pre></div></div>
-<p>Три правила:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[5, 1, 3] 3</code></pre></div></div>
+<p>Three rules:</p>
 <ol>
-<li><code>List&lt;T&gt;::init(a)</code> запоминает аллокатор. До <code>init</code> у списка аллокатора нет, и <code>push</code> в «нулевой» список работать не будет.</li>
-<li>Любое <strong>растущее</strong> действие возвращает <code>!void</code>: память может кончиться. Пишите <code>?</code> или <code>catch</code>.</li>
-<li>В конце вызовите <code>deinit()</code>. Для арены он не нужен (см. <a href="memory.html#arena-выделять-много-освободить-разом">память</a>).</li>
+<li><code>List&lt;T&gt;::init(a)</code> remembers the allocator. Before <code>init</code> a list has no allocator, and <code>push</code> on a &quot;zero&quot; list will not work.</li>
+<li>Any <strong>growing</strong> action returns <code>!void</code>: memory can run out. Write <code>?</code> or <code>catch</code>.</li>
+<li>At the end call <code>deinit()</code>. For an arena it is not needed (see <a href="memory.html#arena-allocate-a-lot-free-at-once">memory</a>).</li>
 </ol>
-<h3 id="структура-списка"><a class="anchor" href="#структура-списка">#</a>Структура списка</h3>
+<h3 id="the-structure-of-a-list"><a class="anchor" href="#the-structure-of-a-list">#</a>The structure of a list</h3>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> List</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">T</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    T</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[] items;   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// выделенный буфер, items.len — ёмкость</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> len;     </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// сколько элементов реально лежит</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    T</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[] items;   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// the allocated buffer, items.len is the capacity</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> len;     </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// how many elements are actually there</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    Allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Поэтому <code>xs.len</code> — число элементов, а <code>xs.items.len</code> — ёмкость. Буфер растёт по удвоению: 8, 16, 32 и так далее.</p>
-<h3 id="методы"><a class="anchor" href="#методы">#</a>Методы</h3>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>So <code>xs.len</code> is the number of elements, and <code>xs.items.len</code> is the capacity. The buffer grows by doubling: 8, 16, 32 and so on.</p>
+<h3 id="methods"><a class="anchor" href="#methods">#</a>Methods</h3>
 <div class="table-wrap"><table><thead><tr>
-<th>Метод</th>
-<th>Что делает</th>
+<th>Method</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>init(a)</code></td>
-<td>создаёт пустой список</td>
+<td>creates an empty list</td>
 </tr>
 <tr>
 <td><code>deinit()</code></td>
-<td>освобождает буфер</td>
+<td>frees the buffer</td>
 </tr>
 <tr>
 <td><code>!void push(v)</code></td>
-<td>добавляет в конец</td>
+<td>appends to the end</td>
 </tr>
 <tr>
 <td><code>!void append(slice)</code></td>
-<td>добавляет несколько</td>
+<td>appends several</td>
 </tr>
 <tr>
 <td><code>!T pop()</code></td>
-<td>убирает и возвращает последний; <code>error.Empty</code> на пустом</td>
+<td>removes and returns the last; <code>error.Empty</code> on an empty list</td>
 </tr>
 <tr>
 <td><code>!T last()</code></td>
-<td>последний, не убирая; <code>error.Empty</code> на пустом</td>
+<td>the last one without removing it; <code>error.Empty</code> on an empty list</td>
 </tr>
 <tr>
 <td><code>T get(i)</code></td>
-<td>элемент (с проверкой границ)</td>
+<td>an element (with a bounds check)</td>
 </tr>
 <tr>
 <td><code>set(i, v)</code></td>
-<td>записывает элемент</td>
+<td>writes an element</td>
 </tr>
 <tr>
 <td><code>T[] slice()</code></td>
-<td>текущие элементы как срез</td>
+<td>the current elements as a slice</td>
 </tr>
 <tr>
 <td><code>bool is_empty()</code></td>
-<td>пуст ли</td>
+<td>whether it is empty</td>
 </tr>
 <tr>
 <td><code>clear()</code></td>
-<td>обнуляет длину, память остаётся</td>
+<td>resets the length to zero, the memory stays</td>
 </tr>
 <tr>
 <td><code>bool contains(v)</code></td>
-<td>есть ли такой элемент (нужен <code>==</code>)</td>
+<td>whether there is such an element (needs <code>==</code>)</td>
 </tr>
 <tr>
 <td><code>reverse()</code></td>
-<td>переворачивает на месте</td>
+<td>reverses in place</td>
 </tr>
 <tr>
 <td><code>sort()</code></td>
-<td>сортирует на месте (нужны <code>&lt;</code>, <code>&gt;</code>)</td>
+<td>sorts in place (needs <code>&lt;</code>, <code>&gt;</code>)</td>
 </tr>
 <tr>
 <td><code>!void reserve(n)</code></td>
-<td>заранее выделяет ёмкость</td>
+<td>allocates capacity in advance</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -146,15 +146,15 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(xs.len, xs.items.len);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">clear</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(xs.len, xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">pop</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[5, 1, 3, 9, 7] 5 false
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[5, 1, 3, 9, 7] 5 false
 true false
 1 7 7
 [1, 3, 9, 50]
 [50, 9, 3, 1]
 4 100
 0 -1</code></pre></div></div>
-<h3 id="перебор"><a class="anchor" href="#перебор">#</a>Перебор</h3>
-<p><code>for</code> умеет перебирать всё, у чего есть <code>slice()</code>, поэтому список идёт прямо в цикл:</p>
+<h3 id="iterating"><a class="anchor" href="#iterating">#</a>Iterating</h3>
+<p><code>for</code> can iterate over anything that has <code>slice()</code>, so a list goes straight into a loop:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> List</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -166,7 +166,7 @@ true false
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x : xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()) { total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x; }</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(total);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>10
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>10
 20
 30
 40
@@ -175,8 +175,8 @@ true false
 2: 30
 3: 40
 100</code></pre></div></div>
-<h3 id="изменение-элементов-на-месте"><a class="anchor" href="#изменение-элементов-на-месте">#</a>Изменение элементов на месте</h3>
-<p><code>get</code> возвращает <strong>копию</strong>. Чтобы менять элементы структур, берите указатель на элемент:</p>
+<h3 id="changing-elements-in-place"><a class="anchor" href="#changing-elements-in-place">#</a>Changing elements in place</h3>
+<p><code>get</code> returns a <strong>copy</strong>. To change the elements of structs, take a pointer to the element:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Player</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> score; }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -195,14 +195,14 @@ true false
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ps.len) { ps.items[i].score </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p : ps) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p.name, p.score); }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1
 99
 ann 100
 bob 3</code></pre></div></div>
-<blockquote class="callout gotcha"><p><strong>Ловушка.</strong> Указатель на элемент (<code>&amp;ps.items[0]</code>) недействителен после <code>push</code>: список мог перенести буфер в другое место. Не держите такие указатели, если будете добавлять элементы.</p>
+<blockquote class="callout gotcha"><p><strong>Gotcha:</strong> a pointer to an element (<code>&amp;ps.items[0]</code>) is invalid after a <code>push</code>: the list may have moved its buffer to another place. Do not keep such pointers if you are going to add elements.</p>
 </blockquote>
-<h3 id="стек-очередь-срезы"><a class="anchor" href="#стек-очередь-срезы">#</a>Стек, очередь, срезы</h3>
-<p>Стек — это <code>push</code> + <code>pop</code>:</p>
+<h3 id="stack-queue-slices"><a class="anchor" href="#stack-queue-slices">#</a>Stack, queue, slices</h3>
+<p>A stack is <code>push</code> + <code>pop</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> st </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> List</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> st.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -212,11 +212,11 @@ bob 3</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    while</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">st.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">is_empty</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()) {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(st.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">pop</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>3
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>3
 2
 1</code></pre></div></div>
-<p>Срез от списка (<code>xs.slice()</code>) тоже можно резать (<code>xs.slice()[1..3]</code>), но он «следит» за теми же данными и устаревает вместе с буфером.</p>
-<h3 id="список-в-списке"><a class="anchor" href="#список-в-списке">#</a>Список в списке</h3>
+<p>A slice of a list (<code>xs.slice()</code>) can be sliced further too (<code>xs.slice()[1..3]</code>), but it &quot;watches&quot; the same data and becomes stale together with the buffer.</p>
+<h3 id="a-list-in-a-list"><a class="anchor" href="#a-list-in-a-list">#</a>A list in a list</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Arena</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -229,12 +229,12 @@ bob 3</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        rows.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(row)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> r : rows) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(r.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()); }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[0, 1, 2]
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[0, 1, 2]
 [3, 4, 5]
 [6, 7, 8]</code></pre></div></div>
-<p>Здесь арена освобождает всё сразу, поэтому <code>deinit</code> у вложенных списков не нужен.</p>
-<h2 id="mapv-хеш-таблица-со-строковыми-ключами"><a class="anchor" href="#mapv-хеш-таблица-со-строковыми-ключами">#</a><code>Map&lt;V&gt;</code> — хеш-таблица со строковыми ключами</h2>
-<p>Ключ — всегда <code>str</code>, значение — любой тип <code>V</code>.</p>
+<p>Here the arena frees everything at once, so the nested lists do not need <code>deinit</code>.</p>
+<h2 id="mapv-a-hash-table-with-string-keys"><a class="anchor" href="#mapv-a-hash-table-with-string-keys">#</a><code>Map&lt;V&gt;</code>: a hash table with string keys</h2>
+<p>The key is always a <code>str</code>, and the value is any type <code>V</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> m </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Map</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -246,43 +246,43 @@ bob 3</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"one"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"zzz"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">has</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"two"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">has</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"x"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), m.len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>11
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>11
 -1
 true false 2</code></pre></div></div>
 <div class="table-wrap"><table><thead><tr>
-<th>Метод</th>
-<th>Что делает</th>
+<th>Method</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>init(a)</code></td>
-<td>пустая таблица</td>
+<td>an empty table</td>
 </tr>
 <tr>
 <td><code>deinit()</code></td>
-<td>освобождает память</td>
+<td>frees the memory</td>
 </tr>
 <tr>
 <td><code>!void put(key, value)</code></td>
-<td>добавляет или заменяет</td>
+<td>adds or replaces</td>
 </tr>
 <tr>
 <td><code>!V get(key)</code></td>
-<td>значение или <code>error.NotFound</code></td>
+<td>the value or <code>error.NotFound</code></td>
 </tr>
 <tr>
 <td><code>bool has(key)</code></td>
-<td>есть ли ключ</td>
+<td>whether the key exists</td>
 </tr>
 <tr>
 <td><code>len</code></td>
-<td>число ключей</td>
+<td>the number of keys</td>
 </tr>
 </tbody></table></div>
-<blockquote class="callout gotcha"><p><strong>Ловушка.</strong> Ключи <strong>не копируются</strong>: таблица хранит срез, который вы дали. Если ключ собирается из временного буфера, скопируйте его через <code>a.dup(key)</code>, иначе он испортится, когда буфер перезапишут.</p>
+<blockquote class="callout gotcha"><p><strong>Gotcha:</strong> keys are <strong>not copied</strong>: the table stores the slice you gave it. If a key is built from a temporary buffer, copy it with <code>a.dup(key)</code>, otherwise it will be corrupted when the buffer is overwritten.</p>
 </blockquote>
-<p>Удалять ключи нельзя (метода <code>remove</code> нет). <code>get</code> возвращает копию значения: чтобы изменить значение на месте, нужно работать с <code>m.entries</code>.</p>
-<h3 id="перебор"><a class="anchor" href="#перебор">#</a>Перебор</h3>
-<p>Специального итератора нет, но таблица — это массив записей <code>entries</code>, и занятые записи помечены <code>used</code>:</p>
+<p>You cannot delete keys (there is no <code>remove</code> method). <code>get</code> returns a copy of the value: to change a value in place you need to work with <code>m.entries</code>.</p>
+<h3 id="iterating"><a class="anchor" href="#iterating">#</a>Iterating</h3>
+<p>There is no special iterator, but the table is an array of records <code>entries</code>, and the occupied records are marked <code>used</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> m </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Map</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -299,13 +299,13 @@ true false 2</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(total, m.len);</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e : m.entries) {</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (e.used </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.key </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"нашли {e.key} = {e.value}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (e.used </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> e.key </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"found {e.key} = {e.value}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>6 3
-нашли b = 2</code></pre></div></div>
-<p>Порядок обхода — порядок слотов хеш-таблицы, а не порядок вставки. Не рассчитывайте на него.</p>
-<h3 id="сч-тчик-слов"><a class="anchor" href="#сч-тчик-слов">#</a>Счётчик слов</h3>
-<p>Типичная задача: посчитать, сколько раз встретилось каждое слово.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>6 3
+found b = 2</code></pre></div></div>
+<p>The order of traversal is the order of the hash table&#39;s slots, not the order of insertion. Do not rely on it.</p>
+<h3 id="a-word-counter"><a class="anchor" href="#a-word-counter">#</a>A word counter</h3>
+<p>A typical task: count how many times each word occurs.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Arena</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -323,9 +323,9 @@ true false 2</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(counts.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"to"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, counts.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"be"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, counts.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"or"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, counts.len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>2 2 1 4</code></pre></div></div>
-<p>Ключи здесь — срезы <code>text</code>, а <code>text</code> — литерал, который живёт всё время работы, поэтому копировать ключи не нужно.</p>
-<h3 id="значения-структуры"><a class="anchor" href="#значения-структуры">#</a>Значения-структуры</h3>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>2 2 1 4</code></pre></div></div>
+<p>The keys here are slices of <code>text</code>, and <code>text</code> is a literal that lives for the whole run, so the keys do not need copying.</p>
+<h3 id="struct-values"><a class="anchor" href="#struct-values">#</a>Struct values</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Stat</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> count; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> sum; }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -334,36 +334,36 @@ true false 2</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">put</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Stat</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.count</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.sum</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> })</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> m.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s.count, s.sum);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1 10</code></pre></div></div>
-<h2 id="optiont-и-t"><a class="anchor" href="#optiont-и-t">#</a><code>Option&lt;T&gt;</code> и <code>?T</code></h2>
-<p><code>?T</code> — запись для <code>Option&lt;T&gt;</code>: union с вариантами <code>Some: T</code> и <code>None</code>. Подробно — в <a href="errors-and-optionals.html#опциональные-значения-t">ошибках и опциональных значениях</a>.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1 10</code></pre></div></div>
+<h2 id="optiont-and-t"><a class="anchor" href="#optiont-and-t">#</a><code>Option&lt;T&gt;</code> and <code>?T</code></h2>
+<p><code>?T</code> is the notation for <code>Option&lt;T&gt;</code>: a union with the variants <code>Some: T</code> and <code>None</code>. Described in detail in <a href="errors-and-optionals.html#optional-values-t">errors and optional values</a>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ?i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .Some</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> ?i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> .None</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">is_some</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), b.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">is_some</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), b.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">unwrap_or</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">9</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">orelse</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">orelse</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true false 9
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true false 9
 5 0</code></pre></div></div>
-<h2 id="сортировка-и-вспомогательные-функции"><a class="anchor" href="#сортировка-и-вспомогательные-функции">#</a>Сортировка и вспомогательные функции</h2>
+<h2 id="sorting-and-helper-functions"><a class="anchor" href="#sorting-and-helper-functions">#</a>Sorting and helper functions</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>sort(slice)</code></td>
-<td>быстрая сортировка на месте; нужны <code>&lt;</code> и <code>&gt;</code> у элементов</td>
+<td>a fast in-place sort; the elements need <code>&lt;</code> and <code>&gt;</code></td>
 </tr>
 <tr>
 <td><code>min(a, b)</code>, <code>max(a, b)</code></td>
-<td>меньшее и большее</td>
+<td>the smaller and the larger</td>
 </tr>
 <tr>
 <td><code>abs(x)</code></td>
-<td>модуль числа</td>
+<td>the absolute value of a number</td>
 </tr>
 <tr>
 <td><code>swap(&amp;a, &amp;b)</code></td>
-<td>меняет два значения местами</td>
+<td>swaps two values</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -378,12 +378,12 @@ true false 2</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    swap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">a, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">b);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, b);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[1, 2, 5, 9]
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[1, 2, 5, 9]
 [1.5, 2.5, 3.5]
 3 3.5 5 2.5
 2 1</code></pre></div></div>
-<p>Сортировать строки или структуры <code>sort</code> не умеет (у них нет <code>&lt;</code>). Для них напишите свой цикл со своей функцией сравнения.</p>
-<h3 id="сортировка-по-ключу"><a class="anchor" href="#сортировка-по-ключу">#</a>Сортировка по ключу</h3>
+<p><code>sort</code> cannot sort strings or structs (they have no <code>&lt;</code>). For them, write your own loop with your own comparison function.</p>
+<h3 id="sorting-by-a-key"><a class="anchor" href="#sorting-by-a-key">#</a>Sorting by a key</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> P</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> age; }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sort_by_age</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">P</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[] ps) {</span></span>
@@ -400,11 +400,11 @@ true false 2</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ps </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">P</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.name</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.age</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 30</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">P</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.name</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.age</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 20</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">P</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.name</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "c"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.age</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 25</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }];</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    sort_by_age</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(ps[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p : ps) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p.name, p.age); }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>b 20
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>b 20
 c 25
 a 30</code></pre></div></div>
-<h2 id="массивы-и-срезы"><a class="anchor" href="#массивы-и-срезы">#</a>Массивы и срезы</h2>
-<p>Если размер заранее известен, список не нужен. Массив на стеке быстрее, ничего не выделяет и не требует <code>deinit</code>:</p>
+<h2 id="arrays-and-slices"><a class="anchor" href="#arrays-and-slices">#</a>Arrays and slices</h2>
+<p>If the size is known in advance, you do not need a list. An array on the stack is faster, allocates nothing and needs no <code>deinit</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">][</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] grid;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> r : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) {</span></span>
@@ -414,9 +414,9 @@ a 30</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(grid);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(grid[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">][</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], grid.len, grid[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">].len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[[0, 1, 2], [3, 4, 5], [6, 7, 8]]
 5 3 3</code></pre></div></div>
-<p>Функции принимают <strong>срез</strong>, поэтому одна и та же функция работает и с массивом, и со списком (<code>xs.slice()</code>):</p>
+<p>Functions take a <strong>slice</strong>, so the same function works with an array and with a list (<code>xs.slice()</code>):</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">total</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[] xs) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> t </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x : xs) { t </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x; }</span></span>
@@ -429,15 +429,15 @@ a 30</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> list.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    list.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">append</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">([</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">20</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">])</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">total</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(arr[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">total</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(list.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>6 30</code></pre></div></div>
-<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>6 30</code></pre></div></div>
+<h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>
 <ul>
-<li>Сами аллокаторы: <a href="memory.html">память и аллокаторы</a>.</li>
-<li>Справочник по всем функциям: <a href="stdlib.html">стандартная библиотека</a>.</li>
+<li>The allocators themselves: <a href="memory.html">memory and allocators</a>.</li>
+<li>A reference of all functions: <a href="stdlib.html">standard library</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="memory.html"><small>Назад</small>Память и аллокаторы</a><a class="next" href="c-interop.html"><small>Дальше</small>Взаимодействие с C и C++</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#listt-динамический-массив">List&amp;lt;T&amp;gt; — динамический массив</a><a class="l3" href="#структура-списка">Структура списка</a><a class="l3" href="#методы">Методы</a><a class="l3" href="#перебор">Перебор</a><a class="l3" href="#изменение-элементов-на-месте">Изменение элементов на месте</a><a class="l3" href="#стек-очередь-срезы">Стек, очередь, срезы</a><a class="l3" href="#список-в-списке">Список в списке</a><a class="l2" href="#mapv-хеш-таблица-со-строковыми-ключами">Map&amp;lt;V&amp;gt; — хеш-таблица со строковыми ключами</a><a class="l3" href="#перебор">Перебор</a><a class="l3" href="#сч-тчик-слов">Счётчик слов</a><a class="l3" href="#значения-структуры">Значения-структуры</a><a class="l2" href="#optiont-и-t">Option&amp;lt;T&amp;gt; и ?T</a><a class="l2" href="#сортировка-и-вспомогательные-функции">Сортировка и вспомогательные функции</a><a class="l3" href="#сортировка-по-ключу">Сортировка по ключу</a><a class="l2" href="#массивы-и-срезы">Массивы и срезы</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+<div class="pager"><a class="prev" href="memory.html"><small>Previous</small>Memory and allocators</a><a class="next" href="c-interop.html"><small>Next</small>Interoperating with C and C++</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#listt-a-dynamic-array">List&amp;lt;T&amp;gt;: a dynamic array</a><a class="l3" href="#the-structure-of-a-list">The structure of a list</a><a class="l3" href="#methods">Methods</a><a class="l3" href="#iterating">Iterating</a><a class="l3" href="#changing-elements-in-place">Changing elements in place</a><a class="l3" href="#stack-queue-slices">Stack, queue, slices</a><a class="l3" href="#a-list-in-a-list">A list in a list</a><a class="l2" href="#mapv-a-hash-table-with-string-keys">Map&amp;lt;V&amp;gt;: a hash table with string keys</a><a class="l3" href="#iterating">Iterating</a><a class="l3" href="#a-word-counter">A word counter</a><a class="l3" href="#struct-values">Struct values</a><a class="l2" href="#optiont-and-t">Option&amp;lt;T&amp;gt; and ?T</a><a class="l2" href="#sorting-and-helper-functions">Sorting and helper functions</a><a class="l3" href="#sorting-by-a-key">Sorting by a key</a><a class="l2" href="#arrays-and-slices">Arrays and slices</a><a class="l2" href="#what-next">What next</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

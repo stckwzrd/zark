@@ -1,11 +1,11 @@
 ---
-title: Управление потоком
+title: Control flow
 order: 14
-section: Язык
-description: if, while, for, break, continue, match и defer в Vibe: все формы с примерами и граничными случаями
+section: Language
+description: if, while, for, break, continue, match and defer in Vibe: all the forms with examples and edge cases
 ---
 
-Управляющих конструкций немного, и у каждой одна форма записи. Условие пишется в круглых скобках, а фигурные скобки блока обязательны всегда, даже для одного оператора.
+There are few control constructs, and each has one form. The condition is written in parentheses, and the braces of the block are always mandatory, even for a single statement.
 
 ## `if` / `else`
 
@@ -13,41 +13,41 @@ description: if, while, for, break, continue, match и defer в Vibe: все ф�
 void main() {
     const auto n = 7;
     if (n > 10) {
-        println("больше десяти");
+        println("greater than ten");
     } else if (n > 5) {
-        println("между пятью и десятью");
+        println("between five and ten");
     } else {
-        println("пять или меньше");
+        println("five or less");
     }
 }
 ```
 
-Условие обязано быть `bool`. Число или указатель в роли условия не принимаются, нужно явное сравнение:
+The condition must be `bool`. A number or a pointer is not accepted as a condition; an explicit comparison is needed:
 
 ```vibe error fragment
 const auto n = 5;
-if (n) { println("да"); }
+if (n) { println("yes"); }
 ```
 
-Фигурные скобки обязательны:
+The braces are mandatory:
 
 ```vibe error fragment
 const auto n = 5;
-if (n > 3) println("да");
+if (n > 3) println("yes");
 ```
 
-`if` — это оператор, а не выражение: `auto x = if ...;` не пишется. Когда нужно выбрать значение по условию, используйте [`match`](#match-как-выражение) или заранее заведённую переменную:
+`if` is a statement, not an expression: `auto x = if ...;` is not written. When you need to choose a value by a condition, use [`match`](#match-as-an-expression) or a variable declared in advance:
 
 ```vibe run
 void main() {
     const auto n = 7;
-    auto kind = "мало";
-    if (n > 5) { kind = "много"; }
+    auto kind = "few";
+    if (n > 5) { kind = "many"; }
     println(kind);
 
     const auto size = match n > 5 {
-        true => "большой",
-        false => "маленький",
+        true => "big",
+        false => "small",
     };
     println(size);
 }
@@ -71,19 +71,19 @@ void main() {
 }
 ```
 
-Бесконечный цикл пишется как `while (true) { ... }` и покидается через `break` или `return`.
+An infinite loop is written as `while (true) { ... }` and left with `break` or `return`.
 
-## `for` по диапазону
+## `for` over a range
 
-`for (auto i : a..b)` перебирает целые от `a` включительно до `b` **не включая**. Если `a >= b`, цикл не выполнится ни разу. Конец диапазона вычисляется один раз до начала цикла.
+`for (auto i : a..b)` iterates over the integers from `a` inclusive to `b` **exclusive**. If `a >= b`, the loop does not run at all. The end of the range is evaluated once before the loop starts.
 
 ```vibe run
 void main() {
     for (auto i : 0..4) {
         println(i);
     }
-    for (auto i : 5..5) { println("не печатается"); }
-    for (auto i : 3..0) { println("тоже не печатается"); }
+    for (auto i : 5..5) { println("not printed"); }
+    for (auto i : 3..0) { println("not printed either"); }
     const auto n = 3;
     auto sum = 0;
     for (auto i : 1..n + 1) { sum += i; }
@@ -91,7 +91,7 @@ void main() {
 }
 ```
 
-Включающей формы `0..=3` нет: пишите `0..4`. Обратного хода тоже нет. Для обратного прохода используйте `while`:
+There is no inclusive form `0..=3`: write `0..4`. There is no reverse iteration either. For a backwards pass use `while`:
 
 ```vibe run
 void main() {
@@ -103,9 +103,9 @@ void main() {
 }
 ```
 
-Диапазон существует только внутри `for`: сохранить `0..3` в переменную нельзя.
+A range exists only inside `for`: you cannot store `0..3` in a variable.
 
-Переменная цикла неизменяема внутри тела:
+The loop variable is immutable inside the body:
 
 ```vibe error fragment
 for (auto i : 0..3) {
@@ -113,9 +113,9 @@ for (auto i : 0..3) {
 }
 ```
 
-## `for` по коллекции
+## `for` over a collection
 
-`for (auto x : seq)` перебирает элементы массива, среза или любого значения с методом `slice()` (например, `List`). `for (auto [i, x] : seq)` добавляет индекс.
+`for (auto x : seq)` iterates over the elements of an array, a slice or any value with a `slice()` method (for example `List`). `for (auto [i, x] : seq)` adds the index.
 
 ```vibe run
 void main() {
@@ -132,7 +132,7 @@ void main() {
 }
 ```
 
-Строка перебирается побайтово: `c` здесь число типа `u8` (97, 98, 99). Элемент — это **копия**. Чтобы изменить элементы на месте, идите по индексу:
+A string is iterated byte by byte: here `c` is a number of type `u8` (97, 98, 99). The element is a **copy**. To change elements in place, go by index:
 
 ```vibe run
 void main() {
@@ -144,15 +144,15 @@ void main() {
 }
 ```
 
-Перебирать число нельзя:
+You cannot iterate over a number:
 
 ```vibe error fragment
 for (auto x : 5) { println(x); }
 ```
 
-## `break` и `continue`
+## `break` and `continue`
 
-`break` выходит из ближайшего цикла, `continue` переходит к следующей итерации. Чтобы выйти из внешнего цикла, поставьте перед ним метку и назовите её в `break` или `continue`.
+`break` leaves the nearest loop, and `continue` moves to the next iteration. To leave an outer loop, put a label in front of it and name the label in `break` or `continue`.
 
 ```vibe run
 void main() {
@@ -173,7 +173,7 @@ void main() {
 }
 ```
 
-Метка пишется перед `for` или `while`:
+A label is written in front of `for` or `while`:
 
 ```vibe run
 void main() {
@@ -189,7 +189,7 @@ void main() {
 }
 ```
 
-`break` и `continue` работают и внутри `match`, влияя на объемлющий цикл:
+`break` and `continue` also work inside `match`, affecting the enclosing loop:
 
 ```vibe run
 void main() {
@@ -206,7 +206,7 @@ void main() {
 
 ## `match`
 
-`match` сравнивает значение с образцами сверху вниз и выполняет первую подходящую ветку. «Проваливания» между ветками нет.
+`match` compares a value with patterns from top to bottom and runs the first branch that fits. There is no fall-through between branches.
 
 ```vibe run
 enum Dir { North, East, South, West }
@@ -214,32 +214,32 @@ enum Dir { North, East, South, West }
 void main() {
     const Dir d = .East;
     match d {
-        .North => println("вверх");
-        .East, .West => println("вбок");
-        _ => println("вниз");
+        .North => println("up");
+        .East, .West => println("sideways");
+        _ => println("down");
     }
 
     const auto n = 3;
     match n {
-        1, 2 => println("мало");
+        1, 2 => println("few");
         3 => {
-            println("три");
+            println("three");
         }
         _ => {}
     }
 
     const auto cmd = "stop";
     match cmd {
-        "go" => println("едем");
-        "stop" => println("стоим");
-        _ => println("непонятно");
+        "go" => println("going");
+        "stop" => println("stopping");
+        _ => println("unclear");
     }
 }
 ```
 
-Что можно разбирать: целые числа, символы (`'a'`), enum, строки (через `==`) и union. Образец может быть литералом или константой, несколько образцов в одной ветке разделяются запятой. Диапазонов (`1..5`) в образцах нет.
+What can be matched: integers, characters (`'a'`), enums, strings (via `==`) and unions. A pattern can be a literal or a constant, and several patterns in one branch are separated by commas. There are no ranges (`1..5`) in patterns.
 
-Ветка `_` — «всё остальное». В **операторе** `match` она необязательна: если ничего не подошло, ничего не произойдёт.
+The branch `_` means "everything else". In a `match` **statement** it is optional: if nothing fits, nothing happens.
 
 ```vibe run
 void main() {
@@ -247,13 +247,13 @@ void main() {
     match n {
         1 => println("a");
     }
-    println("после match");
+    println("after match");
 }
 ```
 
-### Union и привязка payload
+### Unions and binding the payload
 
-Для union образец `.Вариант(имя)` привязывает содержимое варианта к имени. Привязанное значение только для чтения, оно живёт внутри ветки.
+For a union, the pattern `.Variant(name)` binds the contents of the variant to a name. The bound value is read-only and lives inside the branch.
 
 ```vibe run
 union Shape {
@@ -264,9 +264,9 @@ union Shape {
 
 void describe(Shape s) {
     match s {
-        .Circle(r) => println("круг r = {r}");
-        .Rect(w) => println("квадрат {w}x{w}");
-        .Empty => println("пусто");
+        .Circle(r) => println("circle r = {r}");
+        .Rect(w) => println("square {w}x{w}");
+        .Empty => println("empty");
     }
 }
 
@@ -277,11 +277,11 @@ void main() {
 }
 ```
 
-Если payload не нужен, пишите вариант без скобок: `.Empty` (у варианта без payload) или `.Circle(_)`.
+If the payload is not needed, write the variant without parentheses: `.Empty` (for a variant without a payload) or `.Circle(_)`.
 
-### `match` как выражение
+### `match` as an expression
 
-`match` может стоять справа от `=`, в `return`, в аргументе. Ветки тогда — выражения (или блоки, значением которых служит последнее выражение), все приводятся к одному типу.
+`match` can stand to the right of `=`, in a `return`, in an argument. The branches are then expressions (or blocks whose value is the last expression), and all are converted to one type.
 
 ```vibe run
 enum Level { Low, Mid, High }
@@ -297,9 +297,9 @@ i64 score(Level l) {
 void main() {
     const auto x = 4;
     const auto word = match x {
-        1 => "один",
-        2 => "два",
-        _ => "много",
+        1 => "one",
+        2 => "two",
+        _ => "many",
     };
     println(word, score(.High));
 
@@ -314,7 +314,7 @@ void main() {
 }
 ```
 
-У `match`-выражения есть жёсткое требование: он должен быть **исчерпывающим**. Покройте все варианты или добавьте `_`:
+A `match` expression has a hard requirement: it must be **exhaustive**. Cover all the variants or add `_`:
 
 ```vibe error
 enum D { N, E }
@@ -328,7 +328,7 @@ void main() {
 }
 ```
 
-Ветка может не давать значение вовсе, а выходить из функции или цикла через `return`, `break`, `continue`:
+A branch may give no value at all and instead leave the function or loop with `return`, `break` or `continue`:
 
 ```vibe run
 i64 first_positive(i64[] xs) {
@@ -348,37 +348,37 @@ void main() {
 }
 ```
 
-## `defer` и `errdefer`
+## `defer` and `errdefer`
 
-`defer оператор` откладывает оператор до выхода из текущего блока: через конец блока, `return`, `break` или `continue`. Несколько `defer` выполняются в обратном порядке, последний объявленный — первым.
+`defer statement` postpones a statement until the current block is left: through the end of the block, `return`, `break` or `continue`. Several `defer`s run in reverse order, the last declared first.
 
 ```vibe run
 void main() {
-    defer println("объявлен первым, выполнится последним");
-    defer println("объявлен вторым, выполнится первым");
-    println("тело");
+    defer println("declared first, runs last");
+    defer println("declared second, runs first");
+    println("body");
 }
 ```
 
-`defer` привязан к **блоку**, а не к функции. В цикле он срабатывает на каждой итерации:
+`defer` is tied to the **block**, not to the function. In a loop it fires on every iteration:
 
 ```vibe run
 void main() {
     for (auto i : 0..3) {
-        defer println("конец итерации {i}");
+        defer println("end of iteration {i}");
         if (i == 1) { continue; }
-        println("тело {i}");
+        println("body {i}");
     }
 }
 ```
 
-Откладывать можно и блок:
+A block can be deferred too:
 
 ```vibe run
 i64 work() {
     auto x = 1;
     defer {
-        println("очистка, x = {x}");
+        println("cleanup, x = {x}");
         x = 100;
     }
     return x;
@@ -389,9 +389,9 @@ void main() {
 }
 ```
 
-Значение `return` вычисляется **до** `defer`, поэтому `work()` вернул `1`, хотя `defer` потом записал в `x` число 100.
+The value of `return` is computed **before** the `defer`, so `work()` returned `1` even though the `defer` later wrote 100 into `x`.
 
-Типичное применение — освободить ресурс сразу после получения:
+The typical use is to release a resource right after acquiring it:
 
 ```vibe run
 !void main() {
@@ -405,12 +405,12 @@ void main() {
 
 ### `errdefer`
 
-`errdefer` — то же самое, но только на путях, где функция вернула **ошибку** (`return error.X`, `?` на ошибке и т. п.). На успешном выходе он не выполняется. Идеален для отката частично созданного:
+`errdefer` is the same, but only on the paths where the function returned an **error** (`return error.X`, `?` on an error and so on). It does not run on a successful exit. It is ideal for rolling back something partially built:
 
 ```vibe run
 !i64 make(i64 n) {
-    errdefer println("откат: make({n}) провалился");
-    defer println("в любом случае: завершили make({n})");
+    errdefer println("rollback: make({n}) failed");
+    defer println("in any case: finished make({n})");
     if (n < 0) { return error.Negative; }
     return n * 2;
 }
@@ -421,19 +421,19 @@ void main() {
 }
 ```
 
-Подробнее про ошибки: [ошибки и опциональные значения](errors-and-optionals.md).
+More about errors: [errors and optional values](errors-and-optionals.md).
 
-## Чего нет
+## What is missing
 
-- Тернарного оператора `a ? b : c` (используйте `match` или `if`).
-- `do { } while`, `loop`, меток `'outer:`.
-- `switch` с проваливанием.
+- The ternary operator `a ? b : c` (use `match` or `if`).
+- `do { } while` and `loop`.
+- `switch` with fall-through.
 - `goto`.
-- Диапазонов в `match` и включающих диапазонов `0..=n`.
+- Ranges in `match` and inclusive ranges `0..=n`.
 
-Всё это сделано сознательно: одна форма на одно действие.
+All of this is deliberate: one form for one action.
 
-## Что дальше
+## What next
 
-- Как оформлять код в функции: [функции](functions.md).
-- Составные типы и их разбор: [структуры, union и enum](structs-unions-enums.md).
+- How to organize code into functions: [functions](functions.md).
+- Composite types and taking them apart: [structs, unions and enums](structs-unions-enums.md).

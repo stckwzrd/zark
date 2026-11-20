@@ -1,15 +1,15 @@
 ---
-title: Память и аллокаторы
+title: Memory and allocators
 order: 20
-section: Память и данные
-description: Стек и куча, явный Allocator, c_allocator, FixedBuf, Arena, create/destroy, свой аллокатор и типичные ошибки работы с памятью в Vibe
+section: Memory and data
+description: The stack and the heap, the explicit Allocator, c_allocator, FixedBuf, Arena, create/destroy, your own allocator and the typical memory mistakes in Vibe
 ---
 
-Главное правило языка: **ничто не выделяет память само.** Ни строки, ни интерполяция, ни замыкания, ни `println`. Куча появляется только там, где вы явно передали **аллокатор**. Поэтому, читая код, вы всегда видите, кто, где и сколько берёт.
+The main rule of the language: **nothing allocates memory by itself.** Not strings, not interpolation, not closures, not `println`. The heap appears only where you explicitly passed an **allocator**. So when you read code you always see who takes how much and where.
 
-## Стек и куча
+## The stack and the heap
 
-Обычные переменные, массивы и структуры живут на **стеке** функции и исчезают при выходе из неё. Для данных, которые нужно сохранить дольше или размер которых неизвестен заранее, нужна **куча**, а к ней доступ через аллокатор.
+Ordinary variables, arrays and structs live on the **stack** of a function and disappear when it exits. For data that must outlive that, or whose size is not known in advance, you need the **heap**, and it is reached through an allocator.
 
 ```vibe run
 void main() {
@@ -19,11 +19,11 @@ void main() {
 }
 ```
 
-Массив фиксированного размера на стеке — самый дешёвый способ получить память. Но размер должен быть известен при компиляции, а вернуть такой массив срезом из функции нельзя: после возврата стек освободится.
+A fixed-size array on the stack is the cheapest way to get memory. But the size must be known at compile time, and you cannot return such an array as a slice from a function: the stack is freed after the return.
 
 ## Allocator
 
-`Allocator` — маленькая структура из трёх полей: контекст и две функции.
+`Allocator` is a small struct of three fields: a context and two functions.
 
 ```vibe
 struct Allocator {
@@ -33,28 +33,28 @@ struct Allocator {
 }
 ```
 
-Любой аллокатор — это такие три значения. Готовые аллокаторы из стандартной библиотеки:
+Any allocator is such a triple of values. The ready-made allocators of the standard library:
 
-| Аллокатор | Откуда берёт память | Освобождение |
+| Allocator | Where the memory comes from | Freeing |
 |---|---|---|
-| `c_allocator()` | `calloc` / `free` из libc | каждый кусок отдельно |
-| `FixedBuf::init(buf)` | ваш готовый буфер, кучи нет | `reset()` для всего сразу |
-| `Arena::init(parent)` | кусками у родительского аллокатора | `deinit()` для всего сразу |
+| `c_allocator()` | `calloc` / `free` from libc | each piece separately |
+| `FixedBuf::init(buf)` | your ready buffer, no heap | `reset()` for everything at once |
+| `Arena::init(parent)` | in chunks from a parent allocator | `deinit()` for everything at once |
 
-И методы любого аллокатора `a`:
+And the methods of any allocator `a`:
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `!T[] a.alloc<T>(n)` | `n` элементов, заполненных **нулями** |
-| `a.free(slice)` | освобождает срез, полученный из `alloc` |
-| `!T* a.create<T>()` | один `T` в куче, нули |
-| `a.destroy(p)` | освобождает `create` |
-| `!str a.dup(s)` | копия строки |
-| `!u8* a.dupz(s)` | копия с нулевым байтом в конце, для C |
+| `!T[] a.alloc<T>(n)` | `n` elements filled with **zeros** |
+| `a.free(slice)` | frees a slice obtained from `alloc` |
+| `!T* a.create<T>()` | one `T` on the heap, zeroed |
+| `a.destroy(p)` | frees a `create` |
+| `!str a.dup(s)` | a copy of a string |
+| `!u8* a.dupz(s)` | a copy with a zero byte at the end, for C |
 
-Каждая операция выделения возвращает `!...`: когда память кончилась, вы получаете обычную ошибку `error.OutOfMemory`, а не падение.
+Every allocation operation returns `!...`: when memory runs out, you get an ordinary `error.OutOfMemory`, not a crash.
 
-### `alloc` и `free`
+### `alloc` and `free`
 
 ```vibe run
 !void main() {
@@ -68,13 +68,13 @@ struct Allocator {
 }
 ```
 
-Память нулевая: можно читать без инициализации. Размер среза можно узнать как `xs.len`.
+The memory is zeroed, so you can read it without initializing it. The size of the slice is `xs.len`.
 
-> **Совет.** Сразу после получения памяти пишите `defer a.free(...)`. Тогда она освободится на любом выходе из функции, даже по ошибке.
+> **Tip:** write `defer a.free(...)` right after obtaining memory. Then it is released on any exit from the function, even on an error.
 
-### `create` и `destroy`
+### `create` and `destroy`
 
-Для одного объекта, например узла списка:
+For a single object, such as a list node:
 
 ```vibe run
 struct Node {
@@ -108,9 +108,9 @@ struct Node {
 }
 ```
 
-## Ошибка нехватки памяти
+## The out-of-memory error
 
-В Vibe нехватка памяти — не катастрофа, а значение, которое обрабатывается. Это особенно важно для `FixedBuf`, у которого память ограничена:
+In Vibe, running out of memory is not a catastrophe but a value that gets handled. This matters most for `FixedBuf`, whose memory is limited:
 
 ```vibe run
 void main() {
@@ -121,16 +121,16 @@ void main() {
     const auto first = a.alloc<u8>(40) catch return;
     println(first.len, fb.remaining());
     const auto second = a.alloc<u8>(40) catch |e| {
-        println("не хватило: {e}");
+        println("not enough: {e}");
         return;
     };
     println(second.len);
 }
 ```
 
-## `FixedBuf`: без кучи вообще
+## `FixedBuf`: no heap at all
 
-`FixedBuf` раздаёт память из вашего массива «по возрастающей». Отдельные куски освобождать не нужно: `free` возвращает память, только если это самое последнее выделение, иначе ничего не делает. Весь буфер возвращается одним вызовом `reset()`. Аллокатор хранит указатель на `fb`, поэтому переменная `fb` должна жить, пока вы пользуетесь аллокатором.
+`FixedBuf` hands out memory from your array in ascending order. Individual pieces need not be freed: `free` returns memory only if it was the very last allocation, otherwise it does nothing. The whole buffer is returned with one call to `reset()`. The allocator keeps a pointer to `fb`, so the variable `fb` must live as long as you use the allocator.
 
 ```vibe run
 !void main() {
@@ -147,13 +147,13 @@ void main() {
 }
 ```
 
-Применения: встроенные системы, обработка запроса «в рамках бюджета», функции, которые не должны трогать кучу. Весь код на `FixedBuf` работает без единого `malloc`.
+Uses: embedded systems, handling a request "within a budget", functions that must not touch the heap. All code on `FixedBuf` works without a single `malloc`.
 
-> **Ловушка.** После `fb.reset()` все ранее выданные куски недействительны (на них нет защиты). Не используйте старые срезы и контейнеры после сброса: `list` выше нужно заново инициализировать.
+> **Gotcha:** after `fb.reset()` all pieces handed out earlier are invalid (nothing protects them). Do not use old slices and containers after a reset: the `list` above would have to be initialized again.
 
-## `Arena`: выделять много, освободить разом
+## `Arena`: allocate a lot, free at once
 
-`Arena` берёт крупные куски у родительского аллокатора и раздаёт из них маленькие. Куски берутся порциями от 64 КБ. Отдельные `free` ничего не делают, а `deinit()` освобождает **всё** сразу. Идеальна для данных с общим временем жизни: разбор файла, обработка одного запроса, построение дерева.
+`Arena` takes large chunks from a parent allocator and hands small pieces out of them. The chunks are taken in portions of 64 KB. Individual `free`s do nothing, and `deinit()` frees **everything** at once. It is ideal for data with a common lifetime: parsing a file, handling one request, building a tree.
 
 ```vibe run
 !void main() {
@@ -171,13 +171,13 @@ void main() {
     for (auto i : 0..1000) {
         _ = a.alloc<i64>(100)?;
     }
-    println("тысяча массивов выделена и ни одного free");
+    println("a thousand arrays allocated and not a single free");
 }
 ```
 
-Не нужно вызывать `list.deinit()` или `a.free(w1)`: всё уйдёт вместе с `arena.deinit()`. Именно так устроен сам компилятор Vibe: одна арена на запуск.
+There is no need to call `list.deinit()` or `a.free(w1)`: everything goes away with `arena.deinit()`. This is exactly how the Vibe compiler itself works: one arena per run.
 
-Типичный шаблон: аллокатор передаётся параметром.
+A typical pattern: the allocator is passed as a parameter.
 
 ```vibe run
 struct Config {
@@ -199,11 +199,11 @@ struct Config {
 }
 ```
 
-Функция `load` не знает, какой аллокатор ей дали. Вызывающий решает: арена, `FixedBuf` или `c_allocator`.
+The function `load` does not know which allocator it was given. The caller decides: an arena, a `FixedBuf` or `c_allocator`.
 
-## Свой аллокатор
+## Your own allocator
 
-Достаточно заполнить три поля. Например, счётчик, который считает выделения и передаёт работу родителю:
+It is enough to fill in three fields. For example, a counter that counts allocations and hands the work to a parent:
 
 ```vibe run
 struct Counting {
@@ -235,13 +235,13 @@ void count_free(void* ctx, void* p, u64 size) {
 }
 ```
 
-`alloc_fn(ctx, size, align)` обязана вернуть **нулевую** память или `null`, когда не хватило. `free_fn(ctx, ptr, size)` получает указатель и тот же размер.
+`alloc_fn(ctx, size, align)` must return **zeroed** memory, or `null` when there is not enough. `free_fn(ctx, ptr, size)` receives the pointer and the same size.
 
-20 элементов потребовали три выделения (8, 16 и 32 элемента по 8 байт: 64 + 128 + 256 = 448 байт): список удваивает ёмкость.
+20 elements took three allocations (8, 16 and 32 elements of 8 bytes: 64 + 128 + 256 = 448 bytes): the list doubles its capacity.
 
-## Стековые данные и указатели
+## Stack data and pointers
 
-Указатель на локальную переменную нельзя возвращать:
+A pointer to a local variable must not be returned:
 
 ```vibe
 i64* bad() {
@@ -250,9 +250,9 @@ i64* bad() {
 }
 ```
 
-Такой код компилируется, но после выхода из `bad` стек перезаписывается, и указатель «висит». Компилятор такое **не проверяет**. То же с срезом локального массива и с замыканием (см. [замыкания](functions.md#замыкания)).
+Such code compiles, but after `bad` exits the stack is overwritten, and the pointer "dangles". The compiler does **not** check this. The same goes for a slice of a local array and for a closure (see [closures](functions.md#closures)).
 
-Правило: данные, переживающие функцию, должны лежать в памяти, которой владеет вызывающий (параметр-срез, указатель, аллокатор).
+The rule: data that outlives a function must live in memory owned by the caller (a slice parameter, a pointer, an allocator).
 
 ```vibe run
 void fill(i64[] out) {
@@ -266,28 +266,28 @@ void main() {
 }
 ```
 
-## Чего не проверяет компилятор
+## What the compiler does not check
 
-| Проблема | Что будет |
+| Problem | What happens |
 |---|---|
-| Использование после `free` | неопределённое поведение |
-| Двойной `free` | неопределённое поведение |
-| Утечка (забыли `free`/`deinit`) | молча; память освободится при выходе процесса |
-| Выход за границы среза или массива | **проверяется**: паника с файлом и строкой |
-| Выход за границы через указатель | не проверяется |
-| Деление на ноль | аварийное завершение |
+| Use after `free` | undefined behavior |
+| Double `free` | undefined behavior |
+| A leak (forgot `free`/`deinit`) | silent; the memory is released when the process exits |
+| Going out of bounds of a slice or array | **checked**: a panic with file and line |
+| Going out of bounds through a pointer | not checked |
+| Division by zero | an abnormal exit |
 
-Дисциплина проста: пишите `defer` сразу после выделения, передавайте аллокатор вниз, и заводите арену, если не хотите считать отдельные `free`.
+The discipline is simple: write `defer` right after allocating, pass the allocator down, and create an arena if you do not want to count individual `free`s.
 
-## Выбор аллокатора
+## Choosing an allocator
 
-- Простая программа, которой нужен один-два объекта → `c_allocator()` и `defer`.
-- Много мелких выделений с общим временем жизни → `Arena`.
-- Нельзя трогать кучу или память ограничена → `FixedBuf`.
-- Нужна статистика, отладка, особые правила → свой `Allocator`.
+- A simple program that needs one or two objects → `c_allocator()` and `defer`.
+- Many small allocations with a common lifetime → `Arena`.
+- The heap must not be touched, or memory is limited → `FixedBuf`.
+- You need statistics, debugging or special rules → your own `Allocator`.
 
-## Что дальше
+## What next
 
-- Контейнеры, которые принимают аллокатор: [коллекции](collections.md).
-- Как работает `defer`: [управление потоком](control-flow.md#defer-и-errdefer).
-- Обработка `OutOfMemory`: [ошибки и опциональные значения](errors-and-optionals.md).
+- Containers that take an allocator: [collections](collections.md).
+- How `defer` works: [control flow](control-flow.md#defer-and-errdefer).
+- Handling `OutOfMemory`: [errors and optional values](errors-and-optionals.md).

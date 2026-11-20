@@ -1,22 +1,22 @@
 ---
-title: Ошибки и опциональные значения
+title: Errors and optional values
 order: 17
-section: Язык
-description: Тип !T, error.Имя, ?, catch, errdefer, тип ?T и orelse в Vibe с разбором типичных шаблонов
+section: Language
+description: The type !T, error.Name, ?, catch, errdefer, the type ?T and orelse in Vibe, with analysis of typical patterns
 ---
 
-В Vibe нет исключений. Ошибка — обычное значение, которое функция возвращает рядом с результатом. Всё видно в сигнатуре и в месте вызова.
+Vibe has no exceptions. An error is an ordinary value that a function returns alongside its result. Everything is visible in the signature and at the call site.
 
-Для двух разных ситуаций есть два типа:
+There are two types for two different situations:
 
-| Тип | Смысл | Когда использовать |
+| Type | Meaning | When to use |
 |---|---|---|
-| `!T` | значение `T` **или ошибка** с именем | операция могла сломаться: файл, разбор, нехватка памяти |
-| `?T` | значение `T` **или ничего** | отсутствие — нормальный исход: поиск, необязательное поле |
+| `!T` | a value of `T` **or an error** with a name | the operation could break: a file, parsing, running out of memory |
+| `?T` | a value of `T` **or nothing** | absence is a normal outcome: a lookup, an optional field |
 
-## Ошибки: `!T`
+## Errors: `!T`
 
-Функция объявляет, что может завершиться ошибкой, добавив `!` перед типом результата. Вернуть ошибку — `return error.Имя`.
+A function declares that it can fail by putting `!` before the result type. To return an error, write `return error.Name`.
 
 ```vibe run
 !i64 safe_div(i64 a, i64 b) {
@@ -30,11 +30,11 @@ void main() {
 }
 ```
 
-Имя ошибки придумывается на месте: `error.DivByZero`, `error.NotFound`. Объявлять списки ошибок заранее не нужно. Одинаковые имена в разных функциях означают одну и ту же ошибку.
+The name of an error is made up on the spot: `error.DivByZero`, `error.NotFound`. There is no need to declare lists of errors in advance. The same name in different functions means the same error.
 
-Обычное значение `T` подходит там, где ожидается `!T` (это неявное преобразование), поэтому в успешном случае пишите просто `return значение`.
+A plain value `T` fits wherever `!T` is expected (an implicit conversion), so in the successful case just write `return value`.
 
-Если результат не нужен, а ошибка возможна, пишите `!void`:
+If you do not need a result but an error is possible, write `!void`:
 
 ```vibe run
 !void check(i64 n) {
@@ -42,12 +42,12 @@ void main() {
 }
 
 void main() {
-    check(5) catch println("плохо");
-    check(-5) catch println("плохо");
+    check(5) catch println("bad");
+    check(-5) catch println("bad");
 }
 ```
 
-Значение `!T` можно положить в переменную и напечатать. Оно печатается как значение или как `error.Имя`:
+A `!T` value can be put into a variable and printed. It is printed as the value or as `error.Name`:
 
 ```vibe run
 !i64 f(i64 n) {
@@ -62,7 +62,7 @@ void main() {
 }
 ```
 
-Использовать такое значение как обычное число нельзя, оно должно быть сначала «распаковано»:
+You cannot use such a value as an ordinary number: it has to be "unwrapped" first:
 
 ```vibe error
 !i64 f() { return 1; }
@@ -72,24 +72,24 @@ void main() {
 }
 ```
 
-## Нельзя игнорировать ошибку
+## You cannot ignore an error
 
-Если вызвать функцию с `!T` и ничего не сделать с результатом, это ошибка компиляции. Забыть про отказ нельзя:
+If you call a function that returns `!T` and do nothing with the result, that is a compile error. You cannot forget about a failure:
 
 ```vibe error
 !i64 f() { return 1; }
 
 void main() {
     f();
-    println("дальше");
+    println("next");
 }
 ```
 
-Выберите: пробросить (`?`), обработать (`catch`) или сознательно отбросить (`_ =`).
+Choose: propagate (`?`), handle (`catch`) or deliberately discard (`_ =`).
 
-## Проброс: `?`
+## Propagating: `?`
 
-`выражение?` — если внутри ошибка, функция **немедленно возвращает её же** вызывающему (выполнив `defer` и `errdefer`). Если значение — оно извлекается.
+`expression?`: if there is an error inside, the function **immediately returns that same error** to its caller (running `defer` and `errdefer`). If there is a value, it is extracted.
 
 ```vibe run
 !i64 parse(str s) {
@@ -110,7 +110,7 @@ void main() {
 }
 ```
 
-`?` можно ставить только в функции, которая сама возвращает `!T`. Иначе непонятно, куда пробрасывать:
+`?` can be used only in a function that itself returns `!T`. Otherwise it is unclear where to propagate to:
 
 ```vibe error
 !i64 f() { return 1; }
@@ -121,11 +121,11 @@ void main() {
 }
 ```
 
-Цепочки `a()?.b()?` читаются слева направо: каждый `?` — точка возможного выхода.
+Chains like `a()?.b()?` are read left to right: every `?` is a point of possible exit.
 
-### `main` с `!void`
+### `main` with `!void`
 
-Если `main` возвращает `!void`, непойманная ошибка завершает программу кодом 1 и печатает `error: Имя`:
+If `main` returns `!void`, an uncaught error ends the program with code 1 and prints `error: Name`:
 
 ```vibe run exit
 !void load() {
@@ -133,15 +133,15 @@ void main() {
 }
 
 !void main() {
-    println("старт");
+    println("start");
     load()?;
-    println("сюда не дойдём");
+    println("we will not get here");
 }
 ```
 
-## Обработка: `catch`
+## Handling: `catch`
 
-`выражение catch запасное` — результат успешного выражения, а при ошибке — `запасное`.
+`expression catch fallback` gives the result of the expression when it succeeds, and `fallback` on an error.
 
 ```vibe run
 !i64 f(i64 n) {
@@ -155,9 +155,9 @@ void main() {
 }
 ```
 
-### С именем ошибки
+### With the name of the error
 
-`catch |e| { ... }` даёт доступ к ошибке. Блок должен **дать значение** (последнее выражение блока) или **выйти** из функции/цикла через `return`, `break`, `continue`, `panic`.
+`catch |e| { ... }` gives access to the error. The block must **produce a value** (the last expression of the block) or **leave** the function or loop with `return`, `break`, `continue` or `panic`.
 
 ```vibe run
 !i64 f(i64 n) {
@@ -168,14 +168,14 @@ void main() {
 
 void main() {
     const auto r = f(-1) catch |e| {
-        println("ошибка: {e}");
+        println("error: {e}");
         -1;
     };
     println(r);
 }
 ```
 
-Выбрать значение по виду ошибки можно через сравнение. `if` — оператор, поэтому значение заводится заранее:
+You can pick a value by the kind of error with a comparison. `if` is a statement, so the value is declared in advance:
 
 ```vibe run
 !i64 f(i64 n) {
@@ -202,7 +202,7 @@ void main() {
 }
 ```
 
-Блок, который не даёт значения, — ошибка. Последним должно стоять выражение:
+A block that gives no value is an error. An expression must come last:
 
 ```vibe error
 !i64 f() { return error.X; }
@@ -214,9 +214,9 @@ void main() {
 }
 ```
 
-### Выход вместо значения
+### Leaving instead of a value
 
-В ветке `catch` можно выйти из текущей функции или цикла:
+In a `catch` branch you can leave the current function or loop:
 
 ```vibe run
 !i64 f(i64 n) {
@@ -238,41 +238,41 @@ void main() {
 }
 ```
 
-### `catch` для `!void`
+### `catch` for `!void`
 
-Если выражение ничего не возвращает, после `catch` стоит просто действие:
+If the expression returns nothing, an action simply follows `catch`:
 
 ```vibe run
 !void f() { return error.Boom; }
 
 void main() {
-    f() catch println("обработано");
-    f() catch |e| println("поймано {e}");
-    println("конец");
+    f() catch println("handled");
+    f() catch |e| println("caught {e}");
+    println("end");
 }
 ```
 
-### Сознательно отбросить: `_ =`
+### Deliberately discarding: `_ =`
 
 ```vibe run
 !i64 risky() { return error.Fail; }
 
 void main() {
     _ = risky();
-    println("ошибка проигнорирована явно");
+    println("the error was ignored explicitly");
 }
 ```
 
-Это допустимо, но на практике редко нужно: чаще пишут `catch 0` или `catch return`.
+This is allowed, but rarely needed in practice: more often you write `catch 0` or `catch return`.
 
-## `errdefer`: откат только при ошибке
+## `errdefer`: rollback only on error
 
-`errdefer` выполняется только тогда, когда функция выходит **с ошибкой**. Он нужен для отката частично созданного состояния. Обычный `defer` выполняется всегда (см. [управление потоком](control-flow.md#defer-и-errdefer)).
+`errdefer` runs only when the function exits **with an error**. It is meant for rolling back partially built state. A plain `defer` always runs (see [control flow](control-flow.md#defer-and-errdefer)).
 
 ```vibe run
 !i64 make(i64 n) {
-    errdefer println("откат: make({n}) не удался");
-    defer println("в любом случае: закончили make({n})");
+    errdefer println("rollback: make({n}) failed");
+    defer println("in any case: finished make({n})");
     if (n < 0) { return error.Negative; }
     return n * 2;
 }
@@ -283,29 +283,29 @@ void main() {
 }
 ```
 
-Правило работает и для ошибки, пришедшей через `?`, и для `return g()`, который оказался ошибкой:
+The rule works both for an error that arrived through `?` and for a `return g()` that turned out to be an error:
 
 ```vibe run
 !void inner() { return error.OutOfRange; }
 
 !void outer() {
-    errdefer println("outer: откат");
+    errdefer println("outer: rollback");
     inner()?;
-    println("не печатается");
+    println("not printed");
 }
 
 void main() {
-    outer() catch |e| println("main поймал {e}");
+    outer() catch |e| println("main caught {e}");
 }
 ```
 
-Типичное применение: выделили две вещи, на второй сломались — освободили первую.
+A typical use: you allocated two things, the second failed, so you free the first.
 
-## Ошибки в стандартной библиотеке
+## Errors in the standard library
 
-Функции стандартной библиотеки возвращают ошибки с понятными именами:
+The functions of the standard library return errors with clear names:
 
-| Функция | Ошибки |
+| Function | Errors |
 |---|---|
 | `parse_int(s)` | `error.InvalidNumber` |
 | `List.pop()`, `List.last()` | `error.Empty` |
@@ -315,27 +315,27 @@ void main() {
 | `read_file(a, path)` | `error.FileNotFound`, `error.ReadFailed` |
 | `write_file(path, data)` | `error.CannotOpen`, `error.WriteFailed` |
 | `env(name)` | `error.NotFound` |
-| `run(a, argv)` | `error.Signaled` и ошибки запуска процесса |
+| `run(a, argv)` | `error.Signaled` and process start errors |
 | `a.alloc(n)`, `List.push(v)` | `error.OutOfMemory` |
 
-Полная таблица — в [справочнике](stdlib.md).
+The full table is in the [reference](stdlib.md).
 
 ```vibe run
 void main() {
     println(parse_int("42") catch -1);
     const auto e = parse_int("abc") catch |e| {
-        println("не число: {e}");
+        println("not a number: {e}");
         0;
     };
     println(e);
 }
 ```
 
-## Опциональные значения: `?T`
+## Optional values: `?T`
 
-`?T` — «либо значение, либо ничего». Тип `?T` — то же самое, что `Option<T>` из стандартной библиотеки (union с вариантами `Some` и `None`).
+`?T` means "either a value or nothing". The type `?T` is the same as `Option<T>` from the standard library (a union with the variants `Some` and `None`).
 
-В `?T` неявно превращаются значение `T` и `null`:
+A value `T` and `null` convert implicitly into `?T`:
 
 ```vibe run
 ?i64 find(i64[] xs, i64 want) {
@@ -353,9 +353,9 @@ void main() {
 }
 ```
 
-### `orelse`: запасное значение
+### `orelse`: a fallback value
 
-`a orelse b` — значение `a`, а если оно пустое, то `b`. Правая часть может быть выходом: `return`, `break`, `continue`.
+`a orelse b` is the value of `a`, or `b` if it is empty. The right-hand side can be an exit: `return`, `break`, `continue`.
 
 ```vibe run
 ?i64 find(i64[] xs, i64 want) {
@@ -377,14 +377,14 @@ void main() {
     println(index_or_bust(xs[..], 13), index_or_bust(xs[..], 0));
     for (auto i : 0..3) {
         const auto v = find(xs[..], i * 4 + 5) orelse continue;
-        println("нашли на {v}");
+        println("found at {v}");
     }
 }
 ```
 
-> **Ловушка.** Запасное значение того же типа, что и внутри: `?i64 orelse "a"` — ошибка типов.
+> **Gotcha:** the fallback has the same type as the one inside: `?i64 orelse "a"` is a type error.
 
-### Проверка и разбор
+### Testing and taking apart
 
 ```vibe run
 ?i64 pick(i64 n) {
@@ -398,8 +398,8 @@ void main() {
     println(a.is_some(), b.is_some(), b.unwrap_or(9));
     println(a is .Some, b is .None);
     match a {
-        .Some(v) => println("значение {v}");
-        .None => println("пусто");
+        .Some(v) => println("value {v}");
+        .None => println("empty");
     }
     const ?i64 c = .Some(5);
     const ?i64 d = .None;
@@ -407,11 +407,11 @@ void main() {
 }
 ```
 
-Методы: `is_some()` и `unwrap_or(запасное)`. Образцы `.Some(v)` и `.None` работают в [`match`](control-flow.md#match-как-выражение), а `is` проверяет вариант.
+Methods: `is_some()` and `unwrap_or(fallback)`. The patterns `.Some(v)` and `.None` work in [`match`](control-flow.md#match-as-an-expression), and `is` tests the variant.
 
-### Указатель или `?T*`
+### A pointer or `?T*`
 
-Для «указатель, который может отсутствовать» используйте `?T*`. Сравнивать значение типа `?T` с `null` напрямую (`x == null`) нельзя: используйте `orelse`, `is .None` или `match`.
+For "a pointer that may be absent" use `?T*`. You cannot compare a value of type `?T` with `null` directly (`x == null`): use `orelse`, `is .None` or `match`.
 
 ```vibe run
 struct Node { i64 v; }
@@ -432,11 +432,11 @@ void main() {
 }
 ```
 
-А обычный указатель `T*` сам может быть `null` и сравнивается с `null` напрямую.
+An ordinary pointer `T*` can itself be `null` and is compared with `null` directly.
 
-## Вложенность: `!?T`
+## Nesting: `!?T`
 
-Операция, которая может сломаться и ещё вернуть «ничего»: `!?T`. Сначала разворачивается `!`, потом `?`:
+An operation that can break and can also return "nothing": `!?T`. The `!` is unwrapped first, then the `?`:
 
 ```vibe run
 !?i64 lookup(str key) {
@@ -452,30 +452,30 @@ void main() {
 }
 ```
 
-## Выбор между `!T` и `?T`
+## Choosing between `!T` and `?T`
 
-Спросите: «если результата нет, это нормально или это поломка?»
+Ask: "if there is no result, is that normal or is it a failure?"
 
-- Поиск в списке не нашёл элемент — это нормально → `?T`.
-- Файл не открылся, число не разобралось, память кончилась — поломка → `!T`.
-- Если важна **причина** — нужен `!T` с говорящим именем ошибки.
+- A search in a list did not find the element: that is normal → `?T`.
+- A file did not open, a number did not parse, memory ran out: a failure → `!T`.
+- If the **reason** matters, you need a `!T` with a descriptive error name.
 
-## `panic` и `assert`
+## `panic` and `assert`
 
-Для ошибок программиста (нарушенный инвариант) есть `panic("сообщение")` и `assert(условие)`: они печатают место и завершают программу с кодом 1. Они не заменяют `!T`.
+For programmer errors (a violated invariant) there are `panic("message")` and `assert(condition)`: they print the location and end the program with code 1. They do not replace `!T`.
 
 ```vibe run panic
 void main() {
     const auto n = 3;
     assert(n > 0);
-    println("первое assert прошло");
+    println("the first assert passed");
     assert(n > 5);
-    println("не печатается");
+    println("not printed");
 }
 ```
 
-## Что дальше
+## What next
 
-- Как освобождать ресурсы при любом выходе: [управление потоком](control-flow.md#defer-и-errdefer).
-- Ошибки нехватки памяти: [память и аллокаторы](memory.md).
-- Проверка ошибок в тестах: [тестирование](testing.md).
+- How to release resources on any exit: [control flow](control-flow.md#defer-and-errdefer).
+- Out-of-memory errors: [memory and allocators](memory.md).
+- Checking errors in tests: [testing](testing.md).

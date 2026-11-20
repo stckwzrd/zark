@@ -1,25 +1,25 @@
 ---
-title: Драйверы и низкоуровневый код
+title: Drivers and low-level code
 order: 30.5
-section: Интероп и инструменты
-description: volatile, packed struct, inline asm, Cpu, Port, Bits, атомики, сборка без libc и ядро, которое загружается в QEMU
+section: Interop and tools
+description: volatile, packed struct, inline asm, Cpu, Port, Bits, atomics, building without libc and a kernel that boots in QEMU
 ---
 
-Vibe подходит для драйверов и ядер: регистры устройств описываются структурами, привилегированные инструкции вызываются как обычные функции, а программа собирается без libc. Всё, что нужно, вшито в язык и прелюдию. Ни макросов, ни `#pragma`, ни атрибутов компилятора.
+Vibe is suited to drivers and kernels: device registers are described with structs, privileged instructions are called like ordinary functions, and the program is built without libc. Everything you need is built into the language and the prelude. No macros, no `#pragma`, no compiler attributes.
 
-| Задача | В C | В Vibe |
+| Task | In C | In Vibe |
 |---|---|---|
-| регистр устройства | `volatile uint32_t *` и макросы | `volatile u32* reg` или `volatile u32` в `struct` |
-| формат дескриптора | `__attribute__((packed))` | `packed struct` |
-| порты ввода-вывода | `asm volatile` с ограничениями | `Port::in8(p)`, `Port::out8(p, v)` |
-| `cli`, `hlt`, `rdtsc`, `cr3`, MSR | свой inline asm на каждую | `Cpu::cli()`, `Cpu::halt()`, `Cpu::rdtsc()`, `Cpu::cr3()`, `Cpu::rdmsr(n)` |
-| биты регистра | маски и сдвиги вручную | `Bits::get(v, 7, 4)`, `Bits::set(v, 7, 4, x)` |
-| атомарные операции, спинлок | `<stdatomic.h>` | `Atomic::cas32(...)`, `Spinlock` |
-| без libc | `-nostdlib -ffreestanding` и скрипты | `--freestanding` |
+| a device register | `volatile uint32_t *` and macros | `volatile u32* reg` or `volatile u32` in a `struct` |
+| a descriptor format | `__attribute__((packed))` | `packed struct` |
+| I/O ports | `asm volatile` with constraints | `Port::in8(p)`, `Port::out8(p, v)` |
+| `cli`, `hlt`, `rdtsc`, `cr3`, MSRs | your own inline asm for each | `Cpu::cli()`, `Cpu::halt()`, `Cpu::rdtsc()`, `Cpu::cr3()`, `Cpu::rdmsr(n)` |
+| register bits | masks and shifts by hand | `Bits::get(v, 7, 4)`, `Bits::set(v, 7, 4, x)` |
+| atomic operations, a spinlock | `<stdatomic.h>` | `Atomic::cas32(...)`, `Spinlock` |
+| no libc | `-nostdlib -ffreestanding` and scripts | `--freestanding` |
 
 ## `volatile`
 
-`volatile` ставится перед типом и означает, что каждое чтение и запись обращаются к памяти: компилятор их не склеивает и не выбрасывает. Это нужно для регистров устройств.
+`volatile` goes before the type and means that every read and write goes to memory: the compiler does not merge or drop them. This is needed for device registers.
 
 ```vibe run
 struct Uart {
@@ -38,7 +38,7 @@ void main() {
 }
 ```
 
-`volatile` относится к тому, что лежит по адресу: `volatile u32* p` — указатель на `volatile u32`. Поле `volatile u32 data` и переменная `volatile u32 x` тоже работают. Ширина обращения всегда равна ширине типа: `volatile u8*` читает ровно один байт, `volatile u16*` — два.
+`volatile` applies to what lies at the address: `volatile u32* p` is a pointer to a `volatile u32`. A field `volatile u32 data` and a variable `volatile u32 x` work too. The width of an access always equals the width of the type: `volatile u8*` reads exactly one byte, `volatile u16*` two.
 
 ```vibe run
 void main() {
@@ -51,11 +51,11 @@ void main() {
 }
 ```
 
-Реальный адрес регистров задаётся числом через `as`: `auto uart = 0xFE201000 as *Uart;`.
+The real address of registers is given as a number through `as`: `auto uart = 0xFE201000 as *Uart;`.
 
 ## `packed struct`
 
-Обычная структура выравнивает поля, как в C. `packed struct` кладёт поля вплотную, без пропусков: так устроены дескрипторы, таблицы IDT и GDT, заголовки пакетов и конфигурация PCI.
+An ordinary struct aligns its fields as in C. A `packed struct` puts the fields back to back, without gaps: this is how descriptors, IDT and GDT tables, packet headers and PCI configuration are laid out.
 
 ```vibe run
 packed struct Descriptor {
@@ -79,9 +79,9 @@ void main() {
 }
 ```
 
-Доступ к невыровненным полям обычный: x86-64 это допускает. Выравнивание структуры вручную (`align(4096)`) пока не поддерживается: выравнивайте нужные буферы в скрипте линковщика.
+Access to unaligned fields is ordinary: x86-64 allows it. Aligning a struct type by hand is not supported yet (see `align(N)` for global variables below): align the buffers you need in the linker script.
 
-## Биты регистров: `Bits`
+## Register bits: `Bits`
 
 ```vibe run
 void main() {
@@ -92,32 +92,32 @@ void main() {
 }
 ```
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `Bits::bit(n)` | число с одним битом `n` |
-| `Bits::mask(hi, lo)` | маска из битов `hi..lo` включительно |
-| `Bits::get(v, hi, lo)` | значение битового поля |
-| `Bits::set(v, hi, lo, x)` | `v` с заменённым полем |
+| `Bits::bit(n)` | a number with the single bit `n` |
+| `Bits::mask(hi, lo)` | a mask of the bits `hi..lo` inclusive |
+| `Bits::get(v, hi, lo)` | the value of a bit field |
+| `Bits::set(v, hi, lo, x)` | `v` with the field replaced |
 
-Результаты имеют тип `u64`; для 32-битного регистра добавляйте `as u32`: сужение в Vibe всегда явное.
+The results have the type `u64`; for a 32-bit register add `as u32`: narrowing in Vibe is always explicit.
 
-## Процессор: `Cpu` и порты: `Port`
+## The processor: `Cpu`, and ports: `Port`
 
-Это обычные статические методы. Привилегированные инструкции в обычной программе вызывают сбой, поэтому используйте их в ядре или драйвере.
+These are ordinary static methods. Privileged instructions crash in an ordinary program, so use them in a kernel or a driver.
 
-| Функция | Инструкция |
+| Function | Instruction |
 |---|---|
-| `Cpu::cli()`, `Cpu::sti()` | запретить и разрешить прерывания |
+| `Cpu::cli()`, `Cpu::sti()` | disable and enable interrupts |
 | `Cpu::halt()`, `Cpu::pause()`, `Cpu::nop()`, `Cpu::breakpoint()` | `hlt`, `pause`, `nop`, `int3` |
 | `Cpu::fence()`, `load_fence()`, `store_fence()` | `mfence`, `lfence`, `sfence` |
-| `Cpu::rdtsc()` | счётчик тактов |
-| `Cpu::cr0()`, `cr2()`, `cr3()`, `cr4()` и `set_cr0(v)`, `set_cr3(v)`, `set_cr4(v)` | управляющие регистры |
+| `Cpu::rdtsc()` | the cycle counter |
+| `Cpu::cr0()`, `cr2()`, `cr3()`, `cr4()` and `set_cr0(v)`, `set_cr3(v)`, `set_cr4(v)` | control registers |
 | `Cpu::load_idt(p)`, `load_gdt(p)`, `invlpg(addr)` | `lidt`, `lgdt`, `invlpg` |
-| `Cpu::rdmsr(n)`, `Cpu::wrmsr(n, v)` | модельные регистры |
+| `Cpu::rdmsr(n)`, `Cpu::wrmsr(n, v)` | model-specific registers |
 | `Port::in8(p)`, `in16`, `in32` | `in` |
 | `Port::out8(p, v)`, `out16`, `out32` | `out` |
 
-`rdtsc`, `pause` и барьеры работают и в обычных программах:
+`rdtsc`, `pause` and the barriers also work in ordinary programs:
 
 ```vibe run
 void main() {
@@ -128,9 +128,9 @@ void main() {
 }
 ```
 
-## `align(N)`: выравнивание глобальной переменной
+## `align(N)`: aligning a global variable
 
-Таблицы страниц и буферы для DMA должны лежать по адресу, кратному размеру страницы. Перед глобальной переменной пишется `align(N)`; `N` — степень двойки.
+Page tables and DMA buffers must lie at an address that is a multiple of the page size. Write `align(N)` before a global variable; `N` is a power of two.
 
 ```vibe run
 align(4096) u64[512] page_table = 0;
@@ -140,9 +140,9 @@ void main() {
 }
 ```
 
-Структуры и локальные переменные выравниваются по своему типу.
+Structs and local variables are aligned by their type.
 
-## Атомарные операции и `Spinlock`
+## Atomic operations and `Spinlock`
 
 ```vibe run
 void main() {
@@ -160,36 +160,36 @@ void main() {
 }
 ```
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `Atomic::fetch_add32(p, v)`, `fetch_add8`, `fetch_add16`, `fetch_add64` | прибавляет и возвращает старое значение |
-| `Atomic::swap32(p, v)`, `swap8`, `swap16`, `swap64` | записывает и возвращает старое значение |
-| `Atomic::cas32(p, expected, desired)`, `cas8`, `cas16`, `cas64` | пишет `desired`, если там `expected`; возвращает прежнее значение |
+| `Atomic::fetch_add32(p, v)`, `fetch_add8`, `fetch_add16`, `fetch_add64` | adds and returns the old value |
+| `Atomic::swap32(p, v)`, `swap8`, `swap16`, `swap64` | writes and returns the old value |
+| `Atomic::cas32(p, expected, desired)`, `cas8`, `cas16`, `cas64` | writes `desired` if `expected` is there; returns the previous value |
 
-## `asm`: свои инструкции
+## `asm`: your own instructions
 
-Если нужной инструкции нет в `Cpu`, её можно вставить самим: `asm<Тип>("шаблон", "ограничения", операнды...)`. Шаблон и ограничения — в синтаксисе LLVM (AT&T). Фигурные скобки в строках экранируются: `\{rax\}`.
+If the instruction you need is not in `Cpu`, you can insert it yourself: `asm<Type>("template", "constraints", operands...)`. The template and the constraints are in the LLVM (AT&T) syntax. Curly braces in the strings are escaped: `\{rax\}`.
 
 ```vibe
 u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 ```
 
-Собственный бэкенд сам кодирует только шаблоны, которые использует прелюдия (они перечислены выше). Для остальных он остановится с понятным сообщением, а сборка с `--llvm` примет любой шаблон.
+The own backend encodes only the templates that the prelude uses (they are listed above). For the others it stops with a clear message, while a build with `--llvm` accepts any template.
 
-## Драйверы в пространстве пользователя (Linux)
+## User-space drivers (Linux)
 
-Большинство «драйверов для чтения памяти и железа» на Linux работает без ядра: через `/dev/mem`, файлы PCI в sysfs, `/dev/cpu/N/msr` и системные вызовы. В прелюдии для этого есть всё, и libc не нужна: `Sys` вызывает ядро инструкцией `syscall` напрямую, а ошибки возвращаются как `!T` (`error.PermissionDenied`, `error.NotFound`, `error.NoProcess`, `error.BadAddress`, `error.InvalidArgument`).
+Most "drivers for reading memory and hardware" on Linux work without a kernel module: through `/dev/mem`, the PCI files in sysfs, `/dev/cpu/N/msr` and system calls. The prelude has everything for this, and libc is not needed: `Sys` calls the kernel directly with the `syscall` instruction, and errors are returned as `!T` (`error.PermissionDenied`, `error.NotFound`, `error.NoProcess`, `error.BadAddress`, `error.InvalidArgument`).
 
-| Что | Как |
+| What | How |
 |---|---|
-| системный вызов | `Sys::call(номер, a1..a6)`, обёртки `Sys::read`, `write`, `open`, `close`, `pread`, `pwrite`, `mmap`, `munmap`, `ioctl`, `getpid`, `slurp(a, путь)` |
-| память страницы, регистры устройства | `Mapping::anonymous(len)`, `Mapping::file(путь, смещение, len, запись)`; `read8/16/32/64(off)`, `write8/16/32/64(off, v)`, `read_into(off, буфер)` |
-| физическая память | `Mapping::file("/dev/mem", адрес, len, false)` (нужен root, ядро может запрещать обычную память) |
-| чужой процесс | `Proc::read(pid, адрес, буфер)`, `Proc::write(pid, адрес, данные)`, `Proc::maps(a, pid)` |
-| PCI | `Pci::list(a)`, `Pci::config32(устройство, смещение)`, `Pci::bar(устройство, n, запись)` |
-| MSR | `Msr::read(cpu, номер)` (нужны root и модуль `msr`) |
+| a system call | `Sys::call(number, a1..a6)`, the wrappers `Sys::read`, `write`, `open`, `close`, `pread`, `pwrite`, `mmap`, `munmap`, `ioctl`, `getpid`, `slurp(a, path)` |
+| page memory, device registers | `Mapping::anonymous(len)`, `Mapping::file(path, offset, len, write)`; `read8/16/32/64(off)`, `write8/16/32/64(off, v)`, `read_into(off, buffer)` |
+| physical memory | `Mapping::file("/dev/mem", address, len, false)` (needs root, and the kernel may forbid ordinary memory) |
+| another process | `Proc::read(pid, address, buffer)`, `Proc::write(pid, address, data)`, `Proc::maps(a, pid)` |
+| PCI | `Pci::list(a)`, `Pci::config32(device, offset)`, `Pci::bar(device, n, write)` |
+| MSR | `Msr::read(cpu, number)` (needs root and the `msr` module) |
 
-Чтение и запись через `Mapping` идут через `volatile` и проверяют границы: выход за страницу — `error.OutOfRange`, а не падение.
+Reads and writes through `Mapping` go through `volatile` and check the bounds: going past the page gives `error.OutOfRange`, not a crash.
 
 ```vibe run
 !void main() {
@@ -201,7 +201,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 }
 ```
 
-Чтение памяти процесса (своего или того, на который есть право по `ptrace_scope`):
+Reading the memory of a process (your own, or one you have the right to by `ptrace_scope`):
 
 ```vibe run
 !void main() {
@@ -212,7 +212,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 }
 ```
 
-Список карт памяти и поиск области:
+Listing the memory maps and finding a region:
 
 ```vibe run
 !void main() {
@@ -223,7 +223,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 }
 ```
 
-Идентификаторы PCI-устройств (читаются без root):
+PCI device identifiers (readable without root):
 
 ```vibe
 !void main() {
@@ -236,13 +236,13 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 }
 ```
 
-Такие программы собираются в один небольшой исполняемый файл. Обычные права действуют как всегда: доступ к `/dev/mem` и BAR устройств требует root, а чужие процессы читаются только при разрешении `ptrace`.
+Such programs build into one small executable. The usual permissions apply as always: access to `/dev/mem` and device BARs needs root, and other processes can be read only if `ptrace` allows it.
 
-## Сборка без libc: `--freestanding`
+## Building without libc: `--freestanding`
 
-`vibe build ядро.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` компонует с `-nostdlib -static` и отключает проверки границ (их сообщения требуют libc). В режиме можно использовать всё, что не вызывает libc: `Fmt` и `Writer` работают без выделений, `println` не нужен, потому что вывод вы пишете сами.
+`vibe build kernel.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` links with `-nostdlib -static` and turns off the bounds checks (their messages need libc). In this mode you can use everything that does not call libc: `Fmt` and `Writer` work without allocations, `println` is not needed because you write the output yourself.
 
-Компилятор может вызвать `memset` и `memcpy` при копировании и обнулении больших значений. В ядре определите их сами: определение с `export` заменяет объявление из прелюдии.
+The compiler may call `memset` and `memcpy` when copying and zeroing large values. In a kernel, define them yourself: a definition with `export` replaces the declaration from the prelude.
 
 ```vibe
 export void* memset(void* dst, i32 c, u64 n) {
@@ -252,11 +252,11 @@ export void* memset(void* dst, i32 c, u64 n) {
 }
 ```
 
-Файлы `.S`, `.c`, `.o` и параметры `-Wl,...`, `-T...`, `-nostdlib`, `-static` передаются как есть.
+The files `.S`, `.c`, `.o` and the parameters `-Wl,...`, `-T...`, `-nostdlib`, `-static` are passed as they are.
 
-## Пример: ядро, которое загружается в QEMU
+## An example: a kernel that boots in QEMU
 
-В `examples/baremetal/` лежит полное ядро x86-64 на Vibe: `boot.S` (заголовок Multiboot, переход в 64-битный режим, заглушки прерываний), `linker.ld` и `kernel.vibe`.
+`examples/baremetal/` holds a complete x86-64 kernel in Vibe: `boot.S` (the Multiboot header, the switch to 64-bit mode, interrupt stubs), `linker.ld` and `kernel.vibe`.
 
 ```vibe
 struct Serial {
@@ -282,7 +282,7 @@ export void kmain() {
 }
 ```
 
-Своя `kprintln` с интерполяцией строк получается из `Fmt` и `Writer` за шесть строк, а память не выделяется. Ядро выводит текст в последовательный порт, строит IDT (`packed struct`), ловит исключение `int3` в обработчике на Vibe и возвращается из него. Запуск:
+Your own `kprintln` with string interpolation comes out of `Fmt` and `Writer` in six lines, and no memory is allocated. The kernel prints text to the serial port, builds an IDT (a `packed struct`), catches an `int3` exception in a handler written in Vibe and returns from it. Running it:
 
 ```sh
 $ examples/baremetal/run.sh
@@ -294,20 +294,19 @@ interrupt 3, error code 0, back in the kernel
 after int3
 ```
 
-Скрипт собирает ядро, превращает ELF в 32-битный образ для Multiboot (`objcopy -O elf32-i386`) и запускает `qemu-system-x86_64`. Тот же пример проверяется тестами на обоих бэкендах.
+The script builds the kernel, turns the ELF into a 32-bit image for Multiboot (`objcopy -O elf32-i386`) and starts `qemu-system-x86_64`. The same example is checked by the tests on both backends.
 
-## Чего пока нет
+## What is not there yet
 
-- Модулей ядра Linux: для них нужны заголовки ядра (`linux-headers`), сторонний C-файл с `module_init` и проверка в виртуальной машине. Объектный файл из `--freestanding` можно подключить в Kbuild, но готового примера пока нет.
-- Атрибута `interrupt`: обработчики прерываний пишутся как заглушки на ассемблере (см. `boot.S`) и вызывают функцию на Vibe.
-- `align(N)` для структур и переменных.
-- Битовых полей в `struct`: используйте `Bits`.
-- 8- и 16-битных атомарных операций.
-- Кодирования произвольного `asm` в собственном бэкенде.
-- Целей кроме x86-64.
+- Linux kernel modules: they need the kernel headers (`linux-headers`), a third-party C file with `module_init` and a check in a virtual machine. The object file from `--freestanding` can be plugged into Kbuild, but there is no ready example yet.
+- An `interrupt` attribute: interrupt handlers are written as assembly stubs (see `boot.S`) that call a Vibe function.
+- `align(N)` for struct types and local variables.
+- Bit fields in `struct`: use `Bits`.
+- Encoding of arbitrary `asm` in the own backend.
+- Targets other than x86-64.
 
-## Что дальше
+## What next
 
-- C и ассемблерные файлы рядом с Vibe: [взаимодействие с C](c-interop.md).
-- Память без кучи: [память и аллокаторы](memory.md).
-- Устройство бэкендов: [как всё устроено](how-it-works.md).
+- C and assembly files next to Vibe: [interoperating with C](c-interop.md).
+- Memory without a heap: [memory and allocators](memory.md).
+- How the backends work: [how it all works](how-it-works.md).

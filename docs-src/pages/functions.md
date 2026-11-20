@@ -1,11 +1,11 @@
 ---
-title: Функции и замыкания
+title: Functions and closures
 order: 15
-section: Язык
-description: Объявление функций, параметры, возврат значений, дженерики с ограничениями, указатели на функции и замыкания в Vibe
+section: Language
+description: Declaring functions, parameters, returning values, generics with constraints, function pointers and closures in Vibe
 ---
 
-## Объявление и вызов
+## Declaring and calling
 
 ```vibe run
 i64 add(i64 a, i64 b) {
@@ -13,18 +13,18 @@ i64 add(i64 a, i64 b) {
 }
 
 void greet(str name) {
-    println("Привет, {name}!");
+    println("Hello, {name}!");
 }
 
 void main() {
     println(add(2, 3));
-    greet("мир");
+    greet("world");
 }
 ```
 
-Синтаксис: `ТипРезультата имя(Тип параметр, ...) { тело }`. Результат стоит перед именем, как в C++. Функция без результата объявляется как `void`.
+The syntax is `ResultType name(Type parameter, ...) { body }`. The result comes before the name, as in C++. A function without a result is declared as `void`.
 
-Порядок объявлений в файле не важен: можно вызывать функцию, объявленную ниже. Это же позволяет писать взаимную рекурсию:
+The order of declarations in a file does not matter: you can call a function declared further down. This also allows mutual recursion:
 
 ```vibe run
 bool even(i64 n) {
@@ -42,11 +42,11 @@ void main() {
 }
 ```
 
-Висячая запятая в списке параметров и аргументов допустима, а перенос по строкам внутри скобок допустим (см. [лексика](lexical.md#конец-оператора)).
+A trailing comma in the list of parameters and arguments is allowed, and so is wrapping lines inside the parentheses (see [lexical structure](lexical.md#end-of-a-statement)).
 
-## Число и типы аргументов
+## Number and types of arguments
 
-Аргументов должно быть ровно столько, сколько параметров. Значений по умолчанию и перегрузки по числу аргументов нет.
+There must be exactly as many arguments as parameters. There are no default values and no overloading by the number of arguments.
 
 ```vibe error
 i64 f(i64 a, i64 b) { return a; }
@@ -56,7 +56,7 @@ void main() {
 }
 ```
 
-Тип аргумента проверяется, но целые неявно расширяются:
+The type of an argument is checked, but integers are widened implicitly:
 
 ```vibe run
 i64 double(i64 x) { return x * 2; }
@@ -76,11 +76,11 @@ void main() {
 }
 ```
 
-## Параметры передаются по значению
+## Parameters are passed by value
 
-Функция получает копию. Структуры и массивы копируются целиком. Параметр можно менять внутри функции, но это изменение копии: вызывающий его не увидит.
+A function receives a copy. Structs and arrays are copied whole. A parameter can be changed inside the function, but that changes the copy: the caller does not see it.
 
-Чтобы функция меняла чужие данные, передайте **указатель** или **срез**:
+To let a function change someone else's data, pass a **pointer** or a **slice**:
 
 ```vibe run
 void bump(i64* p) {
@@ -101,7 +101,7 @@ void main() {
 }
 ```
 
-Параметр с `const` присваивать нельзя:
+A parameter declared with `const` cannot be assigned:
 
 ```vibe error
 void f(const i64 x) {
@@ -113,17 +113,17 @@ void main() {
 }
 ```
 
-## Возврат значения
+## Returning a value
 
-`return значение` выходит из функции. В функции без результата достаточно `return` без значения.
+`return value` leaves the function. In a function without a result a plain `return` is enough.
 
 ```vibe run
 void check(i64 x) {
     if (x > 0) {
-        println("положительное");
+        println("positive");
         return;
     }
-    println("неположительное");
+    println("not positive");
 }
 
 void main() {
@@ -132,7 +132,7 @@ void main() {
 }
 ```
 
-Результат функции без значения использовать нельзя:
+The result of a function without a value cannot be used:
 
 ```vibe error
 void f() { println("x"); }
@@ -142,11 +142,11 @@ void main() {
 }
 ```
 
-> **Ловушка.** Компилятор не проверяет, что функция с результатом возвращает значение на **всех** путях. Если управление дойдёт до конца тела без `return`, результат неопределён. Всегда завершайте такую функцию `return` в конце.
+> **Gotcha:** the compiler does not check that a function with a result returns a value on **all** paths. If control reaches the end of the body without a `return`, the result is undefined. Always end such a function with a `return`.
 
-### Несколько результатов
+### Several results
 
-Кортежей нет. Для нескольких значений заведите маленькую структуру:
+There are no tuples. For several values, make a small struct:
 
 ```vibe run
 struct DivMod { i64 q; i64 r; }
@@ -161,9 +161,9 @@ void main() {
 }
 ```
 
-Либо возвращайте результат через указатель-параметр, как в C.
+Or return the result through a pointer parameter, as in C.
 
-## Рекурсия
+## Recursion
 
 ```vibe run
 i64 fact(i64 n) {
@@ -181,11 +181,11 @@ void main() {
 }
 ```
 
-Хвостовой рекурсии как оптимизации нет: слишком глубокий вызов исчерпает стек.
+There is no tail-call optimization: a call that is too deep will exhaust the stack.
 
-## Ошибки и опциональные значения
+## Errors and optional values
 
-Результат вида `!T` означает «значение или ошибка», `?T` — «значение или ничего»:
+A result of the form `!T` means "a value or an error", and `?T` means "a value or nothing":
 
 ```vibe run
 !i64 safe_div(i64 a, i64 b) {
@@ -206,11 +206,11 @@ void main() {
 }
 ```
 
-Подробно — на странице [ошибки и опциональные значения](errors-and-optionals.md).
+Described in detail on the page [errors and optional values](errors-and-optionals.md).
 
-## Дженерики
+## Generics
 
-Функция с параметрами типа в `template<...>` создаёт отдельную копию под каждую комбинацию типов (мономорфизация). Накладных расходов во время работы нет.
+A function with type parameters in `template<...>` creates a separate copy for every combination of types (monomorphization). There is no run-time overhead.
 
 ```vibe run
 template<T> T first(T[] xs) {
@@ -236,9 +236,9 @@ void main() {
 }
 ```
 
-Тип выводится по аргументам. Литерал массива `[10, 20]` не годится для вывода `T[]`: сначала положите его в переменную и возьмите срез `nums[..]`, либо укажите тип явно. Когда вывести не из чего (как у `zero`) или нужно задать явно, пишите `имя<Тип>(...)`.
+The type is inferred from the arguments. The array literal `[10, 20]` is not suitable for inferring `T[]`: first put it in a variable and take a slice `nums[..]`, or give the type explicitly. When there is nothing to infer from (as with `zero`) or you want to set it explicitly, write `name<Type>(...)`.
 
-Тело дженерика проверяется при **использовании**, а не при объявлении, и только для реально используемых типов. Поэтому неподходящий тип выдаст ошибку внутри тела:
+The body of a generic is checked at the **use**, not at the declaration, and only for the types actually used. So an unsuitable type produces an error inside the body:
 
 ```vibe error
 template<T> T add(T a, T b) {
@@ -250,16 +250,16 @@ void main() {
 }
 ```
 
-### Ограничения
+### Constraints
 
-Чтобы ошибка была понятной и звучала до компиляции тела, пишите ограничение: `T: Ord`.
+To make the error clear and to report it before the body is compiled, write a constraint: `T: Ord`.
 
-| Ограничение | Какие типы подходят |
+| Constraint | Which types fit |
 |---|---|
-| `Eq` | числа, `bool`, символы, enum, указатели, `str` (есть `==`); структуры не подходят |
-| `Ord` | числа (есть `<`, `>`) |
-| `Num` | числа (есть арифметика) |
-| `Int` | целые |
+| `Eq` | numbers, `bool`, characters, enums, pointers, `str` (they have `==`); structs do not fit |
+| `Ord` | numbers (they have `<`, `>`) |
+| `Num` | numbers (they have arithmetic) |
+| `Int` | integers |
 | `Float` | `f32`, `f64` |
 
 ```vibe run
@@ -282,7 +282,7 @@ void main() {
 }
 ```
 
-Тело функции проверяется по объявленному ограничению сразу при объявлении: оператор, которого ограничение не даёт (`<` при `T: Eq`, `+` при `T: Ord`), — ошибка, даже если функцию никто не вызывает. Нарушение ограничения вызовом сообщается в точке вызова:
+The body of the function is checked against the declared constraint right at the declaration: an operator that the constraint does not provide (`<` with `T: Eq`, `+` with `T: Ord`) is an error even if nobody calls the function. A call that violates the constraint is reported at the call:
 
 ```vibe error
 template<T: Ord> T largest(T a, T b) {
@@ -295,13 +295,13 @@ void main() {
 }
 ```
 
-Строки `Ord` не удовлетворяют: упорядочивать `str` нельзя (см. [операторы](operators.md#сравнения)).
+Strings do not satisfy `Ord`: `str` cannot be ordered (see [operators](operators.md#comparisons)).
 
-В стандартной библиотеке такие функции уже есть: `min`, `max`, `abs`, `swap`, `sort` (см. [справочник](stdlib.md)).
+The standard library already has such functions: `min`, `max`, `abs`, `swap`, `sort` (see the [reference](stdlib.md)).
 
-## Указатели на функции
+## Function pointers
 
-Имя функции можно передавать как значение. Тип записывается как `fn(Параметры) -> Результат`.
+The name of a function can be passed as a value. The type is written as `fn(Parameters) -> Result`.
 
 ```vibe run
 i64 inc(i64 x) { return x + 1; }
@@ -320,7 +320,7 @@ void main() {
 }
 ```
 
-Такое значение — просто адрес. Оно может быть `null`:
+Such a value is just an address. It can be `null`:
 
 ```vibe run
 void main() {
@@ -329,9 +329,9 @@ void main() {
 }
 ```
 
-Вызов через `null` аварийно завершит программу, поэтому проверяйте перед вызовом.
+Calling through `null` crashes the program, so check before calling.
 
-Типичный пример — сравнение в сортировке:
+A typical example is the comparison in a sort:
 
 ```vibe run
 void sort_by(i64[] xs, fn(i64, i64) -> bool less) {
@@ -351,9 +351,9 @@ void main() {
 }
 ```
 
-## Замыкания
+## Closures
 
-Обычная функция не знает переменных вокруг. Замыкание запоминает их, но делает это **явно**: список захватываемых переменных пишется в квадратных скобках перед параметрами, как в C++: `[&k](i64 x) -> i64 { ... }`.
+An ordinary function does not know the variables around it. A closure remembers them, but does so **explicitly**: the list of captured variables is written in square brackets before the parameters, as in C++: `[&k](i64 x) -> i64 { ... }`.
 
 ```vibe run
 i64 apply(fn[](i64) -> i64 f, i64 x) {
@@ -369,11 +369,11 @@ void main() {
 }
 ```
 
-Тип замыкания — `fn[](A) -> R` (с пустыми квадратными скобками), он отличается от типа обычной функции `fn(A) -> R`.
+The type of a closure is `fn[](A) -> R` (with empty square brackets), which differs from the type of an ordinary function `fn(A) -> R`.
 
-### Захват по ссылке
+### Capture by reference
 
-Переменные из списка захватываются **по ссылке**: замыкание хранит указатели на них, поэтому видит актуальные значения и может их менять.
+The variables in the list are captured **by reference**: the closure stores pointers to them, so it sees the current values and can change them.
 
 ```vibe run
 void main() {
@@ -395,9 +395,9 @@ void main() {
 }
 ```
 
-Контекст замыкания лежит на стеке функции, где записан литерал. Замыкание стоит одного непрямого вызова, и в куче ничего не выделяется.
+The closure's context lives on the stack of the function where the literal is written. A closure costs one indirect call, and nothing is allocated on the heap.
 
-> **Ловушка.** Замыкание нельзя вернуть из функции: после возврата стек освободится, и замыкание будет ссылаться на мусор. Результат «работает», но печатает случайные числа:
+> **Gotcha:** a closure cannot be returned from a function: after the return the stack is freed, and the closure would refer to garbage. The result "works" but prints random numbers:
 >
 > ```vibe
 > fn[](i64) -> i64 make() {
@@ -406,20 +406,20 @@ void main() {
 > }
 > ```
 >
-> Передавайте замыкание **вниз** (в вызываемую функцию), но не **вверх**.
+> Pass a closure **down** (into the called function), but not **up**.
 
-### Захват без списка не работает
+### Capture without a list does not work
 
-Если забыть переменную в списке `[...]`, получится ошибка:
+If you forget a variable in the `[...]` list, you get an error:
 
 ```vibe error fragment
 const auto k = 3;
 const auto f = [](i64 x) -> i64 { return x + k; };
 ```
 
-### Замыкание и обычная функция — разные типы
+### A closure and an ordinary function are different types
 
-Параметр типа `fn[](i64) -> i64` принимает только замыкание. Обычную функцию туда передать нельзя, и наоборот:
+A parameter of type `fn[](i64) -> i64` accepts only a closure. An ordinary function cannot be passed there, and the other way round:
 
 ```vibe error
 i64 apply(fn[](i64) -> i64 f, i64 x) { return f(x); }
@@ -430,19 +430,19 @@ void main() {
 }
 ```
 
-Если вашей функции нужны только вызываемые значения без захвата, принимайте `fn(A) -> R`. Если нужны замыкания — `fn[](A) -> R`. Замыкание с пустым списком `[](i64 x) -> i64 { ... }` тоже допустимо.
+If your function needs only callable values without capture, accept `fn(A) -> R`. If you need closures, accept `fn[](A) -> R`. A closure with an empty list `[](i64 x) -> i64 { ... }` is also allowed.
 
-## Методы
+## Methods
 
-Функция внутри `struct` — метод типа. Они описаны на странице про [структуры](structs-unions-enums.md#методы).
+A function inside a `struct` is a method of the type. They are described on the page about [structs](structs-unions-enums.md#methods).
 
-## `extern` и `export`
+## `extern` and `export`
 
-`extern` объявляет функцию из C, `export` делает функцию Vibe видимой для C под её именем. Подробно — в [взаимодействии с C](c-interop.md).
+`extern` declares a function from C, and `export` makes a Vibe function visible to C under its own name. Described in detail in [interoperating with C](c-interop.md).
 
-## Имена стандартной библиотеки
+## Standard library names
 
-Функции стандартной библиотеки живут в одном пространстве имён с вашими. Объявить свою `min`, `max`, `abs`, `sort`, `run`, `env` и т. д. нельзя: вы получите ошибку о дубликате.
+The functions of the standard library live in the same namespace as yours. You cannot declare your own `min`, `max`, `abs`, `sort`, `run`, `env` and so on: you will get a duplicate error.
 
 ```vibe error
 i64 max(i64 a, i64 b) { return a; }
@@ -452,9 +452,9 @@ void main() {
 }
 ```
 
-Выбирайте другие имена. Полный список — в [справочнике](stdlib.md).
+Choose other names. The full list is in the [reference](stdlib.md).
 
-## Что дальше
+## What next
 
-- Структуры и методы: [структуры, union и enum](structs-unions-enums.md).
-- Всё про ошибки: [ошибки и опциональные значения](errors-and-optionals.md).
+- Structs and methods: [structs, unions and enums](structs-unions-enums.md).
+- Everything about errors: [errors and optional values](errors-and-optionals.md).

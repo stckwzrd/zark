@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Руководство по Vibe · Vibe</title>
+<meta name="description" content="Полное руководство по языку программирования Vibe">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="home">
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../index.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
+<div class="layout">
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<main><article>
+
+<div class="hero">
+
+<h1 id="vibe"><a class="anchor" href="#vibe">#</a>Vibe</h1>
+<p>Небольшой системный язык: память под вашим контролем, преобразования типов видны в коде, нет скрытых аллокаций и скрытого управления потоком. Компилятор написан на самом Vibe и собирает себя примерно за десятую долю секунды.</p>
+</div>
+
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "мир"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Привет, {name}! 6 * 7 = {</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">6</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 7</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>Привет, мир! 6 * 7 = 42</code></pre></div></div>
+<p>Это полное руководство. Каждый пример на этих страницах компилировался и запускался настоящим компилятором в момент сборки сайта, а текст под примером — то, что программа реально напечатала. Если пример должен был не скомпилироваться, под ним показано настоящее сообщение компилятора.</p>
+<h2 id="с-чего-начать"><a class="anchor" href="#с-чего-начать">#</a>С чего начать</h2>
+<div class="cards">
+<a href="getting-started.html"><b>Установка и первая программа</b><span>Собрать компилятор, запустить Hello World, понять команды и флаги.</span></a>
+<a href="tour.html"><b>Быстрый тур</b><span>Весь язык на одной странице: примерно двадцать маленьких программ.</span></a>
+<a href="types.html"><b>Типы</b><span>Числа, указатели, срезы, строки, массивы и правила преобразований.</span></a>
+<a href="errors-and-optionals.html"><b>Ошибки</b><span><code>!T</code>, <code>?</code>, <code>catch</code>, <code>errdefer</code> и опциональные значения.</span></a>
+<a href="memory.html"><b>Память</b><span>Аллокаторы, арены, владение и как не терять память.</span></a>
+<a href="cookbook.html"><b>Рецепты</b><span>Больше тридцати законченных программ: от FizzBuzz до калькулятора.</span></a>
+</div>
+
+<h2 id="как-устроено-руководство"><a class="anchor" href="#как-устроено-руководство">#</a>Как устроено руководство</h2>
+<ul>
+<li><strong>Старт</strong> — установка и обзор языка. Читается за вечер.</li>
+<li><strong>Язык</strong> — каждая возможность отдельно, со всеми нюансами и сообщениями об ошибках.</li>
+<li><strong>Память и данные</strong> — аллокаторы, срезы, <code>List</code> и <code>Map</code>.</li>
+<li><strong>Интероп и инструменты</strong> — вызовы C, тесты, форматирование, языковой сервер.</li>
+<li><strong>Справочник</strong> — стандартная библиотека, рецепты, ловушки, устройство компилятора и шпаргалка.</li>
+</ul>
+<p>Поиск по руководству открывается клавишей <code>/</code>. Страницы можно читать в любом порядке, ссылки между ними ведут туда, где подробнее объяснено то или иное правило.</p>
+<blockquote class="callout tip"><p><strong>Совет:</strong> если вы пришли из C, Go, Rust или Zig, начните с <a href="tour.html">быстрого тура</a>, затем откройте <a href="gotchas.html">ловушки и FAQ</a>: там собраны отличия и таблица соответствий.</p>
+</blockquote>
+<h2 id="принципы-языка"><a class="anchor" href="#принципы-языка">#</a>Принципы языка</h2>
+<ol>
+<li><strong>Никаких скрытых аллокаций.</strong> Ни одна конструкция языка и ни одна функция prelude не берёт память сама. Память выдаёт только <code>Allocator</code>, который вы передаёте явно.</li>
+<li><strong>Никакого скрытого управления потоком.</strong> Неявны только <code>defer</code>/<code>errdefer</code> (они написаны рядом с кодом, на который влияют), проверки границ (их можно выключить) и <code>==</code> для строк.</li>
+<li><strong>Один способ сделать одно.</strong> <code>auto</code>/<code>const</code> для привязок, <code>?</code> для проброса ошибок, <code>catch</code> для их обработки, <code>match</code> для ветвления.</li>
+<li><strong>Преобразования видны.</strong> Неявно разрешено только безопасное расширение целых, <code>T</code> → <code>!T</code>, <code>T</code> → <code>?T</code>, <code>null</code> → указатель и <code>*T</code> ↔ <code>*void</code>. Всё остальное через <code>as</code>.</li>
+<li><strong>Что видите, то и лежит в памяти.</strong> Структуры устроены как в C, <code>str</code> — это <code>{указатель, длина}</code>.</li>
+</ol>
+
+<div class="pager"><span></span><a class="next" href="getting-started.html"><small>Дальше</small>Установка и первая программа</a></div>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#с-чего-начать">С чего начать</a><a class="l2" href="#как-устроено-руководство">Как устроено руководство</a><a class="l2" href="#принципы-языка">Принципы языка</a></aside></main>
+</div>
+<script src="../assets/site.js"></script>
+</body>
+</html>

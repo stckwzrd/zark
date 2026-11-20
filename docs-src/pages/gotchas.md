@@ -1,15 +1,15 @@
 ---
-title: Ловушки и FAQ
+title: Pitfalls and FAQ
 order: 42
-section: Справочник
-description: Частые ошибки новичков в Vibe, неочевидное поведение, ограничения языка и ответы на вопросы «почему так»
+section: Reference
+description: Common beginner mistakes in Vibe, non-obvious behavior, language limitations and answers to the "why is it so" questions
 ---
 
-Здесь собрано то, что неочевидно: места, где можно ошибиться, и места, где Vibe работает не так, как привычные языки. У каждой ловушки есть пример. Если вы получили странный результат или ошибку, поищите здесь.
+This page collects what is not obvious: places where you can make a mistake and places where Vibe works differently from the languages you are used to. Every pitfall has an example. If you got a strange result or an error, look here.
 
-## Числа
+## Numbers
 
-### Литерал не проверяется на диапазон
+### A literal is not checked against the range
 
 ```vibe run
 void main() {
@@ -19,9 +19,9 @@ void main() {
 }
 ```
 
-Лишние биты молча отбрасываются. Следите за диапазоном типа сами.
+The extra bits are silently dropped. Watch the range of the type yourself.
 
-### Целые переполняются без предупреждения
+### Integers overflow without a warning
 
 ```vibe run
 void main() {
@@ -33,9 +33,9 @@ void main() {
 }
 ```
 
-Результат «заворачивается» в пределах типа. Нужна проверка — считайте в более широком типе.
+The result wraps around within the type. To catch it, build with `--check-overflow` (a panic with file and line) or compute in a wider type.
 
-### Деление целого на ноль роняет программу
+### Integer division by zero crashes the program
 
 ```vibe run exit
 void main() {
@@ -45,27 +45,27 @@ void main() {
 }
 ```
 
-Это аппаратное исключение, а не `error`. `vibe run` покажет `error: error.Signaled`. Проверяйте делитель до деления.
+This is a hardware exception, not an `error`. `vibe run` shows `error: error.Signaled`. Check the divisor before dividing.
 
-### `/` для целых отбрасывает дробную часть
+### `/` on integers drops the fraction
 
-`7 / 2` — это `3`, а `-7 / 2` — это `-3` (к нулю). Для дробного результата приводите: `7 as f64 / 2 as f64`.
+`7 / 2` is `3`, and `-7 / 2` is `-3` (towards zero). For a fractional result convert: `7 as f64 / 2 as f64`.
 
-### Дробные литералы прячут неточность
+### Floating-point literals hide imprecision
 
-`0.1 + 0.2` печатается как `0.3`, потому что вывод идёт через `%g`. Но `0.1 + 0.2 == 0.3` — `false`. Сравнивайте дробные с допуском.
+`0.1 + 0.2` is printed as `0.3` because the output goes through `%g`. But `0.1 + 0.2 == 0.3` is `false`. Compare floats with a tolerance.
 
-### Сужение и смена знака — только через `as`
+### Narrowing and a change of sign only through `as`
 
-`const i32 small = big;` не скомпилируется. Это сделано нарочно: «**Conversions are visible**».
+`const i32 small = big;` will not compile. This is deliberate: "**Conversions are visible**".
 
-### `300 as u8` из литерала
+### `300 as u8` from a literal
 
-Литерал в `as` обрабатывается как константа и может не обрезаться. Для проверки поведения кладите число в переменную: `auto n = 300; n as u8` даёт 44.
+A literal in `as` is handled as a constant and may not be truncated. To check the behavior, put the number in a variable: `auto n = 300; n as u8` gives 44.
 
-## Строки
+## Strings
 
-### `{` в строке открывает интерполяцию
+### `{` in a string opens an interpolation
 
 ```vibe run
 void main() {
@@ -73,7 +73,7 @@ void main() {
 }
 ```
 
-Компилятор принял `{"key"...` за интерполяцию строки `"key"`, и вместо JSON получился неожиданный вывод. Литеральную скобку пишите `{{` и `}}`:
+The compiler took `{"key"...` for an interpolation of the string `"key"`, and instead of JSON you got an unexpected output. Write a literal brace as `{{` and `}}`:
 
 ```vibe run
 void main() {
@@ -81,11 +81,11 @@ void main() {
 }
 ```
 
-### Интерполяция работает только в функциях вывода
+### Interpolation works only in print functions
 
-`const auto s = "n = {n}";` — ошибка. Строку-значение собирайте через `bprint` или `sprint` (см. [строки](strings.md#сборка-строк)).
+`const auto s = "n = {n}";` is an error. Build a string value with `bprint` or `sprint` (see [strings](strings.md#building-strings)).
 
-### Нельзя изменять литерал
+### You cannot modify a literal
 
 ```vibe run exit
 void main() {
@@ -94,31 +94,31 @@ void main() {
 }
 ```
 
-Запись в литерал роняет программу. Копируйте в буфер.
+Writing into a literal crashes the program. Copy into a buffer.
 
-### `str` — байты, а не символы
+### `str` is bytes, not characters
 
-`"привет".len` — это `12`, а не `6`. Индексация даёт байты. Для ASCII всё просто, для кириллицы нужно разбирать UTF-8 вручную.
+`"привет".len` is `12`, not `6`. Indexing gives bytes. For ASCII everything is simple; for other scripts you have to parse UTF-8 by hand.
 
-### Срез строки не заканчивается нулевым байтом
+### A slice of a string does not end with a zero byte
 
-`puts(s[0..2].ptr)` напечатает всю исходную строку. Для C используйте `to_cstr` или `dupz` (см. [C](c-interop.md#строки-на-границе)).
+`puts(s[0..2].ptr)` will print the whole original string. For C use `to_cstr` or `dupz` (see [C](c-interop.md#strings-at-the-boundary)).
 
-### Нет `+` для строк
+### There is no `+` for strings
 
-Склейка — через `bprint` / `sprint`. Нет `split`, `join`, `replace`, `to_upper`, их пишут сами (рецепты в [строках](strings.md)).
+Joining is done with `bprint` / `sprint`. There are no `split`, `join`, `replace`, `to_upper`; you write them yourself (recipes in [strings](strings.md)).
 
-### Неверный формат печатается как `<bad format>`
+### A wrong format is printed as `<bad format>`
 
-Спецификация проверяется при печати, а не при компиляции. Неизвестная буква (`{n:b}`) или формат, не подходящий типу, дают в выводе `<bad format>`, а программа продолжает работу.
+The specification is checked when printing, not at compile time. An unknown letter (`{n:b}`) or a format that does not suit the type gives `<bad format>` in the output, and the program goes on.
 
-### Двоичного вывода нет
+### There is no binary output
 
-Формат `{n:b}` не поддерживается: допустимы `d`, `i`, `u`, `x`, `X`, `o`, `c` для целых.
+The format `{n:b}` is not supported: the allowed ones for integers are `d`, `i`, `u`, `x`, `X`, `o`, `c`.
 
-## Переменные и области
+## Variables and scopes
 
-### Параметр — это копия
+### A parameter is a copy
 
 ```vibe run
 void f(i64 x) {
@@ -132,42 +132,42 @@ void main() {
 }
 ```
 
-Параметры и переменные изменяемы, но функция меняет свою копию. Чтобы запретить менять параметр, пишите `const i64 x`. Чтобы изменить данные вызывающего, передайте указатель.
+Parameters and variables are mutable, but the function changes its own copy. To forbid changing a parameter, write `const i64 x`. To change the caller's data, pass a pointer.
 
-### Одно имя дважды в одном блоке
+### The same name twice in one block
 
 ```vibe error fragment
 const auto x = 1;
 const auto x = 2;
 ```
 
-Во вложенном блоке перекрывать можно, в том же — нельзя.
+In a nested block you can shadow, in the same one you cannot.
 
-### Переменная заслоняет функцию
+### A variable hides a function
 
-`const auto max = 5;` сделает вызов `max(1, 2)` невозможным в этом блоке.
+`const auto max = 5;` makes the call `max(1, 2)` impossible in that block.
 
-### Имена из прелюдии заняты
+### The names from the prelude are taken
 
-Объявить функции `max`, `min`, `abs`, `sort`, `swap`, `run`, `env`, `arg`, `cstr` нельзя: «duplicate function». Выбирайте другие имена.
+You cannot declare functions `max`, `min`, `abs`, `sort`, `swap`, `run`, `env`, `arg`, `cstr`: "duplicate function". Choose other names.
 
-### Глобальные строки не инициализируются
+### Global strings are not initialized
 
-`str name = "x";` на верхнем уровне остаётся пустой, а `auto name = "x";` отвергается. Присвойте в начале `main`.
+`str name = "x";` at the top level stays empty, and `auto name = "x";` is rejected. Assign at the start of `main`.
 
-### Глобальный массив требует инициализатор
+### A global array requires an initializer
 
-`i64[3] arr;` на верхнем уровне без `= ...` не компилируется. Пишите `i64[3] arr = [0, 0, 0];`.
+`i64[3] arr;` at the top level without `= ...` does not compile. Write `i64[3] arr = [0, 0, 0];`.
 
-### `const` с вызовом функции вычисляется каждый раз
+### A `const` with a function call is evaluated every time
 
-`const auto K = next();` на верхнем уровне — это подстановка выражения, и побочный эффект сработает при каждом использовании.
+`const auto K = next();` at the top level is a substitution of the expression, and the side effect fires at every use.
 
-## Управление потоком
+## Control flow
 
-### Забытая `;`
+### A forgotten `;`
 
-Каждый оператор заканчивается `;`. Без неё компилятор останавливается на следующем токене:
+Every statement ends with `;`. Without it the compiler stops at the next token:
 
 ```vibe error
 void main() {
@@ -176,31 +176,31 @@ void main() {
 }
 ```
 
-### `if` — не выражение
+### `if` is not an expression
 
-`auto x = if (a) { 1 } else { 2 };` — ошибка. Используйте `match` (`match a { true => 1, false => 2 }`) или переменную, объявленную заранее.
+`auto x = if (a) { 1 } else { 2 };` is an error. Use `match` (`match a { true => 1, false => 2 }`) or a variable declared in advance.
 
-### В `catch`-блоке последним должно идти выражение
+### In a `catch` block an expression must come last
 
-Блок, который заканчивается `match` или `if` как оператором, значением не считается. Положите результат в переменную и поставьте её последней строкой.
+A block that ends with a `match` or `if` as a statement does not count as a value. Put the result in a variable and make it the last line.
 
-### Условие должно быть `bool`
+### The condition must be `bool`
 
-`if (n)` и `while (p)` не работают. Пишите `n != 0` и `p != null`.
+`if (n)` and `while (p)` do not work. Write `n != 0` and `p != null`.
 
-### Нет `0..=n`, `a, b = b, a`, `x++` как выражения
+### No `0..=n`, `a, b = b, a`, `x++` as an expression
 
-Это сделано сознательно: одна форма на действие. `x++` и составные присваивания (`+= -= *= /= %= |= &= ^= <<= >>=`) есть, но только как операторы.
+This is deliberate: one form per action. `x++` and the compound assignments (`+= -= *= /= %= |= &= ^= <<= >>=`) exist, but only as statements.
 
-### Нет меток у `break`
+### `break` and `continue` name a loop through a label
 
-Вынесите внутренний цикл в функцию и используйте `return`.
+To leave an outer loop, label it (`outer: for (...)`) and write `break outer;`. Without a label they affect the nearest loop.
 
-### `match` как оператор не обязан быть полным
+### A `match` statement does not have to be complete
 
-Забытый вариант не вызовет ошибки: просто ничего не произойдёт. Для выражения `match` исчерпываемость проверяется.
+A forgotten variant causes no error: nothing simply happens. For a `match` expression, exhaustiveness is checked.
 
-### Функция без `return` на всех путях компилируется
+### A function without a `return` on all paths compiles
 
 ```vibe run
 i64 f(i64 n) {
@@ -213,49 +213,49 @@ void main() {
 }
 ```
 
-Компилятор не проверяет, что все пути возвращают значение. Всегда завершайте функцию `return`.
+The compiler does not check that all paths return a value. Always end a function with a `return`.
 
-## Ошибки и опциональные значения
+## Errors and optional values
 
-### `catch` и `orelse` забирают всё правее
+### `catch` and `orelse` take everything to the right
 
-`f(5) catch 0 + 100` — это `f(5) catch (0 + 100)`, результат `5`, а не `105`. Берите в скобки: `(f(5) catch 0) + 100`.
+`f(5) catch 0 + 100` is `f(5) catch (0 + 100)`, the result is `5`, not `105`. Use parentheses: `(f(5) catch 0) + 100`.
 
-### `?` — только в функции с `!T`
+### `?` only in a function with `!T`
 
-В обычной функции `?` недопустим: нет, куда пробрасывать.
+In an ordinary function `?` is not allowed: there is nowhere to propagate to.
 
-### Нельзя игнорировать `!T`
+### You cannot ignore a `!T`
 
-`f()` без `?`, `catch` или `_ =` не компилируется.
+`f()` without `?`, `catch` or `_ =` does not compile.
 
-### `?T` не сравнивается с `null`
+### `?T` is not compared with `null`
 
-Для `?T` используйте `orelse`, `is .None`, `match`. Сравнивать с `null` можно только обычные указатели.
+For `?T` use `orelse`, `is .None`, `match`. Only ordinary pointers can be compared with `null`.
 
-### `catch return)` в скобках
+### `catch return)` in parentheses
 
-В аргументе вызова `catch return` перед закрывающей скобкой не разбирается. Положите результат в переменную на отдельной строке.
+In a call argument, `catch return` before the closing parenthesis is not parsed. Put the result in a variable on a separate line.
 
-## Типы и структуры
+## Types and structs
 
-### Литерал структуры — только с заглавной
+### A struct literal only with a capital letter
 
-`point{ .x = 1 }` не распознаётся: `T{` считается литералом, когда имя типа начинается с заглавной буквы.
+`point{ .x = 1 }` is not recognized: `T{` is taken as a literal when the type name starts with a capital letter.
 
-### Пропущенные поля — нули
+### Missing fields are zeros
 
-`P{ .x = 1 }` обнуляет остальные поля, и опечатка в имени поля — единственное, что компилятор поймает.
+`P{ .x = 1 }` zeroes the other fields, and a typo in a field name is the only thing the compiler will catch.
 
-### Нет `==` для структур и массивов
+### There is no `==` for structs and arrays
 
-Сравнивайте поля и элементы вручную.
+Compare fields and elements by hand, or define `operator==` on the struct.
 
-### Структуры и массивы копируются
+### Structs and arrays are copied
 
-Присваивание и передача в функцию копируют всё. Для общей работы берите указатель или срез.
+Assignment and passing to a function copy everything. For shared work take a pointer or a slice.
 
-### Метод меняет даже `const`-объект
+### A method changes even a `const` object
 
 ```vibe run
 struct C {
@@ -270,133 +270,133 @@ void main() {
 }
 ```
 
-Компилятор не проверяет изменяемость при вызове метода: он передаёт указатель.
+The compiler does not check mutability at a method call: it passes a pointer. Declare the method `const` to forbid changing fields inside it.
 
-### `.Имя` нужен контекст
+### `.Name` needs a context
 
-`const auto x = .Red;` не компилируется: непонятно, чей это вариант. Пишите `Color::Red` или `const Color x = .Red;`.
+`const auto x = .Red;` does not compile: it is unclear whose variant this is. Write `Color::Red` or `const Color x = .Red;`.
 
-### `число as Enum` не проверяется
+### `number as Enum` is not checked
 
-`7 as Color` даст значение «не из списка».
+`7 as Color` gives a value "not from the list".
 
-### Нельзя задать числа вариантам enum
+### You cannot assign numbers to enum variants
 
-Номера всегда с нуля по порядку.
+The numbers always go from zero in order.
 
-## Функции и замыкания
+## Functions and closures
 
-### Замыкание нельзя возвращать
+### A closure cannot be returned
 
-Контекст замыкания лежит на стеке функции, где оно записано. Вернули — получили мусор. Передавайте только вниз.
+The context of a closure lives on the stack of the function where it is written. If you return it, you get garbage. Pass it only down.
 
-### `fn(A) -> R` и `fn[](A) -> R` — разные типы
+### `fn(A) -> R` and `fn[](A) -> R` are different types
 
-Обычную функцию нельзя передать туда, где ожидается замыкание, и наоборот.
+An ordinary function cannot be passed where a closure is expected, and the other way round.
 
-### Выводимые параметры типа не видят литерал массива
+### Inferred type parameters do not see an array literal
 
-`first([1, 2])` не выведет `T`. Положите массив в переменную и передайте срез `a[..]`, либо `first<i64>([1, 2])`.
+`first([1, 2])` will not infer `T`. Put the array in a variable and pass the slice `a[..]`, or write `first<i64>([1, 2])`.
 
-### Ограничение `Ord` не подходит для строк
+### The `Ord` constraint does not fit strings
 
-`T: Ord` принимает только числа и символы. Строки сравниваются лишь на `==`.
+`T: Ord` accepts only numbers and characters. Strings are compared only with `==`.
 
-### Нельзя вызывать функцию в `const`-размере массива
+### You cannot call a function in a `const` array size
 
-`i64[K] a;` требует константы времени компиляции.
+`i64[K] a;` needs a compile-time constant.
 
-## Память
+## Memory
 
-### Проверяется только выход за границы среза и массива
+### Only going out of bounds of a slice and an array is checked
 
-Выход через указатель, use-after-free, двойной `free`, утечки и висячие указатели на стек не обнаруживаются.
+Going out through a pointer, use-after-free, a double `free`, leaks and dangling pointers to the stack are not detected.
 
-### `FixedBuf.reset()` аннулирует выданное
+### `FixedBuf.reset()` invalidates what was handed out
 
-Всё, что выдано до `reset`, использовать нельзя.
+Everything handed out before `reset` must not be used.
 
-### Арена не освобождает по одному
+### An arena does not free one by one
 
-`free` у арены ничего не делает. Память вернётся при `deinit()`.
+`free` on an arena does nothing. The memory returns at `deinit()`.
 
-### `List` без `init` не работает
+### A `List` without `init` does not work
 
-Нулевой `List` не имеет аллокатора, и `push` на нём упадёт. Всегда вызывайте `List<T>::init(a)`.
+A zero `List` has no allocator, and `push` on it will crash. Always call `List<T>::init(a)`.
 
-### Указатель на элемент `List` недействителен после `push`
+### A pointer to a `List` element is invalid after `push`
 
-Буфер может переехать. Берите указатель, когда закончили добавлять.
+The buffer may move. Take the pointer when you have finished adding.
 
-### `Map`: ключи не копируются, нет `remove`, порядок не определён
+### `Map`: keys are not copied, no `remove`, the order is undefined
 
-Если ключ собирается во временном буфере — `a.dup(key)`.
+If a key is built in a temporary buffer, use `a.dup(key)`.
 
-### `sizeof` принимает тип
+### `sizeof` takes a type
 
-`sizeof(buf)` не работает. Пишите `sizeof(u8[256])`.
+`sizeof(buf)` does not work. Write `sizeof(u8[256])`.
 
-## Модули
+## Modules
 
-### Простой импорт «протекает»
+### A plain import "leaks"
 
-Файл, импортированный без `as`, кладёт все свои имена в общее пространство, и они видны из всех файлов программы.
+A file imported without `as` puts all its names into the common namespace, and they are visible from all the files of the program.
 
-### Один файл — одно имя
+### One file, one name
 
-Нельзя подключить `util.vibe` как `a` и как `b` в одной программе.
+You cannot attach `util.vibe` as `a` and as `b` in one program.
 
-### Недостижимое не проверяется
+### Unreachable code is not checked
 
-Функции, до которых нельзя дойти из `main`, не компилируются: ошибка в них остаётся незамеченной, пока их не вызовут.
+Functions that cannot be reached from `main` are not compiled: an error in them goes unnoticed until they are called.
 
 ## FAQ
 
-### Почему нет исключений?
+### Why are there no exceptions?
 
-Правило «нет скрытого управления потоком». Ошибка — значение, её видно в сигнатуре (`!T`) и в месте вызова (`?`, `catch`). `defer` и `errdefer` заменяют `finally`.
+The rule "no hidden control flow". An error is a value, visible in the signature (`!T`) and at the call site (`?`, `catch`). `defer` and `errdefer` replace `finally`.
 
-### Почему нет перегрузки операторов, наследования и макросов?
+### Why is there no inheritance or macros, and so little overloading?
 
-Правило «одно действие — одна форма записи». `+` всегда складывает числа, метод вызывается по типу объекта, а код выглядит так, как исполняется.
+The rule "one action, one form". `+` on numbers always adds, a method is called by the type of the object, and the code looks the way it executes. Operators can be defined only on your own structs, as ordinary methods (see [structs](structs-unions-enums.md#operator-overloading)); there is no implementation inheritance, and there are no macros.
 
-### Почему нет тернарного оператора?
+### Why is there no ternary operator?
 
-`match` и обычная переменная решают то же самое одним способом. Как `match` — выражение, он может стоять справа от `=`.
+`match` and an ordinary variable solve the same thing in one way. Since `match` is an expression, it can stand to the right of `=`.
 
-### Почему нужен аллокатор в `List::init`?
+### Why does `List::init` need an allocator?
 
-Чтобы вызывающий решал, где живёт память: куча, арена, буфер на стеке. Из этого получается правило «нет скрытых выделений».
+So that the caller decides where the memory lives: the heap, an arena, a buffer on the stack. This is where the rule "no hidden allocations" comes from.
 
-### Что значит «ничто не выделяет скрытно»?
+### What does "nothing allocates secretly" mean?
 
-Ни строка, ни интерполяция, ни замыкание, ни `println` не вызывают `malloc`. Если в коде нет аллокатора, в куче ничего не происходит.
+Not a string, not interpolation, not a closure, not `println` calls `malloc`. If there is no allocator in the code, nothing happens on the heap.
 
-### Как вернуть несколько значений?
+### How do I return several values?
 
-Через маленькую структуру. Кортежей нет.
+Through a small struct. There are no tuples.
 
-### Как подключить библиотеку C?
+### How do I bring in a C library?
 
-`extern` + `.c`/`.o`/`-l...` в командной строке. См. [взаимодействие с C](c-interop.md).
+`extern` + `.c`/`.o`/`-l...` on the command line. See [interoperating with C](c-interop.md).
 
-### Как отладить?
+### How do I debug?
 
-`println` и `eprintln` — первый инструмент. Для паники смотрите место (файл и строка) в сообщении. Для сборки: `vibe ir` показывает LLVM IR, `vibe tokens` — токены, `--time` — время фаз (см. [инструменты](tooling.md)).
+`println` and `eprintln` are the first tool. For a panic, look at the location (file and line) in the message. For the build: `vibe ir` shows the LLVM IR, `vibe tokens` shows the tokens, `--time` shows the time of the phases (see [tooling](tooling.md)).
 
-### Как узнать, что именно компилируется?
+### How do I find out what exactly is compiled?
 
-`vibe ir main.vibe` печатает полученный LLVM IR. Генерируются только достижимые функции.
+`vibe ir main.vibe` prints the resulting LLVM IR. Only reachable functions are generated.
 
-### Где исходный код стандартной библиотеки?
+### Where is the source code of the standard library?
 
-В `std/std.vibe` репозитория. Его можно читать как образец идиоматичного кода.
+In `std/std.vibe` of the repository. You can read it as a sample of idiomatic code.
 
-### Можно ли писать без `main`?
+### Can I write without `main`?
 
-Для тестов — да (`vibe test`). Для запуска нужна `main`.
+For tests, yes (`vibe test`). To run, `main` is needed.
 
-## Что дальше
+## What next
 
-- Подробные страницы по каждой теме идут по порядку в боковом меню.
-- Короткая памятка: [шпаргалка](cheatsheet.md).
+- Detailed pages on each topic go in order in the side menu.
+- A short memo: the [cheat sheet](cheatsheet.md).

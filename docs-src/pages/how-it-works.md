@@ -1,162 +1,162 @@
 ---
-title: Как всё устроено
+title: How it all works
 order: 43
-section: Справочник
-description: Устройство компилятора Vibe: конвейер, бэкенды, самосборка, раскладка типов в памяти и планы развития
+section: Reference
+description: How the Vibe compiler is built: the pipeline, the backends, self-hosting, the memory layout of types and the plans for the future
 ---
 
-Эта страница для тех, кто хочет понимать, что происходит под капотом, или собирается править компилятор. Для написания программ она не обязательна.
+This page is for those who want to understand what happens under the hood, or who are going to change the compiler. It is not required for writing programs.
 
-## Конвейер
+## The pipeline
 
-Компилятор — программа на самом Vibe, около 12 тысяч строк в каталоге `selfhost/`. Работает как конвейер:
+The compiler is a program in Vibe itself, about 12 thousand lines in the `selfhost/` directory. It works as a pipeline:
 
 ```text
-исходник .vibe
+source .vibe
    │
-   ▼  lexer.vibe      токены
-   ▼  parser.vibe     рекурсивный спуск → дерево (ast.vibe), интерполяция строк разбирается здесь
-   ▼  loader.vibe     загрузка import, префиксы модулей (resolve.vibe)
-   ▼  gen*.vibe       проверка типов, мономорфизация дженериков, текст LLVM IR
+   ▼  lexer.vibe      tokens
+   ▼  parser.vibe     recursive descent → a tree (ast.vibe), string interpolation is parsed here
+   ▼  loader.vibe     loading import, module prefixes (resolve.vibe)
+   ▼  gen*.vibe       type checking, monomorphization of generics, LLVM IR text
    │
-   ├── по умолчанию:  native.vibe + x64.vibe   IR → машинный код x86-64 → ELF .o
+   ├── by default:    native.vibe + x64.vibe   IR → x86-64 machine code → ELF .o
    └── -O / --release / --llvm:                IR → clang (LLVM) → .o
    ▼
-линковка через clang (вместе с .c, .cpp, .o) → исполняемый файл
+linking through clang (together with .c, .cpp, .o) → an executable
 ```
 
-Что делает каждый файл:
+What each file does:
 
-| Файл | Роль |
+| File | Role |
 |---|---|
-| `lexer.vibe` | токены (см. [лексику](lexical.md)) |
-| `ast.vibe` | «толстые» узлы дерева с тегом вида |
-| `parser.vibe` | разбор синтаксиса, разбор `"{x}"` на части |
-| `gen.vibe` | типы, инстанцирование дженериков, функции, диагностики |
-| `gen_stmt.vibe` | операторы, `defer`/`errdefer`, `match` |
-| `gen_expr.vibe` | выражения, адреса, операторы, приведения |
-| `gen_call.vibe` | вызовы, вывод параметров типа, методы, указатели на функции |
-| `gen_fmt.vibe` | сборка `Fmt` для вызовов с интерполяцией, `panic`, `assert`, `embed` |
-| `resolve.vibe`, `loader.vibe` | импорты и префиксы модулей |
-| `native.vibe` | свой бэкенд: IR → x86-64 (System V ABI), распределение регистров |
-| `x64.vibe` | кодировщик инструкций и запись ELF64-объекта |
-| `fmt.vibe` | форматтер `vibe fmt` |
-| `lsp.vibe`, `ide.vibe`, `analysis.vibe`, `json.vibe`, `textpos.vibe` | языковой сервер |
-| `diag.vibe` | красивые сообщения об ошибках, «возможно, вы имели в виду» |
-| `main.vibe` | драйвер командной строки |
+| `lexer.vibe` | tokens (see [lexical structure](lexical.md)) |
+| `ast.vibe` | "fat" tree nodes with a kind tag |
+| `parser.vibe` | parsing the syntax, splitting `"{x}"` into parts |
+| `gen.vibe` | types, instantiating generics, functions, diagnostics |
+| `gen_stmt.vibe` | statements, `defer`/`errdefer`, `match` |
+| `gen_expr.vibe` | expressions, addresses, operators, casts |
+| `gen_call.vibe` | calls, inferring type parameters, methods, function pointers |
+| `gen_fmt.vibe` | building `Fmt` for calls with interpolation, `panic`, `assert`, `embed` |
+| `resolve.vibe`, `loader.vibe` | imports and module prefixes |
+| `native.vibe` | the own backend: IR → x86-64 (System V ABI), register allocation |
+| `x64.vibe` | the instruction encoder and the ELF64 object writer |
+| `fmt.vibe` | the `vibe fmt` formatter |
+| `lsp.vibe`, `ide.vibe`, `analysis.vibe`, `json.vibe`, `textpos.vibe` | the language server |
+| `diag.vibe` | nice error messages, "did you mean" |
+| `main.vibe` | the command-line driver |
 
-Посмотреть промежуточные результаты можно прямо из CLI: `vibe tokens file.vibe` (токены) и `vibe ir file.vibe` (LLVM IR). Подробнее — в [инструментах](tooling.md#промежуточные-представления).
+You can see the intermediate results right from the CLI: `vibe tokens file.vibe` (tokens) and `vibe ir file.vibe` (LLVM IR). More in [tooling](tooling.md#intermediate-representations).
 
-Прелюдия (`std/std.vibe`) вшита в компилятор через `embed`, поэтому `vibe` — один исполняемый файл без внешних данных.
+The prelude (`std/std.vibe`) is built into the compiler through `embed`, so `vibe` is one executable without external data.
 
-## Два бэкенда
+## Two backends
 
-**Свой (по умолчанию).** Парсит текстовый LLVM IR, который сгенерировал фронтенд, и превращает его в машинный код x86-64. Использует линейное распределение регистров (linear scan), слияние сравнения с ветвлением, константы в операндах, ленивую загрузку составных значений. Ни одной строки LLVM внутри нет. Назначение — быстрая сборка: типичный проект собирается за доли секунды.
+**The own one (default).** It parses the textual LLVM IR that the frontend generated and turns it into x86-64 machine code. It uses linear-scan register allocation, fusing a comparison with a branch, constants in operands, and lazy loading of composite values. There is not a single line of LLVM inside. The purpose is a fast build: a typical project builds in fractions of a second.
 
-**LLVM (`-O`, `--release`, `--llvm`).** Тот же IR отдаётся `clang`, который делает полную оптимизацию. Нужен для скорости в рабочих сборках.
+**LLVM (`-O`, `--release`, `--llvm`).** The same IR is handed to `clang`, which does full optimization. It is needed for speed in production builds.
 
-Сравнение для программы на 10 тысяч строк, от исходника до исполняемого файла (замеры автора):
+A comparison for a program of 10 thousand lines, from source to executable (the author's measurements):
 
-| Сборщик | Время |
+| Builder | Time |
 |---|---|
-| vibe, свой бэкенд | около 95 мс |
-| clang -O0 | около 220 мс |
-| gcc -O0 | около 670 мс |
+| vibe, own backend | about 95 ms |
+| clang -O0 | about 220 ms |
+| gcc -O0 | about 670 ms |
 
-А быстродействие результата (рекурсивный `fib(38)` и решето 50 млн):
+And the speed of the result (recursive `fib(38)` and a sieve of 50 million):
 
-| | fib(38) | решето 50M |
+| | fib(38) | sieve 50M |
 |---|---|---|
-| C (`clang -O2`) | 97 мс | 369 мс |
-| Vibe `--release` | 95 мс | 345 мс |
-| Vibe, свой бэкенд | около 290 мс | около 820 мс |
+| C (`clang -O2`) | 97 ms | 369 ms |
+| Vibe `--release` | 95 ms | 345 ms |
+| Vibe, own backend | about 290 ms | about 820 ms |
 
-То есть `--release` не уступает C, а отладочная сборка выигрывает в скорости компиляции.
+So `--release` does not lose to C, and the debug build wins in compile speed.
 
-## Самосборка и неподвижная точка
+## Self-hosting and the fixed point
 
-Компилятор собирает сам себя. Чтобы начать с нуля, в репозитории лежит **семя**: LLVM IR самого компилятора (`bootstrap/seed.ll.gz`). `clang` превращает его в первый рабочий компилятор.
+The compiler builds itself. To start from zero, the repository holds a **seed**: the LLVM IR of the compiler itself (`bootstrap/seed.ll.gz`). `clang` turns it into the first working compiler.
 
 ```text
-семя (clang)  →  stage1 (Vibe, собран из семени)
-              →  stage2 (Vibe, собран stage1)
-              →  stage3 (Vibe, собран stage2)
+seed (clang)  →  stage1 (Vibe, built from the seed)
+              →  stage2 (Vibe, built by stage1)
+              →  stage3 (Vibe, built by stage2)
 ```
 
-Проверка: **stage2 и stage3 совпадают побайтно** (неподвижная точка). То же делается для цепочки со своим бэкендом без LLVM (native2 == native3). Скрипт `bootstrap.sh` запускает всё, затем прогоняет набор тестов и кладёт результат в `build/vibe`.
+The check: **stage2 and stage3 are identical byte for byte** (the fixed point). The same is done for the chain with the own backend without LLVM (native2 == native3). The script `bootstrap.sh` runs everything, then runs the test suite and puts the result into `build/vibe`.
 
-Следствие для разработки: новая возможность языка добавляется в два шага. Сначала компилятор учат ей, не используя её в своих исходниках, и обновляют семя (`tools/update-seed.sh`). Только потом её можно использовать в `selfhost/`: иначе старое семя не сможет собрать новый код.
+A consequence for development: a new language feature is added in two steps. First the compiler is taught the feature without using it in its own sources, and the seed is updated (`tools/update-seed.sh`). Only then can the feature be used in `selfhost/`: otherwise the old seed cannot build the new code.
 
-## Раскладка типов в памяти
+## The memory layout of types
 
-Принцип «что видите, то и лежит»:
+The principle "what you see is what is in memory":
 
-| Тип | В памяти |
+| Type | In memory |
 |---|---|
-| `i8..i64`, `u8..u64` | целое соответствующего размера |
-| `bool` | один байт |
-| `T*` | указатель, 8 байт |
-| `T[]`, `str` | `{ ptr, len }`, 16 байт |
-| `T[N]` | `N` элементов подряд |
-| `struct` | поля по порядку, выравнивание как в C |
-| `enum` | 32-битное целое |
-| `union` | `{ i32 tag, payload }`, payload по размеру самого большого варианта |
-| `!T` | `{ i32 код ошибки, T }` |
-| `fn(A) -> R` | указатель на функцию |
-| `fn[](A) -> R` | пара: указатель на функцию и указатель на контекст |
+| `i8..i64`, `u8..u64` | an integer of the corresponding size |
+| `bool` | one byte |
+| `T*` | a pointer, 8 bytes |
+| `T[]`, `str` | `{ ptr, len }`, 16 bytes |
+| `T[N]` | `N` elements in a row |
+| `struct` | the fields in order, alignment as in C |
+| `enum` | a 32-bit integer |
+| `union` | `{ i32 tag, payload }`, the payload sized for the largest variant |
+| `!T` | `{ i32 error code, T }` |
+| `fn(A) -> R` | a function pointer |
+| `fn[](A) -> R` | a pair: a function pointer and a context pointer |
 
-Из этого следует, почему структуры можно передавать в C (по указателю), почему ничего не нужно «упаковывать» при вызове и почему `sizeof` предсказуем.
+This explains why structs can be passed to C (by pointer), why nothing needs to be "packed" at a call and why `sizeof` is predictable.
 
-## Как раскрывается интерполяция
+## How interpolation is expanded
 
-Компилятор не знает ни `print`, ни `println`. Он знает одно правило: если последний параметр вызываемой функции имеет тип `Fmt` (он объявлен в `std/std.vibe`), все оставшиеся аргументы и строки с `{...}` собираются в значение `Fmt`.
+The compiler knows neither `print` nor `println`. It knows one rule: if the last parameter of the called function has the type `Fmt` (declared in `std/std.vibe`), all the remaining arguments and strings with `{...}` are gathered into a `Fmt` value.
 
-`Fmt` — это список кусков: литеральный текст, указатель на значение, функция, которая умеет печатать значение этого типа, и спецификация (`:08X`, `:.2` и т. п.). Функции печати для структур, enum, union и массивов компилятор порождает по типу как обычный код на Vibe. Для чисел, строк и указателей используются функции из прелюдии (`__fmt_int`, `__fmt_str` и другие).
+`Fmt` is a list of pieces: literal text, a pointer to a value, a function that knows how to print a value of that type, and a specification (`:08X`, `:.2` and so on). The print functions for structs, enums, unions and arrays are generated by the compiler from the type as ordinary Vibe code. For numbers, strings and pointers the functions from the prelude are used (`__fmt_int`, `__fmt_str` and others).
 
-Всё лежит на стеке вызывающего, в куче ничего не выделяется. Поэтому интерполяция допустима там, где есть функция с параметром `Fmt`: `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` и ваша собственная.
+Everything lies on the caller's stack, and nothing is allocated on the heap. So interpolation is allowed where there is a function with a `Fmt` parameter: `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` and your own.
 
-## Как работают дженерики
+## How generics work
 
-Функции и структуры с параметрами типа **мономорфизируются**: для каждой комбинации аргументов компилятор создаёт отдельную копию. Поэтому нет накладных расходов во время работы, а тело дженерика проверяется при **использовании**. Ограничения (`T: Ord`) проверяются на вызове, до компиляции тела, чтобы сообщение было понятным.
+Functions and structs with type parameters are **monomorphized**: for each combination of arguments the compiler creates a separate copy. So there is no run-time overhead, and the body of a generic is checked at the **use**. Constraints (`T: Ord`) are checked at the call, before the body is compiled, so that the message is clear.
 
-## Как работают `defer` и `errdefer`
+## How `defer` and `errdefer` work
 
-Компилятор разворачивает `defer` в код **на каждом пути выхода** из блока: перед `return`, `break`, `continue` и в конце блока. Для `errdefer` код добавляется только на путях, где возвращается ошибка. Никакого времени выполнения для этого нет.
+The compiler expands `defer` into code **on every path out of** the block: before `return`, `break`, `continue` and at the end of the block. For `errdefer` the code is added only on the paths where an error is returned. There is no run-time machinery for this.
 
-## Как работает `?` и `catch`
+## How `?` and `catch` work
 
-`f()?` превращается в проверку кода ошибки: если он не нулевой, выполняются `defer` и `errdefer` и возвращается такой же `!T`. `catch` — та же проверка, но вместо возврата идёт ветка с запасным значением.
+`f()?` turns into a check of the error code: if it is not zero, `defer` and `errdefer` run and the same `!T` is returned. `catch` is the same check, but instead of returning it takes the branch with the fallback value.
 
-## Ленивая компиляция
+## Lazy compilation
 
-Компилируются только функции, **достижимые из `main`**. Лишний импорт не раздувает файл, а ошибки в мёртвом коде не видны, пока его не вызовут (если это не дженерик — тогда ошибка проявится в первом использовании).
+Only the functions **reachable from `main`** are compiled. An extra import does not bloat the file, and errors in dead code are not visible until it is called (unless it is a generic: then the error shows up on the first use).
 
-## Хранилище сборки
+## Build storage
 
-Промежуточные файлы лежат в `.vibe-cache/` рядом с местом запуска: `.o`, `.ll` и тестовые бинарники. Каталог можно удалять в любой момент.
+Intermediate files live in `.vibe-cache/` next to the place where you run the compiler: `.o`, `.ll` and test binaries. The directory can be deleted at any time.
 
-## Тесты самого компилятора
+## The compiler's own tests
 
-В `tests/`:
+In `tests/`:
 
-- `tests/run.sh` прогоняет примеры из `examples/` и сравнивает вывод с `tests/expected/`;
-- `tests/errors/` — программы, которые **обязаны** не компилироваться;
-- проверка, что токены примеров совпадают с эталонными файлами `tests/tokens`;
-- проверка неподвижной точки.
+- `tests/run.sh` runs the examples from `examples/` and compares the output with `tests/expected/`;
+- `tests/errors/` holds programs that **must** fail to compile;
+- a check that the tokens of the examples match the reference files in `tests/tokens`;
+- a check of the fixed point.
 
-Режимы сборки проверяются теми же тестами: `FLAGS=--llvm` и `FLAGS=-O` прогоняют их через LLVM.
+The build modes are checked by the same tests: `FLAGS=--llvm` and `FLAGS=-O` run them through LLVM.
 
-## Что дальше
+## What next
 
-Известные направления развития (подробнее в `ROADMAP.md`):
+Known directions of development (more in `ROADMAP.md`):
 
-- **Качество кода бэкенда.** Отладочные сборки примерно втрое медленнее gcc -O0. Дальше: SSA без `alloca` во фронтенде и внутреннее представление в памяти вместо текстового IR.
-- **Свой компоновщик** и среда выполнения без libc на системных вызовах Linux: чтобы чистые программы на Vibe собирались без внешних инструментов.
-- **`comptime`:** выполнение Vibe во время компиляции для таблиц и генерации кода; `inline for`.
-- **`@cImport`:** разбор C-заголовков и передача структур по значению через границу C.
-- **SIMD-типы** (`v4f32`, `v8f32`).
-- **Проверка переполнения** в безопасном режиме.
-- **Новые платформы:** aarch64 и Windows.
-- **Инструменты:** DWARF для локальных переменных и типов (таблица строк уже есть).
+- **The quality of the backend's code.** Debug builds are roughly three times slower than gcc -O0. Next: SSA without `alloca` in the frontend and an in-memory internal representation instead of the textual IR.
+- **An own linker** and a runtime without libc on Linux system calls: so that pure Vibe programs build without external tools.
+- **`comptime`:** running Vibe at compile time for tables and code generation; `inline for`.
+- **`@cImport`:** parsing C headers and passing structs by value across the C boundary.
+- **SIMD types** (`v4f32`, `v8f32`).
+- **Overflow checking on by default** in the safe mode (the opt-in flag `--check-overflow` already exists).
+- **New platforms:** aarch64 and Windows.
+- **Tools:** DWARF for local variables and types (the line table is already there).
 
-Это планы, а не обещания: язык растёт под нужды его автора.
+These are plans, not promises: the language grows to the needs of its author.

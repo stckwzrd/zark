@@ -1,18 +1,18 @@
 ---
-title: Строки и форматирование
+title: Strings and formatting
 order: 18
-section: Язык
-description: Тип str, срезы и сравнение строк, интерполяция, спецификаторы формата, print, bprint, sprint и функции для работы с текстом
+section: Language
+description: The str type, slices and comparing strings, interpolation, format specifiers, print, bprint, sprint and text functions
 ---
 
-## Что такое `str`
+## What `str` is
 
-`str` — это срез байтов: указатель на данные и длина (`{ ptr, len }`, 16 байт). Это то же самое, что `u8[]`. Отсюда всё поведение:
+`str` is a slice of bytes: a pointer to the data and a length (`{ ptr, len }`, 16 bytes). It is the same as `u8[]`. All the behavior follows from that:
 
-- Строка **не владеет** памятью. Литерал `"..."` лежит в памяти программы, копирование `str` копирует только указатель и длину.
-- Строка не обязана заканчиваться нулём (но литерал заканчивается, см. [C](c-interop.md)).
-- Длина — `s.len`, байт — `s[i]`, подстрока — `s[a..b]`.
-- Это **байты**, а не символы. Русская буква занимает 2 байта.
+- A string **does not own** memory. A literal `"..."` lives in the program's memory, and copying a `str` copies only the pointer and the length.
+- A string does not have to end with a zero (but a literal does, see [C](c-interop.md)).
+- The length is `s.len`, a byte is `s[i]`, a substring is `s[a..b]`.
+- These are **bytes**, not characters. A letter like `é` takes 2 bytes.
 
 ```vibe run
 void main() {
@@ -23,11 +23,11 @@ void main() {
 }
 ```
 
-`s[0]` — это число типа `u8`. Для печати символом используйте формат `:c` (см. ниже).
+`s[0]` is a number of type `u8`. To print it as a character, use the `:c` format (see below).
 
-### Строки неизменяемы
+### Strings are immutable
 
-Содержимое литерала менять нельзя. Попытка записать в него аварийно завершает программу, потому что память литералов защищена от записи:
+The contents of a literal cannot be changed. An attempt to write into it crashes the program, because the memory of literals is write-protected:
 
 ```vibe run exit
 void main() {
@@ -36,7 +36,7 @@ void main() {
 }
 ```
 
-Чтобы получить изменяемую строку, скопируйте её в свой буфер:
+To get a mutable string, copy it into your own buffer:
 
 ```vibe run
 void main() {
@@ -47,9 +47,9 @@ void main() {
 }
 ```
 
-## Сравнение
+## Comparison
 
-`==` и `!=` сравнивают **содержимое** (внутри — `memcmp`). Порядка (`<`) нет.
+`==` and `!=` compare the **contents** (with `memcmp` inside). There is no ordering (`<`).
 
 ```vibe run
 void main() {
@@ -60,38 +60,38 @@ void main() {
 }
 ```
 
-`+` для строк нет: склеивание делается форматированием в буфер (см. ниже).
+There is no `+` for strings: joining is done by formatting into a buffer (see below).
 
-## Интерполяция
+## Interpolation
 
-В строковом литерале `{выражение}` вычисляется и вставляется. Можно любое выражение, в том числе вызовы, индексы, арифметику, сравнения и приведения.
+In a string literal, `{expression}` is evaluated and inserted. Any expression is allowed, including calls, indexing, arithmetic, comparisons and casts.
 
 ```vibe run
 i64 double(i64 x) { return x * 2; }
 
 void main() {
     const auto a = 6;
-    const auto name = "мир";
+    const auto name = "world";
     const auto xs = [10, 20, 30];
-    println("привет, {name}");
+    println("hello, {name}");
     println("{a} * 2 = {double(a)}");
-    println("сумма {xs[0] + xs[1]}, длина {xs.len}");
-    println("срез {xs[1..]}");
+    println("sum {xs[0] + xs[1]}, length {xs.len}");
+    println("slice {xs[1..]}");
     println("{a > 3 && a < 9}, {a as f64 / 4.0}");
 }
 ```
 
-Литеральные фигурные скобки — `{{` и `}}` (или `\{` и `\}`):
+Literal curly braces are `{{` and `}}` (or `\{` and `\}`):
 
 ```vibe run
 void main() {
     const auto v = 3;
     println("{{\"v\": {v}}}");
-    println("множество {{1, 2}}");
+    println("set {{1, 2}}");
 }
 ```
 
-**Важно:** интерполяция — это **не** выделение строки. Компилятор разворачивает её в формат для `printf`, значения печатаются сразу, ничего не выделяется в куче. Поэтому `"..{x}.."` без вызова функции печати **не создаёт значения типа `str`**. Интерполяция допустима только в аргументах функции, у которой последний параметр имеет тип `Fmt`: это `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` и ваши собственные (см. [Свои функции вывода](#свои-функции-вывода)):
+**Important:** interpolation is **not** allocating a string. The compiler expands it into a format for `printf`, and the values are printed right away, with nothing allocated on the heap. So `"..{x}.."` without a print function call **does not create a value of type `str`**. Interpolation is allowed only in the arguments of a function whose last parameter has the type `Fmt`: that is `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` and your own (see [Your own print functions](#your-own-print-functions)):
 
 ```vibe error fragment
 const auto n = 5;
@@ -99,18 +99,18 @@ const auto s = "n = {n}";
 println(s);
 ```
 
-Если нужна строка-значение, соберите её в буфер: `bprint` или `sprint` (см. [Сборка строк](#сборка-строк)).
+If you need a string value, build it in a buffer: `bprint` or `sprint` (see [Building strings](#building-strings)).
 
-## Печать
+## Printing
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `print(...)` | в stdout, без перевода строки |
-| `println(...)` | в stdout, с переводом строки |
-| `eprint(...)` | в stderr, без перевода строки |
-| `eprintln(...)` | в stderr, с переводом строки |
+| `print(...)` | to stdout, without a newline |
+| `println(...)` | to stdout, with a newline |
+| `eprint(...)` | to stderr, without a newline |
+| `eprintln(...)` | to stderr, with a newline |
 
-Аргументы можно перечислять через запятую: они выводятся через пробел. Печатается **любой** тип:
+Arguments can be listed with commas: they are printed separated by spaces. **Any** type can be printed:
 
 ```vibe run
 struct P { i64 x; f64 y; }
@@ -119,53 +119,53 @@ union U { i64 A; B; }
 
 void main() {
     const auto p = P{ .x = 1, .y = 2.5 };
-    println(1, "два", 3.5, true, 'x');
-    println(p, [1, 2, 3], "строка");
+    println(1, "two", 3.5, true, 'x');
+    println(p, [1, 2, 3], "string");
     println(Color::Green, U::A(7), U::B);
     println(&p == &p);
-    print("без перевода, ");
-    print("продолжение\n");
-    eprintln("это в stderr");
+    print("no newline, ");
+    print("continued\n");
+    eprintln("this goes to stderr");
 }
 ```
 
-Как печатаются типы:
+How types are printed:
 
-| Тип | Вид |
+| Type | Form |
 |---|---|
-| целые | десятичное число |
-| `f32`, `f64` | как `%g`: до 6 значащих цифр |
+| integers | a decimal number |
+| `f32`, `f64` | like `%g`: up to 6 significant digits |
 | `bool` | `true` / `false` |
-| `str` | текст; внутри структур и массивов в кавычках |
-| `'a'` | число (код байта) |
-| указатель | адрес, как `%p` |
-| enum | `.Имя` |
-| ошибка | `error.Имя` |
-| struct | `Имя{ поле: значение }` |
-| union | `Имя.Вариант(payload)` |
-| массив, срез | `[a, b, c]` |
+| `str` | the text; inside structs and arrays, in quotes |
+| `'a'` | a number (the byte code) |
+| pointer | the address, like `%p` |
+| enum | `.Name` |
+| error | `error.Name` |
+| struct | `Name{ field: value }` |
+| union | `Name.Variant(payload)` |
+| array, slice | `[a, b, c]` |
 
-## Форматирование
+## Formatting
 
-После выражения можно поставить `:` и спецификацию — как у `printf`: флаги, ширина, точность, буква типа.
+After an expression you can put `:` and a specification, as in `printf`: flags, width, precision, a type letter.
 
 ```text
-{выражение : [флаги][ширина][.точность][тип]}
+{expression : [flags][width][.precision][type]}
 ```
 
-### Целые
+### Integers
 
-| Запись | Результат для 255 | Смысл |
+| Form | Result for 255 | Meaning |
 |---|---|---|
-| `{n}` | `255` | десятичное |
-| `{n:x}` | `ff` | шестнадцатеричное, строчные |
-| `{n:X}` | `FF` | шестнадцатеричное, заглавные |
-| `{n:08X}` | `000000FF` | ширина 8, ведущие нули |
-| `{n:6}` | `   255` | ширина 6, по правому краю |
-| `{n:-6}` | `255   ` | ширина 6, по левому краю |
-| `{n:06}` | `000255` | нули спереди |
-| `{n:+}` | `+255` | всегда со знаком |
-| `{c:c}` | `A` для 65 | число как символ |
+| `{n}` | `255` | decimal |
+| `{n:x}` | `ff` | hexadecimal, lowercase |
+| `{n:X}` | `FF` | hexadecimal, uppercase |
+| `{n:08X}` | `000000FF` | width 8, leading zeros |
+| `{n:6}` | `   255` | width 6, right-aligned |
+| `{n:-6}` | `255   ` | width 6, left-aligned |
+| `{n:06}` | `000255` | zeros in front |
+| `{n:+}` | `+255` | always with a sign |
+| `{c:c}` | `A` for 65 | the number as a character |
 
 ```vibe run
 void main() {
@@ -178,17 +178,17 @@ void main() {
 }
 ```
 
-Двоичной печати нет: `{n:b}` выведет `<bad format>`. Для двоичного вида разберите число по битам вручную.
+There is no binary printing: `{n:b}` prints `<bad format>`. For a binary form, take the number apart bit by bit by hand.
 
-### Дробные
+### Floating-point
 
-| Запись | Для 3.14159265 | Смысл |
+| Form | For 3.14159265 | Meaning |
 |---|---|---|
 | `{f}` | `3.14159` | `%g` |
-| `{f:.2}` | `3.14` | два знака после точки |
-| `{f:8.3}` | `   3.142` | ширина 8, три знака |
-| `{f:-8.1}` | `3.1     ` | по левому краю |
-| `{f:e}` | `3.141593e+00` | экспоненциальная запись |
+| `{f:.2}` | `3.14` | two digits after the point |
+| `{f:8.3}` | `   3.142` | width 8, three digits |
+| `{f:-8.1}` | `3.1     ` | left-aligned |
+| `{f:e}` | `3.141593e+00` | exponential notation |
 
 ```vibe run
 void main() {
@@ -198,11 +198,11 @@ void main() {
 }
 ```
 
-Обратите внимание: `100000.0` печатается как `100000`, а `1000000.0` — как `1e+06`. Для постоянного вида используйте точность: `{x:.1}`.
+Note that `100000.0` is printed as `100000`, and `1000000.0` as `1e+06`. For a constant form, use a precision: `{x:.1}`.
 
-### Строки
+### Strings
 
-Ширина работает и со строками:
+Width works with strings too:
 
 ```vibe run
 void main() {
@@ -212,17 +212,17 @@ void main() {
 }
 ```
 
-Точность у строки обрезает её: `{s:.3}` печатает первые три байта. Для подстроки в коде используйте срез `s[0..3]`.
+A precision on a string truncates it: `{s:.3}` prints the first three bytes. For a substring in code, use the slice `s[0..3]`.
 
-Ширина считается в байтах, поэтому кириллица выравнивается неточно.
+Width is counted in bytes, so non-ASCII text is aligned imprecisely.
 
-## Сборка строк
+## Building strings
 
-Нужно получить строку-значение? Есть два способа.
+Need a string value? There are two ways.
 
-### `bprint`: в свой буфер
+### `bprint`: into your own buffer
 
-`bprint(buf, ...)` форматирует в ваш массив и возвращает `!str`, срез этого буфера. Не влезло — `error.NoSpace`. Ничего не выделяется.
+`bprint(buf, ...)` formats into your array and returns a `!str`, a slice of that buffer. If it does not fit, you get `error.NoSpace`. Nothing is allocated.
 
 ```vibe run
 !void main() {
@@ -231,19 +231,19 @@ void main() {
     println(s, s.len);
 
     u8[4] tiny;
-    const auto r = bprint(tiny[..], "слишком длинная строка") catch |e| {
-        println("не влезло: {e}");
+    const auto r = bprint(tiny[..], "a string that is too long") catch |e| {
+        println("did not fit: {e}");
         "?";
     };
     println(r);
 }
 ```
 
-Результат живёт ровно столько, сколько буфер.
+The result lives exactly as long as the buffer.
 
-### `sprint`: в растущий список
+### `sprint`: into a growing list
 
-`sprint(&list, ...)` дописывает текст в `List[u8]`. Рост идёт через аллокатор списка. Идеально для сборки по частям:
+`sprint(&list, ...)` appends text to a `List<u8>`. It grows through the list's allocator. Ideal for building in pieces:
 
 ```vibe run
 !void main() {
@@ -259,11 +259,11 @@ void main() {
 }
 ```
 
-`out.slice()` — это `u8[]`, и его можно передать как `str`.
+`out.slice()` is a `u8[]`, and it can be passed as a `str`.
 
-## Свои функции вывода
+## Your own print functions
 
-Если последний параметр функции — `Fmt`, то строка с `{...}` и все остальные аргументы вызова собираются в него. Передать `Fmt` дальше в `print` или `println` можно как есть:
+If the last parameter of a function is `Fmt`, then the string with `{...}` and all the other arguments of the call are gathered into it. You can pass the `Fmt` on to `print` or `println` as it is:
 
 ```vibe run
 void note(str tag, Fmt f) {
@@ -273,28 +273,28 @@ void note(str tag, Fmt f) {
 
 void main() {
     note("info", "x = {1 + 2}, y = {2.5:.1}");
-    note("warn", "без значений");
+    note("warn", "no values");
 }
 ```
 
-## Функции стандартной библиотеки
+## Standard library functions
 
-| Функция | Что делает |
+| Function | What it does |
 |---|---|
-| `i64 str_find(s, needle)` | позиция подстроки или `-1` |
-| `i64 str_find_byte(s, c)` | первая позиция байта или `-1` |
-| `i64 str_rfind_byte(s, c)` | последняя позиция байта или `-1` |
-| `bool str_starts_with(s, p)` | начинается с |
-| `bool str_ends_with(s, p)` | заканчивается на |
-| `str str_trim(s)` | убрать пробелы по краям |
-| `!i64 parse_int(s)` | число из строки (пробелы по краям разрешены) |
-| `!u64 parse_int_radix(s, r)` | число по основанию (0 — автоопределение `0x`, `0b`, `0o`) |
-| `!f64 parse_float(s)` | дробное число |
-| `is_digit`, `is_alpha`, `is_alnum`, `is_upper`, `is_hex` | классы символов (`u8`) |
-| `!str a.dup(s)` | копия в куче |
-| `str cstr(p)` | `str` из C-строки |
-| `!u8* to_cstr(buf, s)` | C-строка в вашем буфере |
-| `!u8* a.dupz(s)` | C-строка в куче |
+| `i64 str_find(s, needle)` | the position of a substring, or `-1` |
+| `i64 str_find_byte(s, c)` | the first position of a byte, or `-1` |
+| `i64 str_rfind_byte(s, c)` | the last position of a byte, or `-1` |
+| `bool str_starts_with(s, p)` | starts with |
+| `bool str_ends_with(s, p)` | ends with |
+| `str str_trim(s)` | strip whitespace from both ends |
+| `!i64 parse_int(s)` | a number from a string (surrounding spaces are allowed) |
+| `!u64 parse_int_radix(s, r)` | a number in a radix (0 means autodetect `0x`, `0b`, `0o`) |
+| `!f64 parse_float(s)` | a floating-point number |
+| `is_digit`, `is_alpha`, `is_alnum`, `is_upper`, `is_hex` | character classes (`u8`) |
+| `!str a.dup(s)` | a copy on the heap |
+| `str cstr(p)` | a `str` from a C string |
+| `!u8* to_cstr(buf, s)` | a C string in your buffer |
+| `!u8* a.dupz(s)` | a C string on the heap |
 
 ```vibe run
 !void main() {
@@ -311,9 +311,9 @@ void main() {
 }
 ```
 
-Готовых `split`, `join`, `to_upper`, `replace` нет. Они пишутся за минуту.
+There are no ready-made `split`, `join`, `to_upper` or `replace`. They take a minute to write.
 
-### Разбить по разделителю
+### Splitting by a separator
 
 ```vibe run
 !void main() {
@@ -335,11 +335,11 @@ void main() {
 }
 ```
 
-Части — это срезы исходной строки, ничего не копируется.
+The parts are slices of the original string; nothing is copied.
 
-### Преобразовать регистр
+### Changing case
 
-Для изменения нужна своя память:
+Changing needs your own memory:
 
 ```vibe run
 !void main() {
@@ -360,36 +360,36 @@ void main() {
 }
 ```
 
-## Ввод
+## Input
 
-`read_line(buf)` читает строку из stdin (без перевода строки) или возвращает `error.EndOfFile`:
+`read_line(buf)` reads a line from stdin (without the newline) or returns `error.EndOfFile`:
 
 ```vibe run with=allow-fail
 void main() {
     u8[128] buf;
     const auto line = read_line(buf[..]) catch {
-        println("ввода нет");
+        println("no input");
         return;
     };
-    println("прочитано: {line}");
+    println("read: {line}");
 }
 ```
 
-Читать файл целиком: `read_file(a, path)`, писать: `write_file(path, data)`. Подробнее — в [справочнике](stdlib.md).
+To read a whole file: `read_file(a, path)`; to write: `write_file(path, data)`. More in the [reference](stdlib.md).
 
-## `embed`: файл как константа строки
+## `embed`: a file as a string constant
 
-`embed("путь")` во время компиляции читает файл и кладёт его байты в программу как `str`. Путь считается от файла с исходником.
+`embed("path")` reads a file at compile time and puts its bytes into the program as a `str`. The path is relative to the source file.
 
 ```text
-let banner = embed("banner.txt")
-println(banner)
+const auto banner = embed("banner.txt");
+println(banner);
 ```
 
-Это удобно для шаблонов, справки, небольших ресурсов: программа остаётся одним файлом.
+This is handy for templates, help texts and small resources: the program stays a single file.
 
-## Что дальше
+## What next
 
-- Где хранить собранные строки: [память и аллокаторы](memory.md).
-- `List` и `Map`: [коллекции](collections.md).
-- Строки в C: [взаимодействие с C](c-interop.md).
+- Where to keep built strings: [memory and allocators](memory.md).
+- `List` and `Map`: [collections](collections.md).
+- Strings in C: [interoperating with C](c-interop.md).

@@ -1,15 +1,15 @@
 ---
-title: Быстрый тур
+title: Quick tour
 order: 2
-section: Старт
-description: Весь язык Vibe на одной странице: короткие программы с настоящим выводом
+section: Start
+description: The whole Vibe language on one page: short programs with real output
 ---
 
-Эта страница показывает всё основное за один присест. Подробности каждой темы — на отдельных страницах, ссылки в конце разделов.
+This page shows all the essentials in one sitting. The details of each topic are on separate pages, linked at the end of the sections.
 
-## Переменные
+## Variables
 
-Переменные изменяемы по умолчанию, `const` делает их неизменяемыми. Вместо типа можно написать `auto`: он выводится из значения.
+Variables are mutable by default, and `const` makes them immutable. You can write `auto` instead of a type: it is inferred from the value.
 
 ```vibe run fragment
 const auto a = 10;
@@ -19,18 +19,18 @@ const f64 pi = 3.14159;
 println("a = {a}, b = {b}, pi = {pi}");
 ```
 
-Попытка изменить `const`-переменную не компилируется:
+Trying to change a `const` variable does not compile:
 
 ```vibe error fragment
 const auto a = 10;
 a = 11;
 ```
 
-Подробнее: [переменные и константы](variables.md).
+More: [variables and constants](variables.md).
 
-## Числа и преобразования
+## Numbers and conversions
 
-Целые и дробные типы называются как в Rust: `i8..i64`, `u8..u64`, `f32`, `f64`. Неявно расширять можно только без потерь, остальное — через `as`.
+Integer and floating-point types are named as in Rust: `i8..i64`, `u8..u64`, `f32`, `f64`. Only lossless widening is implicit; everything else goes through `as`.
 
 ```vibe run fragment
 const i32 small = 1000;
@@ -41,18 +41,18 @@ const auto t = 3.99 as i64;
 println(big, back, f, t);
 ```
 
-Сужение без `as` не компилируется:
+Narrowing without `as` does not compile:
 
 ```vibe error fragment
 const i64 big = 1000;
 const i32 small = big;
 ```
 
-Подробнее: [типы](types.md), [операторы](operators.md).
+More: [types](types.md), [operators](operators.md).
 
-## Строки и форматирование
+## Strings and formatting
 
-`str` — это срез байтов. Внутри `"..."` в фигурных скобках можно писать любое выражение, после двоеточия — формат.
+`str` is a slice of bytes. Inside `"..."` you can write any expression in curly braces, and a format after a colon.
 
 ```vibe run fragment
 const auto name = "Vibe";
@@ -62,16 +62,16 @@ println("hex {n:x}, padded {n:08X}, width [{n:6}] [{n:-6}]");
 println("pi ~ {3.14159265:.3}");
 ```
 
-Подробнее: [строки и форматирование](strings.md).
+More: [strings and formatting](strings.md).
 
-## Управление потоком
+## Control flow
 
 ```vibe run fragment
 for (auto i : 1..6) {
     if (i % 2 == 0) {
-        println("{i} чётное");
+        println("{i} is even");
     } else {
-        println("{i} нечётное");
+        println("{i} is odd");
     }
 }
 auto n = 3;
@@ -81,9 +81,9 @@ while (n > 0) {
 println("n = {n}");
 ```
 
-Подробнее: [управление потоком](control-flow.md).
+More: [control flow](control-flow.md).
 
-## Функции
+## Functions
 
 ```vibe run
 i64 square(i64 x) {
@@ -91,7 +91,7 @@ i64 square(i64 x) {
 }
 
 void greet(str name) {
-    println("Привет, {name}!");
+    println("Hello, {name}!");
 }
 
 void main() {
@@ -100,9 +100,9 @@ void main() {
 }
 ```
 
-Подробнее: [функции](functions.md).
+More: [functions](functions.md).
 
-## Структуры и методы
+## Structs and methods
 
 ```vibe run
 struct Point {
@@ -124,9 +124,9 @@ void main() {
 }
 ```
 
-Подробнее: [структуры, union и enum](structs-unions-enums.md).
+More: [structs, unions and enums](structs-unions-enums.md).
 
-## Enum, union и match
+## Enums, unions and match
 
 ```vibe run
 enum Color { Red, Green, Blue }
@@ -139,9 +139,9 @@ union Shape {
 
 str name(Color c) {
     return match c {
-        .Red => "красный",
-        .Green => "зелёный",
-        .Blue => "синий",
+        .Red => "red",
+        .Green => "green",
+        .Blue => "blue",
     }
 }
 
@@ -159,9 +159,9 @@ void main() {
 }
 ```
 
-## Ошибки
+## Errors
 
-Ошибка — значение. Функция, которая может завершиться ошибкой, возвращает `!T`. Оператор `?` пробрасывает ошибку вверх, `catch` — обрабатывает.
+An error is a value. A function that can fail returns `!T`. The `?` operator propagates the error upwards, and `catch` handles it.
 
 ```vibe run exit
 !i64 parse(str s) {
@@ -172,19 +172,19 @@ void main() {
 !void main() {
     println(parse("42")?);
     println(parse("") catch -1);
-    println(parse("abc") catch |e| { println("ошибка: {e}"); 0; });
+    println(parse("abc") catch |e| { println("error: {e}"); 0; });
     const auto n = parse("x")?;
     println(n);
 }
 ```
 
-Последняя строка завершает программу с ошибкой: `main` вернул `error.InvalidNumber`.
+The last line ends the program with an error: `main` returned `error.InvalidNumber`.
 
-Подробнее: [ошибки и опциональные значения](errors-and-optionals.md).
+More: [errors and optional values](errors-and-optionals.md).
 
-## Опциональные значения
+## Optional values
 
-`?T` — значение или ничего. `orelse` подставляет запасное.
+`?T` is a value or nothing. `orelse` supplies a fallback.
 
 ```vibe run
 ?i64 find(i64[] items, i64 want) {
@@ -201,9 +201,9 @@ void main() {
 }
 ```
 
-## Память
+## Memory
 
-Ничто не выделяет память само. Куча — только через аллокатор, который вы передаёте явно.
+Nothing allocates by itself. The heap is reachable only through an allocator that you pass explicitly.
 
 ```vibe run
 !void main() {
@@ -217,9 +217,9 @@ void main() {
 }
 ```
 
-`defer` выполняется при выходе из области видимости: `arena.deinit()` освободит всё разом. Подробнее: [память и аллокаторы](memory.md).
+`defer` runs when the scope exits: `arena.deinit()` frees everything at once. More: [memory and allocators](memory.md).
 
-## Дженерики
+## Generics
 
 ```vibe run
 template<T: Ord> T largest(T a, T b) {
@@ -231,14 +231,14 @@ struct Pair<A, B> { A first; B second; }
 
 void main() {
     println(largest(3, 9), largest(2.5, 1.5));
-    const auto p = Pair<i64, str>{ .first = 1, .second = "один" };
+    const auto p = Pair<i64, str>{ .first = 1, .second = "one" };
     println(p.first, p.second);
 }
 ```
 
-## Замыкания
+## Closures
 
-Замыкание явно перечисляет, какие переменные оно использует. Контекст живёт на стеке, ничего не выделяется.
+A closure lists explicitly which variables it uses. The context lives on the stack, and nothing is allocated.
 
 ```vibe run
 i64 apply(fn[](i64) -> i64 f, i64 x) {
@@ -256,25 +256,25 @@ void main() {
 }
 ```
 
-## Тесты
+## Tests
 
 ```vibe test
 i64 add(i64 a, i64 b) { return a + b; }
 
-test "складывает" {
+test "adds" {
     assert(add(2, 3) == 5);
 }
 
-test "ноль нейтрален" {
+test "zero is neutral" {
     assert(add(7, 0) == 7);
 }
 ```
 
-Подробнее: [тесты](testing.md).
+More: [tests](testing.md).
 
-## Модули
+## Modules
 
-Файл подключается через `import`. С `as` его имена получают префикс:
+A file is brought in with `import`. With `as`, its names get a prefix:
 
 ```vibe file=geometry.vibe
 struct Rect { i64 w; i64 h; }
@@ -291,9 +291,9 @@ void main() {
 }
 ```
 
-Подробнее: [модули и импорт](modules.md).
+More: [modules and imports](modules.md).
 
-## Вызов C
+## Calling C
 
 ```vibe run
 extern i32 atoi(u8* s);
@@ -303,11 +303,11 @@ void main() {
 }
 ```
 
-Подробнее: [взаимодействие с C](c-interop.md).
+More: [interoperating with C](c-interop.md).
 
-## Куда дальше
+## Where to go next
 
-- Пришли из C++? Отличия собраны на странице [Vibe для C++-программиста](cpp-style.md).
-- Углубляться в порядке страниц раздела «Язык»: [лексика](lexical.md), [типы](types.md) и далее.
-- Посмотреть готовые программы: [рецепты](cookbook.md).
-- Если что-то ведёт себя неожиданно: [ловушки и FAQ](gotchas.md).
+- Coming from C++? The differences are collected on the page [Vibe for C++ programmers](cpp-style.md).
+- To go deeper, follow the pages of the "Language" section in order: [lexical structure](lexical.md), [types](types.md) and on.
+- To see finished programs: [cookbook](cookbook.md).
+- If something behaves unexpectedly: [pitfalls and FAQ](gotchas.md).

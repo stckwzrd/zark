@@ -1,60 +1,60 @@
 ---
-title: Шпаргалка
+title: Cheat sheet
 order: 44
-section: Справочник
-description: Весь синтаксис Vibe на одной странице: таблицы и короткие примеры для быстрого поиска
+section: Reference
+description: All of Vibe's syntax on one page: tables and short examples for quick lookup
 ---
 
-Краткая памятка. Подробности по каждой теме — по ссылкам.
+A short memo. Details on each topic are behind the links.
 
-## Программа
+## A program
 
 ```vibe run
 void main() {
-    println("Привет, Vibe!");
+    println("Hello, Vibe!");
 }
 ```
 
-| Команда | Что делает |
+| Command | What it does |
 |---|---|
-| `vibe run f.vibe [-- args]` | собрать и запустить |
-| `vibe build f.vibe [-o out] [--release]` | собрать исполняемый файл |
-| `vibe test f.vibe` | запустить блоки `test` |
-| `vibe fmt [--check] f.vibe` | отформатировать |
-| `vibe lsp` | языковой сервер |
-| `vibe ir f.vibe` | показать LLVM IR |
+| `vibe run f.vibe [-- args]` | build and run |
+| `vibe build f.vibe [-o out] [--release]` | build an executable |
+| `vibe test f.vibe` | run the `test` blocks |
+| `vibe fmt [--check] f.vibe` | format |
+| `vibe lsp` | the language server |
+| `vibe ir f.vibe` | show the LLVM IR |
 
-См. [установку](getting-started.md) и [инструменты](tooling.md).
+See [installation](getting-started.md) and [tooling](tooling.md).
 
-## Лексика
+## Lexical structure
 
 | | |
 |---|---|
-| комментарии | `// строка`, `/* блок */` |
-| конец оператора | `;` (после `}` блока не нужна) |
-| числа | `42`, `0xff`, `0b101`, `0o17`, `1_000`, `3.14`, `1e9` |
-| символ | `'a'` — это число `u8` |
-| строки | `"text"`, escapes `\n \t \r \0 \e \\ \" \' \{ \}` |
-| интерполяция | `"x = {expr}"`, литеральные скобки `{{` `}}` |
+| comments | `// line`, `/* block */` |
+| end of a statement | `;` (not needed after the `}` of a block) |
+| numbers | `42`, `0xff`, `0b101`, `0o17`, `1_000`, `3.14`, `1e9` |
+| character | `'a'` is a `u8` number |
+| strings | `"text"`, escapes `\n \t \r \0 \e \\ \" \' \{ \}` |
+| interpolation | `"x = {expr}"`, literal braces `{{` `}}` |
 
-См. [лексику](lexical.md).
+See [lexical structure](lexical.md).
 
-## Типы
+## Types
 
 | | |
 |---|---|
-| целые | `i8 i16 i32 i64 isize`, `u8 u16 u32 u64 usize` |
-| дробные | `f32 f64` |
-| прочее | `bool`, `void`, `str` (= `u8[]`) |
-| указатель | `T*`, `void*`, `null` |
-| срез / массив | `T[]`, `T[N]` |
-| ошибка / опционал | `!T`, `?T` |
-| функции | `fn(A, B) -> R`, замыкание `fn[](A) -> R` |
-| псевдоним | `type Имя = Тип;` |
+| integers | `i8 i16 i32 i64 isize`, `u8 u16 u32 u64 usize` |
+| floating-point | `f32 f64` |
+| other | `bool`, `void`, `str` (= `u8[]`) |
+| pointer | `T*`, `void*`, `null` |
+| slice / array | `T[]`, `T[N]` |
+| error / optional | `!T`, `?T` |
+| functions | `fn(A, B) -> R`, closure `fn[](A) -> R` |
+| alias | `type Name = Type;` |
 
-См. [типы](types.md).
+See [types](types.md).
 
-## Переменные
+## Variables
 
 ```vibe run
 const auto N = 4 * 2;
@@ -70,26 +70,26 @@ void main() {
 }
 ```
 
-Переменная изменяема, `const` делает её неизменяемой, `auto` выводит тип, без значения — ноль. См. [переменные](variables.md).
+A variable is mutable, `const` makes it immutable, `auto` infers the type, and without a value it is zero. See [variables](variables.md).
 
-## Операторы
+## Operators
 
 | | |
 |---|---|
-| арифметика | `+ - * / %`, `-x` |
-| сравнение | `== != < <= > >=` |
-| логика | `&& \|\| !` (ленивые, только `bool`) |
-| биты | `& \| ^ ~ << >>` |
-| присваивание | `= += -= *= /= %= |= &= ^= <<= >>=`, `x++`, `x--`, `_ = выражение` |
-| приведение | `x as T` |
-| указатели | `&x`, `*p`, `p[i]`, `p + n`, `p.поле` |
-| срезы | `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]` |
-| проверка варианта | `x is .Вариант` |
-| ошибка / опционал | `f()?`, `f() catch v`, `f() catch \|e\| { ... }`, `x orelse v` |
+| arithmetic | `+ - * / %`, `-x` |
+| comparison | `== != < <= > >=` |
+| logic | `&& \|\| !` (lazy, `bool` only) |
+| bits | `& \| ^ ~ << >>` |
+| assignment | `= += -= *= /= %= \|= &= ^= <<= >>=`, `x++`, `x--`, `_ = expression` |
+| conversion | `x as T` |
+| pointers | `&x`, `*p`, `p[i]`, `p + n`, `p.field` |
+| slices | `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]` |
+| variant test | `x is .Variant` |
+| error / optional | `f()?`, `f() catch v`, `f() catch \|e\| { ... }`, `x orelse v` |
 
-Приоритет, от слабого к сильному: `catch`/`orelse`, `||`, `&&`, сравнения, `|`, `^`, `&`, сдвиги, `+ -`, `* / %`, `as`, унарные, постфиксные. См. [операторы](operators.md).
+Precedence, from weak to strong: `catch`/`orelse`, `||`, `&&`, comparisons, `|`, `^`, `&`, shifts, `+ -`, `* / %`, `as`, unary, postfix. See [operators](operators.md).
 
-## Управление потоком
+## Control flow
 
 ```vibe run
 void main() {
@@ -114,17 +114,17 @@ void main() {
 
 | | |
 |---|---|
-| `if (c) { } else if (c) { } else { }` | условие — только `bool`, скобки блока обязательны |
-| `while (c) { }` | цикл |
-| `for (auto i : a..b) { }` | `a` включительно, `b` нет |
-| `for (auto x : seq) { }`, `for (auto [i, x] : seq) { }` | массив, срез, `List` |
-| `break`, `continue`, `return [e]` | выходы |
-| `match v { pat => e, ... }` | значения, enum, строки, union; `_` — остальное |
-| `defer stmt`, `errdefer stmt` | выполнить при выходе из блока (`errdefer` — только при ошибке) |
+| `if (c) { } else if (c) { } else { }` | the condition is `bool` only, the braces are mandatory |
+| `while (c) { }` | a loop |
+| `for (auto i : a..b) { }` | `a` inclusive, `b` not |
+| `for (auto x : seq) { }`, `for (auto [i, x] : seq) { }` | an array, slice, `List` |
+| `break`, `continue`, `return [e]` | exits; `outer: for ...` with `break outer;` leaves an outer loop |
+| `match v { pat => e, ... }` | values, enums, strings, unions; `_` is the rest |
+| `defer stmt`, `errdefer stmt` | run when leaving the block (`errdefer` only on an error) |
 
-См. [управление потоком](control-flow.md).
+See [control flow](control-flow.md).
 
-## Функции
+## Functions
 
 ```vibe run
 i64 add(i64 a, i64 b) { return a + b; }
@@ -139,15 +139,15 @@ void main() {
 
 | | |
 |---|---|
-| объявление | `Результат имя(Тип п) { }` |
-| дженерик | `template<T: Ord> T имя(T x)`, ограничения `Eq Ord Num Int Float` |
-| явный тип | `имя<i64>(...)` |
-| замыкание | `[&захват](i64 x) -> i64 { }`, живёт только вниз по стеку |
+| declaration | `Result name(Type p) { }` |
+| generic | `template<T: Ord> T name(T x)`, constraints `Eq Ord Num Int Float` |
+| explicit type | `name<i64>(...)` |
+| closure | `[&capture](i64 x) -> i64 { }`, lives only down the stack |
 | C | `extern i64 f(i64 x);`, `export void g() { }` |
 
-См. [функции](functions.md).
+See [functions](functions.md).
 
-## Структуры, union, enum
+## Structs, unions, enums
 
 ```vibe run
 struct Point {
@@ -173,16 +173,16 @@ void main() {
 
 | | |
 |---|---|
-| литерал | `P{ .x = 1, .y = 2 }`, `P{ .x = 1 }` (остальное нулями), `P{}` |
-| метод | внутри `struct`: `void m() { ... }`, `this` — указатель |
-| статический | `static Self new() { ... }`, вызов `P::new()` |
-| enum | `.Имя` (по контексту) или `Color::Red`; `as i64` |
-| union | `.Имя(payload)`, `.Имя`; `match` с привязкой |
-| дженерик | `struct Pair<A, B> { ... }`, `Pair<i64, str>{ ... }` |
+| literal | `P{ .x = 1, .y = 2 }`, `P{ .x = 1 }` (the rest zeroed), `P{}` |
+| method | inside `struct`: `void m() { ... }`, `this` is a pointer |
+| static | `static Self new() { ... }`, called as `P::new()` |
+| enum | `.Name` (by context) or `Color::Red`; `as i64` |
+| union | `.Name(payload)`, `.Name`; `match` with binding |
+| generic | `struct Pair<A, B> { ... }`, `Pair<i64, str>{ ... }` |
 
-См. [структуры, union и enum](structs-unions-enums.md).
+See [structs, unions and enums](structs-unions-enums.md).
 
-## Ошибки и опционалы
+## Errors and optionals
 
 ```vibe run
 !i64 half(i64 n) {
@@ -201,20 +201,20 @@ void main() {
 }
 ```
 
-См. [ошибки и опциональные значения](errors-and-optionals.md).
+See [errors and optional values](errors-and-optionals.md).
 
-## Память
+## Memory
 
 | | |
 |---|---|
-| аллокаторы | `c_allocator()`, `FixedBuf::init(buf).allocator()`, `Arena::init(parent).allocator()` |
-| выделить | `a.alloc<T>(n)?`, `a.create<T>()?`, `a.dup(s)?` |
-| освободить | `a.free(s)`, `a.destroy(p)`, `arena.deinit()` |
-| шаблон | `auto x = a.alloc<T>(n)?;` и сразу `defer a.free(x)` |
+| allocators | `c_allocator()`, `FixedBuf::init(buf).allocator()`, `Arena::init(parent).allocator()` |
+| allocate | `a.alloc<T>(n)?`, `a.create<T>()?`, `a.dup(s)?` |
+| free | `a.free(s)`, `a.destroy(p)`, `arena.deinit()` |
+| pattern | `auto x = a.alloc<T>(n)?;` and right away `defer a.free(x)` |
 
-См. [память](memory.md).
+See [memory](memory.md).
 
-## Коллекции
+## Collections
 
 ```vibe run
 !void main() {
@@ -232,47 +232,47 @@ void main() {
 }
 ```
 
-См. [коллекции](collections.md).
+See [collections](collections.md).
 
-## Строки и вывод
+## Strings and output
 
 | | |
 |---|---|
-| вывод | `print`, `println`, `eprint`, `eprintln` |
-| в буфер | `bprint(buf[..], "...")?`, `sprint(&list, "...")?` |
-| форматы | `{x:x}` `{x:08X}` `{x:6}` `{x:-6}` `{f:.2}` `{f:e}` `{c:c}` |
-| строки | `s.len`, `s[i]`, `s[a..b]`, `==`, `str_find`, `str_trim`, `parse_int` |
-| паника | `panic("msg {x}")`, `assert(cond)` |
+| output | `print`, `println`, `eprint`, `eprintln` |
+| into a buffer | `bprint(buf[..], "...")?`, `sprint(&list, "...")?` |
+| formats | `{x:x}` `{x:08X}` `{x:6}` `{x:-6}` `{f:.2}` `{f:e}` `{c:c}` |
+| strings | `s.len`, `s[i]`, `s[a..b]`, `==`, `str_find`, `str_trim`, `parse_int` |
+| panic | `panic("msg {x}")`, `assert(cond)` |
 
-См. [строки](strings.md).
+See [strings](strings.md).
 
-## Модули и C
+## Modules and C
 
 ```text
-import "util.vibe";                 имена в общее пространство
-import "util.vibe" as u;            u::имя
-vibe run main.vibe lib.c x.cpp -lm  C и C++ вместе
+import "util.vibe";                 names go into the common namespace
+import "util.vibe" as u;            u::name
+vibe run main.vibe lib.c x.cpp -lm  C and C++ together
 ```
 
-См. [модули](modules.md) и [C](c-interop.md).
+See [modules](modules.md) and [C](c-interop.md).
 
-## Тесты
+## Tests
 
 ```vibe test
-test "арифметика" {
+test "arithmetic" {
     assert(1 + 1 == 2);
 }
 ```
 
-`vibe test main.vibe`. См. [тестирование](testing.md).
+`vibe test main.vibe`. See [testing](testing.md).
 
-## Ловушки одной строкой
+## Pitfalls in one line
 
-- Литерал вне диапазона типа обрезается молча, целые переполняются молча.
-- Деление целого на ноль роняет программу.
-- `catch` и `orelse` забирают всё правее: ставьте скобки.
-- `{` в строке — интерполяция, литеральная скобка — `{{`.
-- Замыкание нельзя возвращать, функции без `return` на всех путях компилируются.
-- Имена прелюдии (`min`, `max`, `abs`, `sort`, `run`, `env`) заняты.
+- A literal outside the range of its type is truncated silently, and integers overflow silently (unless you build with `--check-overflow`).
+- Integer division by zero crashes the program.
+- `catch` and `orelse` take everything to the right: use parentheses.
+- `{` in a string is an interpolation, a literal brace is `{{`.
+- A closure must not be returned, and functions without a `return` on all paths compile.
+- The prelude names (`min`, `max`, `abs`, `sort`, `run`, `env`) are taken.
 
-Полный список: [ловушки и FAQ](gotchas.md).
+The full list: [pitfalls and FAQ](gotchas.md).

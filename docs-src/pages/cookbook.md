@@ -1,11 +1,11 @@
 ---
-title: Рецепты и готовые программы
+title: Recipes and finished programs
 order: 41
-section: Справочник
-description: Законченные программы на Vibe: FizzBuzz, счётчик слов, калькулятор, связный список, дерево, конечный автомат, разбор аргументов и другое
+section: Reference
+description: Complete programs in Vibe: FizzBuzz, a word counter, a calculator, a linked list, a tree, a state machine, argument parsing and more
 ---
 
-Каждый рецепт — целая программа, которую можно скопировать и запустить: `vibe run main.vibe`. Вывод под кодом получен настоящим запуском.
+Every recipe is a whole program that you can copy and run: `vibe run main.vibe`. The output under the code comes from a real run.
 
 ## FizzBuzz
 
@@ -25,7 +25,7 @@ void main() {
 }
 ```
 
-## Простые числа (решето Эратосфена)
+## Prime numbers (the sieve of Eratosthenes)
 
 ```vibe run
 !void main() {
@@ -54,13 +54,13 @@ void main() {
         }
     }
     println();
-    println("всего", count);
+    println("total", count);
 }
 ```
 
-Память нулевая, поэтому массив `bool` начинается с `false`.
+The memory is zeroed, so the `bool` array starts as `false`.
 
-## Числа Фибоначчи без рекурсии
+## Fibonacci numbers without recursion
 
 ```vibe run
 i64 fib(i64 n) {
@@ -81,7 +81,7 @@ void main() {
 }
 ```
 
-## Наибольший общий делитель и НОК
+## Greatest common divisor and least common multiple
 
 ```vibe run
 i64 gcd(i64 a, i64 b) {
@@ -104,7 +104,7 @@ void main() {
 }
 ```
 
-## Разворот строки и палиндромы
+## Reversing a string and palindromes
 
 ```vibe run
 !str reverse(Allocator a, str s) {
@@ -133,9 +133,9 @@ bool is_palindrome(str s) {
 }
 ```
 
-Работа идёт с байтами, поэтому для ASCII всё верно. Русские буквы (два байта) таким способом не переворачиваются.
+It works on bytes, so everything is right for ASCII. Multi-byte letters are not reversed correctly this way.
 
-## Счётчик слов
+## A word counter
 
 ```vibe run
 !void main() {
@@ -162,11 +162,11 @@ bool is_palindrome(str s) {
 }
 ```
 
-Список `order` запоминает порядок появления слов, потому что порядок обхода `Map` не определён.
+The list `order` remembers the order in which the words appeared, because the traversal order of a `Map` is undefined.
 
-## Калькулятор в обратной польской записи
+## A calculator in reverse Polish notation
 
-Показывает ошибки, стек и разбор строки:
+It shows errors, a stack and parsing a string:
 
 ```vibe run
 !i64 eval(Allocator a, str src) {
@@ -203,7 +203,7 @@ void main() {
     const auto exprs = ["3 4 +", "2 3 4 * +", "10 2 /", "1 0 /", "1 +", "2 x +"];
     for (auto e : exprs) {
         const auto r = eval(a, e) catch |err| {
-            println("{e} -> ошибка {err}");
+            println("{e} -> error {err}");
             continue;
         };
         println("{e} -> {r}");
@@ -211,9 +211,9 @@ void main() {
 }
 ```
 
-## Связный список
+## A linked list
 
-Узлы выделяются из арены, и очищать их по одному не нужно:
+The nodes are allocated from an arena, and there is no need to clean them up one by one:
 
 ```vibe run
 struct Node {
@@ -252,7 +252,7 @@ struct Stack {
 }
 ```
 
-## Двоичное дерево поиска
+## A binary search tree
 
 ```vibe run
 struct Tree {
@@ -297,13 +297,13 @@ i64 height(Tree* t) {
     }
     walk(root);
     println();
-    println("высота", height(root));
+    println("height", height(root));
 }
 ```
 
-## Конечный автомат
+## A state machine
 
-Состояние — `enum`, переход — `match`:
+The state is an `enum`, and a transition is a `match`:
 
 ```vibe run
 enum Light { Red, Green, Yellow }
@@ -328,14 +328,14 @@ void main() {
     Light l = .Red;
     auto t = 0;
     for (auto i : 0..5) {
-        println("{l} на {seconds(l)} с, t = {t}");
+        println("{l} for {seconds(l)} s, t = {t}");
         t += seconds(l);
         l = next(l);
     }
 }
 ```
 
-## Токенизатор на union
+## A tokenizer on a union
 
 ```vibe run
 union Token {
@@ -393,14 +393,14 @@ union Token {
     println();
     println(toks.len);
     const auto bad = tokenize(arena.allocator(), "1 $ 2") catch |e| {
-        println("ошибка: {e}");
+        println("error: {e}");
         return;
     };
     println(bad.len);
 }
 ```
 
-## Матрица: умножение
+## A matrix: multiplication
 
 ```vibe run
 const auto N = 3;
@@ -426,9 +426,9 @@ void main() {
 }
 ```
 
-Массивы передаются и возвращаются **по значению**: функция получает копии. Сравнивать массивы через `==` нельзя, сравнивайте по элементам.
+Arrays are passed and returned **by value**: the function receives copies. Arrays cannot be compared with `==`; compare element by element.
 
-## Чтение и обработка файла
+## Reading and processing a file
 
 ```vibe run
 !void main() {
@@ -436,7 +436,7 @@ void main() {
     defer arena.deinit();
     const auto a = arena.allocator();
 
-    write_file("nums.txt", "10\n20\nабв\n30\n")?;
+    write_file("nums.txt", "10\n20\nabc\n30\n")?;
     defer _ = remove("nums.txt");
 
     const auto text = read_file(a, "nums.txt")?;
@@ -453,25 +453,25 @@ void main() {
             }
         }
     }
-    println("сумма {sum}, плохих строк {bad}");
+    println("sum {sum}, bad lines {bad}");
 }
 ```
 
-## Аргументы командной строки
+## Command-line arguments
 
 ```vibe run with=allow-fail
 void main() {
     if (arg_count() < 2) {
-        println("использование: программа <имя>");
+        println("usage: program <name>");
         return;
     }
-    println("привет, {arg(1)}");
+    println("hello, {arg(1)}");
 }
 ```
 
-Запуск через `vibe run main.vibe -- Мир` передаёт `Мир` как `arg(1)`. Номер 0 — путь программы.
+Running `vibe run main.vibe -- World` passes `World` as `arg(1)`. Number 0 is the program path.
 
-## Таймер
+## A timer
 
 ```vibe run
 i64 work(i64 n) {
@@ -484,22 +484,22 @@ void main() {
     const auto t0 = now_ns();
     const auto r = work(10000000);
     const auto ms = (now_ns() - t0) as f64 / 1000000.0;
-    println("результат {r}, время измерено: {ms >= 0.0}");
+    println("result {r}, time measured: {ms >= 0.0}");
 }
 ```
 
-Время печатают реже, чем проверяют: оно меняется от запуска к запуску.
+The time is printed less often than it is checked: it changes from run to run.
 
-## Вызов внешней команды
+## Calling an external command
 
 ```vibe run
 !void main() {
-    const auto code = run(c_allocator(), ["/bin/sh", "-c", "echo из shell; exit 2"])?;
-    println("код выхода", code);
+    const auto code = run(c_allocator(), ["/bin/sh", "-c", "echo from the shell; exit 2"])?;
+    println("exit code", code);
 }
 ```
 
-## Что дальше
+## What next
 
-- Если пример не собирается или ведёт себя странно: [ловушки и FAQ](gotchas.md).
-- Подробнее про каждую функцию: [справочник](stdlib.md).
+- If an example does not build or behaves strangely: [pitfalls and FAQ](gotchas.md).
+- More about each function: [reference](stdlib.md).

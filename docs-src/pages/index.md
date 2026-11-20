@@ -1,53 +1,53 @@
 ---
-title: Руководство по Vibe
+title: The Vibe Guide
 order: 0
-description: Полное руководство по языку программирования Vibe
+description: A complete guide to the Vibe programming language
 ---
 
 <div class="hero">
 
 # Vibe
 
-Небольшой системный язык: память под вашим контролем, преобразования типов видны в коде, нет скрытых аллокаций и скрытого управления потоком. Компилятор написан на самом Vibe и собирает себя примерно за десятую долю секунды.
+A small systems language: you control memory, type conversions are visible in the code, and there are no hidden allocations or hidden control flow. The compiler is written in Vibe itself and builds itself in about a tenth of a second.
 
 </div>
 
 ```vibe run
 void main() {
-    const auto name = "мир";
-    println("Привет, {name}! 6 * 7 = {6 * 7}");
+    const auto name = "world";
+    println("Hello, {name}! 6 * 7 = {6 * 7}");
 }
 ```
 
-Это полное руководство. Каждый пример на этих страницах компилировался и запускался настоящим компилятором в момент сборки сайта, а текст под примером — то, что программа реально напечатала. Если пример должен был не скомпилироваться, под ним показано настоящее сообщение компилятора.
+This is the complete guide. Every example on these pages was compiled and run by the real compiler when the site was built, and the text under an example is what the program actually printed. If an example is supposed to fail to compile, the real compiler message is shown under it.
 
-## С чего начать
+## Where to start
 
 <div class="cards">
-<a href="getting-started.html"><b>Установка и первая программа</b><span>Собрать компилятор, запустить Hello World, понять команды и флаги.</span></a>
-<a href="tour.html"><b>Быстрый тур</b><span>Весь язык на одной странице: примерно двадцать маленьких программ.</span></a>
-<a href="types.html"><b>Типы</b><span>Числа, указатели, срезы, строки, массивы и правила преобразований.</span></a>
-<a href="errors-and-optionals.html"><b>Ошибки</b><span><code>!T</code>, <code>?</code>, <code>catch</code>, <code>errdefer</code> и опциональные значения.</span></a>
-<a href="memory.html"><b>Память</b><span>Аллокаторы, арены, владение и как не терять память.</span></a>
-<a href="cookbook.html"><b>Рецепты</b><span>Больше тридцати законченных программ: от FizzBuzz до калькулятора.</span></a>
+<a href="getting-started.html"><b>Installation and the first program</b><span>Build the compiler, run Hello World, learn the commands and flags.</span></a>
+<a href="tour.html"><b>Quick tour</b><span>The whole language on one page: about twenty small programs.</span></a>
+<a href="types.html"><b>Types</b><span>Numbers, pointers, slices, strings, arrays and the conversion rules.</span></a>
+<a href="errors-and-optionals.html"><b>Errors</b><span><code>!T</code>, <code>?</code>, <code>catch</code>, <code>errdefer</code> and optional values.</span></a>
+<a href="memory.html"><b>Memory</b><span>Allocators, arenas, ownership and how not to leak.</span></a>
+<a href="cookbook.html"><b>Cookbook</b><span>More than thirty complete programs, from FizzBuzz to a calculator.</span></a>
 </div>
 
-## Как устроено руководство
+## How the guide is organized
 
-- **Старт** — установка и обзор языка. Читается за вечер.
-- **Язык** — каждая возможность отдельно, со всеми нюансами и сообщениями об ошибках.
-- **Память и данные** — аллокаторы, срезы, `List` и `Map`.
-- **Интероп и инструменты** — вызовы C, тесты, форматирование, языковой сервер.
-- **Справочник** — стандартная библиотека, рецепты, ловушки, устройство компилятора и шпаргалка.
+- **Start**: installation and an overview of the language. You can read it in an evening.
+- **Language**: every feature on its own, with all the details and error messages.
+- **Memory and data**: allocators, slices, `List` and `Map`.
+- **Interop and tools**: calling C, tests, formatting, the language server.
+- **Reference**: the standard library, recipes, pitfalls, how the compiler works and a cheat sheet.
 
-Поиск по руководству открывается клавишей `/`. Страницы можно читать в любом порядке, ссылки между ними ведут туда, где подробнее объяснено то или иное правило.
+The search box opens with the `/` key. You can read the pages in any order; the links between them lead to where a rule is explained in more detail.
 
-> **Совет:** если вы пришли из C, Go, Rust или Zig, начните с [быстрого тура](tour.md), затем откройте [ловушки и FAQ](gotchas.md): там собраны отличия и таблица соответствий.
+> **Tip:** if you come from C, Go, Rust or Zig, start with the [quick tour](tour.md), then open [pitfalls and FAQ](gotchas.md): it collects the differences and has a comparison table.
 
-## Принципы языка
+## Principles of the language
 
-1. **Никаких скрытых аллокаций.** Ни одна конструкция языка и ни одна функция prelude не берёт память сама. Память выдаёт только `Allocator`, который вы передаёте явно.
-2. **Никакого скрытого управления потоком.** Неявны только `defer`/`errdefer` (они написаны рядом с кодом, на который влияют), проверки границ (их можно выключить) и `==` для строк.
-3. **Один способ сделать одно.** `auto`/`const` для привязок, `?` для проброса ошибок, `catch` для их обработки, `match` для ветвления.
-4. **Преобразования видны.** Неявно разрешено только безопасное расширение целых, `T` → `!T`, `T` → `?T`, `null` → указатель и `*T` ↔ `*void`. Всё остальное через `as`.
-5. **Что видите, то и лежит в памяти.** Структуры устроены как в C, `str` — это `{указатель, длина}`.
+1. **No hidden allocations.** No language construct and no prelude function takes memory by itself. Memory comes only from an `Allocator` that you pass explicitly.
+2. **No hidden control flow.** The only implicit things are `defer`/`errdefer` (written next to the code they affect), bounds checks (which can be turned off) and `==` on strings.
+3. **One way to do one thing.** `auto`/`const` for bindings, `?` to propagate errors, `catch` to handle them, `match` for branching.
+4. **Conversions are visible.** Only safe integer widening, `T` → `!T`, `T` → `?T`, `null` → pointer and `*T` ↔ `*void` are implicit. Everything else goes through `as`.
+5. **What you see is what is in memory.** Structs are laid out as in C, and `str` is `{pointer, length}`.

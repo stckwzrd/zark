@@ -1,20 +1,20 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vibe для C++-программиста · Vibe</title>
-<meta name="description" content="Синтаксис Vibe глазами C++-программиста: типы впереди, template, методы внутри struct, лямбды, for с круглыми скобками и список отличий от C++">
+<title>Vibe for C++ programmers · Vibe</title>
+<meta name="description" content="Vibe syntax through the eyes of a C++ programmer: types first, template, methods inside struct, lambdas, for with parentheses and a list of differences from C++">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/cpp-style.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html" class="current">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html" class="current">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
-<h1>Vibe для C++-программиста</h1>
-<p>Vibe записывается почти как C++: типы пишутся впереди, дженерики — через <code>template</code> и <code>&lt;...&gt;</code>, методы лежат внутри <code>struct</code>, захват в лямбдах — <code>[&amp;k]</code>. Эта страница показывает всё основное и перечисляет, чем язык отличается от C++.</p>
-<h2 id="объявления-тип-впереди"><a class="anchor" href="#объявления-тип-впереди">#</a>Объявления: тип впереди</h2>
+<h1>Vibe for C++ programmers</h1>
+<p>Vibe is written almost like C++: types go first, generics use <code>template</code> and <code>&lt;...&gt;</code>, methods live inside <code>struct</code>, and a lambda capture is <code>[&amp;k]</code>. This page shows all the essentials and lists how the language differs from C++.</p>
+<h2 id="declarations-the-type-comes-first"><a class="anchor" href="#declarations-the-type-comes-first">#</a>Declarations: the type comes first</h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> i64</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> LIMIT</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> counter </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"></span>
@@ -30,17 +30,17 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    counter</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">++</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n, k, acc, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">LIMIT</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, counter);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>5 10 50 4 1</code></pre></div></div>
-<p>Правила:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>5 10 50 4 1</code></pre></div></div>
+<p>The rules:</p>
 <ul>
-<li>Тип пишется перед именем: <code>i64 x = 5;</code>. Вместо типа можно написать <code>auto</code>.</li>
-<li>Переменные и параметры <strong>изменяемы</strong> по умолчанию. <code>const</code> делает значение неизменяемым.</li>
-<li>Результат функции стоит перед её именем. Функция без результата называется <code>void</code>.</li>
-<li>Точка с запятой обязательна, как в C++. После <code>}</code> блока, функции или <code>struct</code> она не нужна.</li>
-<li><code>nullptr</code> — то же, что <code>null</code>.</li>
+<li>The type is written before the name: <code>i64 x = 5;</code>. You can write <code>auto</code> instead of a type.</li>
+<li>Variables and parameters are <strong>mutable</strong> by default. <code>const</code> makes a value immutable.</li>
+<li>The result of a function stands before its name. A function without a result is <code>void</code>.</li>
+<li>The semicolon is mandatory, as in C++. It is not needed after the <code>}</code> of a block, function or <code>struct</code>.</li>
+<li><code>nullptr</code> is the same as <code>null</code>.</li>
 </ul>
-<p>Типы: <code>T*</code> указатель, <code>T[]</code> срез, <code>T[N]</code> массив, <code>!T</code> ошибка, <code>?T</code> опциональное значение. Число или константа в скобках — всегда размер массива: <code>i64[4]</code>, <code>Point[4]</code>.</p>
-<h2 id="структуры-и-методы-внутри-struct"><a class="anchor" href="#структуры-и-методы-внутри-struct">#</a>Структуры и методы внутри struct</h2>
+<p>Types: <code>T*</code> is a pointer, <code>T[]</code> a slice, <code>T[N]</code> an array, <code>!T</code> an error, <code>?T</code> an optional value. A number or constant in brackets is always an array size: <code>i64[4]</code>, <code>Point[4]</code>.</p>
+<h2 id="structs-and-methods-inside-struct"><a class="anchor" href="#structs-and-methods-inside-struct">#</a>Structs and methods inside struct</h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Point</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> y;</span></span>
@@ -55,14 +55,14 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    p.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">move</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">len2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), p, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Point</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">origin</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>41 Point{ x: 4, y: 5 } Point{ x: 0, y: 0 }</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>41 Point{ x: 4, y: 5 } Point{ x: 0, y: 0 }</code></pre></div></div>
 <ul>
-<li>Методы лежат внутри <code>struct</code>. Поля доступны по голому имени (<code>x</code>) и через <code>this-&gt;x</code> (или <code>this.x</code>). Локальная переменная с тем же именем перекрывает поле.</li>
-<li><code>static</code> объявляет функцию без <code>this</code>: <code>Point::origin()</code>.</li>
-<li><code>const</code> после списка параметров запрещает методу менять поля через <code>this</code> (присваивание и <code>+=</code> дают ошибку). Вызвать из него неконстантный метод через <code>this</code> тоже нельзя.</li>
-<li>Литерал с точками, <code>Point{ .x = 3 }</code>, обнуляет остальные поля, как в C++. <code>Point{}</code> — все поля нулевые.</li>
+<li>Methods live inside <code>struct</code>. The fields are available by the bare name (<code>x</code>) and through <code>this-&gt;x</code> (or <code>this.x</code>). A local variable with the same name shadows the field.</li>
+<li><code>static</code> declares a function without <code>this</code>: <code>Point::origin()</code>.</li>
+<li><code>const</code> after the parameter list forbids the method to change fields through <code>this</code> (assignment and <code>+=</code> give an error). It also cannot call a non-const method through <code>this</code>.</li>
+<li>A literal with dots, <code>Point{ .x = 3 }</code>, zeroes the other fields, as in C++. <code>Point{}</code> has all fields zero.</li>
 </ul>
-<h2 id="union-enum-и"><a class="anchor" href="#union-enum-и">#</a>Union, enum и <code>::</code></h2>
+<h2 id="union-enum-and"><a class="anchor" href="#union-enum-and">#</a>Union, enum and <code>::</code></h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">union</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Shape</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    f64</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Circle</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Rect</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
@@ -84,9 +84,9 @@
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    Color</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Color</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Green</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">area</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s), c);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>12 .Green</code></pre></div></div>
-<p>Варианты union пишутся как поля: <code>тип Имя;</code>. Вариант без данных — просто <code>Имя;</code>. <code>::</code> равнозначно <code>.</code>: <code>Color::Green</code>, <code>net::connect(...)</code>, <code>Point::origin()</code>.</p>
-<h2 id="шаблоны"><a class="anchor" href="#шаблоны">#</a>Шаблоны</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>12 .Green</code></pre></div></div>
+<p>The variants of a union are written like fields: <code>type Name;</code>. A variant without data is simply <code>Name;</code>. <code>::</code> is equivalent to <code>.</code>: <code>Color::Green</code>, <code>net::connect(...)</code>, <code>Point::origin()</code>.</p>
+<h2 id="templates"><a class="anchor" href="#templates">#</a>Templates</h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Pair</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">A</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">B</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    A</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> first;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    B</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> second;</span></span>
@@ -103,11 +103,11 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(q.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get_first</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), q);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">largest</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">9</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), largest</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;f64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2.5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1.5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>7 Pair[i64, str]{ first: 7, second: &quot;seven&quot; }
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>7 Pair[i64, str]{ first: 7, second: &quot;seven&quot; }
 9 2.5</code></pre></div></div>
-<p>Параметры обобщённых функций пишутся в <code>template&lt;...&gt;</code>, обобщённых типов — прямо после имени: <code>struct Pair&lt;A, B&gt;</code>. Ограничения: <code>T: Ord</code>. Явные аргументы: <code>largest&lt;f64&gt;(...)</code>, <code>List&lt;i64&gt;::init(a)</code>.</p>
-<h2 id="управление-потоком"><a class="anchor" href="#управление-потоком">#</a>Управление потоком</h2>
-<p>В <code>if</code> и <code>while</code> условие в круглых скобках, фигурные скобки остаются обязательными.</p>
+<p>The parameters of generic functions are written in <code>template&lt;...&gt;</code>, and those of generic types right after the name: <code>struct Pair&lt;A, B&gt;</code>. Constraints: <code>T: Ord</code>. Explicit arguments: <code>largest&lt;f64&gt;(...)</code>, <code>List&lt;i64&gt;::init(a)</code>.</p>
+<h2 id="control-flow"><a class="anchor" href="#control-flow">#</a>Control flow</h2>
+<p>In <code>if</code> and <code>while</code> the condition is in parentheses, and the curly braces remain mandatory.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sum</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[] xs) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x : xs) { total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x; }</span></span>
@@ -126,16 +126,17 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    acc </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sum</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(arr[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]), acc);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>10 57</code></pre></div></div>
-<p>Формы <code>for</code>:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>10 57</code></pre></div></div>
+<p>The forms of <code>for</code>:</p>
 <ul>
-<li><code>for (T x : seq)</code> — перебор массива, среза или списка;</li>
-<li><code>for (T i : a..b)</code> — диапазон от <code>a</code> до <code>b</code>, <code>b</code> не включается;</li>
-<li><code>for (T i = a; i &lt; b; i++)</code> и <code>i &lt;= b</code>, шаг только <code>i++</code>, <code>++i</code> или <code>i += 1</code>. Это тот же диапазон. Любые другие C-циклы пишите через <code>while</code>.</li>
+<li><code>for (T x : seq)</code> iterates over an array, slice or list;</li>
+<li><code>for (T i : a..b)</code> is a range from <code>a</code> to <code>b</code>, with <code>b</code> excluded;</li>
+<li><code>for (T i = a; i &lt; b; i++)</code> and <code>i &lt;= b</code>, with a step of only <code>i++</code>, <code>++i</code> or <code>i += 1</code>. It is the same range. Write any other C loops with <code>while</code>.</li>
 </ul>
-<p>Появились <code>++</code>, <code>--</code> и все составные присваивания: <code>+= -= *= /= %= |= &amp;= ^= &lt;&lt;= &gt;&gt;=</code>. <code>i++</code> — оператор, а не выражение.</p>
-<p><code>match</code> остаётся прежним, как и <code>defer</code>, <code>errdefer</code>, <code>?</code>, <code>catch</code>, <code>orelse</code>, <code>is</code>, интерполяция строк и <code>as</code>.</p>
-<h2 id="ошибки-и-опциональные-значения"><a class="anchor" href="#ошибки-и-опциональные-значения">#</a>Ошибки и опциональные значения</h2>
+<p><code>++</code>, <code>--</code> and all the compound assignments are there: <code>+= -= *= /= %= |= &amp;= ^= &lt;&lt;= &gt;&gt;=</code>. <code>i++</code> is a statement, not an expression.</p>
+<p>A loop can carry a label (<code>outer: for (...)</code>) for <code>break outer;</code> and <code>continue outer;</code>.</p>
+<p><code>match</code> stays as it was, as do <code>defer</code>, <code>errdefer</code>, <code>?</code>, <code>catch</code>, <code>orelse</code>, <code>is</code>, string interpolation and <code>as</code>.</p>
+<h2 id="errors-and-optional-values"><a class="anchor" href="#errors-and-optional-values">#</a>Errors and optional values</h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">parse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (s.len </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> error.Empty</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    return </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">parse_int</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s);</span></span>
@@ -153,10 +154,10 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">parse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"12"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">parse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">""</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">find</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(xs[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">6</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">orelse</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">find</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(xs[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">9</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">orelse</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> -</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>12 -1
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>12 -1
 2 -1</code></pre></div></div>
-<h2 id="лямбды"><a class="anchor" href="#лямбды">#</a>Лямбды</h2>
-<p>Захват записывается как в C++, <code>[&amp;k]</code>: переменные захватываются <strong>по ссылке</strong>, контекст лежит на стеке, замыкание нельзя возвращать из функции.</p>
+<h2 id="lambdas"><a class="anchor" href="#lambdas">#</a>Lambdas</h2>
+<p>The capture is written as in C++, <code>[&amp;k]</code>: variables are captured <strong>by reference</strong>, the context lives on the stack, and a closure must not be returned from a function.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i32 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> calls </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
@@ -166,21 +167,21 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    };</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">6</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), calls);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>15 16 2</code></pre></div></div>
-<p>Тип замыкания пишется <code>fn[](i64) -&gt; i64</code>, функции — <code>fn(i64) -&gt; i64</code>.</p>
-<h2 id="модули"><a class="anchor" href="#модули">#</a>Модули</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>15 16 2</code></pre></div></div>
+<p>The type of a closure is written <code>fn[](i64) -&gt; i64</code>, and that of a function <code>fn(i64) -&gt; i64</code>.</p>
+<h2 id="modules"><a class="anchor" href="#modules">#</a>Modules</h2>
 <div class="code"><div class="code-title">cpp_lib.vibe</div><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">twice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span></code></pre></div><div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "cpp_lib.vibe"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> lib;</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i32 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(lib::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">twice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">21</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>42</code></pre></div></div>
-<h2 id="чего-пока-нет"><a class="anchor" href="#чего-пока-нет">#</a>Чего пока нет</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>42</code></pre></div></div>
+<h2 id="what-is-not-there"><a class="anchor" href="#what-is-not-there">#</a>What is not there</h2>
 <ul>
-<li>Нет <code>class</code>, <code>public:</code>, конструкторов и деструкторов, наследования и перегрузки.</li>
-<li>В приведении указатель пишется префиксом: <code>p as *u8</code>.</li>
+<li>There is no <code>class</code> or <code>public:</code>, no implicit destructors and no inheritance. Constructors, operator overloading and interfaces do exist (see <a href="structs-unions-enums.html">structs, unions and enums</a>).</li>
+<li>In a cast, a pointer type is written as a prefix: <code>p as *u8</code>.</li>
 </ul>
-<h2 id="таблица-отличий"><a class="anchor" href="#таблица-отличий">#</a>Таблица отличий</h2>
+<h2 id="table-of-differences"><a class="anchor" href="#table-of-differences">#</a>Table of differences</h2>
 <div class="table-wrap"><table><thead><tr>
 <th>C++</th>
 <th>Vibe</th>
@@ -191,19 +192,19 @@
 </tr>
 <tr>
 <td><code>T* p</code>, <code>const T&amp; r</code></td>
-<td><code>T* p</code>; ссылок нет, только указатели и срезы</td>
+<td><code>T* p</code>; there are no references, only pointers and slices</td>
 </tr>
 <tr>
 <td><code>std::vector&lt;T&gt;</code></td>
-<td><code>List&lt;T&gt;</code> с явным аллокатором: <code>List&lt;T&gt;::init(a)</code></td>
+<td><code>List&lt;T&gt;</code> with an explicit allocator: <code>List&lt;T&gt;::init(a)</code></td>
 </tr>
 <tr>
 <td><code>std::string</code>, <code>std::string_view</code></td>
-<td><code>str</code>: срез байтов, строки не владеют памятью</td>
+<td><code>str</code>: a slice of bytes, strings do not own memory</td>
 </tr>
 <tr>
 <td><code>try</code>/<code>catch</code>, <code>throw</code></td>
-<td><code>!T</code>, <code>error.Имя</code>, <code>?</code> и <code>catch</code></td>
+<td><code>!T</code>, <code>error.Name</code>, <code>?</code> and <code>catch</code></td>
 </tr>
 <tr>
 <td><code>std::optional&lt;T&gt;</code></td>
@@ -211,7 +212,7 @@
 </tr>
 <tr>
 <td><code>std::variant</code>, <code>switch</code></td>
-<td><code>union</code> и <code>match</code></td>
+<td><code>union</code> and <code>match</code></td>
 </tr>
 <tr>
 <td><code>new</code>/<code>delete</code>, RAII</td>
@@ -219,7 +220,7 @@
 </tr>
 <tr>
 <td><code>std::cout &lt;&lt; x</code></td>
-<td><code>println(x)</code> и <code>&quot;{x}&quot;</code> в строках</td>
+<td><code>println(x)</code> and <code>&quot;{x}&quot;</code> in strings</td>
 </tr>
 <tr>
 <td><code>(T)x</code>, <code>static_cast&lt;T&gt;(x)</code></td>
@@ -231,8 +232,8 @@
 </tr>
 </tbody></table></div>
 
-<div class="pager"><a class="prev" href="tour.html"><small>Назад</small>Быстрый тур</a><a class="next" href="lexical.html"><small>Дальше</small>Лексика</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#объявления-тип-впереди">Объявления: тип впереди</a><a class="l2" href="#структуры-и-методы-внутри-struct">Структуры и методы внутри struct</a><a class="l2" href="#union-enum-и">Union, enum и ::</a><a class="l2" href="#шаблоны">Шаблоны</a><a class="l2" href="#управление-потоком">Управление потоком</a><a class="l2" href="#ошибки-и-опциональные-значения">Ошибки и опциональные значения</a><a class="l2" href="#лямбды">Лямбды</a><a class="l2" href="#модули">Модули</a><a class="l2" href="#чего-пока-нет">Чего пока нет</a><a class="l2" href="#таблица-отличий">Таблица отличий</a></aside></main>
+<div class="pager"><a class="prev" href="tour.html"><small>Previous</small>Quick tour</a><a class="next" href="lexical.html"><small>Next</small>Lexical structure</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#declarations-the-type-comes-first">Declarations: the type comes first</a><a class="l2" href="#structs-and-methods-inside-struct">Structs and methods inside struct</a><a class="l2" href="#union-enum-and">Union, enum and ::</a><a class="l2" href="#templates">Templates</a><a class="l2" href="#control-flow">Control flow</a><a class="l2" href="#errors-and-optional-values">Errors and optional values</a><a class="l2" href="#lambdas">Lambdas</a><a class="l2" href="#modules">Modules</a><a class="l2" href="#what-is-not-there">What is not there</a><a class="l2" href="#table-of-differences">Table of differences</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

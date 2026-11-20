@@ -1,62 +1,62 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Драйверы и низкоуровневый код · Vibe</title>
-<meta name="description" content="volatile, packed struct, inline asm, Cpu, Port, Bits, атомики, сборка без libc и ядро, которое загружается в QEMU">
+<title>Drivers and low-level code · Vibe</title>
+<meta name="description" content="volatile, packed struct, inline asm, Cpu, Port, Bits, atomics, building without libc and a kernel that boots in QEMU">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/drivers.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html" class="current">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html" class="current">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
-<h1>Драйверы и низкоуровневый код</h1>
-<p>Vibe подходит для драйверов и ядер: регистры устройств описываются структурами, привилегированные инструкции вызываются как обычные функции, а программа собирается без libc. Всё, что нужно, вшито в язык и прелюдию. Ни макросов, ни <code>#pragma</code>, ни атрибутов компилятора.</p>
+<h1>Drivers and low-level code</h1>
+<p>Vibe is suited to drivers and kernels: device registers are described with structs, privileged instructions are called like ordinary functions, and the program is built without libc. Everything you need is built into the language and the prelude. No macros, no <code>#pragma</code>, no compiler attributes.</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Задача</th>
-<th>В C</th>
-<th>В Vibe</th>
+<th>Task</th>
+<th>In C</th>
+<th>In Vibe</th>
 </tr>
 </thead><tbody><tr>
-<td>регистр устройства</td>
-<td><code>volatile uint32_t *</code> и макросы</td>
-<td><code>volatile u32* reg</code> или <code>volatile u32</code> в <code>struct</code></td>
+<td>a device register</td>
+<td><code>volatile uint32_t *</code> and macros</td>
+<td><code>volatile u32* reg</code> or <code>volatile u32</code> in a <code>struct</code></td>
 </tr>
 <tr>
-<td>формат дескриптора</td>
+<td>a descriptor format</td>
 <td><code>__attribute__((packed))</code></td>
 <td><code>packed struct</code></td>
 </tr>
 <tr>
-<td>порты ввода-вывода</td>
-<td><code>asm volatile</code> с ограничениями</td>
+<td>I/O ports</td>
+<td><code>asm volatile</code> with constraints</td>
 <td><code>Port::in8(p)</code>, <code>Port::out8(p, v)</code></td>
 </tr>
 <tr>
-<td><code>cli</code>, <code>hlt</code>, <code>rdtsc</code>, <code>cr3</code>, MSR</td>
-<td>свой inline asm на каждую</td>
+<td><code>cli</code>, <code>hlt</code>, <code>rdtsc</code>, <code>cr3</code>, MSRs</td>
+<td>your own inline asm for each</td>
 <td><code>Cpu::cli()</code>, <code>Cpu::halt()</code>, <code>Cpu::rdtsc()</code>, <code>Cpu::cr3()</code>, <code>Cpu::rdmsr(n)</code></td>
 </tr>
 <tr>
-<td>биты регистра</td>
-<td>маски и сдвиги вручную</td>
+<td>register bits</td>
+<td>masks and shifts by hand</td>
 <td><code>Bits::get(v, 7, 4)</code>, <code>Bits::set(v, 7, 4, x)</code></td>
 </tr>
 <tr>
-<td>атомарные операции, спинлок</td>
+<td>atomic operations, a spinlock</td>
 <td><code>&lt;stdatomic.h&gt;</code></td>
 <td><code>Atomic::cas32(...)</code>, <code>Spinlock</code></td>
 </tr>
 <tr>
-<td>без libc</td>
-<td><code>-nostdlib -ffreestanding</code> и скрипты</td>
+<td>no libc</td>
+<td><code>-nostdlib -ffreestanding</code> and scripts</td>
 <td><code>--freestanding</code></td>
 </tr>
 </tbody></table></div>
 <h2 id="volatile"><a class="anchor" href="#volatile">#</a><code>volatile</code></h2>
-<p><code>volatile</code> ставится перед типом и означает, что каждое чтение и запись обращаются к памяти: компилятор их не склеивает и не выбрасывает. Это нужно для регистров устройств.</p>
+<p><code>volatile</code> goes before the type and means that every read and write goes to memory: the compiler does not merge or drop them. This is needed for device registers.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Uart</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    volatile</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> data;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    volatile</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> status;</span></span>
@@ -70,8 +70,8 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    *</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ctrl </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0xA0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    *</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ctrl </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(dev.status, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ctrl);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1 161</code></pre></div></div>
-<p><code>volatile</code> относится к тому, что лежит по адресу: <code>volatile u32* p</code> — указатель на <code>volatile u32</code>. Поле <code>volatile u32 data</code> и переменная <code>volatile u32 x</code> тоже работают. Ширина обращения всегда равна ширине типа: <code>volatile u8*</code> читает ровно один байт, <code>volatile u16*</code> — два.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1 161</code></pre></div></div>
+<p><code>volatile</code> applies to what lies at the address: <code>volatile u32* p</code> is a pointer to a <code>volatile u32</code>. A field <code>volatile u32 data</code> and a variable <code>volatile u32 x</code> work too. The width of an access always equals the width of the type: <code>volatile u8*</code> reads exactly one byte, <code>volatile u16*</code> two.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> word </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0xAABBCCDD</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    volatile</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u8*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> bytes </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">word </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
@@ -79,11 +79,11 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(bytes[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], bytes[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], halves[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    bytes[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0x11</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(word);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>221 204 43707
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>221 204 43707
 2864386525</code></pre></div></div>
-<p>Реальный адрес регистров задаётся числом через <code>as</code>: <code>auto uart = 0xFE201000 as *Uart;</code>.</p>
+<p>The real address of registers is given as a number through <code>as</code>: <code>auto uart = 0xFE201000 as *Uart;</code>.</p>
 <h2 id="packed-struct"><a class="anchor" href="#packed-struct">#</a><code>packed struct</code></h2>
-<p>Обычная структура выравнивает поля, как в C. <code>packed struct</code> кладёт поля вплотную, без пропусков: так устроены дескрипторы, таблицы IDT и GDT, заголовки пакетов и конфигурация PCI.</p>
+<p>An ordinary struct aligns its fields as in C. A <code>packed struct</code> puts the fields back to back, without gaps: this is how descriptors, IDT and GDT tables, packet headers and PCI configuration are laid out.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">packed</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Descriptor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> addr;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> len;</span></span>
@@ -102,47 +102,47 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    t.crc </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0xABCD</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    volatile</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u8*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> raw </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">t </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(raw[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], raw[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], raw[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], t.len, t.crc);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>16 12 7 1
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>16 12 7 1
 7 4 205 16909060 43981</code></pre></div></div>
-<p>Доступ к невыровненным полям обычный: x86-64 это допускает. Выравнивание структуры вручную (<code>align(4096)</code>) пока не поддерживается: выравнивайте нужные буферы в скрипте линковщика.</p>
-<h2 id="биты-регистров-bits"><a class="anchor" href="#биты-регистров-bits">#</a>Биты регистров: <code>Bits</code></h2>
+<p>Access to unaligned fields is ordinary: x86-64 allows it. Aligning a struct type by hand is not supported yet (see <code>align(N)</code> for global variables below): align the buffers you need in the linker script.</p>
+<h2 id="register-bits-bits"><a class="anchor" href="#register-bits-bits">#</a>Register bits: <code>Bits</code></h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> reg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    reg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Bits</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">set</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(reg, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0xA</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    reg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Bits</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">bit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(reg, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Bits</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(reg, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">7</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Bits</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">mask</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">15</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>161 10 65280</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>161 10 65280</code></pre></div></div>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>Bits::bit(n)</code></td>
-<td>число с одним битом <code>n</code></td>
+<td>a number with the single bit <code>n</code></td>
 </tr>
 <tr>
 <td><code>Bits::mask(hi, lo)</code></td>
-<td>маска из битов <code>hi..lo</code> включительно</td>
+<td>a mask of the bits <code>hi..lo</code> inclusive</td>
 </tr>
 <tr>
 <td><code>Bits::get(v, hi, lo)</code></td>
-<td>значение битового поля</td>
+<td>the value of a bit field</td>
 </tr>
 <tr>
 <td><code>Bits::set(v, hi, lo, x)</code></td>
-<td><code>v</code> с заменённым полем</td>
+<td><code>v</code> with the field replaced</td>
 </tr>
 </tbody></table></div>
-<p>Результаты имеют тип <code>u64</code>; для 32-битного регистра добавляйте <code>as u32</code>: сужение в Vibe всегда явное.</p>
-<h2 id="процессор-cpu-и-порты-port"><a class="anchor" href="#процессор-cpu-и-порты-port">#</a>Процессор: <code>Cpu</code> и порты: <code>Port</code></h2>
-<p>Это обычные статические методы. Привилегированные инструкции в обычной программе вызывают сбой, поэтому используйте их в ядре или драйвере.</p>
+<p>The results have the type <code>u64</code>; for a 32-bit register add <code>as u32</code>: narrowing in Vibe is always explicit.</p>
+<h2 id="the-processor-cpu-and-ports-port"><a class="anchor" href="#the-processor-cpu-and-ports-port">#</a>The processor: <code>Cpu</code>, and ports: <code>Port</code></h2>
+<p>These are ordinary static methods. Privileged instructions crash in an ordinary program, so use them in a kernel or a driver.</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Инструкция</th>
+<th>Function</th>
+<th>Instruction</th>
 </tr>
 </thead><tbody><tr>
 <td><code>Cpu::cli()</code>, <code>Cpu::sti()</code></td>
-<td>запретить и разрешить прерывания</td>
+<td>disable and enable interrupts</td>
 </tr>
 <tr>
 <td><code>Cpu::halt()</code>, <code>Cpu::pause()</code>, <code>Cpu::nop()</code>, <code>Cpu::breakpoint()</code></td>
@@ -154,11 +154,11 @@
 </tr>
 <tr>
 <td><code>Cpu::rdtsc()</code></td>
-<td>счётчик тактов</td>
+<td>the cycle counter</td>
 </tr>
 <tr>
-<td><code>Cpu::cr0()</code>, <code>cr2()</code>, <code>cr3()</code>, <code>cr4()</code> и <code>set_cr0(v)</code>, <code>set_cr3(v)</code>, <code>set_cr4(v)</code></td>
-<td>управляющие регистры</td>
+<td><code>Cpu::cr0()</code>, <code>cr2()</code>, <code>cr3()</code>, <code>cr4()</code> and <code>set_cr0(v)</code>, <code>set_cr3(v)</code>, <code>set_cr4(v)</code></td>
+<td>control registers</td>
 </tr>
 <tr>
 <td><code>Cpu::load_idt(p)</code>, <code>load_gdt(p)</code>, <code>invlpg(addr)</code></td>
@@ -166,7 +166,7 @@
 </tr>
 <tr>
 <td><code>Cpu::rdmsr(n)</code>, <code>Cpu::wrmsr(n, v)</code></td>
-<td>модельные регистры</td>
+<td>model-specific registers</td>
 </tr>
 <tr>
 <td><code>Port::in8(p)</code>, <code>in16</code>, <code>in32</code></td>
@@ -177,22 +177,22 @@
 <td><code>out</code></td>
 </tr>
 </tbody></table></div>
-<p><code>rdtsc</code>, <code>pause</code> и барьеры работают и в обычных программах:</p>
+<p><code>rdtsc</code>, <code>pause</code> and the barriers also work in ordinary programs:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    Cpu</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fence</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Cpu</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">rdtsc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Cpu</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">rdtsc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">>=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true</code></pre></div></div>
-<h2 id="align-n-выравнивание-глобальной-переменной"><a class="anchor" href="#align-n-выравнивание-глобальной-переменной">#</a><code>align(N)</code>: выравнивание глобальной переменной</h2>
-<p>Таблицы страниц и буферы для DMA должны лежать по адресу, кратному размеру страницы. Перед глобальной переменной пишется <code>align(N)</code>; <code>N</code> — степень двойки.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true</code></pre></div></div>
+<h2 id="align-n-aligning-a-global-variable"><a class="anchor" href="#align-n-aligning-a-global-variable">#</a><code>align(N)</code>: aligning a global variable</h2>
+<p>Page tables and DMA buffers must lie at an address that is a multiple of the page size. Write <code>align(N)</code> before a global variable; <code>N</code> is a power of two.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">align</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4096</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">512</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] page_table </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">((</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">page_table[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">%</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4096</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>0</code></pre></div></div>
-<p>Структуры и локальные переменные выравниваются по своему типу.</p>
-<h2 id="атомарные-операции-и-spinlock"><a class="anchor" href="#атомарные-операции-и-spinlock">#</a>Атомарные операции и <code>Spinlock</code></h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>0</code></pre></div></div>
+<p>Structs and local variables are aligned by their type.</p>
+<h2 id="atomic-operations-and-spinlock"><a class="anchor" href="#atomic-operations-and-spinlock">#</a>Atomic operations and <code>Spinlock</code></h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> counter </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> old </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Atomic</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fetch_add32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">counter, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
@@ -205,84 +205,84 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(lock.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">try_lock</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    lock.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">unlock</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(lock.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">try_lock</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>5 8 100 7
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>5 8 100 7
 false
 true</code></pre></div></div>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>Atomic::fetch_add32(p, v)</code>, <code>fetch_add8</code>, <code>fetch_add16</code>, <code>fetch_add64</code></td>
-<td>прибавляет и возвращает старое значение</td>
+<td>adds and returns the old value</td>
 </tr>
 <tr>
 <td><code>Atomic::swap32(p, v)</code>, <code>swap8</code>, <code>swap16</code>, <code>swap64</code></td>
-<td>записывает и возвращает старое значение</td>
+<td>writes and returns the old value</td>
 </tr>
 <tr>
 <td><code>Atomic::cas32(p, expected, desired)</code>, <code>cas8</code>, <code>cas16</code>, <code>cas64</code></td>
-<td>пишет <code>desired</code>, если там <code>expected</code>; возвращает прежнее значение</td>
+<td>writes <code>desired</code> if <code>expected</code> is there; returns the previous value</td>
 </tr>
 </tbody></table></div>
-<h2 id="asm-свои-инструкции"><a class="anchor" href="#asm-свои-инструкции">#</a><code>asm</code>: свои инструкции</h2>
-<p>Если нужной инструкции нет в <code>Cpu</code>, её можно вставить самим: <code>asm&lt;Тип&gt;(&quot;шаблон&quot;, &quot;ограничения&quot;, операнды...)</code>. Шаблон и ограничения — в синтаксисе LLVM (AT&amp;T). Фигурные скобки в строках экранируются: <code>\{rax\}</code>.</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">u64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">read_flags</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> asm</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"pushfq; popq $0"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"=r,~</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\{</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">memory</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\}</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span></code></pre></div><p>Собственный бэкенд сам кодирует только шаблоны, которые использует прелюдия (они перечислены выше). Для остальных он остановится с понятным сообщением, а сборка с <code>--llvm</code> примет любой шаблон.</p>
-<h2 id="драйверы-в-пространстве-пользователя-linux"><a class="anchor" href="#драйверы-в-пространстве-пользователя-linux">#</a>Драйверы в пространстве пользователя (Linux)</h2>
-<p>Большинство «драйверов для чтения памяти и железа» на Linux работает без ядра: через <code>/dev/mem</code>, файлы PCI в sysfs, <code>/dev/cpu/N/msr</code> и системные вызовы. В прелюдии для этого есть всё, и libc не нужна: <code>Sys</code> вызывает ядро инструкцией <code>syscall</code> напрямую, а ошибки возвращаются как <code>!T</code> (<code>error.PermissionDenied</code>, <code>error.NotFound</code>, <code>error.NoProcess</code>, <code>error.BadAddress</code>, <code>error.InvalidArgument</code>).</p>
+<h2 id="asm-your-own-instructions"><a class="anchor" href="#asm-your-own-instructions">#</a><code>asm</code>: your own instructions</h2>
+<p>If the instruction you need is not in <code>Cpu</code>, you can insert it yourself: <code>asm&lt;Type&gt;(&quot;template&quot;, &quot;constraints&quot;, operands...)</code>. The template and the constraints are in the LLVM (AT&amp;T) syntax. Curly braces in the strings are escaped: <code>\{rax\}</code>.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">u64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">read_flags</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> asm</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"pushfq; popq $0"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"=r,~</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\{</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">memory</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\}</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span></code></pre></div><p>The own backend encodes only the templates that the prelude uses (they are listed above). For the others it stops with a clear message, while a build with <code>--llvm</code> accepts any template.</p>
+<h2 id="user-space-drivers-linux"><a class="anchor" href="#user-space-drivers-linux">#</a>User-space drivers (Linux)</h2>
+<p>Most &quot;drivers for reading memory and hardware&quot; on Linux work without a kernel module: through <code>/dev/mem</code>, the PCI files in sysfs, <code>/dev/cpu/N/msr</code> and system calls. The prelude has everything for this, and libc is not needed: <code>Sys</code> calls the kernel directly with the <code>syscall</code> instruction, and errors are returned as <code>!T</code> (<code>error.PermissionDenied</code>, <code>error.NotFound</code>, <code>error.NoProcess</code>, <code>error.BadAddress</code>, <code>error.InvalidArgument</code>).</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Что</th>
-<th>Как</th>
+<th>What</th>
+<th>How</th>
 </tr>
 </thead><tbody><tr>
-<td>системный вызов</td>
-<td><code>Sys::call(номер, a1..a6)</code>, обёртки <code>Sys::read</code>, <code>write</code>, <code>open</code>, <code>close</code>, <code>pread</code>, <code>pwrite</code>, <code>mmap</code>, <code>munmap</code>, <code>ioctl</code>, <code>getpid</code>, <code>slurp(a, путь)</code></td>
+<td>a system call</td>
+<td><code>Sys::call(number, a1..a6)</code>, the wrappers <code>Sys::read</code>, <code>write</code>, <code>open</code>, <code>close</code>, <code>pread</code>, <code>pwrite</code>, <code>mmap</code>, <code>munmap</code>, <code>ioctl</code>, <code>getpid</code>, <code>slurp(a, path)</code></td>
 </tr>
 <tr>
-<td>память страницы, регистры устройства</td>
-<td><code>Mapping::anonymous(len)</code>, <code>Mapping::file(путь, смещение, len, запись)</code>; <code>read8/16/32/64(off)</code>, <code>write8/16/32/64(off, v)</code>, <code>read_into(off, буфер)</code></td>
+<td>page memory, device registers</td>
+<td><code>Mapping::anonymous(len)</code>, <code>Mapping::file(path, offset, len, write)</code>; <code>read8/16/32/64(off)</code>, <code>write8/16/32/64(off, v)</code>, <code>read_into(off, buffer)</code></td>
 </tr>
 <tr>
-<td>физическая память</td>
-<td><code>Mapping::file(&quot;/dev/mem&quot;, адрес, len, false)</code> (нужен root, ядро может запрещать обычную память)</td>
+<td>physical memory</td>
+<td><code>Mapping::file(&quot;/dev/mem&quot;, address, len, false)</code> (needs root, and the kernel may forbid ordinary memory)</td>
 </tr>
 <tr>
-<td>чужой процесс</td>
-<td><code>Proc::read(pid, адрес, буфер)</code>, <code>Proc::write(pid, адрес, данные)</code>, <code>Proc::maps(a, pid)</code></td>
+<td>another process</td>
+<td><code>Proc::read(pid, address, buffer)</code>, <code>Proc::write(pid, address, data)</code>, <code>Proc::maps(a, pid)</code></td>
 </tr>
 <tr>
 <td>PCI</td>
-<td><code>Pci::list(a)</code>, <code>Pci::config32(устройство, смещение)</code>, <code>Pci::bar(устройство, n, запись)</code></td>
+<td><code>Pci::list(a)</code>, <code>Pci::config32(device, offset)</code>, <code>Pci::bar(device, n, write)</code></td>
 </tr>
 <tr>
 <td>MSR</td>
-<td><code>Msr::read(cpu, номер)</code> (нужны root и модуль <code>msr</code>)</td>
+<td><code>Msr::read(cpu, number)</code> (needs root and the <code>msr</code> module)</td>
 </tr>
 </tbody></table></div>
-<p>Чтение и запись через <code>Mapping</code> идут через <code>volatile</code> и проверяют границы: выход за страницу — <code>error.OutOfRange</code>, а не падение.</p>
+<p>Reads and writes through <code>Mapping</code> go through <code>volatile</code> and check the bounds: going past the page gives <code>error.OutOfRange</code>, not a crash.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> page </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Mapping</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">anonymous</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4096</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> page.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">unmap</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    page.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">write32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0xCAFEBABE</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(page.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">read32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, page.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">read16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(page.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">read32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4094</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>3405691582 51966
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>3405691582 51966
 0</code></pre></div></div>
-<p>Чтение памяти процесса (своего или того, на который есть право по <code>ptrace_scope</code>):</p>
+<p>Reading the memory of a process (your own, or one you have the right to by <code>ptrace_scope</code>):</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] secret </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">11</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">22</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">33</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">44</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">];</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] copy;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Proc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">read</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Sys</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">getpid</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">secret[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, copy[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">])</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n, copy[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], copy[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], copy[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], copy[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">12</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>16 11 22 33 44</code></pre></div></div>
-<p>Список карт памяти и поиск области:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>16 11 22 33 44</code></pre></div></div>
+<p>Listing the memory maps and finding a region:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Arena</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> maps </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Proc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">maps</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Sys</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">getpid</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">())</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">str_find</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(maps, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"[stack]"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">>=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true</code></pre></div></div>
-<p>Идентификаторы PCI-устройств (читаются без root):</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true</code></pre></div></div>
+<p>PCI device identifiers (readable without root):</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Arena</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -290,17 +290,17 @@ true</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> id </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Pci</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">config32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(d, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(d, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"vendor {id </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0xFFFF:#x</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">} device {id </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">>></span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 16:#x</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Такие программы собираются в один небольшой исполняемый файл. Обычные права действуют как всегда: доступ к <code>/dev/mem</code> и BAR устройств требует root, а чужие процессы читаются только при разрешении <code>ptrace</code>.</p>
-<h2 id="сборка-без-libc-freestanding"><a class="anchor" href="#сборка-без-libc-freestanding">#</a>Сборка без libc: <code>--freestanding</code></h2>
-<p><code>vibe build ядро.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf</code> компонует с <code>-nostdlib -static</code> и отключает проверки границ (их сообщения требуют libc). В режиме можно использовать всё, что не вызывает libc: <code>Fmt</code> и <code>Writer</code> работают без выделений, <code>println</code> не нужен, потому что вывод вы пишете сами.</p>
-<p>Компилятор может вызвать <code>memset</code> и <code>memcpy</code> при копировании и обнулении больших значений. В ядре определите их сами: определение с <code>export</code> заменяет объявление из прелюдии.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Such programs build into one small executable. The usual permissions apply as always: access to <code>/dev/mem</code> and device BARs needs root, and other processes can be read only if <code>ptrace</code> allows it.</p>
+<h2 id="building-without-libc-freestanding"><a class="anchor" href="#building-without-libc-freestanding">#</a>Building without libc: <code>--freestanding</code></h2>
+<p><code>vibe build kernel.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf</code> links with <code>-nostdlib -static</code> and turns off the bounds checks (their messages need libc). In this mode you can use everything that does not call libc: <code>Fmt</code> and <code>Writer</code> work without allocations, <code>println</code> is not needed because you write the output yourself.</p>
+<p>The compiler may call <code>memset</code> and <code>memcpy</code> when copying and zeroing large values. In a kernel, define them yourself: a definition with <code>export</code> replaces the declaration from the prelude.</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">export</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> void* </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">memset</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dst, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dst </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> *u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">n) { p[i] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dst;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Файлы <code>.S</code>, <code>.c</code>, <code>.o</code> и параметры <code>-Wl,...</code>, <code>-T...</code>, <code>-nostdlib</code>, <code>-static</code> передаются как есть.</p>
-<h2 id="пример-ядро-которое-загружается-в-qemu"><a class="anchor" href="#пример-ядро-которое-загружается-в-qemu">#</a>Пример: ядро, которое загружается в QEMU</h2>
-<p>В <code>examples/baremetal/</code> лежит полное ядро x86-64 на Vibe: <code>boot.S</code> (заголовок Multiboot, переход в 64-битный режим, заглушки прерываний), <code>linker.ld</code> и <code>kernel.vibe</code>.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>The files <code>.S</code>, <code>.c</code>, <code>.o</code> and the parameters <code>-Wl,...</code>, <code>-T...</code>, <code>-nostdlib</code>, <code>-static</code> are passed as they are.</p>
+<h2 id="an-example-a-kernel-that-boots-in-qemu"><a class="anchor" href="#an-example-a-kernel-that-boots-in-qemu">#</a>An example: a kernel that boots in QEMU</h2>
+<p><code>examples/baremetal/</code> holds a complete x86-64 kernel in Vibe: <code>boot.S</code> (the Multiboot header, the switch to 64-bit mode, interrupt stubs), <code>linker.ld</code> and <code>kernel.vibe</code>.</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Serial</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    static</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">put</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        while</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ((</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Port</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">in8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0x3F8</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> +</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0x20</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Cpu</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">pause</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(); }</span></span>
@@ -321,33 +321,32 @@ true</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">export</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">kmain</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    kprintln</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"Hello from Vibe on bare metal!"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    kprintln</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"paging = {</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Bits</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Cpu</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">cr0</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">(), </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">31</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">31</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">)}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Своя <code>kprintln</code> с интерполяцией строк получается из <code>Fmt</code> и <code>Writer</code> за шесть строк, а память не выделяется. Ядро выводит текст в последовательный порт, строит IDT (<code>packed struct</code>), ловит исключение <code>int3</code> в обработчике на Vibe и возвращается из него. Запуск:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Your own <code>kprintln</code> with string interpolation comes out of <code>Fmt</code> and <code>Writer</code> in six lines, and no memory is allocated. The kernel prints text to the serial port, builds an IDT (a <code>packed struct</code>), catches an <code>int3</code> exception in a handler written in Vibe and returns from it. Running it:</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> examples/baremetal/run.sh</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Hello</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> from</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> Vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> on</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> bare</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> metal!</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">protected</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> mode</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 1,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> paging</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">page</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> table</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> aligned</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> true</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">,</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> *</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 20</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fib</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [0, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">1,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 1,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 2,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 3,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 5,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 8,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 13]</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">interrupt</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 3,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> error</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> code</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> 0,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> back</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> in</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> the</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> kernel</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">after</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> int3</span></span></code></pre></div><p>Скрипт собирает ядро, превращает ELF в 32-битный образ для Multiboot (<code>objcopy -O elf32-i386</code>) и запускает <code>qemu-system-x86_64</code>. Тот же пример проверяется тестами на обоих бэкендах.</p>
-<h2 id="чего-пока-нет"><a class="anchor" href="#чего-пока-нет">#</a>Чего пока нет</h2>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">after</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> int3</span></span></code></pre></div><p>The script builds the kernel, turns the ELF into a 32-bit image for Multiboot (<code>objcopy -O elf32-i386</code>) and starts <code>qemu-system-x86_64</code>. The same example is checked by the tests on both backends.</p>
+<h2 id="what-is-not-there-yet"><a class="anchor" href="#what-is-not-there-yet">#</a>What is not there yet</h2>
 <ul>
-<li>Модулей ядра Linux: для них нужны заголовки ядра (<code>linux-headers</code>), сторонний C-файл с <code>module_init</code> и проверка в виртуальной машине. Объектный файл из <code>--freestanding</code> можно подключить в Kbuild, но готового примера пока нет.</li>
-<li>Атрибута <code>interrupt</code>: обработчики прерываний пишутся как заглушки на ассемблере (см. <code>boot.S</code>) и вызывают функцию на Vibe.</li>
-<li><code>align(N)</code> для структур и переменных.</li>
-<li>Битовых полей в <code>struct</code>: используйте <code>Bits</code>.</li>
-<li>8- и 16-битных атомарных операций.</li>
-<li>Кодирования произвольного <code>asm</code> в собственном бэкенде.</li>
-<li>Целей кроме x86-64.</li>
+<li>Linux kernel modules: they need the kernel headers (<code>linux-headers</code>), a third-party C file with <code>module_init</code> and a check in a virtual machine. The object file from <code>--freestanding</code> can be plugged into Kbuild, but there is no ready example yet.</li>
+<li>An <code>interrupt</code> attribute: interrupt handlers are written as assembly stubs (see <code>boot.S</code>) that call a Vibe function.</li>
+<li><code>align(N)</code> for struct types and local variables.</li>
+<li>Bit fields in <code>struct</code>: use <code>Bits</code>.</li>
+<li>Encoding of arbitrary <code>asm</code> in the own backend.</li>
+<li>Targets other than x86-64.</li>
 </ul>
-<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>
 <ul>
-<li>C и ассемблерные файлы рядом с Vibe: <a href="c-interop.html">взаимодействие с C</a>.</li>
-<li>Память без кучи: <a href="memory.html">память и аллокаторы</a>.</li>
-<li>Устройство бэкендов: <a href="how-it-works.html">как всё устроено</a>.</li>
+<li>C and assembly files next to Vibe: <a href="c-interop.html">interoperating with C</a>.</li>
+<li>Memory without a heap: <a href="memory.html">memory and allocators</a>.</li>
+<li>How the backends work: <a href="how-it-works.html">how it all works</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="c-interop.html"><small>Назад</small>Взаимодействие с C и C++</a><a class="next" href="testing.html"><small>Дальше</small>Тестирование</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#volatile">volatile</a><a class="l2" href="#packed-struct">packed struct</a><a class="l2" href="#биты-регистров-bits">Биты регистров: Bits</a><a class="l2" href="#процессор-cpu-и-порты-port">Процессор: Cpu и порты: Port</a><a class="l2" href="#align-n-выравнивание-глобальной-переменной">align(N): выравнивание глобальной переменной</a><a class="l2" href="#атомарные-операции-и-spinlock">Атомарные операции и Spinlock</a><a class="l2" href="#asm-свои-инструкции">asm: свои инструкции</a><a class="l2" href="#драйверы-в-пространстве-пользователя-linux">Драйверы в пространстве пользователя (Linux)</a><a class="l2" href="#сборка-без-libc-freestanding">Сборка без libc: --freestanding</a><a class="l2" href="#пример-ядро-которое-загружается-в-qemu">Пример: ядро, которое загружается в QEMU</a><a class="l2" href="#чего-пока-нет">Чего пока нет</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+<div class="pager"><a class="prev" href="c-interop.html"><small>Previous</small>Interoperating with C and C++</a><a class="next" href="testing.html"><small>Next</small>Testing</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#volatile">volatile</a><a class="l2" href="#packed-struct">packed struct</a><a class="l2" href="#register-bits-bits">Register bits: Bits</a><a class="l2" href="#the-processor-cpu-and-ports-port">The processor: Cpu, and ports: Port</a><a class="l2" href="#align-n-aligning-a-global-variable">align(N): aligning a global variable</a><a class="l2" href="#atomic-operations-and-spinlock">Atomic operations and Spinlock</a><a class="l2" href="#asm-your-own-instructions">asm: your own instructions</a><a class="l2" href="#user-space-drivers-linux">User-space drivers (Linux)</a><a class="l2" href="#building-without-libc-freestanding">Building without libc: --freestanding</a><a class="l2" href="#an-example-a-kernel-that-boots-in-qemu">An example: a kernel that boots in QEMU</a><a class="l2" href="#what-is-not-there-yet">What is not there yet</a><a class="l2" href="#what-next">What next</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

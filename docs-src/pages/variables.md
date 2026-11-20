@@ -1,13 +1,13 @@
 ---
-title: Переменные и константы
+title: Variables and constants
 order: 12
-section: Язык
-description: Объявление переменных, auto, const, глобальные переменные и константы, область видимости, инициализация нулями и правила неизменяемости в Vibe
+section: Language
+description: Declaring variables, auto, const, global variables and constants, scope, zero initialization and the immutability rules in Vibe
 ---
 
-Переменная объявляется как в C++: сначала тип, потом имя. Вместо типа можно написать `auto`. Выбор между «можно менять» и «нельзя» делает `const`, и это проверяет компилятор.
+A variable is declared as in C++: the type first, then the name. You can write `auto` instead of the type. The choice between "can change" and "cannot change" is made by `const`, and the compiler checks it.
 
-## `const` — неизменяемая переменная
+## `const`: an immutable variable
 
 ```vibe run
 void main() {
@@ -18,7 +18,7 @@ void main() {
 }
 ```
 
-Тип можно не указывать: он выводится из значения. Явный тип нужен, когда значение само по себе его не определяет (например, литерал `5` может быть любым целым) или когда вы хотите зафиксировать тип:
+The type can be omitted: it is inferred from the value. An explicit type is needed when the value does not determine it by itself (for example, the literal `5` can be any integer) or when you want to pin the type down:
 
 ```vibe run
 void main() {
@@ -29,7 +29,7 @@ void main() {
 }
 ```
 
-Менять `const`-переменную нельзя:
+A `const` variable cannot be changed:
 
 ```vibe error fragment
 const auto x = 1;
@@ -41,7 +41,7 @@ const auto x = 1;
 x += 1;
 ```
 
-## Изменяемая переменная
+## A mutable variable
 
 ```vibe run
 void main() {
@@ -53,11 +53,11 @@ void main() {
 }
 ```
 
-Без `const` переменная изменяема. Если её нигде не меняют, компилятор молчит: предупреждений о неиспользуемых переменных нет.
+Without `const` a variable is mutable. If it is never changed, the compiler stays silent: there are no warnings about unused variables.
 
-## Инициализация нулями
+## Zero initialization
 
-Переменная без начального значения заполняется нулями (нулевые биты). Это касается и целых, и массивов, и структур:
+A variable without an initial value is filled with zeros (zero bits). This applies to integers, arrays and structs alike:
 
 ```vibe run
 struct P { i64 x; str name; }
@@ -74,13 +74,13 @@ void main() {
 }
 ```
 
-Пустая строка — это нулевой указатель и длина 0; пустой указатель — `null`. Поэтому «забыть» инициализировать переменную нельзя: чтение всегда определено.
+An empty string is a null pointer with length 0; an empty pointer is `null`. So you cannot "forget" to initialize a variable: reading it is always defined.
 
-> **Совет.** Запись `const T x;` без значения бесполезна: вы ничего не сможете присвоить. Для переменной без значения `const` не нужен.
+> **Tip:** writing `const T x;` without a value is useless: you will never be able to assign anything. A variable without a value does not need `const`.
 
-## Постоянство «насквозь»
+## Constness goes all the way through
 
-`const` запрещает не только присвоить саму переменную, но и менять поля структуры и элементы массива **через неё**:
+`const` forbids not only assigning the variable itself, but also changing struct fields and array elements **through it**:
 
 ```vibe error
 struct P { i64 x; }
@@ -96,7 +96,7 @@ const auto a = [1, 2, 3];
 a[0] = 5;
 ```
 
-Чтобы менять содержимое, не пишите `const`:
+To change the contents, do not write `const`:
 
 ```vibe run
 struct P { i64 x; }
@@ -110,7 +110,7 @@ void main() {
 }
 ```
 
-Зато то, что лежит **за указателем или срезом**, `const` не замораживает: ограничение касается только самой привязки.
+What lies **behind a pointer or a slice** is not frozen by `const`, though: the restriction applies only to the binding itself.
 
 ```vibe run
 void bump(i64[] xs) {
@@ -126,29 +126,29 @@ void main() {
 }
 ```
 
-Здесь `view` объявлен с `const`, но `view[0] = 100` работает: срез указывает на изменяемый `data`. Функция `bump` получила срез и поменяла данные вызывающего.
+Here `view` is declared with `const`, but `view[0] = 100` works: the slice points at the mutable `data`. The function `bump` received a slice and changed the caller's data.
 
-Параметры функций изменяемы, но это копия: вызывающий изменений не увидит. Чтобы запретить менять параметр, напишите `const`: `i64 f(const i64 x)`. Чтобы менять данные вызывающего, принимайте указатель или срез.
+Function parameters are mutable, but they are a copy: the caller will not see the changes. To forbid changing a parameter, write `const`: `i64 f(const i64 x)`. To change the caller's data, take a pointer or a slice.
 
-## Область видимости
+## Scope
 
-Переменная живёт до конца блока `{ ... }`, где объявлена. В одном блоке одно имя дважды объявить нельзя:
+A variable lives until the end of the block `{ ... }` where it is declared. The same name cannot be declared twice in one block:
 
 ```vibe error fragment
 const auto x = 1;
 const auto x = 2;
 ```
 
-Во вложенном блоке имя можно **перекрыть** (shadowing); после выхода из блока снова видна внешняя:
+In a nested block a name can be **shadowed**; after leaving the block the outer one is visible again:
 
 ```vibe run
 void main() {
     const auto x = 1;
     {
         const auto x = 2;
-        println("внутри {x}");
+        println("inside {x}");
     }
-    println("снаружи {x}");
+    println("outside {x}");
     for (auto i : 0..2) {
         const auto x = i * 10;
         println(x);
@@ -156,11 +156,11 @@ void main() {
 }
 ```
 
-Переменные цикла (`for (auto i : ...)`) тоже живут только внутри цикла.
+Loop variables (`for (auto i : ...)`) also live only inside the loop.
 
-### Не называйте переменную как функцию
+### Do not name a variable like a function
 
-Локальная переменная заслоняет функцию с тем же именем, и вызов дальше в блоке становится невозможным:
+A local variable hides a function with the same name, and calling it later in the block becomes impossible:
 
 ```vibe error
 void main() {
@@ -169,11 +169,11 @@ void main() {
 }
 ```
 
- Не называйте переменные `min`, `max`, `abs`, `sort` и т. п. — это функции [стандартной библиотеки](stdlib.md).
+Do not name variables `min`, `max`, `abs`, `sort` and so on: those are functions of the [standard library](stdlib.md).
 
-## Глобальный `const`: константа времени компиляции
+## Global `const`: a compile-time constant
 
-`const` на верхнем уровне вычисляется при компиляции и подставляется по месту. У константы нет адреса, и её нельзя изменить.
+A top-level `const` is evaluated at compile time and substituted in place. A constant has no address and cannot be changed.
 
 ```vibe run
 const auto A = 3;
@@ -189,7 +189,7 @@ void main() {
 }
 ```
 
-Если константа нужна как размер массива, она обязана быть вычислима при компиляции: числа, арифметика над ними и другие константы. Если в инициализаторе вызов функции, `const` превращается в «выражение, которое подставляется при каждом использовании» и пересчитывается каждый раз:
+If a constant is needed as an array size, it must be computable at compile time: numbers, arithmetic on them and other constants. If the initializer contains a function call, `const` turns into "an expression that is substituted at every use" and is recomputed each time:
 
 ```vibe run
 auto n = 0;
@@ -206,9 +206,9 @@ void main() {
 }
 ```
 
-> **Ловушка.** Это не то, чего ждут от константы. Не кладите в `const` вызовы функций с побочными эффектами; для таких значений заведите переменную внутри функции.
+> **Gotcha:** this is not what you expect from a constant. Do not put calls of functions with side effects into a `const`; for such values, create a variable inside a function.
 
-Присваивать константе нельзя:
+You cannot assign to a constant:
 
 ```vibe error
 const auto K = 5;
@@ -218,13 +218,13 @@ void main() {
 }
 ```
 
-Тип можно указать явно: `const u8 LIMIT = 200;`. С `auto` число получает тип по контексту использования.
+The type can be given explicitly: `const u8 LIMIT = 200;`. With `auto` a number gets its type from how it is used.
 
-> **Примечание.** Полноценных вычислений при компиляции (`comptime`) пока нет, они в [планах](how-it-works.md#что-дальше).
+> **Note:** full compile-time evaluation (`comptime`) does not exist yet; it is among the [plans](how-it-works.md#what-next).
 
-## Глобальные переменные
+## Global variables
 
-Переменная без `const`, объявленная на верхнем уровне, — глобальная изменяемая переменная. Инициализатор обязателен и должен быть константным выражением: число, арифметика над числами, `true`/`false`, `null`. Другую глобальную переменную в инициализаторе использовать нельзя.
+A variable without `const` declared at the top level is a global mutable variable. The initializer is mandatory and must be a constant expression: a number, arithmetic on numbers, `true`/`false`, `null`. You cannot use another global variable in the initializer.
 
 ```vibe run
 auto calls = 0;
@@ -244,15 +244,15 @@ void main() {
 }
 ```
 
-> **Ловушка.** Глобальная переменная типа `str` с инициализатором (`str name = "x";`) сейчас остаётся пустой строкой. С `auto` (`auto name = "x";`) компилятор выдаёт ошибку «not a compile-time constant». Если нужна глобальная строка, объявите `str name = "";` и присвойте значение в начале `main`.
+> **Gotcha:** a global variable of type `str` with an initializer (`str name = "x";`) currently stays an empty string. With `auto` (`auto name = "x";`) the compiler reports the error "not a compile-time constant". If you need a global string, declare `str name = "";` and assign the value at the start of `main`.
 
-У глобальной переменной можно взять адрес, она хранится в памяти программы всё время работы.
+You can take the address of a global variable; it lives in the program's memory for the whole run.
 
-Глобальные переменные — это общее изменяемое состояние. Используйте их экономно: чаще лучше передать значение или указатель параметром.
+Global variables are shared mutable state. Use them sparingly: more often it is better to pass a value or a pointer as a parameter.
 
-## Порядок объявлений
+## Order of declarations
 
-Порядок функций, структур и констант на верхнем уровне не важен: вызывать функцию можно раньше, чем она объявлена в файле.
+The order of functions, structs and constants at the top level does not matter: you can call a function before it is declared in the file.
 
 ```vibe run
 void main() {
@@ -264,7 +264,7 @@ i64 later(i64 x) { return x + LIMIT; }
 const auto LIMIT = 100;
 ```
 
-## Что дальше
+## What next
 
-- Как работают операторы и их приоритет: [операторы](operators.md).
-- Что происходит с памятью, на которую указывает переменная: [память](memory.md).
+- How operators work and their precedence: [operators](operators.md).
+- What happens to the memory a variable points at: [memory](memory.md).

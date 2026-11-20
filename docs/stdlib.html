@@ -1,73 +1,73 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Справочник стандартной библиотеки · Vibe</title>
-<meta name="description" content="Все функции и типы прелюдии Vibe: вывод, строки, числа, аллокаторы, List, Map, Option, файлы, процессы, время и математика">
+<title>Standard library reference · Vibe</title>
+<meta name="description" content="All the functions and types of the Vibe prelude: output, strings, numbers, allocators, List, Map, Option, files, processes, time and math">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/stdlib.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html" class="current">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html" class="current">Standard library reference</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
-<h1>Справочник стандартной библиотеки</h1>
-<p>Стандартная библиотека — один файл <code>std/std.vibe</code>, написанный на самом Vibe. Он подключается к каждой программе <strong>автоматически</strong> (прелюдия). Ничего импортировать не нужно.</p>
-<p>Имена из прелюдии занимают общее пространство имён с вашими: свою функцию с именем <code>min</code>, <code>max</code>, <code>abs</code>, <code>sort</code>, <code>swap</code>, <code>run</code>, <code>env</code>, <code>cstr</code>, <code>arg</code> и т. п. объявить нельзя, будет ошибка «duplicate function».</p>
-<p>Имена с префиксом <code>__</code> (<code>__find</code>, <code>__qsort</code>) внутренние. Не вызывайте их.</p>
-<p>Сигнатуры пишутся как в коде: результат, имя, параметры. <code>!T</code> — функция может вернуть ошибку; <code>a</code> — значение типа <code>Allocator</code>.</p>
-<h2 id="вывод-и-форматирование"><a class="anchor" href="#вывод-и-форматирование">#</a>Вывод и форматирование</h2>
-<p>Это <strong>встроенные</strong> функции компилятора. Формат: <code>println(&quot;x = {x}&quot;)</code>, подробности — на странице <a href="strings.html#форматирование">строки</a>.</p>
+<h1>Standard library reference</h1>
+<p>The standard library is a single file, <code>std/std.vibe</code>, written in Vibe itself. It is attached to every program <strong>automatically</strong> (the prelude). Nothing needs to be imported.</p>
+<p>The names from the prelude share a namespace with yours: you cannot declare your own function named <code>min</code>, <code>max</code>, <code>abs</code>, <code>sort</code>, <code>swap</code>, <code>run</code>, <code>env</code>, <code>cstr</code>, <code>arg</code> and so on; you will get the error &quot;duplicate function&quot;.</p>
+<p>Names with the prefix <code>__</code> (<code>__find</code>, <code>__qsort</code>) are internal. Do not call them.</p>
+<p>Signatures are written as in code: the result, the name, the parameters. <code>!T</code> means the function can return an error; <code>a</code> is a value of type <code>Allocator</code>.</p>
+<h2 id="output-and-formatting"><a class="anchor" href="#output-and-formatting">#</a>Output and formatting</h2>
+<p>These are <strong>built-in</strong> functions of the compiler. The format is <code>println(&quot;x = {x}&quot;)</code>; details are on the page <a href="strings.html#formatting">strings</a>.</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>print(...)</code></td>
-<td>печатает аргументы через пробел</td>
+<td>prints the arguments separated by spaces</td>
 </tr>
 <tr>
 <td><code>println(...)</code></td>
-<td>то же и перевод строки</td>
+<td>the same plus a newline</td>
 </tr>
 <tr>
 <td><code>eprint(...)</code>, <code>eprintln(...)</code></td>
-<td>то же в stderr</td>
+<td>the same to stderr</td>
 </tr>
 <tr>
 <td><code>!str bprint(u8[] buf, ...)</code></td>
-<td>форматирует в буфер; <code>error.NoSpace</code>, если не влезло</td>
+<td>formats into a buffer; <code>error.NoSpace</code> if it does not fit</td>
 </tr>
 <tr>
 <td><code>!void sprint(List&lt;u8&gt;* out, ...)</code></td>
-<td>дописывает в список</td>
+<td>appends to a list</td>
 </tr>
 <tr>
 <td><code>panic(msg)</code></td>
-<td>печатает сообщение и место, завершает с кодом 1</td>
+<td>prints the message and the location, exits with code 1</td>
 </tr>
 <tr>
 <td><code>assert(cond)</code></td>
-<td><code>panic</code> с местом, если <code>cond</code> ложно</td>
+<td><code>panic</code> with a location if <code>cond</code> is false</td>
 </tr>
 <tr>
-<td><code>embed(&quot;файл&quot;)</code></td>
-<td>байты файла как константа <code>str</code>, читается при компиляции</td>
+<td><code>embed(&quot;file&quot;)</code></td>
+<td>the bytes of a file as a <code>str</code> constant, read at compile time</td>
 </tr>
 <tr>
 <td><code>sizeof(T)</code>, <code>alignof(T)</code></td>
-<td>размер и выравнивание типа, <code>u64</code>, при компиляции</td>
+<td>the size and alignment of a type, <code>u64</code>, at compile time</td>
 </tr>
 </tbody></table></div>
-<h2 id="аллокаторы"><a class="anchor" href="#аллокаторы">#</a>Аллокаторы</h2>
+<h2 id="allocators"><a class="anchor" href="#allocators">#</a>Allocators</h2>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ctx;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    fn</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> alloc_fn;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    fn</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) free_fn;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>Allocator c_allocator()</code></td>
@@ -75,209 +75,209 @@
 </tr>
 <tr>
 <td><code>!T[] a.alloc&lt;T&gt;(i64 n)</code></td>
-<td><code>n</code> элементов, зануленных; <code>error.OutOfMemory</code></td>
+<td><code>n</code> elements, zeroed; <code>error.OutOfMemory</code></td>
 </tr>
 <tr>
 <td><code>a.free(slice)</code></td>
-<td>освобождает срез от <code>alloc</code></td>
+<td>frees a slice from <code>alloc</code></td>
 </tr>
 <tr>
 <td><code>!T* a.create&lt;T&gt;()</code></td>
-<td>один зануленный <code>T</code></td>
+<td>one zeroed <code>T</code></td>
 </tr>
 <tr>
 <td><code>a.destroy(p)</code></td>
-<td>освобождает <code>create</code></td>
+<td>frees a <code>create</code></td>
 </tr>
 <tr>
 <td><code>!str a.dup(str s)</code></td>
-<td>копия строки</td>
+<td>a copy of a string</td>
 </tr>
 <tr>
 <td><code>!u8* a.dupz(str s)</code></td>
-<td>копия с нулевым байтом, для C</td>
+<td>a copy with a zero byte, for C</td>
 </tr>
 </tbody></table></div>
 <h3 id="fixedbuf"><a class="anchor" href="#fixedbuf">#</a><code>FixedBuf</code></h3>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>FixedBuf FixedBuf::init(u8[] buf)</code></td>
-<td>аллокатор поверх вашего буфера</td>
+<td>an allocator over your buffer</td>
 </tr>
 <tr>
 <td><code>Allocator fb.allocator()</code></td>
-<td>сам аллокатор</td>
+<td>the allocator itself</td>
 </tr>
 <tr>
 <td><code>fb.reset()</code></td>
-<td>считает весь буфер свободным</td>
+<td>treats the whole buffer as free</td>
 </tr>
 <tr>
 <td><code>i64 fb.remaining()</code></td>
-<td>сколько байт осталось</td>
+<td>how many bytes are left</td>
 </tr>
 </tbody></table></div>
 <h3 id="arena"><a class="anchor" href="#arena">#</a><code>Arena</code></h3>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>Arena Arena::init(Allocator parent)</code></td>
-<td>арена поверх родителя</td>
+<td>an arena over a parent</td>
 </tr>
 <tr>
 <td><code>Allocator ar.allocator()</code></td>
-<td>сам аллокатор</td>
+<td>the allocator itself</td>
 </tr>
 <tr>
 <td><code>ar.deinit()</code></td>
-<td>освобождает всё разом</td>
+<td>frees everything at once</td>
 </tr>
 </tbody></table></div>
-<p>Подробнее: <a href="memory.html">память</a>.</p>
+<p>More: <a href="memory.html">memory</a>.</p>
 <h2 id="listt"><a class="anchor" href="#listt">#</a><code>List&lt;T&gt;</code></h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Метод</th>
-<th>Что делает</th>
+<th>Method</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>List&lt;T&gt;::init(a)</code></td>
-<td>пустой список</td>
+<td>an empty list</td>
 </tr>
 <tr>
 <td><code>deinit()</code></td>
-<td>освобождает буфер</td>
+<td>frees the buffer</td>
 </tr>
 <tr>
 <td><code>!void reserve(n)</code></td>
-<td>выделяет ёмкость</td>
+<td>allocates capacity</td>
 </tr>
 <tr>
 <td><code>!void push(v)</code></td>
-<td>добавляет</td>
+<td>appends</td>
 </tr>
 <tr>
 <td><code>!void append(T[] xs)</code></td>
-<td>добавляет несколько</td>
+<td>appends several</td>
 </tr>
 <tr>
 <td><code>!T pop()</code></td>
-<td>убирает последний, <code>error.Empty</code></td>
+<td>removes the last, <code>error.Empty</code></td>
 </tr>
 <tr>
 <td><code>!T last()</code></td>
-<td>последний, <code>error.Empty</code></td>
+<td>the last, <code>error.Empty</code></td>
 </tr>
 <tr>
 <td><code>T get(i)</code></td>
-<td>элемент</td>
+<td>an element</td>
 </tr>
 <tr>
 <td><code>set(i, v)</code></td>
-<td>записывает</td>
+<td>writes</td>
 </tr>
 <tr>
 <td><code>T[] slice()</code></td>
-<td>элементы как срез</td>
+<td>the elements as a slice</td>
 </tr>
 <tr>
 <td><code>bool is_empty()</code></td>
-<td>пуст ли</td>
+<td>whether it is empty</td>
 </tr>
 <tr>
 <td><code>clear()</code></td>
-<td>длина в ноль</td>
+<td>length to zero</td>
 </tr>
 <tr>
 <td><code>bool contains(v)</code></td>
-<td>есть ли</td>
+<td>whether it is there</td>
 </tr>
 <tr>
 <td><code>reverse()</code></td>
-<td>разворот</td>
+<td>reverses</td>
 </tr>
 <tr>
 <td><code>sort()</code></td>
-<td>сортировка</td>
+<td>sorts</td>
 </tr>
 <tr>
-<td>поля <code>items</code>, <code>len</code>, <code>a</code></td>
-<td>буфер, число элементов, аллокатор</td>
+<td>fields <code>items</code>, <code>len</code>, <code>a</code></td>
+<td>the buffer, the number of elements, the allocator</td>
 </tr>
 </tbody></table></div>
 <h2 id="mapv"><a class="anchor" href="#mapv">#</a><code>Map&lt;V&gt;</code></h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Метод</th>
-<th>Что делает</th>
+<th>Method</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>Map&lt;V&gt;::init(a)</code></td>
-<td>пустая таблица</td>
+<td>an empty table</td>
 </tr>
 <tr>
 <td><code>deinit()</code></td>
-<td>освобождает память</td>
+<td>frees the memory</td>
 </tr>
 <tr>
 <td><code>!void put(str key, v)</code></td>
-<td>вставка или замена</td>
+<td>inserts or replaces</td>
 </tr>
 <tr>
 <td><code>!V get(str key)</code></td>
-<td>значение, <code>error.NotFound</code></td>
+<td>the value, <code>error.NotFound</code></td>
 </tr>
 <tr>
 <td><code>bool has(str key)</code></td>
-<td>есть ли ключ</td>
+<td>whether the key exists</td>
 </tr>
 <tr>
-<td>поля <code>len</code>, <code>entries</code></td>
-<td>число ключей; записи <code>{ key, value, used }</code></td>
+<td>fields <code>len</code>, <code>entries</code></td>
+<td>the number of keys; records <code>{ key, value, used }</code></td>
 </tr>
 </tbody></table></div>
-<p>Ключи не копируются.</p>
+<p>Keys are not copied.</p>
 <h2 id="optiont"><a class="anchor" href="#optiont">#</a><code>Option&lt;T&gt;</code></h2>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">union</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Option</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">T</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    T</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Some</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    None</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p><code>?T</code> — запись для <code>Option&lt;T&gt;</code>.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p><code>?T</code> is the notation for <code>Option&lt;T&gt;</code>.</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Метод</th>
-<th>Что делает</th>
+<th>Method</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>bool is_some()</code></td>
-<td>есть ли значение</td>
+<td>whether there is a value</td>
 </tr>
 <tr>
 <td><code>T unwrap_or(d)</code></td>
-<td>значение или <code>d</code></td>
+<td>the value or <code>d</code></td>
 </tr>
 </tbody></table></div>
-<h2 id="математические-и-общие-функции"><a class="anchor" href="#математические-и-общие-функции">#</a>Математические и общие функции</h2>
+<h2 id="math-and-general-functions"><a class="anchor" href="#math-and-general-functions">#</a>Math and general functions</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>min(a, b)</code>, <code>max(a, b)</code></td>
-<td>меньшее, большее</td>
+<td>the smaller, the larger</td>
 </tr>
 <tr>
 <td><code>abs(x)</code></td>
-<td>модуль числа</td>
+<td>the absolute value of a number</td>
 </tr>
 <tr>
 <td><code>void swap(T* a, T* b)</code></td>
-<td>обмен значений</td>
+<td>swaps values</td>
 </tr>
 <tr>
 <td><code>void sort(T[] s)</code></td>
-<td>сортировка на месте</td>
+<td>sorts in place</td>
 </tr>
 <tr>
 <td><code>sqrt</code>, <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>exp</code>, <code>log</code></td>
@@ -285,11 +285,11 @@
 </tr>
 <tr>
 <td><code>pow(x, y)</code></td>
-<td>степень</td>
+<td>a power</td>
 </tr>
 <tr>
 <td><code>floor</code>, <code>ceil</code>, <code>fabs</code></td>
-<td>округление вниз, вверх, модуль</td>
+<td>round down, round up, absolute value</td>
 </tr>
 <tr>
 <td><code>PI</code></td>
@@ -300,71 +300,71 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sqrt</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">16.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sin</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">cos</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">floor</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2.7</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ceil</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2.1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fabs</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">exp</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">log</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">pow</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">10.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">PI</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">min</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">max</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3.5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">abs</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>4 0 1 2 3 3
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>4 0 1 2 3 3
 1 0 1024 3.14159
 3 3.5 5</code></pre></div></div>
-<h2 id="строки-и-символы"><a class="anchor" href="#строки-и-символы">#</a>Строки и символы</h2>
+<h2 id="strings-and-characters"><a class="anchor" href="#strings-and-characters">#</a>Strings and characters</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>i64 str_find(s, needle)</code></td>
-<td>позиция подстроки, <code>-1</code></td>
+<td>the position of a substring, <code>-1</code></td>
 </tr>
 <tr>
 <td><code>i64 str_find_byte(s, c)</code></td>
-<td>позиция байта, <code>-1</code></td>
+<td>the position of a byte, <code>-1</code></td>
 </tr>
 <tr>
 <td><code>i64 str_rfind_byte(s, c)</code></td>
-<td>последняя позиция байта, <code>-1</code></td>
+<td>the last position of a byte, <code>-1</code></td>
 </tr>
 <tr>
 <td><code>str_starts_with(s, p)</code>, <code>str_ends_with(s, p)</code></td>
-<td>начало и конец</td>
+<td>the start and the end</td>
 </tr>
 <tr>
 <td><code>str str_trim(s)</code></td>
-<td>убрать пробелы по краям</td>
+<td>strips whitespace from both ends</td>
 </tr>
 <tr>
 <td><code>str cstr(u8* p)</code></td>
-<td>C-строка в <code>str</code></td>
+<td>a C string as a <code>str</code></td>
 </tr>
 <tr>
 <td><code>!u8* to_cstr(buf, s)</code></td>
-<td>C-строка в вашем буфере, <code>error.NoSpace</code></td>
+<td>a C string in your buffer, <code>error.NoSpace</code></td>
 </tr>
 <tr>
 <td><code>is_digit</code>, <code>is_alpha</code>, <code>is_alnum</code>, <code>is_upper</code>, <code>is_hex</code></td>
-<td>классы символа (<code>u8</code>)</td>
+<td>character classes (<code>u8</code>)</td>
 </tr>
 </tbody></table></div>
-<h2 id="числа-из-текста"><a class="anchor" href="#числа-из-текста">#</a>Числа из текста</h2>
+<h2 id="numbers-from-text"><a class="anchor" href="#numbers-from-text">#</a>Numbers from text</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>!i64 parse_int(s)</code></td>
-<td>целое, допускает знак и пробелы; <code>error.InvalidNumber</code></td>
+<td>an integer, allows a sign and spaces; <code>error.InvalidNumber</code></td>
 </tr>
 <tr>
 <td><code>!u64 parse_int_radix(s, radix)</code></td>
-<td>по основанию; <code>radix</code> 0 — автоопределение <code>0x</code>, <code>0b</code>, <code>0o</code></td>
+<td>in a radix; <code>radix</code> 0 autodetects <code>0x</code>, <code>0b</code>, <code>0o</code></td>
 </tr>
 <tr>
 <td><code>!f64 parse_float(s)</code></td>
-<td>дробное, <code>error.InvalidNumber</code></td>
+<td>a float, <code>error.InvalidNumber</code></td>
 </tr>
 <tr>
 <td><code>u64 bits_f64(x)</code></td>
-<td>биты числа</td>
+<td>the bits of a number</td>
 </tr>
 <tr>
 <td><code>f64 f64_from_bits(x)</code></td>
-<td>число из бит</td>
+<td>a number from bits</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -374,146 +374,146 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">parse_int_radix</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"0b101"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">parse_float</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"2.5e1"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">bits_f64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">f64_from_bits</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4611686018427387904</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>-42
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>-42
 -1
 255
 5
 25
 4607182418800017408 2</code></pre></div></div>
-<h2 id="файлы"><a class="anchor" href="#файлы">#</a>Файлы</h2>
+<h2 id="files"><a class="anchor" href="#files">#</a>Files</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>!str read_file(a, path)</code></td>
-<td>весь файл в память; <code>error.FileNotFound</code>, <code>error.ReadFailed</code></td>
+<td>the whole file into memory; <code>error.FileNotFound</code>, <code>error.ReadFailed</code></td>
 </tr>
 <tr>
 <td><code>!void write_file(path, data)</code></td>
-<td>записать с заменой; <code>error.CannotOpen</code>, <code>error.WriteFailed</code></td>
+<td>writes, replacing; <code>error.CannotOpen</code>, <code>error.WriteFailed</code></td>
 </tr>
 <tr>
 <td><code>bool file_exists(path)</code></td>
-<td>существует ли</td>
+<td>whether it exists</td>
 </tr>
 <tr>
 <td><code>i32 remove(u8* path)</code></td>
-<td>удалить (C-функция)</td>
+<td>deletes (a C function)</td>
 </tr>
 <tr>
 <td><code>i32 mkdir(u8* path, u32 mode)</code></td>
-<td>создать каталог (C-функция)</td>
+<td>creates a directory (a C function)</td>
 </tr>
 </tbody></table></div>
-<p>Результат <code>read_file</code> выделен через <code>a</code>: освободите его (или используйте арену).</p>
+<p>The result of <code>read_file</code> is allocated through <code>a</code>: free it (or use an arena).</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    write_file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"demo.txt"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"строка 1</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\n</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">строка 2</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\n</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    write_file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"demo.txt"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"line 1</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\n</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">line 2</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\n</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">file_exists</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"demo.txt"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> text </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> read_file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"demo.txt"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">free</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(text);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(text.len);</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> missing </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> read_file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"net-takogo.txt"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> |</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"нет файла: {e}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> missing </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> read_file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"no-such-file.txt"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> |</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"no file: {e}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    };</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(missing.len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true
-30
-нет файла: error.FileNotFound</code></pre></div></div>
-<h2 id="ввод"><a class="anchor" href="#ввод">#</a>Ввод</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>true
+14
+no file: error.FileNotFound</code></pre></div></div>
+<h2 id="input"><a class="anchor" href="#input">#</a>Input</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>!str read_line(u8[] buf)</code></td>
-<td>одна строка из stdin без <code>\n</code>; <code>error.EndOfFile</code></td>
+<td>one line from stdin without <code>\n</code>; <code>error.EndOfFile</code></td>
 </tr>
 </tbody></table></div>
-<h2 id="процессы-и-окружение"><a class="anchor" href="#процессы-и-окружение">#</a>Процессы и окружение</h2>
+<h2 id="processes-and-environment"><a class="anchor" href="#processes-and-environment">#</a>Processes and environment</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>!i32 run(a, str[] argv)</code></td>
-<td>запускает процесс, ждёт, возвращает код выхода; <code>error.Signaled</code>, если убит сигналом</td>
+<td>starts a process, waits, returns the exit code; <code>error.Signaled</code> if killed by a signal</td>
 </tr>
 <tr>
 <td><code>!str env(name)</code></td>
-<td>переменная окружения; <code>error.NotFound</code></td>
+<td>an environment variable; <code>error.NotFound</code></td>
 </tr>
 <tr>
 <td><code>i64 arg_count()</code></td>
-<td>число аргументов (вместе с именем программы)</td>
+<td>the number of arguments (including the program name)</td>
 </tr>
 <tr>
 <td><code>str arg(i)</code></td>
-<td>аргумент по номеру; <code>arg(0)</code> — путь программы</td>
+<td>an argument by number; <code>arg(0)</code> is the program path</td>
 </tr>
 <tr>
 <td><code>void exit(i32 code)</code></td>
-<td>завершить программу</td>
+<td>ends the program</td>
 </tr>
 </tbody></table></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> code </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"/bin/echo"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"hi"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"there"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">])</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"код"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, code);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"code"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, code);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> bad </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> run</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, [</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"/bin/sh"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"-c"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"exit 3"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">])</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"код"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, bad);</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">env</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"NO_SUCH_VAR_HERE"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "не задана"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"code"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, bad);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">env</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"NO_SUCH_VAR_HERE"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "not set"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">arg_count</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>hi there
-код 0
-код 3
-не задана
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>hi there
+code 0
+code 3
+not set
 1</code></pre></div></div>
-<p>Аргументы программы при <code>vibe run</code> идут после <code>--</code>: <code>vibe run main.vibe -- a b</code>.</p>
-<h2 id="время-и-случайные-числа"><a class="anchor" href="#время-и-случайные-числа">#</a>Время и случайные числа</h2>
+<p>Program arguments with <code>vibe run</code> go after <code>--</code>: <code>vibe run main.vibe -- a b</code>.</p>
+<h2 id="time-and-random-numbers"><a class="anchor" href="#time-and-random-numbers">#</a>Time and random numbers</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Функция</th>
-<th>Что делает</th>
+<th>Function</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>i64 now_ns()</code></td>
-<td>монотонное время в наносекундах (для замеров)</td>
+<td>monotonic time in nanoseconds (for measuring)</td>
 </tr>
 <tr>
 <td><code>i64 clock()</code></td>
-<td>процессорное время (C-функция)</td>
+<td>processor time (a C function)</td>
 </tr>
 <tr>
 <td><code>i64 time(null)</code></td>
-<td>секунды Unix (C-функция)</td>
+<td>Unix seconds (a C function)</td>
 </tr>
 <tr>
 <td><code>i32 rand()</code>, <code>srand(u32 seed)</code></td>
-<td>генератор C</td>
+<td>the C generator</td>
 </tr>
 </tbody></table></div>
-<p>Измерить время:</p>
+<p>Measuring time:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> t0 </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> now_ns</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1000000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i; }</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ms </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">now_ns</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> t0) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1000000.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s, ms </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">>=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>499999500000 true</code></pre></div></div>
-<h2 id="функции-libc-доступные-без-объявления"><a class="anchor" href="#функции-libc-доступные-без-объявления">#</a>Функции libc, доступные без объявления</h2>
-<p>Из C-библиотеки в прелюдии уже объявлены: <code>printf</code>, <code>malloc</code>, <code>calloc</code>, <code>free</code>, <code>exit</code>, <code>memcmp</code>, <code>memcpy</code>, <code>memmove</code>, <code>memset</code>, <code>strlen</code>, <code>fdopen</code>, <code>fgets</code>, <code>fopen</code>, <code>fclose</code>, <code>fread</code>, <code>fwrite</code>, <code>fseek</code>, <code>ftell</code>, <code>remove</code>, <code>mkdir</code>, <code>fork</code>, <code>execvp</code>, <code>waitpid</code>, <code>getenv</code>, <code>fflush</code>, <code>strtod</code>, <code>clock_gettime</code>, <code>clock</code>, <code>rand</code>, <code>srand</code>, <code>time</code> и математика. Любую другую вызывайте через <code>extern fn</code> (см. <a href="c-interop.html">C</a>).</p>
-<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>499999500000 true</code></pre></div></div>
+<h2 id="libc-functions-available-without-a-declaration"><a class="anchor" href="#libc-functions-available-without-a-declaration">#</a>libc functions available without a declaration</h2>
+<p>From the C library the prelude already declares: <code>printf</code>, <code>malloc</code>, <code>calloc</code>, <code>free</code>, <code>exit</code>, <code>memcmp</code>, <code>memcpy</code>, <code>memmove</code>, <code>memset</code>, <code>strlen</code>, <code>fdopen</code>, <code>fgets</code>, <code>fopen</code>, <code>fclose</code>, <code>fread</code>, <code>fwrite</code>, <code>fseek</code>, <code>ftell</code>, <code>remove</code>, <code>mkdir</code>, <code>fork</code>, <code>execvp</code>, <code>waitpid</code>, <code>getenv</code>, <code>fflush</code>, <code>strtod</code>, <code>clock_gettime</code>, <code>clock</code>, <code>rand</code>, <code>srand</code>, <code>time</code> and math. Call any other one through <code>extern</code> (see <a href="c-interop.html">C</a>).</p>
+<h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>
 <ul>
-<li>Сквозные примеры с этими функциями: <a href="cookbook.html">рецепты</a>.</li>
-<li>Если что-то не работает как ожидали: <a href="gotchas.html">ловушки и FAQ</a>.</li>
+<li>End-to-end examples with these functions: <a href="cookbook.html">cookbook</a>.</li>
+<li>If something does not work as expected: <a href="gotchas.html">pitfalls and FAQ</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="tooling.html"><small>Назад</small>Инструменты: fmt, lsp, флаги</a><a class="next" href="cookbook.html"><small>Дальше</small>Рецепты и готовые программы</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#вывод-и-форматирование">Вывод и форматирование</a><a class="l2" href="#аллокаторы">Аллокаторы</a><a class="l3" href="#fixedbuf">FixedBuf</a><a class="l3" href="#arena">Arena</a><a class="l2" href="#listt">List&amp;lt;T&amp;gt;</a><a class="l2" href="#mapv">Map&amp;lt;V&amp;gt;</a><a class="l2" href="#optiont">Option&amp;lt;T&amp;gt;</a><a class="l2" href="#математические-и-общие-функции">Математические и общие функции</a><a class="l2" href="#строки-и-символы">Строки и символы</a><a class="l2" href="#числа-из-текста">Числа из текста</a><a class="l2" href="#файлы">Файлы</a><a class="l2" href="#ввод">Ввод</a><a class="l2" href="#процессы-и-окружение">Процессы и окружение</a><a class="l2" href="#время-и-случайные-числа">Время и случайные числа</a><a class="l2" href="#функции-libc-доступные-без-объявления">Функции libc, доступные без объявления</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+<div class="pager"><a class="prev" href="tooling.html"><small>Previous</small>Tools: fmt, lsp, flags</a><a class="next" href="cookbook.html"><small>Next</small>Recipes and finished programs</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#output-and-formatting">Output and formatting</a><a class="l2" href="#allocators">Allocators</a><a class="l3" href="#fixedbuf">FixedBuf</a><a class="l3" href="#arena">Arena</a><a class="l2" href="#listt">List&amp;lt;T&amp;gt;</a><a class="l2" href="#mapv">Map&amp;lt;V&amp;gt;</a><a class="l2" href="#optiont">Option&amp;lt;T&amp;gt;</a><a class="l2" href="#math-and-general-functions">Math and general functions</a><a class="l2" href="#strings-and-characters">Strings and characters</a><a class="l2" href="#numbers-from-text">Numbers from text</a><a class="l2" href="#files">Files</a><a class="l2" href="#input">Input</a><a class="l2" href="#processes-and-environment">Processes and environment</a><a class="l2" href="#time-and-random-numbers">Time and random numbers</a><a class="l2" href="#libc-functions-available-without-a-declaration">libc functions available without a declaration</a><a class="l2" href="#what-next">What next</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

@@ -1,54 +1,54 @@
 ---
-title: Лексика
+title: Lexical structure
 order: 10
-section: Язык
-description: Комментарии, литералы, экранирование, конец оператора и интерполяция строк в Vibe
+section: Language
+description: Comments, literals, escapes, the end of a statement and string interpolation in Vibe
 ---
 
-Здесь описано, из каких кусочков состоит исходный текст: комментарии, числа, строки, имена и правило «конца оператора».
+This page describes the pieces the source text is made of: comments, numbers, strings, names and the rule for "the end of a statement".
 
-## Файл и точка входа
+## Files and the entry point
 
-Исходный файл — обычный UTF-8 текст с расширением `.vibe`. Программа начинается с функции `main`. Она может возвращать ничего, `i32` (код выхода) или `!void` (ошибку, которая завершит программу).
+A source file is plain UTF-8 text with the extension `.vibe`. A program starts at the function `main`. It can return nothing, an `i32` (the exit code) or `!void` (an error that ends the program).
 
 ```vibe run
 void main() {
-    println("минимальная программа");
+    println("the smallest program");
 }
 ```
 
-Код выхода можно вернуть числом:
+The exit code can be returned as a number:
 
 ```vibe run exit
 i32 main() {
-    println("выходим с кодом 3");
+    println("exiting with code 3");
     return 3;
 }
 ```
 
-## Комментарии
+## Comments
 
-Есть два вида: строчный `//` и блочный `/* ... */`.
+There are two kinds: the line comment `//` and the block comment `/* ... */`.
 
 ```vibe run
 void main() {
-    // строчный комментарий идёт до конца строки
-    const auto a = 1 /* блочный можно вставить прямо в выражение */ + 2;
+    // a line comment runs to the end of the line
+    const auto a = 1 /* a block comment can sit right inside an expression */ + 2;
     /*
-       блочный может занимать
-       несколько строк
+       a block comment can span
+       several lines
     */
     println(a);
 }
 ```
 
-> **Примечание.** Блочные комментарии не вкладываются друг в друга: первый же `*/` закрывает комментарий.
+> **Note:** block comments do not nest: the first `*/` closes the comment.
 
-## Конец оператора
+## End of a statement
 
-Каждый оператор заканчивается точкой с запятой, как в C++. После закрывающей `}` блока, функции, `struct`, `enum`, `union`, `if`, `while`, `for` и `match` она не нужна.
+Every statement ends with a semicolon, as in C++. It is not needed after the closing `}` of a block, function, `struct`, `enum`, `union`, `if`, `while`, `for` or `match`.
 
-Оператор можно переносить как угодно: конец определяется только `;`.
+A statement can be wrapped any way you like: only `;` ends it.
 
 ```vibe run
 i64 sum3(i64 a, i64 b, i64 c) { return a + b + c; }
@@ -71,7 +71,7 @@ void main() {
 }
 ```
 
-Если забыть `;`, компилятор укажет на токен, где оператор должен был закончиться:
+If you forget the `;`, the compiler points at the token where the statement should have ended:
 
 ```vibe error
 void main() {
@@ -80,7 +80,7 @@ void main() {
 }
 ```
 
-Несколько операторов можно уместить в одну строку:
+Several statements fit on one line:
 
 ```vibe run
 void main() {
@@ -89,27 +89,27 @@ void main() {
 }
 ```
 
-`else` можно поставить как на одной строке с `}`, так и на следующей:
+`else` can go on the same line as `}` or on the next one:
 
 ```vibe run
 void main() {
     const auto n = 5;
     if (n > 3) {
-        println("больше");
+        println("greater");
     }
     else {
-        println("не больше");
+        println("not greater");
     }
 }
 ```
 
-Формат `vibe fmt` всегда пишет `} else {` в одну строку, см. [инструменты](tooling.md#vibe-fmt).
+`vibe fmt` always writes `} else {` on one line, see [tooling](tooling.md#vibe-fmt).
 
-## Идентификаторы
+## Identifiers
 
-Имя состоит из латинских букв, цифр и `_`, не начинается с цифры. Регистр различается. Имена, начинающиеся с двух подчёркиваний (`__find`, `__qsort`), используются внутри стандартной библиотеки: свои так не называйте.
+A name consists of Latin letters, digits and `_`, and does not start with a digit. Case matters. Names that start with two underscores (`__find`, `__qsort`) are used inside the standard library: do not name your own things like that.
 
-Ключевые слова нельзя использовать как имена:
+Keywords cannot be used as names:
 
 ```text
 fn const static template struct union enum type import as extern export
@@ -117,17 +117,17 @@ if else while for match return break continue defer errdefer
 test is orelse catch sizeof alignof true false null nullptr error
 ```
 
-> **Примечание.** `auto`, `this` и `Self` — не ключевые слова в строгом смысле, но имеют особый смысл: `auto` вместо типа, `this` и `Self` внутри [методов](structs-unions-enums.md#методы).
+> **Note:** `auto`, `this` and `Self` are not keywords in the strict sense, but they have a special meaning: `auto` in place of a type, `this` and `Self` inside [methods](structs-unions-enums.md#methods).
 
-## Целые литералы
+## Integer literals
 
-| Запись | Значение |
+| Form | Value |
 |---|---|
-| `42` | десятичное |
-| `0xff` | шестнадцатеричное, 255 |
-| `0b101` | двоичное, 5 |
-| `0o17` | восьмеричное, 15 |
-| `1_000_000` | `_` — разделитель разрядов, на значение не влияет |
+| `42` | decimal |
+| `0xff` | hexadecimal, 255 |
+| `0b101` | binary, 5 |
+| `0o17` | octal, 15 |
+| `1_000_000` | `_` is a digit separator and does not affect the value |
 
 ```vibe run
 void main() {
@@ -136,7 +136,7 @@ void main() {
 }
 ```
 
-Тип целого литерала берётся из контекста; если контекста нет, это `i64`:
+The type of an integer literal comes from the context; without a context it is `i64`:
 
 ```vibe run
 void main() {
@@ -148,7 +148,7 @@ void main() {
 }
 ```
 
-> **Ловушка.** Компилятор не проверяет, помещается ли литерал в тип. Лишние старшие биты просто отбрасываются:
+> **Gotcha:** the compiler does not check that a literal fits into the type. Extra high bits are simply dropped:
 
 ```vibe run
 void main() {
@@ -158,9 +158,9 @@ void main() {
 }
 ```
 
-Следите за диапазоном сами: `u8` — 0..255, `i8` — -128..127.
+Watch the range yourself: `u8` is 0..255, `i8` is -128..127.
 
-## Дробные литералы
+## Floating-point literals
 
 ```vibe run
 void main() {
@@ -170,11 +170,11 @@ void main() {
 }
 ```
 
-Литерал вида `1e9` — дробный (`f64`), хотя записан без точки. Тип по умолчанию `f64`, в контексте `f32` литерал становится `f32`.
+A literal like `1e9` is floating-point (`f64`) even though it is written without a dot. The default type is `f64`; in an `f32` context the literal becomes `f32`.
 
-## Символы
+## Characters
 
-Символ в одинарных кавычках — это число типа `u8` (код байта). Юникод-символы вне ASCII в одинарные кавычки не помещаются: они занимают несколько байт.
+A character in single quotes is a number of type `u8` (a byte code). Unicode characters outside ASCII do not fit into single quotes: they take several bytes.
 
 ```vibe run
 void main() {
@@ -186,72 +186,72 @@ void main() {
 }
 ```
 
-Печатается число, если не попросить формат `:c`. Подробнее о форматах — в [строках](strings.md#форматирование).
+A number is printed unless you ask for the `:c` format. More about formats in [strings](strings.md#formatting).
 
-## Строковые литералы
+## String literals
 
-Строка в двойных кавычках имеет тип `str`: это срез байтов `{ ptr, len }` (см. [типы](types.md#str)). Литерал лежит в памяти программы и заканчивается нулевым байтом, поэтому его можно напрямую отдавать в C.
+A string in double quotes has the type `str`: a slice of bytes `{ ptr, len }` (see [types](types.md#str)). The literal lives in the program's memory and ends with a zero byte, so it can be passed to C directly.
 
-### Escape-последовательности
+### Escape sequences
 
-| Запись | Что означает |
+| Form | Meaning |
 |---|---|
-| `\n` | перевод строки |
-| `\t` | табуляция |
-| `\r` | возврат каретки |
-| `\0` | нулевой байт |
-| `\e` | символ ESC (0x1b), для цветов в терминале |
-| `\\` | обратная косая черта |
-| `\"` | двойная кавычка |
-| `\'` | одинарная кавычка |
-| `\{` | литеральная `{` |
-| `\}` | литеральная `}` |
+| `\n` | newline |
+| `\t` | tab |
+| `\r` | carriage return |
+| `\0` | zero byte |
+| `\e` | the ESC character (0x1b), for terminal colors |
+| `\\` | backslash |
+| `\"` | double quote |
+| `\'` | single quote |
+| `\{` | a literal `{` |
+| `\}` | a literal `}` |
 
 ```vibe run
 void main() {
-    println("строка 1\nстрока 2");
-    println("колонка\tколонка");
-    println("кавычки: \" и \\");
-    println("скобки: \{ и \}");
+    println("line 1\nline 2");
+    println("column\tcolumn");
+    println("quotes: \" and \\");
+    println("braces: \{ and \}");
 }
 ```
 
-### Многострочные строки
+### Multi-line strings
 
-Строковый литерал может содержать настоящий перевод строки. Он попадёт в значение как есть, вместе с отступами:
+A string literal can contain a real newline. It goes into the value as it is, together with the indentation:
 
 ```vibe run
 void main() {
-    const auto text = "первая
-вторая
-третья";
+    const auto text = "first
+second
+third";
     println(text);
     println(text.len);
 }
 ```
 
-### Интерполяция
+### Interpolation
 
-В `"..."` выражение в фигурных скобках вычисляется и подставляется. Скобки — часть формата, поэтому литеральные нужно удваивать: `{{` и `}}` (или экранировать `\{`).
+In `"..."` an expression in curly braces is evaluated and substituted. The braces are part of the format, so literal ones must be doubled: `{{` and `}}` (or escaped as `\{`).
 
 ```vibe run
 void main() {
     const auto a = 6;
     const auto b = 7;
     println("{a} * {b} = {a * b}");
-    println("{{a}} — это не подстановка");
+    println("{{a}} is not a substitution");
     println("{a + b > 10} {a:03}");
 }
 ```
 
-Интерполяция — не вызов функции и ничего не выделяет в куче: компилятор превращает строку в формат для `printf`. Подробности в разделе [строки и форматирование](strings.md).
+Interpolation is not a function call and allocates nothing on the heap: the compiler turns the string into a format for `printf`. Details are in [strings and formatting](strings.md).
 
-> **Ловушка.** Забытая `{{` — частая ошибка при печати JSON или C-кода: `"{"key": 1}"` ломается, нужно `"{{\"key\": 1}}"`.
+> **Gotcha:** a forgotten `{{` is a common mistake when printing JSON or C code: `"{"key": 1}"` breaks, and you need `"{{\"key\": 1}}"`.
 
-## Булевы значения и null
+## Booleans and null
 
-`true` и `false` — значения `bool`. `null` — «пустой указатель» и «пустой `?T`», подробнее в [ошибках и опциональных значениях](errors-and-optionals.md).
+`true` and `false` are `bool` values. `null` is "the empty pointer" and "the empty `?T`", described in [errors and optional values](errors-and-optionals.md).
 
-## Приоритет и ассоциативность
+## Precedence and associativity
 
-Таблица приоритетов операторов вынесена на страницу [операторов](operators.md#приоритет).
+The operator precedence table is on the [operators](operators.md#precedence) page.

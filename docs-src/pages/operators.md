@@ -1,20 +1,20 @@
 ---
-title: Операторы и выражения
+title: Operators and expressions
 order: 13
-section: Язык
-description: Арифметика, сравнения, логика, побитовые операторы, присваивание, приоритет, as, указатели и срезы в Vibe
+section: Language
+description: Arithmetic, comparisons, logic, bitwise operators, assignment, precedence, as, pointers and slices in Vibe
 ---
 
-Операторов в Vibe немного, а перегрузки нет: `+` всегда означает сложение чисел. Любое действие над значением видно в коде.
+Vibe has few operators and no overloading of the built-in ones: `+` always means adding numbers. Every action on a value is visible in the code.
 
-## Арифметика
+## Arithmetic
 
-| Оператор | Что делает |
+| Operator | What it does |
 |---|---|
-| `+` `-` `*` | сложение, вычитание, умножение |
-| `/` | деление (для целых — с отбрасыванием дробной части в сторону нуля) |
-| `%` | остаток (знак совпадает со знаком делимого) |
-| `-x` | смена знака |
+| `+` `-` `*` | addition, subtraction, multiplication |
+| `/` | division (for integers the fraction is dropped towards zero) |
+| `%` | remainder (the sign matches the sign of the dividend) |
+| `-x` | negation |
 
 ```vibe run
 void main() {
@@ -24,7 +24,7 @@ void main() {
 }
 ```
 
-Оба операнда должны быть одного типа. Целое можно неявно расширить, но с дробным смешивать нельзя:
+Both operands must have the same type. An integer can be widened implicitly, but it cannot be mixed with a float:
 
 ```vibe error fragment
 const i64 a = 5;
@@ -32,21 +32,21 @@ const f64 b = 2.0;
 println(a + b);
 ```
 
-Нужно привести явно: `a as f64 + b`.
+Convert explicitly: `a as f64 + b`.
 
-Строки операторами не склеиваются:
+Strings are not joined with operators:
 
 ```vibe error fragment
 println("a" + "b");
 ```
 
-Склейка делается интерполяцией и [буфером](strings.md#сборка-строк): `"{a}{b}"`.
+Joining is done with interpolation and a [buffer](strings.md#building-strings): `"{a}{b}"`.
 
-Деление целого на ноль аварийно завершает программу (см. [типы](types.md#переполнение)), деление дробных на ноль даёт `inf` или `nan`.
+Integer division by zero crashes the program (see [types](types.md#overflow)); floating-point division by zero gives `inf` or `nan`.
 
-## Сравнения
+## Comparisons
 
-`==` `!=` `<` `<=` `>` `>=` дают `bool`.
+`==` `!=` `<` `<=` `>` `>=` give `bool`.
 
 ```vibe run
 void main() {
@@ -56,19 +56,19 @@ void main() {
 }
 ```
 
-Для строк определены только `==` и `!=`. Упорядочивать строки через `<` нельзя:
+Only `==` and `!=` are defined for strings. You cannot order strings with `<`:
 
 ```vibe error fragment
 println("abc" < "abd");
 ```
 
-Цепочки сравнений вроде `1 < 2 < 3` не работают: результат `1 < 2` — это `bool`, а не число.
+Chains of comparisons like `1 < 2 < 3` do not work: the result of `1 < 2` is a `bool`, not a number.
 
 ```vibe error fragment
 println(1 < 2 < 3);
 ```
 
-Сравниваются также enum-значения и указатели:
+Enum values and pointers can be compared too:
 
 ```vibe run
 enum Color { Red, Green }
@@ -81,38 +81,38 @@ void main() {
 }
 ```
 
-Для структур `==` не определён: сравнивайте поля вручную.
+`==` is not defined for structs: compare the fields by hand.
 
-## Логика
+## Logic
 
-`&&` (и), `||` (или), `!` (не). Операнды обязаны быть `bool`, числа в роли условия не принимаются.
+`&&` (and), `||` (or), `!` (not). The operands must be `bool`; numbers are not accepted as conditions.
 
-Вычисление **ленивое**: правая часть выполняется, только если нужна для результата.
+Evaluation is **lazy**: the right-hand side runs only if it is needed for the result.
 
 ```vibe run
 bool noisy(str name, bool v) {
-    println("вызван {name}");
+    println("called {name}");
     return v;
 }
 
 void main() {
-    const auto a = false && noisy("первый", true);
-    const auto b = true || noisy("второй", true);
-    const auto c = true && noisy("третий", false);
+    const auto a = false && noisy("first", true);
+    const auto b = true || noisy("second", true);
+    const auto c = true && noisy("third", false);
     println(a, b, c);
 }
 ```
 
-Благодаря этому можно писать защиту и проверку в одном условии:
+This lets you write a guard and a check in one condition:
 
 ```vibe run
 void main() {
     const auto s = "x";
     auto i = 5;
     if (i < s.len && s[i] == 'x') {
-        println("нашли");
+        println("found");
     } else {
-        println("нет, но и ошибки нет");
+        println("no, but no error either");
     }
 }
 ```
@@ -121,15 +121,15 @@ void main() {
 println(!5);
 ```
 
-## Побитовые операторы
+## Bitwise operators
 
-| Оператор | Действие |
+| Operator | Action |
 |---|---|
-| `&` | и |
-| `\|` | или |
-| `^` | исключающее или |
-| `~x` | побитовое отрицание |
-| `<<` `>>` | сдвиги |
+| `&` | and |
+| `\|` | or |
+| `^` | exclusive or |
+| `~x` | bitwise not |
+| `<<` `>>` | shifts |
 
 ```vibe run
 void main() {
@@ -139,24 +139,24 @@ void main() {
 }
 ```
 
-Сдвиг вправо для знаковых — арифметический (знак сохраняется), для беззнаковых — логический.
+A right shift is arithmetic for signed types (the sign is kept) and logical for unsigned ones.
 
-> **Примечание.** В отличие от C, побитовые `&`, `|`, `^` привязаны **сильнее** сравнений. Выражение `x & 1 == 0` читается как `(x & 1) == 0`, скобки не нужны.
+> **Note:** unlike C, the bitwise `&`, `|`, `^` bind **tighter** than comparisons. The expression `x & 1 == 0` reads as `(x & 1) == 0`, and no parentheses are needed.
 
 ```vibe run
 void main() {
     const auto n = 6;
-    if (n & 1 == 0) { println("чётное"); }
+    if (n & 1 == 0) { println("even"); }
     const auto flags = 0b1010;
     println(flags & 0b0010 != 0, flags & 0b0100 != 0);
 }
 ```
 
-## Присваивание
+## Assignment
 
-`=` кладёт значение в переменную, поле, элемент массива или по указателю. Присваивание — оператор, а не выражение: `a = b = 0` написать нельзя.
+`=` puts a value into a variable, a field, an array element or the target of a pointer. Assignment is a statement, not an expression: you cannot write `a = b = 0`.
 
-Составные формы: `+=` `-=` `*=` `/=` `%=` `|=` `&=` `^=` `<<=` `>>=`.
+The compound forms: `+=` `-=` `*=` `/=` `%=` `|=` `&=` `^=` `<<=` `>>=`.
 
 ```vibe run
 void main() {
@@ -173,7 +173,7 @@ void main() {
 }
 ```
 
-`x++` и `x--` тоже есть, но это оператор, а не выражение: `y = x++` написать нельзя. Одновременного присваивания `a, b = b, a` нет — используйте временную переменную или `swap`:
+`x++` and `x--` exist too, but they are statements, not expressions: you cannot write `y = x++`. There is no simultaneous assignment `a, b = b, a`; use a temporary variable or `swap`:
 
 ```vibe run
 void main() {
@@ -184,42 +184,42 @@ void main() {
 }
 ```
 
-`_ = выражение` вычисляет выражение и отбрасывает результат. Вызвать функцию, вернувшую число, и не использовать результат можно и без `_`. А вот `!T` без `_` не проходит: `_ =` показывает, что ошибку вы игнорируете сознательно.
+`_ = expression` evaluates the expression and discards the result. You can call a function that returns a number and ignore the result even without `_`. But a `!T` does not pass without `_`: `_ =` shows that you are ignoring the error on purpose.
 
 ```vibe run
 !i64 load() { return 42; }
 
 void main() {
     _ = load();
-    println("результат отброшен");
+    println("result discarded");
 }
 ```
 
-Игнорировать `!T` без `_`, `?` или `catch` нельзя: [ошибка компиляции](errors-and-optionals.md#нельзя-игнорировать-ошибку).
+Ignoring a `!T` without `_`, `?` or `catch` is a [compile error](errors-and-optionals.md#you-cannot-ignore-an-error).
 
-## Унарные операторы
+## Unary operators
 
-| Запись | Смысл |
+| Form | Meaning |
 |---|---|
-| `-x` | смена знака |
-| `!b` | логическое «не» |
-| `~x` | побитовое «не» |
-| `&x` | адрес переменной |
-| `*p` | значение по адресу |
+| `-x` | negation |
+| `!b` | logical not |
+| `~x` | bitwise not |
+| `&x` | the address of a variable |
+| `*p` | the value at an address |
 
-`&` берёт адрес только у того, что лежит в памяти: переменной, поля, элемента. Результат `&x` имеет тип `T*`.
+`&` takes the address only of something that lives in memory: a variable, a field, an element. The result of `&x` has the type `T*`.
 
-## Постфиксные формы
+## Postfix forms
 
-Эти операции стоят сразу после выражения и связывают сильнее всего:
+These operations stand right after an expression and bind the tightest:
 
-| Запись | Смысл |
+| Form | Meaning |
 |---|---|
-| `f(a, b)` | вызов |
-| `x[i]` | индекс |
-| `x[a..b]` | срез |
-| `x.name` | поле или метод (`->` и `::` значат то же самое) |
-| `x?` | пробросить ошибку |
+| `f(a, b)` | call |
+| `x[i]` | index |
+| `x[a..b]` | slice |
+| `x.name` | a field or a method (`->` and `::` mean the same) |
+| `x?` | propagate the error |
 
 ```vibe run
 struct Box { i64[3] items; }
@@ -232,11 +232,11 @@ void main() {
 }
 ```
 
-Цепочки `a.b.c(1)[2].d` читаются слева направо.
+Chains like `a.b.c(1)[2].d` are read left to right.
 
-## `as` и приоритет
+## `as` and precedence
 
-`as` приводит значение к другому типу (см. [типы](types.md#преобразования-as)). Он связывает слабее унарных операторов, но сильнее арифметики:
+`as` converts a value to another type (see [types](types.md#conversions-as)). It binds more weakly than the unary operators but more strongly than arithmetic:
 
 ```vibe run
 void main() {
@@ -247,19 +247,19 @@ void main() {
 }
 ```
 
-Здесь `-a as f64` значит `(-a) as f64`, а `1 + 2 as f64` — `1 + (2 as f64)`, поэтому результат дробный.
+Here `-a as f64` means `(-a) as f64`, and `1 + 2 as f64` means `1 + (2 as f64)`, so the result is a float.
 
-Для указателя: `&x as *u8` значит `(&x) as *u8`.
+For a pointer: `&x as *u8` means `(&x) as *u8`.
 
-> **Ловушка.** С `catch` и `orelse` пишите скобки: `(f() catch 0) as i64`. Без них `catch` забирает всё правее себя.
+> **Gotcha:** with `catch` and `orelse` write parentheses: `(f() catch 0) as i64`. Without them `catch` takes everything to its right.
 
-## Приоритет
+## Precedence
 
-От самого слабого к самому сильному:
+From the weakest to the strongest:
 
-| Уровень | Операторы |
+| Level | Operators |
 |---|---|
-| 1 (слабейший) | `catch`, `orelse` |
+| 1 (weakest) | `catch`, `orelse` |
 | 2 | `\|\|` |
 | 3 | `&&` |
 | 4 | `==` `!=` `<` `<=` `>` `>=` |
@@ -270,10 +270,10 @@ void main() {
 | 9 | `+` `-` |
 | 10 | `*` `/` `%` |
 | 11 | `as` |
-| 12 | унарные `-` `!` `~` `&` `*` |
-| 13 (сильнейший) | постфиксные: `()` `[]` `[a..b]` `.f` `->f` `::f` `?` |
+| 12 | unary `-` `!` `~` `&` `*` |
+| 13 (strongest) | postfix: `()` `[]` `[a..b]` `.f` `->f` `::f` `?` |
 
-Все бинарные операторы левоассоциативны: `10 - 3 - 2` — это `(10 - 3) - 2`.
+All binary operators are left-associative: `10 - 3 - 2` is `(10 - 3) - 2`.
 
 ```vibe run
 void main() {
@@ -285,11 +285,11 @@ void main() {
 }
 ```
 
-`1 << 2 + 1` — это `1 << (2 + 1)`, потому что `+` сильнее сдвига. Когда сомневаетесь, ставьте скобки: они бесплатны.
+`1 << 2 + 1` is `1 << (2 + 1)`, because `+` is stronger than a shift. When in doubt, add parentheses: they are free.
 
-### `catch` и `orelse` забирают всё правее
+### `catch` and `orelse` take everything to the right
 
-`catch` и `orelse` — самые слабые операторы, поэтому их правая часть — всё выражение до конца:
+`catch` and `orelse` are the weakest operators, so their right-hand side is the whole expression to the end:
 
 ```vibe run
 !i64 f(i64 n) {
@@ -309,11 +309,11 @@ void main() {
 }
 ```
 
-Первые две строки печатают `5`: успешный результат слева остаётся как есть, а `0 + 100` — запасное значение, которое не понадобилось. Если хотели прибавить 100 к результату, нужны скобки (третья строка).
+The first two lines print `5`: a successful result on the left stays as it is, and `0 + 100` is the fallback value that was not needed. If you wanted to add 100 to the result, you need parentheses (the third line).
 
-## `is` — проверка варианта
+## `is`: testing a variant
 
-`x is .Вариант` дает `bool`: проверяет enum или тег union.
+`x is .Variant` gives a `bool`: it tests an enum or the tag of a union.
 
 ```vibe run
 enum State { Idle, Busy }
@@ -331,9 +331,9 @@ void main() {
 }
 ```
 
-Для извлечения содержимого используйте [`match`](control-flow.md#match).
+To extract the contents, use [`match`](control-flow.md#match).
 
-## Что дальше
+## What next
 
-- Условия и циклы: [управление потоком](control-flow.md).
-- Как `?`, `catch` и `orelse` работают с ошибками: [ошибки и опциональные значения](errors-and-optionals.md).
+- Conditions and loops: [control flow](control-flow.md).
+- How `?`, `catch` and `orelse` work with errors: [errors and optional values](errors-and-optionals.md).

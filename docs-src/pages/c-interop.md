@@ -1,15 +1,15 @@
 ---
-title: Взаимодействие с C и C++
+title: Interoperating with C and C++
 order: 30
-section: Интероп и инструменты
-description: extern, export, строки и указатели на границе с C, подключение .c, .cpp и библиотек, структуры, колбэки и фасад extern "C" в Vibe
+section: Interop and tools
+description: extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, structs, callbacks and the extern "C" facade in Vibe
 ---
 
-Vibe не нужен отдельный «слой привязки»: C-функцию объявляют одной строкой, а C-файл передают компилятору в командной строке. Здесь собрано всё, что нужно на границе.
+Vibe needs no separate "binding layer": a C function is declared in one line, and a C file is passed to the compiler on the command line. This page collects everything you need at the boundary.
 
-## Вызов C из Vibe: `extern`
+## Calling C from Vibe: `extern`
 
-`extern` объявляет функцию, которая живёт снаружи. Сигнатура пишется в терминах Vibe, а соответствие с C простое:
+`extern` declares a function that lives outside. The signature is written in Vibe terms, and the correspondence with C is simple:
 
 | C | Vibe |
 |---|---|
@@ -21,8 +21,8 @@ Vibe не нужен отдельный «слой привязки»: C-фун�
 | `double` / `float` | `f64` / `f32` |
 | `char *`, `const char *` | `u8*` |
 | `void *` | `void*` |
-| любой `T *` | `T*` |
-| `void` (результат) | результат не пишется |
+| any `T *` | `T*` |
+| `void` (a result) | no result is written |
 | `...` | `...` |
 
 ```vibe run
@@ -31,28 +31,28 @@ extern i32 atoi(u8* s);
 extern u64 strlen(u8* s);
 
 void main() {
-    puts("привет из C");
+    puts("hello from C");
     println(atoi("41") + 1, strlen("abcd"));
 }
 ```
 
-Функции libc, которые часто нужны, уже объявлены в прелюдии (`printf`, `malloc`, `calloc`, `free`, `exit`, `memcpy`, `memset`, `strlen`, `sqrt`, `sin`, `cos`, `pow`, `floor`, `fopen`, `fork` и т. д.). Их можно просто вызывать, а объявлять заново не обязательно.
+The libc functions that are often needed are already declared in the prelude (`printf`, `malloc`, `calloc`, `free`, `exit`, `memcpy`, `memset`, `strlen`, `sqrt`, `sin`, `cos`, `pow`, `floor`, `fopen`, `fork` and so on). You can simply call them, and declaring them again is not required.
 
-> **Ловушка.** Если вы объявите `extern` с именем, которое уже занято **функцией Vibe** из прелюдии (`abs`, `min`, `max`, `sort`), будет ошибка «duplicate function». Выберите другой способ или импортируйте C-версию в обёртку с другим именем.
+> **Gotcha:** if you declare an `extern` with a name that is already taken by a **Vibe function** from the prelude (`abs`, `min`, `max`, `sort`), you get the error "duplicate function". Choose another approach, or import the C version into a wrapper with a different name.
 
-## Строки на границе
+## Strings at the boundary
 
-Литерал `"..."` всегда заканчивается нулевым байтом и поэтому подходит как `u8*` (то есть `const char *`):
+A literal `"..."` always ends with a zero byte, so it fits as a `u8*` (that is, a `const char *`):
 
 ```vibe run
 extern i32 puts(u8* s);
 
 void main() {
-    puts("литерал: можно передавать как есть");
+    puts("a literal: it can be passed as it is");
 }
 ```
 
-Любой другой `str` (срез) ни на что не заканчивается и **не годится** как C-строка. Тип `str` — это `{ ptr, len }`, и в C уходит только `s.ptr`, который читается до нулевого байта:
+Any other `str` (a slice) does not end with anything and is **not suitable** as a C string. The type `str` is `{ ptr, len }`, and only `s.ptr` goes to C, which is read up to a zero byte:
 
 ```vibe run
 extern i32 puts(u8* s);
@@ -64,10 +64,10 @@ void main() {
 }
 ```
 
-Ожидали `ab`, а получили `abc`: после `ab` нет нулевого байта, и C читает дальше. Для таких строк нужна C-строка. Есть два способа:
+You expected `ab` and got `abc`: after `ab` there is no zero byte, and C reads on. For such strings you need a C string. There are two ways:
 
-- `to_cstr(buf, s)` — копирует в **ваш** буфер и добавляет нулевой байт (без выделения памяти);
-- `a.dupz(s)` — копирует в куче через аллокатор.
+- `to_cstr(buf, s)` copies into **your** buffer and adds a zero byte (no memory allocation);
+- `a.dupz(s)` copies onto the heap through an allocator.
 
 ```vibe run
 extern i32 puts(u8* s);
@@ -87,7 +87,7 @@ extern i32 puts(u8* s);
 }
 ```
 
-Обратно: `cstr(p)` превращает C-строку `u8*` в `str` (длина считается через `strlen`, копирования нет):
+The other way: `cstr(p)` turns a C string `u8*` into a `str` (the length is computed with `strlen`, nothing is copied):
 
 ```vibe run
 extern u8* getenv(u8* name);
@@ -98,14 +98,14 @@ void main() {
         const auto s = cstr(p);
         println(s.len > 0);
     }
-    const auto q = getenv("ЭТО_НЕ_ЗАДАНО");
+    const auto q = getenv("THIS_IS_NOT_SET");
     println(q == null);
 }
 ```
 
-## Указатели
+## Pointers
 
-Любой указатель Vibe приводится к `void*` и обратно **неявно**; к другим типам указателей — через `as`:
+Any Vibe pointer converts to `void*` and back **implicitly**; to other pointer types, through `as`:
 
 ```vibe run
 void main() {
@@ -115,7 +115,7 @@ void main() {
 }
 ```
 
-Массив или срез превращается в указатель на первый элемент через `.ptr` (у срезов) или `&a[0]`/`as T*`:
+An array or a slice becomes a pointer to the first element through `.ptr` (for slices) or `&a[0]`/`as T*`:
 
 ```vibe run
 extern void* memset(void* dst, i32 c, u64 n);
@@ -127,9 +127,9 @@ void main() {
 }
 ```
 
-## Переменные число аргументов
+## Variable number of arguments
 
-`...` в `extern` допускает вариативные функции. Типы подтягиваются по обычным правилам C: целые расширяются, `f32` → `f64`. Срезы запрещены.
+`...` in an `extern` allows variadic functions. The types are promoted by the usual C rules: integers are widened, `f32` → `f64`. Slices are not allowed.
 
 ```vibe run
 extern i32 printf(u8* fmt, ...);
@@ -139,13 +139,13 @@ void main() {
 }
 ```
 
-Для вывода из самого Vibe лучше `println`: он безопаснее. `printf` пригодится при работе с готовым C-кодом.
+For output from Vibe itself, `println` is better: it is safer. `printf` is handy when working with ready-made C code.
 
-## Структуры
+## Structs
 
-Структуры Vibe лежат в памяти так же, как C-структуры (те же размеры и выравнивание). Поэтому описание на стороне Vibe — копия описания на C.
+Vibe structs lie in memory the same way as C structs (the same sizes and alignment). So the description on the Vibe side is a copy of the description in C.
 
-**Структуры передаются в C только по указателю.** Передача и возврат по значению пока не поддерживаются.
+**Structs are passed to C by pointer only.** Passing and returning by value is not supported yet.
 
 ```vibe file=vec.c
 typedef struct { double x, y, z; } Vec3;
@@ -176,23 +176,23 @@ void main() {
 }
 ```
 
-## Подключение C-файлов
+## Bringing in C files
 
-`vibe run`, `vibe build` и `vibe test` принимают `.c`, `.cpp`, `.o`, `.a`, `.so` и ключи `-l...` / `-L...` вместе с исходником:
+`vibe run`, `vibe build` and `vibe test` accept `.c`, `.cpp`, `.o`, `.a`, `.so` and the options `-l...` / `-L...` together with the source:
 
 ```sh
-vibe run main.vibe mathlib.c                 # компилирует mathlib.c и линкует
-vibe run main.vibe mathlib.c engine.cpp      # с C++ линковка идёт через clang++
-vibe build main.vibe lib.o -lm -o app        # готовый объект и библиотека
+vibe run main.vibe mathlib.c                 # compiles mathlib.c and links
+vibe run main.vibe mathlib.c engine.cpp      # with C++ the link goes through clang++
+vibe build main.vibe lib.o -lm -o app        # a ready object and a library
 ```
 
-Что происходит: каждый `.c` / `.cpp` компилируется через `clang` (`clang++` для C++, уровень оптимизации берётся из `-O`), затем всё линкуется вместе с вашей программой. Если есть хотя бы один `.cpp`, линковщиком становится `clang++`.
+What happens: every `.c` / `.cpp` is compiled with `clang` (`clang++` for C++, the optimization level comes from `-O`), then everything is linked together with your program. If there is at least one `.cpp`, the linker becomes `clang++`.
 
-Подробности режимов — в [инструментах](tooling.md#режимы-компиляции).
+Details of the modes are in [tooling](tooling.md#compilation-modes).
 
-## Вызов Vibe из C: `export`
+## Calling Vibe from C: `export`
 
-`export` выводит функцию Vibe под её собственным именем. C-код её видит как обычный внешний символ:
+`export` exposes a Vibe function under its own name. C code sees it as an ordinary external symbol:
 
 ```vibe file=sumsq.c
 #include <stdint.h>
@@ -218,11 +218,11 @@ void main() {
 }
 ```
 
-Имена `extern` и `export` — символы C, поэтому **не получают префикса** модуля, даже при `import ... as` (см. [модули](modules.md)).
+The names of `extern` and `export` are C symbols, so they **get no module prefix**, even with `import ... as` (see [modules](modules.md)).
 
-## Колбэки: указатели на функции
+## Callbacks: function pointers
 
-Функцию Vibe можно передать в C как `fn(...) -> R`. Это обычный адрес функции без замыкания:
+A Vibe function can be passed to C as `fn(...) -> R`. This is a plain function address without a closure:
 
 ```vibe run
 extern void qsort(void* base, u64 n, u64 size, fn(void*, void*) -> i32 cmp);
@@ -242,11 +242,11 @@ void main() {
 }
 ```
 
-Замыкание `fn[](...) -> R` в C передавать нельзя: у него есть контекст, а C ждёт простой адрес.
+A closure `fn[](...) -> R` cannot be passed to C: it has a context, and C expects a plain address.
 
-## C++ через фасад `extern "C"`
+## C++ through an `extern "C"` facade
 
-Vibe не знает C++-ABI (шаблоны, перегрузки, классы). Поэтому C++ прячут за небольшим C-интерфейсом, где объект — непрозрачный указатель.
+Vibe does not know the C++ ABI (templates, overloads, classes). So C++ is hidden behind a small C interface where an object is an opaque pointer.
 
 ```vibe file=engine.cpp
 #include <vector>
@@ -283,11 +283,11 @@ void main() {
 }
 ```
 
-`defer` здесь гарантирует `engine_free` на любом выходе.
+`defer` here guarantees `engine_free` on any exit.
 
-## Библиотеки: `-l` и `-L`
+## Libraries: `-l` and `-L`
 
-Подключение системных библиотек — как в C. Ключи `-l` и `-L` и файлы `.a`, `.so`, `.o` передаются линковщику как есть:
+Bringing in system libraries works as in C. The options `-l` and `-L` and the files `.a`, `.so`, `.o` are passed to the linker as they are:
 
 ```sh
 vibe run main.vibe -lm
@@ -295,19 +295,19 @@ vibe run main.vibe -L/opt/foo/lib -lfoo
 vibe build main.vibe libbar.a -o app
 ```
 
-Математика (`sqrt`, `sin`, `pow`) линкуется автоматически: `-lm` уже включён.
+Math (`sqrt`, `sin`, `pow`) is linked automatically: `-lm` is already included.
 
-## Правила и подводные камни
+## Rules and pitfalls
 
-- Нет `@cImport` и разбора заголовков: сигнатуры пишете руками. Это место для ошибок: тип вашего `extern` обязан совпадать с C.
-- Структуры по значению через границу не ходят.
-- `bool` в C — это `_Bool`/`uint8_t`. Используйте `u8` или `i32`, а не `bool`, если сомневаетесь.
-- Не передавайте `str` вместо `u8*`: нужна `s.ptr` (и нулевой байт, см. выше).
-- `size_t` — это `u64`, `ssize_t` — `i64`.
-- Память, которую вернула C-функция (`malloc`), освобождайте C-функцией (`free`), а не аллокатором Vibe.
-- `extern` с тем же именем, что и функция из прелюдии Vibe, недопустимо.
+- There is no `@cImport` and no header parsing: you write the signatures by hand. This is a place for mistakes: the type of your `extern` must match C.
+- Structs do not cross the boundary by value.
+- `bool` in C is `_Bool`/`uint8_t`. Use `u8` or `i32`, not `bool`, if in doubt.
+- Do not pass a `str` instead of a `u8*`: you need `s.ptr` (and a zero byte, see above).
+- `size_t` is `u64`, `ssize_t` is `i64`.
+- Memory returned by a C function (`malloc`) must be freed by a C function (`free`), not by a Vibe allocator.
+- An `extern` with the same name as a function from the Vibe prelude is not allowed.
 
-## Что дальше
+## What next
 
-- Файлы и процессы: [справочник](stdlib.md).
-- Режимы сборки и флаги: [инструменты](tooling.md).
+- Files and processes: [reference](stdlib.md).
+- Build modes and flags: [tooling](tooling.md).

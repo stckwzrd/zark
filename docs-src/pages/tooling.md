@@ -1,15 +1,15 @@
 ---
-title: "Инструменты: fmt, lsp, флаги"
+title: "Tools: fmt, lsp, flags"
 order: 32
-section: Интероп и инструменты
-description: Форматтер, языковой сервер, режимы компиляции, диагностика и отладка в Vibe
+section: Interop and tools
+description: The formatter, the language server, compilation modes, diagnostics and debugging in Vibe
 ---
 
-Все инструменты — это подкоманды одного исполняемого файла `vibe`. Отдельно ничего ставить не нужно.
+All the tools are subcommands of one executable, `vibe`. Nothing separate needs to be installed.
 
-## Диагностика компилятора
+## Compiler diagnostics
 
-Любая ошибка печатается в формате `файл:строка: error: сообщение`, под ним показана строка исходника и указатель `^` на место ошибки:
+Every error is printed in the form `file:line: error: message`, and under it the source line is shown with a `^` pointing at the place of the error:
 
 ```vibe error
 void main() {
@@ -18,19 +18,19 @@ void main() {
 }
 ```
 
-Когда в программе есть похожее имя, компилятор подсказывает его (для имён короче трёх символов подсказки не показываются, они были бы случайными):
+When the program has a similar name, the compiler suggests it (for names shorter than three characters no suggestions are shown, they would be random):
 
-- неизвестная переменная или функция;
-- поле структуры, вариант enum или union, имя в списке захвата замыкания;
-- имя ограничения дженерика (`T: Orb` → `Ord`).
+- an unknown variable or function;
+- a struct field, an enum or union variant, a name in a closure's capture list;
+- the name of a generic constraint (`T: Orb` → `Ord`).
 
-Типичные сообщения и их причины разобраны на странице [ловушки и FAQ](gotchas.md).
+Typical messages and their causes are explained on the page [pitfalls and FAQ](gotchas.md).
 
-> **Примечание:** компилятор останавливается на **первой** ошибке парсера. Ошибки типов он тоже сообщает по одной за запуск, но [языковой сервер](#языковой-сервер-и-редактор) проверяет каждую функцию отдельно и показывает по одной ошибке на функцию.
+> **Note:** the compiler stops at the **first** parser error. It also reports type errors one per run, but the [language server](#language-server-and-editor) checks every function separately and shows one error per function.
 
 ## vibe fmt
 
-`vibe fmt файл.vibe ...` переписывает файлы на месте. Форматтер работает по токенам: он правит пробелы, отступы и пустые строки, **никогда не переносит и не склеивает строки** и не трогает комментарии.
+`vibe fmt file.vibe ...` rewrites files in place. The formatter works on tokens: it fixes spaces, indentation and blank lines, **never wraps or joins lines** and does not touch comments.
 
 ```sh
 $ cat ugly.vibe
@@ -88,17 +88,17 @@ void main() {
 }
 ```
 
-Что именно делает форматтер:
+What exactly the formatter does:
 
-- отступы — 4 пробела на уровень вложенности скобок; продолжение выражения на следующей строке получает ещё один уровень;
-- пробелы вокруг бинарных операторов, после запятых и двоеточий, внутри `{ }` на одной строке; нет пробелов внутри `()` и `[]`; угловые скобки дженериков (`List<i64>`) остаются как написаны;
-- серии пустых строк сворачиваются в одну, пустые строки сразу после `{` и перед `}` убираются;
-- пробелы в конце строк удаляются, файл заканчивается ровно одним переводом строки;
-- расстояние между кодом и комментарием в конце строки сохраняется как есть.
+- indentation is 4 spaces per level of bracket nesting; a continuation of an expression on the next line gets one more level;
+- spaces around binary operators, after commas and colons, inside `{ }` on one line; no spaces inside `()` and `[]`; the angle brackets of generics (`List<i64>`) stay as written;
+- runs of blank lines collapse into one, and blank lines right after `{` and before `}` are removed;
+- trailing spaces are removed, and the file ends with exactly one newline;
+- the distance between code and a trailing comment is kept as it is.
 
-Чего форматтер **не** делает: не ломает длинные строки, не выравнивает комментарии по колонке, не меняет порядок объявлений, не переименовывает ничего. Пробелы вокруг `*` и `&`, когда по соседним токенам не понять, умножение это или указатель (`i*2` в примере выше), он оставляет такими, какими они были.
+What the formatter does **not** do: it does not break long lines, does not align comments to a column, does not reorder declarations, does not rename anything. Spaces around `*` and `&`, when the neighboring tokens do not show whether it is multiplication or a pointer (`i*2` in the example above), are left as they were.
 
-`--check` ничего не меняет, а печатает `would reformat файл` для каждого файла, который был бы изменён, и завершается с кодом 1 — удобно для CI:
+`--check` changes nothing and prints `would reformat file` for every file that would be changed, and exits with code 1: handy for CI:
 
 ```sh
 $ vibe fmt --check ugly.vibe
@@ -107,26 +107,26 @@ $ echo $?
 1
 ```
 
-Форматтер идемпотентен: повторный запуск на уже отформатированном файле ничего не меняет. Он гарантированно сохраняет поток токенов: смысл программы измениться не может.
+The formatter is idempotent: running it again on an already formatted file changes nothing. It is guaranteed to preserve the stream of tokens: the meaning of the program cannot change.
 
-> **Примечание:** файлы с переводами строк `\r\n` форматтер превращает в `\n`.
+> **Note:** files with `\r\n` line endings are turned into `\n` by the formatter.
 
-## Режимы компиляции
+## Compilation modes
 
-У Vibe два бэкенда:
+Vibe has two backends:
 
-- **собственный x86-64 бэкенд** (по умолчанию). Компилятор сам превращает промежуточное представление в машинный код и пишет ELF-объект. Сборка очень быстрая; код заметно быстрее «наивного», потому что есть распределение регистров, но медленнее оптимизированного LLVM;
-- **LLVM** (`--llvm`, `-O`, `--release`): компилятор печатает LLVM IR, а `clang` его оптимизирует и компилирует.
+- **the own x86-64 backend** (the default). The compiler itself turns the intermediate representation into machine code and writes an ELF object. The build is very fast; the code is noticeably faster than "naive" code because there is register allocation, but slower than optimized LLVM;
+- **LLVM** (`--llvm`, `-O`, `--release`): the compiler prints LLVM IR, and `clang` optimizes and compiles it.
 
-| Команда | Бэкенд | Оптимизация | Проверки границ |
+| Command | Backend | Optimization | Bounds checks |
 |---|---|---|---|
-| `vibe run x.vibe` | свой | нет | да |
-| `vibe run x.vibe --llvm` | LLVM | `-O0` | да |
-| `vibe run x.vibe -O` | LLVM | `-O2` | да |
-| `vibe run x.vibe --release` | LLVM | `-O2` | **нет** |
-| `vibe run x.vibe --no-safety` | свой | нет | **нет** |
+| `vibe run x.vibe` | own | none | yes |
+| `vibe run x.vibe --llvm` | LLVM | `-O0` | yes |
+| `vibe run x.vibe -O` | LLVM | `-O2` | yes |
+| `vibe run x.vibe --release` | LLVM | `-O2` | **no** |
+| `vibe run x.vibe --no-safety` | own | none | **no** |
 
-Проверка границ — это то, что превращает выход за массив в понятную панику. Без неё это **неопределённое поведение**: пример ниже падает с `panic` при обычной сборке и молча читает мусор при `--release`:
+The bounds check is what turns going out of an array into a clear panic. Without it this is **undefined behavior**: the example below fails with a `panic` in a normal build and silently reads garbage with `--release`:
 
 ```sh
 $ vibe run oob.vibe
@@ -135,13 +135,13 @@ $ vibe run oob.vibe --release
 140735146892504
 ```
 
-(`oob.vibe` читает `a[5]` у массива из трёх элементов.) Отладочные сборки держите с проверками, `--release` включайте для готовых программ, когда уверены в корректности индексов.
+(`oob.vibe` reads `a[5]` of an array of three elements.) Keep debug builds with the checks, and turn on `--release` for finished programs when you are sure the indexes are correct.
 
-Для разработки используйте режим по умолчанию: он собирает сам компилятор (около 6 тысяч строк Vibe) примерно за десятую долю секунды, не считая линковки.
+For development use the default mode: it builds the compiler itself (about 12 thousand lines of Vibe) in about a tenth of a second, not counting the link.
 
-## Промежуточные представления
+## Intermediate representations
 
-`vibe ir file.vibe` печатает LLVM IR, который сгенерировал фронтенд. Это тот же текст, который читает собственный бэкенд. Для функции
+`vibe ir file.vibe` prints the LLVM IR that the frontend generated. It is the same text that the own backend reads. For the function
 
 ```vibe
 i64 fib(i64 n) {
@@ -150,7 +150,7 @@ i64 fib(i64 n) {
 }
 ```
 
-получается (локальные переменные лежат в `alloca`, имена `%tN` — временные значения):
+you get (local variables live in `alloca`, the names `%tN` are temporary values):
 
 ```text
 define internal i64 @vb.fib(i64 %a.0) {
@@ -175,63 +175,63 @@ endif3:
 }
 ```
 
-`vibe tokens file.vibe` печатает токены: номер строки, вид токена и текст. Полезно, когда непонятно, как лексер разобрал строку (особенно с кавычками и фигурными скобками):
+`vibe tokens file.vibe` prints the tokens: the line number, the kind of the token and the text. Useful when it is unclear how the lexer split a line (especially with quotes and curly braces):
 
 ```text
-1 .kw_fn fn
+1 .ident i64
 1 .ident fib
 1 .lparen (
-1 .ident n
-1 .colon :
 1 .ident i64
+1 .ident n
+1 .rparen )
 ```
 
-Как устроено всё остальное — на странице [как устроен компилятор](how-it-works.md).
+How everything else works is on the page [how the compiler works](how-it-works.md).
 
-## Языковой сервер и редактор
+## Language server and editor
 
-`vibe lsp` — языковой сервер по протоколу LSP на стандартных вводе/выводе. Он построен на том же парсере и генераторе, что и компилятор, поэтому сообщения те же, что при `vibe build`, и они относятся и к несохранённым изменениям. Возможности:
+`vibe lsp` is a language server over the LSP protocol on standard input/output. It is built on the same parser and generator as the compiler, so the messages are the same as with `vibe build`, and they also apply to unsaved changes. Features:
 
-| Возможность | Что умеет |
+| Feature | What it can do |
 |---|---|
-| Диагностика | ошибки с точным диапазоном по ходу набора, подсказки «did you mean», быстрые исправления |
-| Подсказка при наведении | сигнатура символа и комментарии `///` над объявлением |
-| Автодополнение | члены структур и методы (по выведенному типу) после `.`, `->` и `::`, имена модулей после `alias::`, варианты enum после `.`, поля литерала после `.` внутри `Имя{ ... }`, локальные переменные, глобальные имена, ключевые слова |
-| Подсказка по параметрам | при вводе `(` и `,`: сигнатура вызываемой функции или метода |
-| Переход к определению | в том числе в импортированные файлы и по пути внутри `import "..."` |
-| Ссылки и переименование | по всему рабочему каталогу, включая файлы, которые импортируют ваш файл |
-| Структура файла | дерево структур, перечислений, функций, методов и тестов |
-| Поиск символов | `Ctrl+T` по всем `.vibe`-файлам рабочего каталога |
-| Подсветка вхождений | все использования символа под курсором |
-| Форматирование | то же, что `vibe fmt` |
+| Diagnostics | errors with an exact range as you type, "did you mean" hints, quick fixes |
+| Hover | the signature of a symbol and the `///` comments above the declaration |
+| Completion | struct members and methods (by the inferred type) after `.`, `->` and `::`, module names after `alias::`, enum variants after `.`, literal fields after `.` inside `Name{ ... }`, local variables, global names, keywords |
+| Parameter hints | when typing `(` and `,`: the signature of the function or method being called |
+| Go to definition | including into imported files and by the path inside `import "..."` |
+| References and rename | across the whole working directory, including the files that import your file |
+| File outline | a tree of structs, enums, functions, methods and tests |
+| Symbol search | `Ctrl+T` over all the `.vibe` files of the working directory |
+| Occurrence highlighting | all the uses of the symbol under the cursor |
+| Formatting | the same as `vibe fmt` |
 
-> **Примечание:** диагностика работает так: сервер запускает фронтенд компилятора по каждой функции файла (кроме обобщённых, они проверяются только когда вызываются) и собирает по одной ошибке на функцию. Парсер останавливается на первой синтаксической ошибке в файле.
+> **Note:** diagnostics work like this: the server runs the compiler's frontend on every function of the file (except generic ones, which are checked only when they are called) and collects one error per function. The parser stops at the first syntax error in a file.
 
-Что сервер **не** делает: не показывает типы выражений, не умеет рефакторинг, кроме переименования, и не выводит типы в сложных дженерик-выражениях (там подсказок просто не будет).
+What the server does **not** do: it does not show the types of expressions, cannot refactor except for renaming, and does not infer types in complex generic expressions (there are simply no hints there).
 
-### VS Code и code-oss
+### VS Code and code-oss
 
-В репозитории лежит расширение `editors/vscode`. Оно запускает `vibe lsp` и добавляет подсветку синтаксиса, сниппеты, кнопки запуска и тестов, команду «Vibe: Restart Language Server».
+The repository contains the extension `editors/vscode`. It starts `vibe lsp` and adds syntax highlighting, snippets, run and test buttons, and the command "Vibe: Restart Language Server".
 
 ```sh
 cd editors/vscode
 npm install
 python3 pack.py vibe-lang.vsix
-code-oss --install-extension vibe-lang.vsix      # или: code --install-extension vibe-lang.vsix
+code-oss --install-extension vibe-lang.vsix      # or: code --install-extension vibe-lang.vsix
 ```
 
-После установки перезагрузите окно (`Ctrl+Shift+P` → «Developer: Reload Window») и откройте любой `.vibe`-файл. Настройки:
+After installing, reload the window (`Ctrl+Shift+P` → "Developer: Reload Window") and open any `.vibe` file. Settings:
 
-| Настройка | Значение |
+| Setting | Value |
 |---|---|
-| `vibe.path` | путь к `vibe`; по умолчанию ищется в `PATH`, затем в `~/.local/bin` |
-| `vibe.trace.server` | `off`, `messages` или `verbose`: журнал обмена с сервером на вкладке вывода |
+| `vibe.path` | the path to `vibe`; by default it is searched in `PATH`, then in `~/.local/bin` |
+| `vibe.trace.server` | `off`, `messages` or `verbose`: a log of the exchange with the server in the output tab |
 
-Горячие клавиши: `Ctrl+Alt+R` — запустить файл, `Ctrl+Alt+T` — запустить тесты. Над `main` и над каждым `test` появляются ссылки «Run». Форматирование при сохранении включено для `.vibe` по умолчанию.
+Hotkeys: `Ctrl+Alt+R` runs the file, `Ctrl+Alt+T` runs the tests. "Run" links appear above `main` and above every `test`. Formatting on save is on by default for `.vibe`.
 
-### Другие редакторы
+### Other editors
 
-Любой клиент LSP подойдёт: команда запуска `vibe lsp`, транспорт stdio, расширение файлов `.vibe`. Ниже типичные настройки; я не проверял их в каждом редакторе, поэтому считайте их отправной точкой.
+Any LSP client will do: the start command is `vibe lsp`, the transport is stdio, the file extension is `.vibe`. Below are typical settings; I have not checked them in every editor, so treat them as a starting point.
 
 ```text
 -- Neovim (0.11+)
@@ -261,21 +261,21 @@ indent = { tab-width = 4, unit = "    " }
 (add-to-list 'eglot-server-programs '(prog-mode . ("vibe" "lsp")))
 ```
 
-Подсветка для Zed, Sublime и других редакторов может использовать грамматику TextMate из `editors/vscode/syntaxes/vibe.tmLanguage.json`.
+Highlighting for Zed, Sublime and other editors can use the TextMate grammar from `editors/vscode/syntaxes/vibe.tmLanguage.json`.
 
-## Отладка
+## Debugging
 
-- **`println`** — основной инструмент. Вывод идёт сразу, `eprintln` пишет в stderr.
-- **`panic("сообщение {x}")`** печатает сообщение с файлом и строкой и завершает программу с кодом 1.
-- **`assert(условие)`** паникует с файлом и строкой, если условие ложно.
-- **`vibe ir`** позволяет увидеть, как компилятор понял программу, и найти, например, лишние копии агрегатов.
-- **gdb**: собственный бэкенд кладёт в файл таблицу строк DWARF. Работают `break файл.vibe:12`, `next`, `step`, `bt` с номерами строк; в трассировке функции выглядят как `vb[fib]`, `vb[main]`. Имён локальных переменных и типов в отладочной информации нет, а сборки через `--llvm` и `--release` не содержат ничего, кроме символов функций.
-- **`vibe tokens`** помогает, когда подозреваете проблему лексера: незакрытая кавычка, фигурная скобка внутри строки и т. п.
+- **`println`** is the main tool. Output goes out at once, and `eprintln` writes to stderr.
+- **`panic("message {x}")`** prints the message with a file and line and ends the program with code 1.
+- **`assert(condition)`** panics with a file and line if the condition is false.
+- **`vibe ir`** lets you see how the compiler understood the program and find, for example, extra copies of aggregates.
+- **gdb**: the own backend puts a DWARF line table into the file. `break file.vibe:12`, `next`, `step` and `bt` with line numbers work; in a backtrace the functions look like `vb[fib]`, `vb[main]`. There are no local variable names or types in the debug information, and builds through `--llvm` and `--release` contain nothing but function symbols.
+- **`vibe tokens`** helps when you suspect a lexer problem: an unclosed quote, a curly brace inside a string and the like.
 
-## Кэш и временные файлы
+## Cache and temporary files
 
-Весь мусор сборки лежит в `.vibe-cache/` в текущем каталоге: объектные файлы, `.ll` (для LLVM-режима), объекты внешних C/C++ файлов и исполняемый файл `vibe run`. Каталог безопасно удалять целиком. Тесты (`vibe test`) создают там `имя.test` и `test.out`.
+All the build debris lives in `.vibe-cache/` in the current directory: object files, `.ll` (for the LLVM mode), objects of external C/C++ files and the executable of `vibe run`. The directory is safe to delete entirely. Tests (`vibe test`) create `name.test` and `test.out` there.
 
-## Переменные окружения и версия
+## Environment variables and version
 
-У компилятора нет переменных окружения для настройки. Он вызывает `clang` (и `clang++`, если среди дополнительных файлов есть C++) из `PATH`.
+The compiler has no environment variables for configuration. It calls `clang` (and `clang++` if there is C++ among the extra files) from `PATH`.

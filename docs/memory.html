@@ -1,87 +1,87 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Память и аллокаторы · Vibe</title>
-<meta name="description" content="Стек и куча, явный Allocator, c_allocator, FixedBuf, Arena, create/destroy, свой аллокатор и типичные ошибки работы с памятью в Vibe">
+<title>Memory and allocators · Vibe</title>
+<meta name="description" content="The stack and the heap, the explicit Allocator, c_allocator, FixedBuf, Arena, create/destroy, your own allocator and the typical memory mistakes in Vibe">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/memory.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html" class="current">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html" class="current">Memory and allocators</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
-<h1>Память и аллокаторы</h1>
-<p>Главное правило языка: <strong>ничто не выделяет память само.</strong> Ни строки, ни интерполяция, ни замыкания, ни <code>println</code>. Куча появляется только там, где вы явно передали <strong>аллокатор</strong>. Поэтому, читая код, вы всегда видите, кто, где и сколько берёт.</p>
-<h2 id="стек-и-куча"><a class="anchor" href="#стек-и-куча">#</a>Стек и куча</h2>
-<p>Обычные переменные, массивы и структуры живут на <strong>стеке</strong> функции и исчезают при выходе из неё. Для данных, которые нужно сохранить дольше или размер которых неизвестен заранее, нужна <strong>куча</strong>, а к ней доступ через аллокатор.</p>
+<h1>Memory and allocators</h1>
+<p>The main rule of the language: <strong>nothing allocates memory by itself.</strong> Not strings, not interpolation, not closures, not <code>println</code>. The heap appears only where you explicitly passed an <strong>allocator</strong>. So when you read code you always see who takes how much and where.</p>
+<h2 id="the-stack-and-the-heap"><a class="anchor" href="#the-stack-and-the-heap">#</a>The stack and the heap</h2>
+<p>Ordinary variables, arrays and structs live on the <strong>stack</strong> of a function and disappear when it exits. For data that must outlive that, or whose size is not known in advance, you need the <strong>heap</strong>, and it is reached through an allocator.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] local;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    local[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(local, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">sizeof</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">256</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[1, 0, 0, 0] 256</code></pre></div></div>
-<p>Массив фиксированного размера на стеке — самый дешёвый способ получить память. Но размер должен быть известен при компиляции, а вернуть такой массив срезом из функции нельзя: после возврата стек освободится.</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[1, 0, 0, 0] 256</code></pre></div></div>
+<p>A fixed-size array on the stack is the cheapest way to get memory. But the size must be known at compile time, and you cannot return such an array as a slice from a function: the stack is freed after the return.</p>
 <h2 id="allocator"><a class="anchor" href="#allocator">#</a>Allocator</h2>
-<p><code>Allocator</code> — маленькая структура из трёх полей: контекст и две функции.</p>
+<p><code>Allocator</code> is a small struct of three fields: a context and two functions.</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ctx;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    fn</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> alloc_fn;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    fn</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">void*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) free_fn;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Любой аллокатор — это такие три значения. Готовые аллокаторы из стандартной библиотеки:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Any allocator is such a triple of values. The ready-made allocators of the standard library:</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Аллокатор</th>
-<th>Откуда берёт память</th>
-<th>Освобождение</th>
+<th>Allocator</th>
+<th>Where the memory comes from</th>
+<th>Freeing</th>
 </tr>
 </thead><tbody><tr>
 <td><code>c_allocator()</code></td>
-<td><code>calloc</code> / <code>free</code> из libc</td>
-<td>каждый кусок отдельно</td>
+<td><code>calloc</code> / <code>free</code> from libc</td>
+<td>each piece separately</td>
 </tr>
 <tr>
 <td><code>FixedBuf::init(buf)</code></td>
-<td>ваш готовый буфер, кучи нет</td>
-<td><code>reset()</code> для всего сразу</td>
+<td>your ready buffer, no heap</td>
+<td><code>reset()</code> for everything at once</td>
 </tr>
 <tr>
 <td><code>Arena::init(parent)</code></td>
-<td>кусками у родительского аллокатора</td>
-<td><code>deinit()</code> для всего сразу</td>
+<td>in chunks from a parent allocator</td>
+<td><code>deinit()</code> for everything at once</td>
 </tr>
 </tbody></table></div>
-<p>И методы любого аллокатора <code>a</code>:</p>
+<p>And the methods of any allocator <code>a</code>:</p>
 <div class="table-wrap"><table><thead><tr>
-<th>Метод</th>
-<th>Что делает</th>
+<th>Method</th>
+<th>What it does</th>
 </tr>
 </thead><tbody><tr>
 <td><code>!T[] a.alloc&lt;T&gt;(n)</code></td>
-<td><code>n</code> элементов, заполненных <strong>нулями</strong></td>
+<td><code>n</code> elements filled with <strong>zeros</strong></td>
 </tr>
 <tr>
 <td><code>a.free(slice)</code></td>
-<td>освобождает срез, полученный из <code>alloc</code></td>
+<td>frees a slice obtained from <code>alloc</code></td>
 </tr>
 <tr>
 <td><code>!T* a.create&lt;T&gt;()</code></td>
-<td>один <code>T</code> в куче, нули</td>
+<td>one <code>T</code> on the heap, zeroed</td>
 </tr>
 <tr>
 <td><code>a.destroy(p)</code></td>
-<td>освобождает <code>create</code></td>
+<td>frees a <code>create</code></td>
 </tr>
 <tr>
 <td><code>!str a.dup(s)</code></td>
-<td>копия строки</td>
+<td>a copy of a string</td>
 </tr>
 <tr>
 <td><code>!u8* a.dupz(s)</code></td>
-<td>копия с нулевым байтом в конце, для C</td>
+<td>a copy with a zero byte at the end, for C</td>
 </tr>
 </tbody></table></div>
-<p>Каждая операция выделения возвращает <code>!...</code>: когда память кончилась, вы получаете обычную ошибку <code>error.OutOfMemory</code>, а не падение.</p>
-<h3 id="alloc-и-free"><a class="anchor" href="#alloc-и-free">#</a><code>alloc</code> и <code>free</code></h3>
+<p>Every allocation operation returns <code>!...</code>: when memory runs out, you get an ordinary <code>error.OutOfMemory</code>, not a crash.</p>
+<h3 id="alloc-and-free"><a class="anchor" href="#alloc-and-free">#</a><code>alloc</code> and <code>free</code></h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
@@ -90,13 +90,13 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    xs[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    xs[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 40</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(xs);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[0, 0, 0, 0] 4
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[0, 0, 0, 0] 4
 [10, 0, 0, 40]</code></pre></div></div>
-<p>Память нулевая: можно читать без инициализации. Размер среза можно узнать как <code>xs.len</code>.</p>
-<blockquote class="callout tip"><p><strong>Совет.</strong> Сразу после получения памяти пишите <code>defer a.free(...)</code>. Тогда она освободится на любом выходе из функции, даже по ошибке.</p>
+<p>The memory is zeroed, so you can read it without initializing it. The size of the slice is <code>xs.len</code>.</p>
+<blockquote class="callout tip"><p><strong>Tip:</strong> write <code>defer a.free(...)</code> right after obtaining memory. Then it is released on any exit from the function, even on an error.</p>
 </blockquote>
-<h3 id="create-и-destroy"><a class="anchor" href="#create-и-destroy">#</a><code>create</code> и <code>destroy</code></h3>
-<p>Для одного объекта, например узла списка:</p>
+<h3 id="create-and-destroy"><a class="anchor" href="#create-and-destroy">#</a><code>create</code> and <code>destroy</code></h3>
+<p>For a single object, such as a list node:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Node</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> val;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    Node</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> next;</span></span>
@@ -112,7 +112,7 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    n1.next </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n2;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    n2.val </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n1.val, n1.next.val, n2.next </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">==</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> null</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1 2 true</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1 2 true</code></pre></div></div>
 <h3 id="dup"><a class="anchor" href="#dup">#</a><code>dup</code></h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -121,9 +121,9 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">free</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    src[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 72</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy, src[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>hi! Hi!</code></pre></div></div>
-<h2 id="ошибка-нехватки-памяти"><a class="anchor" href="#ошибка-нехватки-памяти">#</a>Ошибка нехватки памяти</h2>
-<p>В Vibe нехватка памяти — не катастрофа, а значение, которое обрабатывается. Это особенно важно для <code>FixedBuf</code>, у которого память ограничена:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>hi! Hi!</code></pre></div></div>
+<h2 id="the-out-of-memory-error"><a class="anchor" href="#the-out-of-memory-error">#</a>The out-of-memory error</h2>
+<p>In Vibe, running out of memory is not a catastrophe but a value that gets handled. This matters most for <code>FixedBuf</code>, whose memory is limited:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] mem;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> fb </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> FixedBuf</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(mem[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
@@ -132,15 +132,15 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> first </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">40</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(first.len, fb.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">remaining</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> second </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">40</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> |</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">e</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">|</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"не хватило: {e}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"not enough: {e}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    };</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(second.len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>64
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>64
 40 24
-не хватило: error.OutOfMemory</code></pre></div></div>
-<h2 id="fixedbuf-без-кучи-вообще"><a class="anchor" href="#fixedbuf-без-кучи-вообще">#</a><code>FixedBuf</code>: без кучи вообще</h2>
-<p><code>FixedBuf</code> раздаёт память из вашего массива «по возрастающей». Отдельные куски освобождать не нужно: <code>free</code> возвращает память, только если это самое последнее выделение, иначе ничего не делает. Весь буфер возвращается одним вызовом <code>reset()</code>. Аллокатор хранит указатель на <code>fb</code>, поэтому переменная <code>fb</code> должна жить, пока вы пользуетесь аллокатором.</p>
+not enough: error.OutOfMemory</code></pre></div></div>
+<h2 id="fixedbuf-no-heap-at-all"><a class="anchor" href="#fixedbuf-no-heap-at-all">#</a><code>FixedBuf</code>: no heap at all</h2>
+<p><code>FixedBuf</code> hands out memory from your array in ascending order. Individual pieces need not be freed: <code>free</code> returns memory only if it was the very last allocation, otherwise it does nothing. The whole buffer is returned with one call to <code>reset()</code>. The allocator keeps a pointer to <code>fb</code>, so the variable <code>fb</code> must live as long as you use the allocator.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">256</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] mem;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> fb </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> FixedBuf</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(mem[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
@@ -152,13 +152,13 @@
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    fb.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">reset</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(fb.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">remaining</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[0, 1, 4, 9, 16] 192
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[0, 1, 4, 9, 16] 192
 256</code></pre></div></div>
-<p>Применения: встроенные системы, обработка запроса «в рамках бюджета», функции, которые не должны трогать кучу. Весь код на <code>FixedBuf</code> работает без единого <code>malloc</code>.</p>
-<blockquote class="callout gotcha"><p><strong>Ловушка.</strong> После <code>fb.reset()</code> все ранее выданные куски недействительны (на них нет защиты). Не используйте старые срезы и контейнеры после сброса: <code>list</code> выше нужно заново инициализировать.</p>
+<p>Uses: embedded systems, handling a request &quot;within a budget&quot;, functions that must not touch the heap. All code on <code>FixedBuf</code> works without a single <code>malloc</code>.</p>
+<blockquote class="callout gotcha"><p><strong>Gotcha:</strong> after <code>fb.reset()</code> all pieces handed out earlier are invalid (nothing protects them). Do not use old slices and containers after a reset: the <code>list</code> above would have to be initialized again.</p>
 </blockquote>
-<h2 id="arena-выделять-много-освободить-разом"><a class="anchor" href="#arena-выделять-много-освободить-разом">#</a><code>Arena</code>: выделять много, освободить разом</h2>
-<p><code>Arena</code> берёт крупные куски у родительского аллокатора и раздаёт из них маленькие. Куски берутся порциями от 64 КБ. Отдельные <code>free</code> ничего не делают, а <code>deinit()</code> освобождает <strong>всё</strong> сразу. Идеальна для данных с общим временем жизни: разбор файла, обработка одного запроса, построение дерева.</p>
+<h2 id="arena-allocate-a-lot-free-at-once"><a class="anchor" href="#arena-allocate-a-lot-free-at-once">#</a><code>Arena</code>: allocate a lot, free at once</h2>
+<p><code>Arena</code> takes large chunks from a parent allocator and hands small pieces out of them. The chunks are taken in portions of 64 KB. Individual <code>free</code>s do nothing, and <code>deinit()</code> frees <strong>everything</strong> at once. It is ideal for data with a common lifetime: parsing a file, handling one request, building a tree.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Arena</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
@@ -174,11 +174,11 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) {</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">        _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"тысяча массивов выделена и ни одного free"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[&quot;alpha&quot;, &quot;beta&quot;]
-тысяча массивов выделена и ни одного free</code></pre></div></div>
-<p>Не нужно вызывать <code>list.deinit()</code> или <code>a.free(w1)</code>: всё уйдёт вместе с <code>arena.deinit()</code>. Именно так устроен сам компилятор Vibe: одна арена на запуск.</p>
-<p>Типичный шаблон: аллокатор передаётся параметром.</p>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a thousand arrays allocated and not a single free"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[&quot;alpha&quot;, &quot;beta&quot;]
+a thousand arrays allocated and not a single free</code></pre></div></div>
+<p>There is no need to call <code>list.deinit()</code> or <code>a.free(w1)</code>: everything goes away with <code>arena.deinit()</code>. This is exactly how the Vibe compiler itself works: one arena per run.</p>
+<p>A typical pattern: the allocator is passed as a parameter.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Config</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    List</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> values;</span></span>
@@ -195,10 +195,10 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> cfg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> load</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(arena.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">())</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(cfg.name, cfg.values.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>config [10, 20, 30]</code></pre></div></div>
-<p>Функция <code>load</code> не знает, какой аллокатор ей дали. Вызывающий решает: арена, <code>FixedBuf</code> или <code>c_allocator</code>.</p>
-<h2 id="свой-аллокатор"><a class="anchor" href="#свой-аллокатор">#</a>Свой аллокатор</h2>
-<p>Достаточно заполнить три поля. Например, счётчик, который считает выделения и передаёт работу родителю:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>config [10, 20, 30]</code></pre></div></div>
+<p>The function <code>load</code> does not know which allocator it was given. The caller decides: an arena, a <code>FixedBuf</code> or <code>c_allocator</code>.</p>
+<h2 id="your-own-allocator"><a class="anchor" href="#your-own-allocator">#</a>Your own allocator</h2>
+<p>It is enough to fill in three fields. For example, a counter that counts allocations and hands the work to a parent:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Counting</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> count;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> bytes;</span></span>
@@ -225,16 +225,16 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> list.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">20</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { list.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(i)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(list.len, stats.count, stats.bytes);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>20 3 448</code></pre></div></div>
-<p><code>alloc_fn(ctx, size, align)</code> обязана вернуть <strong>нулевую</strong> память или <code>null</code>, когда не хватило. <code>free_fn(ctx, ptr, size)</code> получает указатель и тот же размер.</p>
-<p>20 элементов потребовали три выделения (8, 16 и 32 элемента по 8 байт: 64 + 128 + 256 = 448 байт): список удваивает ёмкость.</p>
-<h2 id="стековые-данные-и-указатели"><a class="anchor" href="#стековые-данные-и-указатели">#</a>Стековые данные и указатели</h2>
-<p>Указатель на локальную переменную нельзя возвращать:</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>20 3 448</code></pre></div></div>
+<p><code>alloc_fn(ctx, size, align)</code> must return <strong>zeroed</strong> memory, or <code>null</code> when there is not enough. <code>free_fn(ctx, ptr, size)</code> receives the pointer and the same size.</p>
+<p>20 elements took three allocations (8, 16 and 32 elements of 8 bytes: 64 + 128 + 256 = 448 bytes): the list doubles its capacity.</p>
+<h2 id="stack-data-and-pointers"><a class="anchor" href="#stack-data-and-pointers">#</a>Stack data and pointers</h2>
+<p>A pointer to a local variable must not be returned:</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64* </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">bad</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">x;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Такой код компилируется, но после выхода из <code>bad</code> стек перезаписывается, и указатель «висит». Компилятор такое <strong>не проверяет</strong>. То же с срезом локального массива и с замыканием (см. <a href="functions.html#замыкания">замыкания</a>).</p>
-<p>Правило: данные, переживающие функцию, должны лежать в памяти, которой владеет вызывающий (параметр-срез, указатель, аллокатор).</p>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><p>Such code compiles, but after <code>bad</code> exits the stack is overwritten, and the pointer &quot;dangles&quot;. The compiler does <strong>not</strong> check this. The same goes for a slice of a local array and for a closure (see <a href="functions.html#closures">closures</a>).</p>
+<p>The rule: data that outlives a function must live in memory owned by the caller (a slice parameter, a pointer, an allocator).</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fill</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[] out) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">out.len) { out[i] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i; }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
@@ -243,54 +243,54 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] buf;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    fill</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(buf[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(buf);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>[0, 1, 4, 9, 16]</code></pre></div></div>
-<h2 id="чего-не-проверяет-компилятор"><a class="anchor" href="#чего-не-проверяет-компилятор">#</a>Чего не проверяет компилятор</h2>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>[0, 1, 4, 9, 16]</code></pre></div></div>
+<h2 id="what-the-compiler-does-not-check"><a class="anchor" href="#what-the-compiler-does-not-check">#</a>What the compiler does not check</h2>
 <div class="table-wrap"><table><thead><tr>
-<th>Проблема</th>
-<th>Что будет</th>
+<th>Problem</th>
+<th>What happens</th>
 </tr>
 </thead><tbody><tr>
-<td>Использование после <code>free</code></td>
-<td>неопределённое поведение</td>
+<td>Use after <code>free</code></td>
+<td>undefined behavior</td>
 </tr>
 <tr>
-<td>Двойной <code>free</code></td>
-<td>неопределённое поведение</td>
+<td>Double <code>free</code></td>
+<td>undefined behavior</td>
 </tr>
 <tr>
-<td>Утечка (забыли <code>free</code>/<code>deinit</code>)</td>
-<td>молча; память освободится при выходе процесса</td>
+<td>A leak (forgot <code>free</code>/<code>deinit</code>)</td>
+<td>silent; the memory is released when the process exits</td>
 </tr>
 <tr>
-<td>Выход за границы среза или массива</td>
-<td><strong>проверяется</strong>: паника с файлом и строкой</td>
+<td>Going out of bounds of a slice or array</td>
+<td><strong>checked</strong>: a panic with file and line</td>
 </tr>
 <tr>
-<td>Выход за границы через указатель</td>
-<td>не проверяется</td>
+<td>Going out of bounds through a pointer</td>
+<td>not checked</td>
 </tr>
 <tr>
-<td>Деление на ноль</td>
-<td>аварийное завершение</td>
+<td>Division by zero</td>
+<td>an abnormal exit</td>
 </tr>
 </tbody></table></div>
-<p>Дисциплина проста: пишите <code>defer</code> сразу после выделения, передавайте аллокатор вниз, и заводите арену, если не хотите считать отдельные <code>free</code>.</p>
-<h2 id="выбор-аллокатора"><a class="anchor" href="#выбор-аллокатора">#</a>Выбор аллокатора</h2>
+<p>The discipline is simple: write <code>defer</code> right after allocating, pass the allocator down, and create an arena if you do not want to count individual <code>free</code>s.</p>
+<h2 id="choosing-an-allocator"><a class="anchor" href="#choosing-an-allocator">#</a>Choosing an allocator</h2>
 <ul>
-<li>Простая программа, которой нужен один-два объекта → <code>c_allocator()</code> и <code>defer</code>.</li>
-<li>Много мелких выделений с общим временем жизни → <code>Arena</code>.</li>
-<li>Нельзя трогать кучу или память ограничена → <code>FixedBuf</code>.</li>
-<li>Нужна статистика, отладка, особые правила → свой <code>Allocator</code>.</li>
+<li>A simple program that needs one or two objects → <code>c_allocator()</code> and <code>defer</code>.</li>
+<li>Many small allocations with a common lifetime → <code>Arena</code>.</li>
+<li>The heap must not be touched, or memory is limited → <code>FixedBuf</code>.</li>
+<li>You need statistics, debugging or special rules → your own <code>Allocator</code>.</li>
 </ul>
-<h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
+<h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>
 <ul>
-<li>Контейнеры, которые принимают аллокатор: <a href="collections.html">коллекции</a>.</li>
-<li>Как работает <code>defer</code>: <a href="control-flow.html#defer-и-errdefer">управление потоком</a>.</li>
-<li>Обработка <code>OutOfMemory</code>: <a href="errors-and-optionals.html">ошибки и опциональные значения</a>.</li>
+<li>Containers that take an allocator: <a href="collections.html">collections</a>.</li>
+<li>How <code>defer</code> works: <a href="control-flow.html#defer-and-errdefer">control flow</a>.</li>
+<li>Handling <code>OutOfMemory</code>: <a href="errors-and-optionals.html">errors and optional values</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="modules.html"><small>Назад</small>Модули и импорт</a><a class="next" href="collections.html"><small>Дальше</small>Коллекции: List, Map, Option</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#стек-и-куча">Стек и куча</a><a class="l2" href="#allocator">Allocator</a><a class="l3" href="#alloc-и-free">alloc и free</a><a class="l3" href="#create-и-destroy">create и destroy</a><a class="l3" href="#dup">dup</a><a class="l2" href="#ошибка-нехватки-памяти">Ошибка нехватки памяти</a><a class="l2" href="#fixedbuf-без-кучи-вообще">FixedBuf: без кучи вообще</a><a class="l2" href="#arena-выделять-много-освободить-разом">Arena: выделять много, освободить разом</a><a class="l2" href="#свой-аллокатор">Свой аллокатор</a><a class="l2" href="#стековые-данные-и-указатели">Стековые данные и указатели</a><a class="l2" href="#чего-не-проверяет-компилятор">Чего не проверяет компилятор</a><a class="l2" href="#выбор-аллокатора">Выбор аллокатора</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+<div class="pager"><a class="prev" href="modules.html"><small>Previous</small>Modules and imports</a><a class="next" href="collections.html"><small>Next</small>Collections: List, Map, Option</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#the-stack-and-the-heap">The stack and the heap</a><a class="l2" href="#allocator">Allocator</a><a class="l3" href="#alloc-and-free">alloc and free</a><a class="l3" href="#create-and-destroy">create and destroy</a><a class="l3" href="#dup">dup</a><a class="l2" href="#the-out-of-memory-error">The out-of-memory error</a><a class="l2" href="#fixedbuf-no-heap-at-all">FixedBuf: no heap at all</a><a class="l2" href="#arena-allocate-a-lot-free-at-once">Arena: allocate a lot, free at once</a><a class="l2" href="#your-own-allocator">Your own allocator</a><a class="l2" href="#stack-data-and-pointers">Stack data and pointers</a><a class="l2" href="#what-the-compiler-does-not-check">What the compiler does not check</a><a class="l2" href="#choosing-an-allocator">Choosing an allocator</a><a class="l2" href="#what-next">What next</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>
