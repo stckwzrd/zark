@@ -107,7 +107,8 @@ Migration notes (S2/S3a): the compiler (11.8k lines), std, examples and tests we
 - [x] `--freestanding`, linker script and `.S` passthrough, `export` replaces an `extern` of the same name
 - [x] `examples/baremetal`: boots in QEMU, serial through `Fmt`, IDT and an exception handled in Vibe; tested on both backends
 - [x] `align(N)` on global variables, 8/16-bit atomics
-- [ ] `align(N)` on struct types and locals, an `interrupt` function attribute, bitfields, aarch64/riscv targets
+- [x] `align(N)` on struct types and locals
+- [ ] an `interrupt` function attribute, bitfields, aarch64/riscv targets
 
 ### Phase O: types with behavior
 - [x] default field values, constructors, interfaces with dynamic dispatch, operator methods

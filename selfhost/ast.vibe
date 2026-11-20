@@ -116,6 +116,7 @@ struct StructDecl {
     bool is_union;
     bool packed;
     bool is_iface;
+    i64 align;
 }
 
 struct EnumDecl { str name; List<str> variants; List<i64> variant_offs; i64 line; i64 name_off; }

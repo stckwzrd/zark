@@ -28,6 +28,8 @@ struct StructInst {
     List<FieldInfo> fields;
     str names_global;
     u64 payload_words;
+    bool explicit;
+    List<i64> llidx;
 }
 
 struct EnumInfo { EnumDecl* decl; str names_global; }
@@ -61,6 +63,7 @@ struct Gen {
     bool fastmath;
     bool ovf;
     bool wrapping;
+    bool needs_llvm;
 
     Map<FnDecl*> fns;
     Map<FnDecl*> methods;
@@ -306,8 +309,11 @@ struct Gen {
         auto nb = this->sb();
         sprint(&nb, "@g.{c.name}")?;
         const auto name = nb.slice();
-        if (c.align > 0) {
-            sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}, align {c.align}\n")?;
+        auto want = c.align as u64;
+        const auto gal = this->align_of(ty)?;
+        if (gal > this->ll_align(ty)? || gal > 8) { want = max(want, gal); }
+        if (want > 0) {
+            sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}, align {want}\n")?;
         } else {
             sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}\n")?;
         }
@@ -419,7 +425,13 @@ struct Gen {
         auto b = this->sb();
         sprint(&b, "%v.{hint}.{this->ntmp}")?;
         const auto name = b.slice();
-        sprint(&this->allocas, "  {name} = alloca {this->llty(ty)?}\n")?;
+        const auto al = this->align_of(ty)?;
+        if (al > this->ll_align(ty)? || al > 8) {
+            if (al > 16) { this->needs_llvm = true; }
+            sprint(&this->allocas, "  {name} = alloca {this->llty(ty)?}, align {al}\n")?;
+        } else {
+            sprint(&this->allocas, "  {name} = alloca {this->llty(ty)?}\n")?;
+        }
         return name;
     }
 
@@ -467,21 +479,26 @@ struct Gen {
         sprint(this->ins()?, "  store {this->llty(ty)?} zeroinitializer, ptr {ptr}\n")?;
     }
 
+    i64 fidx(Type* t, i64 idx) {
+        if (t.k == .Strct && !t.si.decl.is_union && t.si.explicit) { return t.si.llidx.get(idx); }
+        return idx;
+    }
+
     !Value extract(Value agg, i64 idx, Type* ty) {
         const auto t = this->tmp()?;
-        sprint(this->ins()?, "  {t} = extractvalue {this->llty(agg.ty)?} {agg.v}, {idx}\n")?;
+        sprint(this->ins()?, "  {t} = extractvalue {this->llty(agg.ty)?} {agg.v}, {this->fidx(agg.ty, idx)}\n")?;
         return Value{ .ty = ty, .v = t };
     }
 
     !str insert(Type* agg_ty, str agg, Value v, i64 idx) {
         const auto t = this->tmp()?;
-        sprint(this->ins()?, "  {t} = insertvalue {this->llty(agg_ty)?} {agg}, {this->llty(v.ty)?} {v.v}, {idx}\n")?;
+        sprint(this->ins()?, "  {t} = insertvalue {this->llty(agg_ty)?} {agg}, {this->llty(v.ty)?} {v.v}, {this->fidx(agg_ty, idx)}\n")?;
         return t;
     }
 
     !str gep_field(Type* agg_ty, str ptr, i64 idx) {
         const auto t = this->tmp()?;
-        sprint(this->ins()?, "  {t} = getelementptr {this->llty(agg_ty)?}, ptr {ptr}, i32 0, i32 {idx}\n")?;
+        sprint(this->ins()?, "  {t} = getelementptr {this->llty(agg_ty)?}, ptr {ptr}, i32 0, i32 {this->fidx(agg_ty, idx)}\n")?;
         return t;
     }
 
