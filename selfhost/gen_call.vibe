@@ -321,6 +321,8 @@ bool Gen::names_type(Expr* e) {
     const auto fi = this->inst_fn(decl, env, targs)?;
 
     auto argtxt = this->sb();
+    auto cmodes = List<i64>::init(this->a);
+    if (decl.is_extern && !decl.variadic) { cmodes = this->c_modes(fi.params, fi.ret)?; }
     if (recv != null) {
         const auto pt = fi.params.get(0);
         if (pt.k == .Ptr) {
@@ -341,7 +343,40 @@ bool Gen::names_type(Expr* e) {
         auto v = vals.get(i);
         if (pi < fi.params.len) { v = this->coerce(v, fi.params.get(pi), x.line)?; } else { v = this->c_promote(v, x.line)?; }
         if (argtxt.len > 0) { argtxt.append(", ")?; }
-        sprint(&argtxt, "{this->llty(v.ty)?} {v.v}")?;
+        if (decl.is_extern && pi < cmodes.len && cmodes.get(pi) != 0) {
+            argtxt.append(this->c_arg(v, cmodes.get(pi))?)?;
+        } else {
+            sprint(&argtxt, "{this->llty(v.ty)?} {v.v}")?;
+        }
+    }
+    if (decl.is_extern && !decl.variadic && is_c_agg(fi.ret)) {
+        // a struct coming back from C: in registers, or through a hidden pointer
+        const auto c = this->classify_c(fi.ret)?;
+        if (c.memory) {
+            const auto slot = this->alloca(fi.ret, "csret")?;
+            auto full = this->sb();
+            sprint(&full, "ptr sret({this->llty(fi.ret)?}) align {max(this->align_of(fi.ret)?, 8 as u64)} {slot}")?;
+            if (argtxt.len > 0) { sprint(&full, ", {argtxt.slice()}")?; }
+            sprint(this->ins()?, "  call void @{fi.llname}({full.slice()})\n")?;
+            return this->load(fi.ret, slot);
+        }
+        const auto rt = this->c_ret_ty(fi.ret)?;
+        const auto r = this->tmp()?;
+        sprint(this->ins()?, "  {r} = call ccc {rt} @{fi.llname}({argtxt.slice()})\n")?;
+        const auto buf = this->c_buf()?;
+        if (c.words == 1) {
+            sprint(this->ins()?, "  store {rt} {r}, ptr {buf}\n")?;
+        } else {
+            for (auto w : 0..2) {
+                auto cls = c.c0;
+                if (w == 1) { cls = c.c1; }
+                const auto part = this->tmp()?;
+                sprint(this->ins()?, "  {part} = extractvalue {rt} {r}, {w}\n")?;
+                const auto dst = this->c_half(buf, w)?;
+                sprint(this->ins()?, "  store {cword_ty(cls)} {part}, ptr {dst}\n")?;
+            }
+        }
+        return this->load(fi.ret, buf);
     }
 
     auto fnty = this->llty(fi.ret)?;
@@ -400,4 +435,195 @@ bool Gen::names_type(Expr* e) {
     f.off = e.off;
     f.name_off = e.off;
     return f;
+}
+
+// ------------------------------------------------------------------ C ABI (System V x86-64) for extern functions
+// A struct passed to or returned from C is split like clang does it: up to 16 bytes travel in
+// one or two registers (each eightbyte is INTEGER, or SSE when it holds only floats), larger
+// ones are copied onto the stack (byval) or returned through a hidden pointer (sret).
+
+struct CClass {
+    bool memory;
+    i64 words;
+    i64 c0;        // 0 = unused, 1 = INTEGER, 2 = SSE
+    i64 c1;
+}
+
+bool is_c_agg(Type* t) { return t.k == .Strct || t.k == .Slice || t.k == .Closure || t.k == .Errun; }
+
+void cword(CClass* c, u64 off, u64 size, i64 cls) {
+    if (size == 0) { return; }
+    const auto w0 = off / 8;
+    const auto w1 = (off + size - 1) / 8;
+    if (w0 != w1 || w1 > 1) {
+        c.memory = true;
+        return;
+    }
+    if (w0 == 0) {
+        if (cls == 1 || c.c0 == 0) { c.c0 = cls; }
+    } else {
+        if (cls == 1 || c.c1 == 0) { c.c1 = cls; }
+    }
+}
+
+!void Gen::cmark(Type* t, u64 off, CClass* c) {
+    match t.k {
+        .Strct => {
+            if (t.si.decl.is_union) {
+                const auto n = this->size_of(t)?;
+                auto o = 0 as u64;
+                while (o < n) {
+                    cword(c, off + o, min(8 as u64, n - o), 1);
+                    o += 8;
+                }
+                return;
+            }
+            u64 o = 0;
+            for (auto f : t.si.fields) {
+                if (!t.si.decl.packed) {
+                    const auto al = this->align_of(f.ty)?;
+                    o = (o + al - 1) / al * al;
+                }
+                this->cmark(f.ty, off + o, c)?;
+                o += this->size_of(f.ty)?;
+            }
+        }
+        .Array => {
+            const auto es = this->size_of(t.elem)?;
+            for (auto i : 0..t.len as i64) { this->cmark(t.elem, off + (i as u64) * es, c)?; }
+        }
+        .Slice, .Closure => {
+            cword(c, off, 8, 1);
+            cword(c, off + 8, 8, 1);
+        }
+        .Errun => {
+            const auto n = this->size_of(t)?;
+            auto o = 0 as u64;
+            while (o < n) {
+                cword(c, off + o, min(8 as u64, n - o), 1);
+                o += 8;
+            }
+        }
+        .Float => cword(c, off, this->size_of(t)?, 2);
+        .Void => {}
+        _ => cword(c, off, this->size_of(t)?, 1);
+    }
+}
+
+!CClass Gen::classify_c(Type* t) {
+    auto c = CClass{};
+    const auto size = this->size_of(t)?;
+    if (size > 16) {
+        c.memory = true;
+        return c;
+    }
+    this->cmark(t, 0, &c)?;
+    c.words = ((size + 7) / 8) as i64;
+    if (c.words == 0) { c.memory = true; }
+    return c;
+}
+
+str cword_ty(i64 cls) {
+    if (cls == 2) { return "double"; }
+    return "i64";
+}
+
+/// how each parameter of a C function travels: 0 = as itself, 1 = split into registers,
+/// 2 = in memory (byval). A struct that does not fit into the registers that are left goes
+/// to memory as a whole, as the ABI says, so the registers are counted here like clang does.
+!List<i64> Gen::c_modes(List<Type*> params, Type* ret) {
+    auto modes = List<i64>::init(this->a);
+    auto ints = 6;
+    auto sses = 8;
+    if (is_c_agg(ret) && this->classify_c(ret)?.memory) { ints -= 1; }
+    for (auto p : params) {
+        if (!is_c_agg(p)) {
+            if (p.k == .Float) { if (sses > 0) { sses -= 1; } } else if (ints > 0) { ints -= 1; }
+            modes.push(0)?;
+            continue;
+        }
+        const auto c = this->classify_c(p)?;
+        if (c.memory) {
+            modes.push(2)?;
+            continue;
+        }
+        auto ni = 0;
+        auto ns = 0;
+        if (c.c0 == 2) { ns += 1; } else { ni += 1; }
+        if (c.words == 2) { if (c.c1 == 2) { ns += 1; } else { ni += 1; } }
+        if (ni <= ints && ns <= sses) {
+            ints -= ni;
+            sses -= ns;
+            modes.push(1)?;
+        } else {
+            modes.push(2)?;
+        }
+    }
+    return modes;
+}
+
+/// the parameter types a C function sees for one Vibe parameter
+!str Gen::c_param_ty(Type* t, i64 mode) {
+    if (mode == 0) { return this->llty(t); }
+    const auto c = this->classify_c(t)?;
+    auto b = this->sb();
+    if (mode == 2) {
+        sprint(&b, "ptr byval({this->llty(t)?}) align {max(this->align_of(t)?, 8 as u64)}")?;
+    } else if (c.words == 1) {
+        b.append(cword_ty(c.c0))?;
+    } else {
+        sprint(&b, "{cword_ty(c.c0)}, {cword_ty(c.c1)}")?;
+    }
+    return b.slice();
+}
+
+/// the return type a C function declares for a Vibe result ("void" when it goes through sret)
+!str Gen::c_ret_ty(Type* t) {
+    if (!is_c_agg(t)) { return this->llty(t); }
+    const auto c = this->classify_c(t)?;
+    if (c.memory) { return "void"; }
+    if (c.words == 1) { return cword_ty(c.c0); }
+    auto b = this->sb();
+    sprint(&b, "{{ {cword_ty(c.c0)}, {cword_ty(c.c1)} }")?;
+    return b.slice();
+}
+
+/// a 16-byte, zeroed scratch buffer
+!str Gen::c_buf() {
+    const auto t2 = this->mk_elem(.Array, this->t_i64)?;
+    t2.len = 2;
+    const auto buf = this->alloca(t2, "cabi")?;
+    sprint(this->ins()?, "  store [2 x i64] zeroinitializer, ptr {buf}\n")?;
+    return buf;
+}
+
+!str Gen::c_half(str buf, i64 w) {
+    if (w == 0) { return buf; }
+    const auto p = this->tmp()?;
+    sprint(this->ins()?, "  {p} = getelementptr i8, ptr {buf}, i64 8\n")?;
+    return p;
+}
+
+/// the argument text for passing the value `v` of a struct type to C
+!str Gen::c_arg(Value v, i64 mode) {
+    const auto c = this->classify_c(v.ty)?;
+    auto b = this->sb();
+    if (mode == 2) {
+        const auto slot = this->alloca(v.ty, "cbyval")?;
+        this->store(v, slot)?;
+        sprint(&b, "ptr byval({this->llty(v.ty)?}) align {max(this->align_of(v.ty)?, 8 as u64)} {slot}")?;
+        return b.slice();
+    }
+    const auto buf = this->c_buf()?;
+    this->store(v, buf)?;
+    for (auto w : 0..c.words) {
+        auto cls = c.c0;
+        if (w == 1) { cls = c.c1; }
+        auto ty = this->t_i64;
+        if (cls == 2) { ty = this->t_f64; }
+        const auto part = this->load(ty, this->c_half(buf, w)?)?;
+        if (w > 0) { b.append(", ")?; }
+        sprint(&b, "{cword_ty(cls)} {part.v}")?;
+    }
+    return b.slice();
 }

@@ -210,5 +210,6 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [x] **v0.5: own x86-64 backend + ELF writer** (default); the native-built compiler reaches its own fixed point. Next steps: [ROADMAP.md](ROADMAP.md)
 - [x] **v0.4: self-hosted.** The compiler is written in Vibe and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
 - [ ] `comptime` blocks, `inline for`
-- [ ] `@cImport` via libclang; passing structs by value across the C ABI
+- [x] passing structs by value across the C ABI (`extern`)
+- [ ] `@cImport` via libclang
 - [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `vibe test`, `vibe fmt`

@@ -612,10 +612,21 @@ struct Gen {
         this->fn_insts.put(key, fi)?;
         if (decl.is_extern) {
             auto txt = this->sb();
-            sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+            auto sret = false;
+            if (!decl.variadic && is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
+            if (decl.variadic) {
+                sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+            } else {
+                sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
+            }
+            if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; }
+            auto cm = List<i64>::init(this->a);
+            if (!decl.variadic) { cm = this->c_modes(params, ret)?; }
             for (auto [i, p] : params) {
-                if (i > 0) { txt.append(", ")?; }
-                txt.append(this->llty(p)?)?;
+                if (i > 0 || sret) { txt.append(", ")?; }
+                auto mode = 0;
+                if (i < cm.len) { mode = cm.get(i); }
+                txt.append(this->c_param_ty(p, mode)?)?;
             }
             if (decl.variadic) {
                 if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
