@@ -8,6 +8,8 @@ struct Resolver {
     str prefix;
     Map<bool> names;
     List<str> locals;
+    str from;          // alias mode: names written "from.x" become "to.x"
+    str to;
 
     !str qual(str name) {
         auto b = List<u8>::init(this->a);
@@ -21,6 +23,16 @@ struct Resolver {
     }
 
     !str rename(str name) {
+        if (this->from.len > 0) {
+            if (name.len > this->from.len && name[this->from.len] == '.' && str_starts_with(name, this->from)) {
+                const auto rest = name[this->from.len + 1..];
+                if (this->to.len == 0) { return rest; }
+                auto b = List<u8>::init(this->a);
+                sprint(&b, "{this->to}.{rest}")?;
+                return b.slice();
+            }
+            return name;
+        }
         if (this->names.has(name) && !this->is_local(name)) { return this->qual(name); }
         return name;
     }
@@ -150,6 +162,13 @@ struct Resolver {
     }
 }
 
+/// in `decls`, references written through the import name `from` (from::x) are rewritten to
+/// the name `to` the module was first imported under ("" = the global namespace)
+!void alias_module(Allocator a, List<Decl> decls, str from, str to) {
+    auto r = Resolver{ .a = a, .prefix = "", .names = Map<bool>::init(a), .locals = List<str>::init(a), .from = from, .to = to };
+    r.walk(decls)?;
+}
+
 !void resolve_module(Allocator a, List<Decl> decls, str prefix) {
     auto r = Resolver{ .a = a, .prefix = prefix, .names = Map<bool>::init(a), .locals = List<str>::init(a) };
     for (auto d : decls) {
@@ -164,6 +183,11 @@ struct Resolver {
             .Alias => r.names.put(d.path, true)?;
         }
     }
+    r.walk(decls)?;
+}
+
+!void Resolver::walk(List<Decl> decls) {
+    const auto r = this;
     for (auto i : 0..decls.len) {
         const auto d = &decls.items[i];
         match d.k {

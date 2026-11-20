@@ -338,10 +338,6 @@ If a key is built in a temporary buffer, use `a.dup(key)`.
 
 A file imported without `as` puts all its names into the common namespace, and they are visible from all the files of the program.
 
-### One file, one name
-
-You cannot attach `util.vibe` as `a` and as `b` in one program.
-
 ### Unreachable code is not checked
 
 Functions that cannot be reached from `main` are not compiled: an error in them goes unnoticed until they are called.

@@ -1,1 +1,278 @@
-// std/net.vibe
+// TCP networking.
+//   import "std/net" as net;
+//   auto l = net::listen("127.0.0.1", 8080)?;      // port 0 picks a free one: l.port()
+//   auto c = l.accept()?;
+//   defer c.close();
+//   auto r = net::Reader::init(&c, buf[..]);
+//   const auto line = r.read_line()?;
+//   c.print("you said: {line}\n")?;
+// Hosts are names or addresses (IPv4 or IPv6); names are resolved with the system resolver.
+
+struct AddrInfo { i32 flags; i32 family; i32 socktype; i32 protocol; u32 addrlen; i32 pad; u8* addr; u8* canonname; AddrInfo* next; }
+
+extern i32 getaddrinfo(u8* node, u8* service, AddrInfo* hints, AddrInfo** res);
+extern void freeaddrinfo(AddrInfo* res);
+extern u8* gai_strerror(i32 code);
+extern i32 socket(i32 domain, i32 kind, i32 protocol);
+extern i32 connect(i32 fd, u8* addr, u32 len);
+extern i32 bind(i32 fd, u8* addr, u32 len);
+extern i32 accept(i32 fd, u8* addr, u32* len);
+extern i32 setsockopt(i32 fd, i32 level, i32 name, void* value, u32 len);
+extern i32 getsockname(i32 fd, u8* addr, u32* len);
+extern i32 getpeername(i32 fd, u8* addr, u32* len);
+extern i32 shutdown(i32 fd, i32 how);
+extern i32 close(i32 fd);
+extern i64 send(i32 fd, void* buf, u64 n, i32 flags);
+extern i64 recv(i32 fd, void* buf, u64 n, i32 flags);
+extern u8* inet_ntop(i32 family, void* src, u8* dst, u32 n);
+
+const auto MSG_NOSIGNAL = 0x4000;
+
+struct Timeval { i64 sec; i64 usec; }
+
+/// resolves `host:port` and calls `each` until it returns a socket (>= 0)
+!i32 resolve_and(str host, i64 port, bool passive, fn(AddrInfo*) -> i32 each) {
+    u8[256] hb;
+    u8[16] pb;
+    u8* node = null;
+    if (host.len > 0) { node = to_cstr(hb[..], host)?; }
+    const auto service = to_cstr(pb[..], bprint(pb[..], "{port}")?)?;
+    auto hints = AddrInfo{ .socktype = 1 };
+    if (passive) { hints.flags = 1; }
+    AddrInfo* res = null;
+    const auto rc = getaddrinfo(node, service, &hints, &res);
+    if (rc != 0) { return error.HostNotFound; }
+    defer freeaddrinfo(res);
+    auto p = res;
+    while (p != null) {
+        const auto fd = each(p);
+        if (fd >= 0) { return fd; }
+        p = p.next;
+    }
+    errno_error()?;
+    return error.ConnectionFailed;
+}
+
+i32 try_connect(AddrInfo* ai) {
+    const auto fd = socket(ai.family, 1 | 0o2000000, ai.protocol);
+    if (fd < 0) { return -1; }
+    if (connect(fd, ai.addr, ai.addrlen) != 0) {
+        _ = close(fd);
+        return -1;
+    }
+    i32 one = 1;
+    _ = setsockopt(fd, 6, 1, &one as *void, 4);   // TCP_NODELAY
+    return fd;
+}
+
+i32 try_bind(AddrInfo* ai) {
+    const auto fd = socket(ai.family, 1 | 0o2000000, ai.protocol);
+    if (fd < 0) { return -1; }
+    i32 one = 1;
+    _ = setsockopt(fd, 1, 2, &one as *void, 4);   // SO_REUSEADDR
+    if (bind(fd, ai.addr, ai.addrlen) != 0 || Sys::raw(50, fd as i64, 128, 0, 0, 0, 0) != 0) {
+        _ = close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+/// a connected TCP stream
+struct Conn {
+    i32 fd;
+
+    /// reads what is available (at least one byte); 0 means the peer closed the connection
+    !i64 read(u8[] buf) {
+        while (true) {
+            const auto n = recv(this->fd, buf.ptr, buf.len as u64, 0);
+            if (n >= 0) { return n; }
+            if (*__errno_location() == 4) { continue; }
+            if (*__errno_location() == 11) { return error.TimedOut; }
+            errno_error()?;
+        }
+        return 0;
+    }
+
+    !void write_all(str data) {
+        auto off = 0;
+        while (off < data.len) {
+            const auto n = send(this->fd, data.ptr + off, (data.len - off) as u64, MSG_NOSIGNAL);
+            if (n < 0) {
+                if (*__errno_location() == 4) { continue; }
+                errno_error()?;
+            }
+            off += n;
+        }
+    }
+
+    /// formatted text straight to the socket (no allocation)
+    !void print(Fmt f) {
+        auto w = this->writer();
+        return w.put(f);
+    }
+
+    Writer writer() { return Writer{ .ctx = this as *void, .write_fn = conn_write }; }
+
+    /// gives up waiting for reads and writes after `ms` milliseconds (0 = wait forever)
+    !void set_timeout(i64 ms) {
+        auto tv = Timeval{ .sec = ms / 1000, .usec = (ms % 1000) * 1000 };
+        if (setsockopt(this->fd, 1, 20, &tv as *void, 16) != 0) { errno_error()?; }
+        if (setsockopt(this->fd, 1, 21, &tv as *void, 16) != 0) { errno_error()?; }
+    }
+
+    /// no more writes from this side; the peer reads end of stream
+    void close_write() { _ = shutdown(this->fd, 1); }
+
+    void close() {
+        if (this->fd >= 0) { _ = close(this->fd); }
+        this->fd = -1;
+    }
+
+    /// "address:port" of the other side
+    !str peer(u8[] buf) {
+        u8[128] sa;
+        u32 len = 128;
+        if (getpeername(this->fd, &sa[0], &len) != 0) { errno_error()?; }
+        return format_addr(buf, sa[..]);
+    }
+}
+
+!void conn_write(void* ctx, str s) {
+    const auto c = ctx as *Conn;
+    return c.write_all(s);
+}
+
+!str format_addr(u8[] buf, u8[] sa) {
+    u8[64] ip;
+    const auto family = (sa[0] as u16) | ((sa[1] as u16) << 8);
+    const auto port = ((sa[2] as u64) << 8) | (sa[3] as u64);
+    if (family == 10) {
+        if (inet_ntop(10, &sa[8] as *void, &ip[0], 64) == null) { return error.InvalidAddress; }
+        return bprint(buf, "[{cstr(&ip[0])}]:{port}");
+    }
+    if (inet_ntop(2, &sa[4] as *void, &ip[0], 64) == null) { return error.InvalidAddress; }
+    return bprint(buf, "{cstr(&ip[0])}:{port}");
+}
+
+/// opens a TCP connection
+!Conn connect_to(str host, i64 port) {
+    const auto fd = resolve_and(host, port, false, try_connect) catch |e| {
+        if (e == error.HostNotFound) { return e; }
+        return error.ConnectionRefused;
+    };
+    return Conn{ .fd = fd };
+}
+
+/// a listening TCP socket
+struct Listener {
+    i32 fd;
+
+    /// waits for the next connection
+    !Conn accept() {
+        while (true) {
+            const auto fd = accept(this->fd, null, null);
+            if (fd >= 0) { return Conn{ .fd = fd }; }
+            const auto e = *__errno_location();
+            if (e == 4 || e == 103) { continue; }
+            if (e == 22 || e == 9) { return error.Closed; }
+            errno_error()?;
+        }
+        return error.Closed;
+    }
+
+    /// the port it listens on (useful after listening on port 0)
+    i64 port() {
+        u8[128] sa;
+        u32 len = 128;
+        if (getsockname(this->fd, &sa[0], &len) != 0) { return 0; }
+        return (((sa[2] as u64) << 8) | (sa[3] as u64)) as i64;
+    }
+
+    /// stops listening; a thread blocked in accept() gets error.Closed
+    void close() {
+        if (this->fd >= 0) {
+            _ = shutdown(this->fd, 2);
+            _ = close(this->fd);
+        }
+        this->fd = -1;
+    }
+}
+
+/// listens on host:port ("" or "0.0.0.0" for every interface, port 0 for any free port)
+!Listener listen(str host, i64 port) {
+    const auto fd = resolve_and(host, port, true, try_bind) catch |e| {
+        if (e == error.HostNotFound) { return e; }
+        return error.AddressInUse;
+    };
+    return Listener{ .fd = fd };
+}
+
+/// Buffered reading from a connection: lines, exact byte counts, everything.
+struct Reader {
+    Conn* c;
+    u8[] buf;
+    i64 start;
+    i64 end;
+
+    static Reader init(Conn* c, u8[] buf) { return Reader{ .c = c, .buf = buf }; }
+
+    !bool fill() {
+        if (this->start > 0) {
+            const auto n = this->end - this->start;
+            if (n > 0) { memmove(this->buf.ptr, this->buf.ptr + this->start, n as u64); }
+            this->start = 0;
+            this->end = n;
+        }
+        if (this->end == this->buf.len) { return error.LineTooLong; }
+        const auto got = this->c.read(this->buf[this->end..])?;
+        this->end += got;
+        return got > 0;
+    }
+
+    /// the next line without "\n" or "\r\n"; valid until the next read; error.EndOfStream at the end
+    !str read_line() {
+        while (true) {
+            const auto i = str_find_byte(this->buf[this->start..this->end], '\n');
+            if (i >= 0) {
+                auto line = this->buf[this->start..this->start + i];
+                this->start += i + 1;
+                if (line.len > 0 && line[line.len - 1] == '\r') { line = line[0..line.len - 1]; }
+                return line;
+            }
+            if (!this->fill()?) {
+                if (this->end > this->start) {
+                    const auto rest = this->buf[this->start..this->end];
+                    this->start = this->end;
+                    return rest;
+                }
+                return error.EndOfStream;
+            }
+        }
+        return error.EndOfStream;
+    }
+
+    /// exactly n bytes appended to `out`
+    !void read_exact(List<u8>* out, i64 n) {
+        auto left = n;
+        while (left > 0) {
+            if (this->start == this->end && !this->fill()?) { return error.EndOfStream; }
+            const auto k = min(left, this->end - this->start);
+            out.append(this->buf[this->start..this->start + k])?;
+            this->start += k;
+            left -= k;
+        }
+    }
+
+    /// everything until the peer closes, appended to `out`
+    !void read_all(List<u8>* out) {
+        out.append(this->buf[this->start..this->end])?;
+        this->start = 0;
+        this->end = 0;
+        u8[16384] chunk;
+        while (true) {
+            const auto n = this->c.read(chunk[..])?;
+            if (n == 0) { return; }
+            out.append(chunk[0..n])?;
+        }
+    }
+}

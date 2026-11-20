@@ -60,21 +60,34 @@ struct Loader {
         auto p = new_parser(this->a, toks.slice(), path);
         const auto decls = p.parse_file()?;
         const auto dir = dir_of(path);
+        auto renames = List<str>::init(this->a);
         for (auto d : decls) {
-            if (d.k == .Import) { this->load_file(import_target(this->a, dir, d.path)?, d.alias)? };
+            if (d.k == .Import) {
+                const auto actual = this->load_file(import_target(this->a, dir, d.path)?, d.alias)?;
+                if (d.alias.len > 0 && actual != d.alias) {
+                    renames.push(d.alias)?;
+                    renames.push(actual)?;
+                }
+            }
         }
         if (prefix.len > 0) { resolve_module(this->a, decls, prefix)?; }
+        auto k = 0;
+        while (k < renames.len) {
+            alias_module(this->a, decls, renames.get(k), renames.get(k + 1))?;
+            k += 2;
+        }
         this->g.add_decls(decls, path)?;
     }
 
-    !void load_file(str path, str prefix) {
+    /// loads a file once; returns the name its declarations live under (the first import's)
+    !str load_file(str path, str prefix) {
         if (this->seen.has(path)) {
             const auto old = this->seen.get(path)?;
-            if (old != prefix) {
-                eprintln("error: '{path}' is imported both as '{old}' and as '{prefix}'; use the same name everywhere");
+            if (old != prefix && prefix.len == 0) {
+                eprintln("error: '{path}' is imported as '{old}' elsewhere, so a plain import cannot see its names; write `import \"...\" as {old};`");
                 return error.CompileFailed;
             }
-            return;
+            return old;
         }
         if (prefix.len > 0 && this->prefixes.has(prefix)) {
             eprintln("error: the name '{prefix}' is already used for '{this->prefixes.get(prefix)?}'; pick another name for '{path}'");
@@ -84,7 +97,7 @@ struct Loader {
         if (prefix.len > 0) { this->prefixes.put(prefix, path)?; }
         if (this->overrides.has(path)) {
             this->load_source(this->overrides.get(path)?, path, prefix)?;
-            return;
+            return prefix;
         }
         if (is_std_path(path)) {
             const auto ssrc = std_source(path) catch {
@@ -94,13 +107,14 @@ struct Loader {
             if (diag_files.a.alloc_fn == null) { diag_files = Map<str>::init(c_allocator()); }
             diag_files.put(path, ssrc)?;
             this->load_source(ssrc, path, prefix)?;
-            return;
+            return prefix;
         }
         const auto src = read_file(this->a, path) catch |e| {
             eprintln("error: cannot read '{path}': {e}");
             return error.CompileFailed;
         };
         this->load_source(src, path, prefix)?;
+        return prefix;
     }
 }
 

@@ -1,1 +1,636 @@
-// std/http.vibe
+// HTTP/1.1: a client (http:// and https://) and a small threaded server.
+//   import "std/http" as http;
+//   auto r = http::get(a, "https://example.com/")?;
+//   defer r.deinit();
+//   println(r.status, r.header("content-type"), r.body.len);
+//
+//   auto srv = http::Server::bind("127.0.0.1", 8080)?;
+//   srv.serve(a, 8, [](http::ServerRequest* req, http::ServerResponse* res) -> void {
+//       if (req.path == "/hello") { res.text("hi\n") catch {}; return; }
+//       res.status = 404;
+//       res.text("not found\n") catch {};
+//   })?;
+// HTTPS uses the system's OpenSSL (libssl.so.3), loaded when first needed; certificates are
+// verified against the system store unless the request says otherwise.
+
+import "std/net" as net;
+import "std/thread" as thread;
+
+struct Header { str name; str value; }
+
+/// header lookup, case-insensitive; "" when missing
+str find_header(Header[] hs, str name) {
+    for (auto h : hs) { if (str_eq_ignore_case(h.name, name)) { return h.value; } }
+    return "";
+}
+
+// ---------------------------------------------------------------- URLs
+
+struct Url {
+    str scheme;     // "http" or "https"
+    str host;
+    i64 port;
+    str target;     // path and query, at least "/"
+}
+
+!Url parse_url(str url) {
+    auto u = Url{};
+    auto rest = url;
+    if (str_starts_with(rest, "http://")) {
+        u.scheme = "http";
+        u.port = 80;
+        rest = rest[7..];
+    } else if (str_starts_with(rest, "https://")) {
+        u.scheme = "https";
+        u.port = 443;
+        rest = rest[8..];
+    } else {
+        return error.UnsupportedScheme;
+    }
+    auto slash = str_find_byte(rest, '/');
+    auto q = str_find_byte(rest, '?');
+    if (q >= 0 && (slash < 0 || q < slash)) { slash = q; }
+    auto authority = rest;
+    u.target = "/";
+    if (slash >= 0) {
+        authority = rest[0..slash];
+        u.target = rest[slash..];
+        if (u.target[0] == '?') { return error.InvalidUrl; }
+    }
+    const auto at = str_rfind_byte(authority, '@');
+    if (at >= 0) { authority = authority[at + 1..]; }
+    if (authority.len > 0 && authority[0] == '[') {
+        const auto close = str_find_byte(authority, ']');
+        if (close < 0) { return error.InvalidUrl; }
+        u.host = authority[1..close];
+        if (close + 1 < authority.len) {
+            if (authority[close + 1] != ':') { return error.InvalidUrl; }
+            u.port = parse_int(authority[close + 2..]) catch { return error.InvalidUrl; };
+        }
+    } else {
+        const auto colon = str_rfind_byte(authority, ':');
+        u.host = authority;
+        if (colon >= 0) {
+            u.host = authority[0..colon];
+            u.port = parse_int(authority[colon + 1..]) catch { return error.InvalidUrl; };
+        }
+    }
+    if (u.host.len == 0 || u.port <= 0 || u.port > 65535) { return error.InvalidUrl; }
+    return u;
+}
+
+/// percent-decoding ("+" becomes a space, as in form data)
+!str url_decode(Allocator a, str s) {
+    auto out = List<u8>::init(a);
+    errdefer out.deinit();
+    auto i = 0;
+    while (i < s.len) {
+        const auto c = s[i];
+        if (c == '%' && i + 2 < s.len + 0 && is_hex(s[i + 1]) && is_hex(s[i + 2])) {
+            out.push((parse_int_radix(s[i + 1..i + 3], 16) catch 0) as u8)?;
+            i += 3;
+        } else if (c == '+') {
+            out.push(' ')?;
+            i += 1;
+        } else {
+            out.push(c)?;
+            i += 1;
+        }
+    }
+    return out.take();
+}
+
+/// percent-encoding of everything except letters, digits and -_.~
+!str url_encode(Allocator a, str s) {
+    auto out = List<u8>::init(a);
+    errdefer out.deinit();
+    for (auto c : s) {
+        if (is_alnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out.push(c)?;
+        } else {
+            u8[4] b;
+            out.append(bprint(b[..], "%{c as u32:02X}")?)?;
+        }
+    }
+    return out.take();
+}
+
+// ---------------------------------------------------------------- TLS through libssl, loaded at run time
+
+extern void* dlopen(u8* file, i32 flags);
+extern void* dlsym(void* h, u8* name);
+
+struct SslApi {
+    fn() -> void* client_method;
+    fn(void*) -> void* ctx_new;
+    fn(void*) -> i32 ctx_default_paths;
+    fn(void*, u8*, u8*) -> i32 ctx_load_verify;
+    fn(void*, i32, void*) ctx_set_verify;
+    fn(void*) -> void* ssl_new;
+    fn(void*, i32) -> i32 set_fd;
+    fn(void*, i32, i64, void*) -> i64 ctrl;
+    fn(void*, u8*) -> i32 set1_host;
+    fn(void*) -> i32 connect;
+    fn(void*, void*, i32) -> i32 read;
+    fn(void*, void*, i32) -> i32 write;
+    fn(void*) -> i32 shutdown;
+    fn(void*) free;
+    fn(void*, i32) -> i32 get_error;
+    fn(void*) -> i64 verify_result;
+}
+
+SslApi ssl_api = SslApi{};
+bool ssl_loaded = false;
+thread::Mutex ssl_lock = thread::Mutex{};
+
+!SslApi* load_ssl() {
+    ssl_lock.lock();
+    defer ssl_lock.unlock();
+    if (ssl_loaded) { return &ssl_api; }
+    auto h = dlopen("libssl.so.3", 2);
+    if (h == null) { h = dlopen("libssl.so", 2); }
+    if (h == null) { return error.TlsUnavailable; }
+    const auto names = ["TLS_client_method", "SSL_CTX_new", "SSL_CTX_set_default_verify_paths", "SSL_CTX_load_verify_locations",
+                        "SSL_CTX_set_verify", "SSL_new", "SSL_set_fd", "SSL_ctrl", "SSL_set1_host", "SSL_connect", "SSL_read",
+                        "SSL_write", "SSL_shutdown", "SSL_free", "SSL_get_error", "SSL_get_verify_result"];
+    const auto slots = &ssl_api as **void;
+    for (auto [i, n] : names) {
+        u8[64] nb;
+        const auto p = dlsym(h, to_cstr(nb[..], n)?);
+        if (p == null) { return error.TlsUnavailable; }
+        slots[i] = p;
+    }
+    ssl_loaded = true;
+    return &ssl_api;
+}
+
+/// a connection that is plain TCP or TLS on top of it
+struct Stream {
+    net::Conn c;
+    void* ssl;
+    void* ctx;
+
+    !i64 read(u8[] buf) {
+        if (this->ssl == null) { return this->c.read(buf); }
+        const auto api = &ssl_api;
+        const auto n = api.read(this->ssl, buf.ptr as *void, min(buf.len, 1 << 30) as i32);
+        if (n > 0) { return n as i64; }
+        const auto e = api.get_error(this->ssl, n);
+        if (e == 6 || e == 5 && n == 0) { return 0; }   // closed (SSL_ERROR_ZERO_RETURN / EOF)
+        return error.TlsError;
+    }
+
+    !void write_all(str data) {
+        if (this->ssl == null) { return this->c.write_all(data); }
+        const auto api = &ssl_api;
+        auto off = 0;
+        while (off < data.len) {
+            const auto n = api.write(this->ssl, (data.ptr + off) as *void, min(data.len - off, 1 << 30) as i32);
+            if (n <= 0) { return error.TlsError; }
+            off += n as i64;
+        }
+    }
+
+    void close() {
+        if (this->ssl != null) {
+            _ = ssl_api.shutdown(this->ssl);
+            ssl_api.free(this->ssl);
+            this->ssl = null;
+        }
+        this->c.close();
+    }
+}
+
+!void stream_write(void* ctx, str s) {
+    const auto st = ctx as *Stream;
+    return st.write_all(s);
+}
+
+!Stream open_stream(Url u, Request* r) {
+    auto c = net::connect_to(u.host, u.port)?;
+    errdefer c.close();
+    if (r.timeout_ms > 0) { c.set_timeout(r.timeout_ms)?; }
+    auto st = Stream{ .c = c };
+    if (u.scheme != "https") { return st; }
+    const auto api = load_ssl()?;
+    const auto ctx = api.ctx_new(api.client_method());
+    if (ctx == null) { return error.TlsError; }
+    if (r.ca_file.len > 0) {
+        u8[1024] cb;
+        if (api.ctx_load_verify(ctx, to_cstr(cb[..], r.ca_file)?, null) != 1) { return error.TlsError; }
+    } else {
+        _ = api.ctx_default_paths(ctx);
+    }
+    if (!r.insecure) { api.ctx_set_verify(ctx, 1, null); }
+    const auto ssl = api.ssl_new(ctx);
+    if (ssl == null) { return error.TlsError; }
+    st.ssl = ssl;
+    st.ctx = ctx;
+    u8[256] hb;
+    const auto hz = to_cstr(hb[..], u.host)?;
+    _ = api.ctrl(ssl, 55, 0, hz as *void);           // SNI
+    if (!r.insecure) { _ = api.set1_host(ssl, hz); }  // check the name in the certificate
+    _ = api.set_fd(ssl, c.fd);
+    if (api.connect(ssl) != 1) {
+        if (api.verify_result(ssl) != 0) { return error.CertificateInvalid; }
+        return error.TlsError;
+    }
+    return st;
+}
+
+// ---------------------------------------------------------------- reading messages
+
+struct BufReader {
+    Stream* s;
+    u8[] buf;
+    i64 start;
+    i64 end;
+
+    !bool fill() {
+        if (this->start > 0) {
+            const auto n = this->end - this->start;
+            if (n > 0) { memmove(this->buf.ptr, this->buf.ptr + this->start, n as u64); }
+            this->start = 0;
+            this->end = n;
+        }
+        if (this->end == this->buf.len) { return error.HeaderTooLarge; }
+        const auto got = this->s.read(this->buf[this->end..])?;
+        this->end += got;
+        return got > 0;
+    }
+
+    !str line() {
+        while (true) {
+            const auto i = str_find_byte(this->buf[this->start..this->end], '\n');
+            if (i >= 0) {
+                auto l = this->buf[this->start..this->start + i];
+                this->start += i + 1;
+                if (l.len > 0 && l[l.len - 1] == '\r') { l = l[0..l.len - 1]; }
+                return l;
+            }
+            if (!this->fill()?) { return error.EndOfStream; }
+        }
+        return error.EndOfStream;
+    }
+
+    !void exact(List<u8>* out, i64 n) {
+        auto left = n;
+        while (left > 0) {
+            if (this->start == this->end && !this->fill()?) { return error.EndOfStream; }
+            const auto k = min(left, this->end - this->start);
+            out.append(this->buf[this->start..this->start + k])?;
+            this->start += k;
+            left -= k;
+        }
+    }
+
+    !void to_end(List<u8>* out) {
+        while (true) {
+            out.append(this->buf[this->start..this->end])?;
+            this->start = 0;
+            this->end = 0;
+            if (!this->fill()?) { return; }
+        }
+    }
+
+    !void chunked(List<u8>* out) {
+        while (true) {
+            const auto l = this->line()?;
+            auto size_txt = str_trim(l);
+            const auto semi = str_find_byte(size_txt, ';');
+            if (semi >= 0) { size_txt = size_txt[0..semi]; }
+            const auto n = parse_int_radix(size_txt, 16) catch { return error.BadChunk; };
+            if (n == 0) {
+                while (true) {
+                    const auto t = this->line()?;
+                    if (t.len == 0) { return; }
+                }
+            }
+            this->exact(out, n as i64)?;
+            _ = this->line()?;
+        }
+    }
+}
+
+/// reads "Name: value" lines up to the empty line; names and values are copied with `a`
+!void read_headers(BufReader* r, Allocator a, List<Header>* out) {
+    while (true) {
+        const auto l = r.line()?;
+        if (l.len == 0) { return; }
+        const auto colon = str_find_byte(l, ':');
+        if (colon <= 0) { return error.BadHeader; }
+        out.push(Header{ .name = a.dup(str_trim(l[0..colon]))?, .value = a.dup(str_trim(l[colon + 1..]))? })?;
+        if (out.len > 200) { return error.TooManyHeaders; }
+    }
+}
+
+// ---------------------------------------------------------------- client
+
+/// what to send; only `url` is required
+struct Request {
+    str method = "GET";
+    str url;
+    Header[] headers;
+    str body;
+    i64 timeout_ms = 30000;
+    i64 max_redirects = 5;
+    bool insecure;       // https without checking the certificate
+    str ca_file;         // trust these certificates (PEM) instead of the system store
+}
+
+/// the answer; everything is owned and freed by deinit()
+struct Reply {
+    i64 status;
+    str reason;
+    List<Header> headers;
+    str body;
+    Arena mem;
+
+    str header(str name) { return find_header(this->headers.slice(), name); }
+    bool ok() const { return this->status >= 200 && this->status < 300; }
+    void deinit() { this->mem.deinit(); }
+}
+
+!Reply get(Allocator a, str url) { return send(a, Request{ .url = url }); }
+
+!Reply post(Allocator a, str url, str content_type, str body) {
+    Header[1] hs = [Header{ .name = "Content-Type", .value = content_type }];
+    return send(a, Request{ .method = "POST", .url = url, .headers = hs[..], .body = body });
+}
+
+/// sends the request and reads the whole answer; follows redirects for GET and HEAD
+!Reply send(Allocator a, Request r) {
+    auto req = r;
+    auto hops = 0;
+    auto url_mem = Arena::init(a);
+    defer url_mem.deinit();
+    while (true) {
+        auto rep = send_once(a, &req)?;
+        const auto loc = rep.header("location");
+        const auto redirect = (rep.status == 301 || rep.status == 302 || rep.status == 303 || rep.status == 307 || rep.status == 308) && loc.len > 0;
+        if (!redirect || hops >= req.max_redirects || (req.method != "GET" && req.method != "HEAD" && rep.status != 303)) { return rep; }
+        hops += 1;
+        auto next = List<u8>::init(url_mem.allocator());
+        if (str_starts_with(loc, "http://") || str_starts_with(loc, "https://")) {
+            next.append(loc)?;
+        } else {
+            const auto u = parse_url(req.url)?;
+            if (loc.len > 0 && loc[0] == '/') { sprint(&next, "{u.scheme}://{u.host}:{u.port}{loc}")?; }
+            else { sprint(&next, "{u.scheme}://{u.host}:{u.port}/{loc}")?; }
+        }
+        rep.deinit();
+        req.url = next.slice();
+        if (req.method != "HEAD") { req.method = "GET"; }
+        req.body = "";
+    }
+    return error.TooManyRedirects;
+}
+
+!Reply send_once(Allocator a, Request* r) {
+    const auto u = parse_url(r.url)?;
+    auto st = open_stream(u, r)?;
+    defer st.close();
+    auto w = Writer{ .ctx = &st as *void, .write_fn = stream_write };
+    w.put("{r.method} {u.target} HTTP/1.1\r\n")?;
+    if ((u.scheme == "http" && u.port == 80) || (u.scheme == "https" && u.port == 443)) {
+        w.put("Host: {u.host}\r\n")?;
+    } else {
+        w.put("Host: {u.host}:{u.port}\r\n")?;
+    }
+    auto has_ua = false;
+    for (auto h : r.headers) {
+        w.put("{h.name}: {h.value}\r\n")?;
+        if (str_eq_ignore_case(h.name, "user-agent")) { has_ua = true; }
+    }
+    if (!has_ua) { w.write("User-Agent: vibe-http/1\r\n")?; }
+    if (r.body.len > 0 || r.method == "POST" || r.method == "PUT" || r.method == "PATCH") { w.put("Content-Length: {r.body.len}\r\n")?; }
+    w.write("Accept-Encoding: identity\r\nConnection: close\r\n\r\n")?;
+    w.write(r.body)?;
+
+    auto rep = Reply{ .mem = Arena::init(a) };
+    errdefer rep.deinit();
+    const auto ma = rep.mem.allocator();
+    rep.headers = List<Header>::init(ma);
+    const auto buf = ma.alloc<u8>(65536)?;
+    auto rd = BufReader{ .s = &st, .buf = buf };
+    auto status_line = rd.line()?;
+    while (true) {
+        // "HTTP/1.1 200 OK"
+        if (!str_starts_with(status_line, "HTTP/") || status_line.len < 12) { return error.BadResponse; }
+        rep.status = parse_int(status_line[9..12]) catch { return error.BadResponse; };
+        rep.reason = ma.dup(str_trim(status_line[12..]))?;
+        read_headers(&rd, ma, &rep.headers)?;
+        if (rep.status != 100) { break; }
+        rep.headers.clear();
+        status_line = rd.line()?;
+    }
+    auto body = List<u8>::init(ma);
+    const auto te = rep.header("transfer-encoding");
+    const auto cl = rep.header("content-length");
+    if (r.method == "HEAD" || rep.status == 204 || rep.status == 304) {
+    } else if (str_eq_ignore_case(te, "chunked")) {
+        rd.chunked(&body)?;
+    } else if (cl.len > 0) {
+        rd.exact(&body, parse_int(cl) catch { return error.BadResponse; })?;
+    } else {
+        rd.to_end(&body)?;
+    }
+    rep.body = body.slice();
+    return rep;
+}
+
+// ---------------------------------------------------------------- server
+
+/// one request to the server; valid only during the handler call
+struct ServerRequest {
+    str method;
+    str path;            // without the query
+    str query;           // after '?', not decoded
+    List<Header> headers;
+    str body;
+    str peer;            // "address:port" of the client
+    Allocator a;         // freed after the handler returns: use it for anything per request
+
+    str header(str name) { return find_header(this->headers.slice(), name); }
+
+    /// a decoded query parameter, or "" (query=?a=1&b=x%20y)
+    str param(str name) {
+        auto it = str_split(this->query, "&");
+        while (it.next()) {
+            const auto eq = str_find_byte(it.part, '=');
+            auto k = it.part;
+            auto v = "";
+            if (eq >= 0) {
+                k = it.part[0..eq];
+                v = it.part[eq + 1..];
+            }
+            if (k == name) { return url_decode(this->a, v) catch v; }
+        }
+        return "";
+    }
+}
+
+/// the answer to a request; set `status`, add headers, then send once
+struct ServerResponse {
+    i64 status = 200;
+    List<Header> headers;
+    Stream* s;
+    bool sent;
+    bool keep_alive;
+    Allocator a;
+
+    !void header(str name, str value) { this->headers.push(Header{ .name = name, .value = value })?; }
+
+    /// sends the status line, the headers and the body
+    !void send(str content_type, str body) {
+        if (this->sent) { return error.AlreadySent; }
+        this->sent = true;
+        auto w = Writer{ .ctx = this->s as *void, .write_fn = stream_write };
+        w.put("HTTP/1.1 {this->status} {reason_phrase(this->status)}\r\n")?;
+        if (content_type.len > 0) { w.put("Content-Type: {content_type}\r\n")?; }
+        for (auto h : this->headers) { w.put("{h.name}: {h.value}\r\n")?; }
+        w.put("Content-Length: {body.len}\r\n")?;
+        if (this->keep_alive) { w.write("Connection: keep-alive\r\n\r\n")?; } else { w.write("Connection: close\r\n\r\n")?; }
+        return w.write(body);
+    }
+
+    !void text(str body) { return this->send("text/plain; charset=utf-8", body); }
+    !void html(str body) { return this->send("text/html; charset=utf-8", body); }
+    !void json(str body) { return this->send("application/json", body); }
+
+    /// formats the body (no allocation besides the per-request allocator)
+    !void printf(str content_type, Fmt f) {
+        auto b = List<u8>::init(this->a);
+        sprint(&b, f)?;
+        return this->send(content_type, b.slice());
+    }
+}
+
+str reason_phrase(i64 code) {
+    match code {
+        200 => return "OK";
+        201 => return "Created";
+        204 => return "No Content";
+        301 => return "Moved Permanently";
+        302 => return "Found";
+        304 => return "Not Modified";
+        400 => return "Bad Request";
+        401 => return "Unauthorized";
+        403 => return "Forbidden";
+        404 => return "Not Found";
+        405 => return "Method Not Allowed";
+        409 => return "Conflict";
+        413 => return "Payload Too Large";
+        429 => return "Too Many Requests";
+        500 => return "Internal Server Error";
+        501 => return "Not Implemented";
+        503 => return "Service Unavailable";
+    }
+    return "Status";
+}
+
+struct Server {
+    net::Listener l;
+    thread::AtomicI64 stopping;
+    i64 max_body = 16777216;
+    i64 idle_ms = 5000;
+
+    static !Server bind(str host, i64 port) { return Server{ .l = net::listen(host, port)? }; }
+
+    i64 port() { return this->l.port(); }
+
+    /// serves until stop(): `threads` workers (0 = one per CPU) call `handler` for each request;
+    /// the handler runs on several threads at once, so guard shared data with a Mutex
+    !void serve(Allocator a, i64 threads, fn[](ServerRequest*, ServerResponse*) -> void handler) {
+        auto n = threads;
+        if (n <= 0) { n = max(net_cpus(), 1); }
+        n = min(n, 256);
+        thread::Thread[256] ts;
+        const auto self = this;
+        for (auto i : 1..n) {
+            ts[i] = thread::spawn([&self, &a, &handler]() -> void { self.worker(a, handler); })?;
+        }
+        this->worker(a, handler);
+        for (auto i : 1..n) { ts[i].join(); }
+    }
+
+    void worker(Allocator a, fn[](ServerRequest*, ServerResponse*) -> void handler) {
+        while (this->stopping.load() == 0) {
+            auto c = this->l.accept() catch { return; };
+            this->connection(a, c, handler);
+        }
+    }
+
+    void connection(Allocator a, net::Conn c, fn[](ServerRequest*, ServerResponse*) -> void handler) {
+        auto st = Stream{ .c = c };
+        defer st.close();
+        _ = st.c.set_timeout(this->idle_ms) catch 0;
+        auto mem = Arena::init(a);
+        defer mem.deinit();
+        u8[16384] buf;
+        auto rd = BufReader{ .s = &st, .buf = buf[..] };
+        u8[80] pb;
+        const auto peer = st.c.peer(pb[..]) catch "?";
+        while (this->stopping.load() == 0) {
+            const auto ma = mem.allocator();
+            const auto line = rd.line() catch { return; };
+            if (line.len == 0) { continue; }
+            // "GET /path?q HTTP/1.1"
+            const auto sp1 = str_find_byte(line, ' ');
+            const auto sp2 = str_rfind_byte(line, ' ');
+            if (sp1 <= 0 || sp2 <= sp1) { return; }
+            const auto method = ma.dup(line[0..sp1]) catch { return; };
+            auto req = ServerRequest{ .method = method, .peer = peer, .a = ma };
+            const auto target = ma.dup(line[sp1 + 1..sp2]) catch { return; };
+            const auto version = line[sp2 + 1..];
+            const auto q = str_find_byte(target, '?');
+            req.path = target;
+            if (q >= 0) {
+                req.path = target[0..q];
+                req.query = target[q + 1..];
+            }
+            const auto http10 = version == "HTTP/1.0";
+            req.headers = List<Header>::init(ma);
+            read_headers(&rd, ma, &req.headers) catch { return; };
+            auto res = ServerResponse{ .headers = List<Header>::init(ma), .s = &st, .a = ma };
+            const auto conn_h = req.header("connection");
+            res.keep_alive = !http10 && !str_eq_ignore_case(conn_h, "close") || http10 && str_eq_ignore_case(conn_h, "keep-alive");
+            const auto cl = req.header("content-length");
+            if (str_eq_ignore_case(req.header("transfer-encoding"), "chunked")) {
+                auto body = List<u8>::init(ma);
+                rd.chunked(&body) catch { return; };
+                req.body = body.slice();
+            } else if (cl.len > 0) {
+                const auto n = parse_int(cl) catch -1;
+                if (n < 0 || n > this->max_body) {
+                    res.status = 413;
+                    res.keep_alive = false;
+                    res.text("request body too large\n") catch {};
+                    return;
+                }
+                auto body = List<u8>::init(ma);
+                rd.exact(&body, n) catch { return; };
+                req.body = body.slice();
+            }
+            if (str_eq_ignore_case(req.header("expect"), "100-continue")) {}
+            handler(&req, &res);
+            if (!res.sent) {
+                res.status = 500;
+                res.text("the handler sent no response\n") catch { return; };
+            }
+            if (!res.keep_alive) { return; }
+            mem.deinit();
+            mem = Arena::init(a);
+        }
+    }
+
+    /// makes serve() return after the requests in progress
+    void stop() {
+        this->stopping.store(1);
+        this->l.close();
+    }
+}
+
+i64 net_cpus() { return sysconf(84); }
+
+extern i64 sysconf(i32 name);

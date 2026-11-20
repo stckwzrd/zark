@@ -1,1 +1,255 @@
-// std/thread.vibe
+// Threads and synchronization (POSIX threads).
+//   import "std/thread" as thread;
+//   auto total = thread::AtomicI64{};
+//   auto t = thread::spawn([&total]() -> void { total.add(1); })?;
+//   t.join();
+// A closure keeps pointers to the variables it captures, so join every thread before
+// those variables go out of scope. Mutex, Cond, WaitGroup and Channel must not be copied
+// once in use: share them through a pointer.
+
+extern i32 pthread_create(u64* t, void* attr, void* start, void* arg);
+extern i32 pthread_join(u64 t, void** ret);
+extern i32 pthread_detach(u64 t);
+extern u64 pthread_self();
+extern i32 pthread_mutex_lock(Mutex* m);
+extern i32 pthread_mutex_trylock(Mutex* m);
+extern i32 pthread_mutex_unlock(Mutex* m);
+extern i32 pthread_cond_wait(Cond* c, Mutex* m);
+extern i32 pthread_cond_timedwait(Cond* c, Mutex* m, Timespec* abstime);
+extern i32 pthread_cond_signal(Cond* c);
+extern i32 pthread_cond_broadcast(Cond* c);
+extern i32 sched_yield();
+
+struct Thread {
+    u64 id;
+    bool joined;
+
+    /// waits for the thread to finish
+    void join() {
+        if (!this->joined) {
+            _ = pthread_join(this->id, null);
+            this->joined = true;
+        }
+    }
+
+    /// lets the thread run on its own; it cannot be joined afterwards
+    void detach() {
+        _ = pthread_detach(this->id);
+        this->joined = true;
+    }
+}
+
+/// runs the closure on a new thread
+!Thread spawn(fn[]() -> void body) {
+    auto c = body;
+    const auto words = &c as *u64;
+    auto t = Thread{};
+    // a closure is {code, context} and its code takes the context first: exactly a thread entry
+    if (pthread_create(&t.id, null, words[0] as *void, words[1] as *void) != 0) { return error.ThreadFailed; }
+    return t;
+}
+
+/// runs `f(arg)` on a new thread
+!Thread spawn_fn(fn(void*) f, void* arg) {
+    auto fp = f;
+    auto t = Thread{};
+    if (pthread_create(&t.id, null, *(&fp as **void), arg) != 0) { return error.ThreadFailed; }
+    return t;
+}
+
+void yield() { _ = sched_yield(); }
+
+/// an id of the calling thread
+u64 current_id() { return pthread_self(); }
+
+// ---------------------------------------------------------------- locks
+
+/// a mutual-exclusion lock; the zero value is unlocked and ready
+struct Mutex {
+    u64[5] raw;
+
+    void lock() { _ = pthread_mutex_lock(this); }
+    void unlock() { _ = pthread_mutex_unlock(this); }
+    bool try_lock() { return pthread_mutex_trylock(this) == 0; }
+}
+
+/// a condition variable; the zero value is ready
+struct Cond {
+    u64[6] raw;
+
+    /// atomically unlocks `m`, sleeps until signaled, locks `m` again
+    void wait(Mutex* m) { _ = pthread_cond_wait(this, m); }
+
+    /// like wait, but gives up after `ms` milliseconds; false on timeout
+    bool wait_ms(Mutex* m, i64 ms) {
+        auto ts = Timespec{ .sec = 0, .nsec = 0 };
+        _ = clock_gettime(0, &ts);
+        ts.sec += ms / 1000;
+        ts.nsec += (ms % 1000) * 1000000;
+        if (ts.nsec >= 1000000000) {
+            ts.sec += 1;
+            ts.nsec -= 1000000000;
+        }
+        return pthread_cond_timedwait(this, m, &ts) == 0;
+    }
+
+    void signal() { _ = pthread_cond_signal(this); }
+    void broadcast() { _ = pthread_cond_broadcast(this); }
+}
+
+/// an integer shared between threads
+struct AtomicI64 {
+    i64 v;
+
+    /// adds `d` and returns the previous value
+    i64 add(i64 d) { return Atomic::fetch_add64(&this->v as *u64, d as u64) as i64; }
+    i64 load() { return Atomic::fetch_add64(&this->v as *u64, 0) as i64; }
+    void store(i64 x) { _ = Atomic::swap64(&this->v as *u64, x as u64); }
+    /// sets the value to `desired` if it is `expected`; true when it did
+    bool compare_swap(i64 expected, i64 desired) {
+        return Atomic::cas64(&this->v as *u64, expected as u64, desired as u64) == expected as u64;
+    }
+}
+
+/// waits until a number of tasks have finished
+struct WaitGroup {
+    Mutex m;
+    Cond c;
+    i64 n;
+
+    void add(i64 k) {
+        this->m.lock();
+        this->n += k;
+        this->m.unlock();
+    }
+
+    void done() {
+        this->m.lock();
+        this->n -= 1;
+        if (this->n <= 0) { this->c.broadcast(); }
+        this->m.unlock();
+    }
+
+    void wait() {
+        this->m.lock();
+        while (this->n > 0) { this->c.wait(&this->m); }
+        this->m.unlock();
+    }
+}
+
+// ---------------------------------------------------------------- channels
+
+/// A bounded queue between threads. Create it with `Channel<T>::create(a, capacity)` and share
+/// the pointer; `send` blocks while the queue is full, `recv` while it is empty.
+/// After `close()` sends fail and `recv` returns the rest, then error.Closed.
+struct Channel<T> {
+    T[] buf;
+    i64 head;
+    i64 len;
+    bool closed;
+    Mutex m;
+    Cond not_empty;
+    Cond not_full;
+    Allocator a;
+
+    static !Self* create(Allocator a, i64 capacity) {
+        auto ch = a.create<Self>()?;
+        errdefer a.destroy(ch);
+        ch.buf = a.alloc<T>(max(capacity, 1))?;
+        ch.a = a;
+        return ch;
+    }
+
+    /// frees the channel; no thread may use it any more
+    void destroy() {
+        const auto a = this->a;
+        a.free(this->buf);
+        a.destroy(this);
+    }
+
+    !void send(T v) {
+        this->m.lock();
+        while (this->len == this->buf.len && !this->closed) { this->not_full.wait(&this->m); }
+        if (this->closed) {
+            this->m.unlock();
+            return error.Closed;
+        }
+        this->buf[(this->head + this->len) % this->buf.len] = v;
+        this->len += 1;
+        this->not_empty.signal();
+        this->m.unlock();
+    }
+
+    !T recv() {
+        this->m.lock();
+        while (this->len == 0 && !this->closed) { this->not_empty.wait(&this->m); }
+        if (this->len == 0) {
+            this->m.unlock();
+            return error.Closed;
+        }
+        const auto v = this->buf[this->head];
+        this->head = (this->head + 1) % this->buf.len;
+        this->len -= 1;
+        this->not_full.signal();
+        this->m.unlock();
+        return v;
+    }
+
+    /// a value if one is ready, without waiting
+    ?T try_recv() {
+        this->m.lock();
+        if (this->len == 0) {
+            this->m.unlock();
+            return null;
+        }
+        const auto v = this->buf[this->head];
+        this->head = (this->head + 1) % this->buf.len;
+        this->len -= 1;
+        this->not_full.signal();
+        this->m.unlock();
+        return v;
+    }
+
+    void close() {
+        this->m.lock();
+        this->closed = true;
+        this->not_empty.broadcast();
+        this->not_full.broadcast();
+        this->m.unlock();
+    }
+}
+
+// ---------------------------------------------------------------- parallel loops
+
+struct Chunk { fn[](i64) -> void body; i64 lo; i64 hi; }
+
+void chunk_main(void* p) {
+    const auto c = p as *Chunk;
+    for (auto i : c.lo..c.hi) { c.body(i); }
+}
+
+/// calls body(i) for every i in 0..n, spread over `threads` threads (0 = one per CPU);
+/// returns when all calls have finished
+!void parallel_for(i64 n, i64 threads, fn[](i64) -> void body) {
+    auto k = threads;
+    if (k <= 0) { k = max(sysconf(84), 1); }
+    k = min(k, max(n, 1));
+    k = min(k, 64);
+    Chunk[64] chunks;
+    Thread[64] ts;
+    auto started = 0;
+    for (auto t : 0..k) {
+        chunks[t] = Chunk{ .body = body, .lo = n * t / k, .hi = n * (t + 1) / k };
+    }
+    for (auto t : 1..k) {
+        ts[t] = spawn_fn(chunk_main, &chunks[t] as *void) catch |e| {
+            for (auto j : 1..t) { ts[j].join(); }
+            return e;
+        };
+        started = t;
+    }
+    chunk_main(&chunks[0] as *void);
+    for (auto t : 1..started + 1) { ts[t].join(); }
+}
+
+extern i64 sysconf(i32 name);
