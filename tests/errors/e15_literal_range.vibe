@@ -1,0 +1,4 @@
+void main() {
+    const u8 b = 300;
+    println(b);
+}

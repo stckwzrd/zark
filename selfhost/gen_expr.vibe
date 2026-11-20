@@ -70,7 +70,10 @@ bool can_coerce(Type* from, Type* to) {
     match e.k {
         .IntLit => {
             const auto t = num_target(expected);
-            if (t != null && t.k == .Int) { return Value{ .ty = t, .v = this->unum(e.ival)? } };
+            if (t != null && t.k == .Int) {
+                this->check_lit_range(e.ival, false, t, e.line)?;
+                return Value{ .ty = t, .v = this->unum(e.ival)? };
+            }
             if (t != null && t.k == .Float) { return Value{ .ty = t, .v = this->float_const(e.ival as f64, t.bits)? } };
             return Value{ .ty = this->t_i64, .v = this->unum(e.ival)? };
         }
@@ -165,7 +168,10 @@ bool can_coerce(Type* from, Type* to) {
             const auto target = this->resolve_type_at(e.ty, e.line)?;
             Type* exp = null;
             if (is_literal(e.l)) { exp = target; }
-            const auto v = this->gen_expr(e.l, exp)?;
+            const auto saved_cast = this->in_cast;
+            this->in_cast = true;
+            const auto v = this->gen_expr(e.l, exp) catch |err| { this->in_cast = saved_cast; return err; };
+            this->in_cast = saved_cast;
             return this->cast(v, target, e.line);
         }
         .Try => {
@@ -223,6 +229,28 @@ bool can_coerce(Type* from, Type* to) {
     return error.CompileFailed;
 }
 
+// an integer literal must fit its target type: `const u8 b = 300;` is a compile error
+!void Gen::check_lit_range(u64 v, bool neg, Type* t, i64 line) {
+    if (this->in_cast || (t.bits >= 64 && !neg)) { return; }
+    auto ok = true;
+    if (neg) {
+        if (!t.signed) { ok = v == 0; }
+        else if (t.bits < 64) { ok = v <= ((1 as u64) << ((t.bits - 1) as u64)); }
+        else { ok = v <= 0x8000000000000000; }
+    } else if (t.signed) {
+        ok = v < ((1 as u64) << ((t.bits - 1) as u64));
+    } else {
+        ok = v < ((1 as u64) << (t.bits as u64));
+    }
+    if (!ok) {
+        this->err(line);
+        auto sign = "";
+        if (neg) { sign = "-"; }
+        eprintln("integer literal {sign}{v} does not fit in '{this->type_name(t)?}'; use a wider type or an explicit 'as'");
+        return error.CompileFailed;
+    }
+}
+
 !str Gen::unum(u64 n) {
     auto b = this->sb();
     sprint(&b, "{n}")?;
@@ -235,6 +263,12 @@ bool can_coerce(Type* from, Type* to) {
             if (e.l.k == .IntLit) {
                 const auto lt = num_target(expected);
                 if (lt != null && lt.k == .Float) { return Value{ .ty = lt, .v = this->float_const(0.0 - (e.l.ival as f64), lt.bits)? } };
+                if (lt != null && lt.k == .Int) {
+                    this->check_lit_range(e.l.ival, true, lt, e.line)?;
+                    const auto nt = this->tmp()?;
+                    sprint(this->ins()?, "  {nt} = sub {this->llty(lt)?} 0, {this->unum(e.l.ival)?}\n")?;
+                    return Value{ .ty = lt, .v = nt };
+                }
             }
             const auto v = this->gen_expr(e.l, expected)?;
             if (v.ty.k == .Strct && !is_union(v.ty)) {

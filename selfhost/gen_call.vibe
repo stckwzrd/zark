@@ -94,6 +94,10 @@ bool Gen::names_type(Expr* e) {
         if (this->is_builtin(name) && !this->fns.has(name)) { return this->gen_builtin(name, e.args, e.line); }
         if (this->fns.has(name)) { return this->call_decl(this->fns.get(name)?, this->new_env()?, null, e.args, this->no_types(), expected, e.line); }
         if (this->structs.has(name) && !this->consts.has(name)) { return this->gen_construct(e); }
+        if (!this->consts.has(name)) {
+            const auto mf = this->member_method(callee)?;
+            if (mf != null) { return this->gen_field_call(mf, e.args, this->no_types(), expected, e.line); }
+        }
         if (!this->consts.has(name)) { this->err(e.line); eprintln("unknown function '{name}'{this->hint(name, this->visible_names())}"); return error.CompileFailed; }
     }
     if (callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field)) {
@@ -370,4 +374,30 @@ bool Gen::names_type(Expr* e) {
     if (v.ty.k == .Slice) { this->err(line); eprintln("slices cannot be passed to C varargs; pass .ptr (and .len) explicitly"); return error.CompileFailed };
     if (v.ty.k == .Null) { return Value{ .ty = this->t_ptr_u8, .v = "null" } };
     return v;
+}
+
+/// a bare call `name(...)` inside a method means this->name(...) when the struct has such a method
+/// and no free function of that name exists
+!Expr* Gen::member_method(Expr* e) {
+    if (this->cur == null || this->cur.decl.receiver.len == 0 || !this->has_var("this")) { return null; }
+    const auto tv = this->lookup_var("this")?;
+    auto t = tv.ty;
+    if (t.k == .Ptr) { t = t.elem };
+    if (t.k != .Strct) { return null; }
+    auto kb = this->sb();
+    sprint(&kb, "{recv_name(t)}.{e.name}")?;
+    if (!this->methods.has(kb.slice())) { return null; }
+    const auto th = this->a.create<Expr>()?;
+    th.k = .Ident;
+    th.name = "this";
+    th.line = e.line;
+    th.off = e.off;
+    const auto f = this->a.create<Expr>()?;
+    f.k = .Field;
+    f.l = th;
+    f.name = e.name;
+    f.line = e.line;
+    f.off = e.off;
+    f.name_off = e.off;
+    return f;
 }

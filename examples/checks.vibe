@@ -1,0 +1,48 @@
+// Phase 0: what the compiler now checks or accepts.
+
+str greeting = "hello";          // a global string is initialized
+auto target = "world";
+
+struct Counter {
+    i64 n;
+    void inc() { n += 1; }
+    i64 get() const { return n; }
+    i64 add_two() {
+        inc();                   // a sibling method by its bare name
+        inc();
+        return get();
+    }
+}
+
+i64 classify(i64 n) {
+    if (n > 0) { return 1; }
+    if (n < 0) { return -1; }
+    return 0;                    // without this line: "does not return a value on every path"
+}
+
+i64 first_over(i64[] xs, i64 limit) {
+    auto i = 0;
+    while (true) {               // an endless loop without break also counts as returning
+        if (xs[i] > limit) { return xs[i]; }
+        i += 1;
+    }
+}
+
+Counter* keep(Counter* c) { return c; }   // returning a pointer that came from the caller is fine
+
+void main() {
+    println(greeting, target);
+    greeting = "bye";
+    println(greeting);
+
+    auto c = Counter{};
+    println(c.add_two(), keep(&c).get());
+
+    println(classify(-4), classify(0), classify(9));
+    i64[4] xs = [1, 5, 9, 12];
+    println(first_over(xs[..], 6));
+
+    const u8 max_byte = 255;     // fits; 256 would be a compile error
+    const i8 min_i8 = -128;
+    println(max_byte, min_i8);
+}

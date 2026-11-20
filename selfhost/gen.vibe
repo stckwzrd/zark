@@ -97,6 +97,7 @@ struct Gen {
     List<Loop> loops;
     FnInst* cur;
     bool const_this;
+    bool in_cast;          // a literal under `as` may be truncated on purpose
     Env env;
     bool terminated;
     str cur_label;
@@ -287,11 +288,21 @@ struct Gen {
             ty = this->t_f64;
         } else if (c.value.k == .BoolLit) {
             ty = this->t_bool;
+        } else if (c.value.k == .StrLit) {
+            ty = this->t_str;
         } else {
             ty = this->t_i64;
         }
         auto init = "zeroinitializer";
-        if (ty.k == .Int) {
+        if (c.value != null && c.value.k == .StrLit && is_str(ty)) {
+            const auto gs = this->str_global(c.value.name)?;
+            auto ib = this->sb();
+            sprint(&ib, "{{ ptr {gs}, i64 {c.value.name.len} }}")?;
+            init = ib.slice();
+        } else if (c.value != null && c.value.k == .StrLit) {
+            this->err(c.line); eprintln("a string literal cannot initialize a global of type '{this->type_name(ty)?}'");
+            return error.CompileFailed;
+        } else if (ty.k == .Int) {
             auto b = this->sb();
             sprint(&b, "{this->eval_const(c.value)?}")?;
             init = b.slice();
@@ -816,6 +827,11 @@ struct Gen {
             } else if (fi.ret.k == .Errun && fi.ret.elem.k == .Void) {
                 sprint(this->ins()?, "  ret {{ i32 }} zeroinitializer\n")?;
             } else {
+                if (!always_returns(decl.body)) {
+                    this->err(decl.line);
+                    eprintln("function '{decl.name}' does not return a value on every path; add a 'return' at the end");
+                    return error.CompileFailed;
+                }
                 sprint(this->ins()?, "  unreachable\n")?;
             }
             this->terminated = true;
@@ -880,6 +896,48 @@ struct Gen {
     g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?;
     g.error_names.push("ok")?;
     return g;
+}
+
+// ------------------------------------------------------------------ control flow
+
+// true when control can never fall off the end of `s`
+bool always_returns(Stmt* s) {
+    if (s == null) { return false; }
+    match s.k {
+        .Ret => return true;
+        .Block => {
+            for (auto x : s.stmts) { if (always_returns(x)) { return true; } }
+            return false;
+        }
+        .If => return s.els != null && always_returns(s.body) && always_returns(s.els);
+        .While => return s.e.k == .BoolLit && s.e.bval && !breaks_out(s.body, s.label, 0);
+        .Match => {
+            if (s.arms.len == 0) { return false; }
+            for (auto arm : s.arms) { if (!always_returns(arm.body)) { return false; } }
+            return true;
+        }
+        .ExprS => return s.e.k == .Call && s.e.l.k == .Ident && s.e.l.name == "panic";
+    }
+    return false;
+}
+
+// true when `s` contains a break that leaves the loop at nesting `depth` 0 (or labeled `lbl`)
+bool breaks_out(Stmt* s, str lbl, i64 depth) {
+    if (s == null) { return false; }
+    match s.k {
+        .Brk => return (s.label.len == 0 && depth == 0) || (s.label.len > 0 && s.label == lbl);
+        .Block => {
+            for (auto x : s.stmts) { if (breaks_out(x, lbl, depth)) { return true; } }
+            return false;
+        }
+        .If => return breaks_out(s.body, lbl, depth) || breaks_out(s.els, lbl, depth);
+        .While, .ForRange, .ForEach => return breaks_out(s.body, lbl, depth + 1);
+        .Match => {
+            for (auto arm : s.arms) { if (breaks_out(arm.body, lbl, depth)) { return true; } }
+            return false;
+        }
+    }
+    return false;
 }
 
 // ------------------------------------------------------------------ type predicates
