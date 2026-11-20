@@ -1,0 +1,207 @@
+// Time: wall clock, calendar dates, sleeping, measuring.
+//   import "std/time" as time;
+//   println(time::now_local());                 // 2026-11-20T10:43:05+01:00
+//   auto sw = time::Stopwatch::start(); ... println(sw.ms());
+
+struct Tm { i32 sec; i32 min; i32 hour; i32 mday; i32 mon; i32 year; i32 wday; i32 yday; i32 isdst; i32 pad; i64 gmtoff; u8* zone; }
+
+extern i32 nanosleep(Timespec* req, Timespec* rem);
+extern Tm* localtime_r(i64* t, Tm* out);
+
+/// seconds since 1970-01-01 UTC
+i64 unix() {
+    auto ts = Timespec{ .sec = 0, .nsec = 0 };
+    _ = clock_gettime(0, &ts);
+    return ts.sec;
+}
+
+i64 unix_ms() {
+    auto ts = Timespec{ .sec = 0, .nsec = 0 };
+    _ = clock_gettime(0, &ts);
+    return ts.sec * 1000 + ts.nsec / 1000000;
+}
+
+/// a monotonic clock in nanoseconds, for measuring intervals
+i64 mono_ns() {
+    auto ts = Timespec{ .sec = 0, .nsec = 0 };
+    _ = clock_gettime(1, &ts);
+    return ts.sec * 1000000000 + ts.nsec;
+}
+
+void sleep_ms(i64 ms) {
+    auto req = Timespec{ .sec = ms / 1000, .nsec = (ms % 1000) * 1000000 };
+    auto rem = Timespec{};
+    while (nanosleep(&req, &rem) != 0) { req = rem; }
+}
+
+struct Stopwatch {
+    i64 t0;
+
+    static Stopwatch start() { return Stopwatch{ .t0 = mono_ns() }; }
+    void restart() { this->t0 = mono_ns(); }
+    i64 ns() const { return mono_ns() - this->t0; }
+    i64 us() const { return this->ns() / 1000; }
+    i64 ms() const { return this->ns() / 1000000; }
+    f64 seconds() const { return this->ns() as f64 / 1000000000.0; }
+}
+
+enum Weekday { Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday }
+
+/// A calendar date and time with a fixed offset from UTC.
+struct DateTime {
+    i64 year;
+    i64 month;        // 1..12
+    i64 day;          // 1..31
+    i64 hour;
+    i64 minute;
+    i64 second;
+    i64 nsec;
+    i64 offset;       // seconds east of UTC (3600 for UTC+1)
+
+    /// seconds since 1970-01-01 UTC
+    i64 to_unix() const {
+        return days_from_civil(this->year, this->month, this->day) * 86400 + this->hour * 3600 + this->minute * 60 + this->second - this->offset;
+    }
+
+    Weekday weekday() const {
+        const auto d = days_from_civil(this->year, this->month, this->day);
+        return ((d % 7 + 11) % 7) as Weekday;
+    }
+
+    /// 1..366
+    i64 day_of_year() const { return days_from_civil(this->year, this->month, this->day) - days_from_civil(this->year, 1, 1) + 1; }
+
+    DateTime add_seconds(i64 s) const { return from_unix(this->to_unix() + s, this->offset); }
+    DateTime add_days(i64 d) const { return this->add_seconds(d * 86400); }
+
+    /// ISO 8601: 2026-11-20T09:43:05Z or ...+01:00; spec "d" prints only the date
+    !void fmt(Writer* w, str spec) {
+        u8[64] b;
+        if (spec == "d") {
+            return w.write(bprint(b[..], "{this->year:04}-{this->month:02}-{this->day:02}")?);
+        }
+        w.write(bprint(b[..], "{this->year:04}-{this->month:02}-{this->day:02}T{this->hour:02}:{this->minute:02}:{this->second:02}")?)?;
+        if (this->offset == 0) { return w.write("Z"); }
+        auto off = this->offset;
+        auto sign = "+";
+        if (off < 0) { sign = "-"; off = -off; }
+        return w.write(bprint(b[..], "{sign}{off / 3600:02}:{off % 3600 / 60:02}")?);
+    }
+}
+
+/// days since 1970-01-01 of a proleptic Gregorian date (H. Hinnant's algorithm)
+i64 days_from_civil(i64 y0, i64 m, i64 d) {
+    auto y = y0;
+    if (m <= 2) { y -= 1; }
+    auto era = y / 400;
+    if (y < 0 && y % 400 != 0) { era -= 1; }
+    const auto yoe = y - era * 400;
+    auto mp = m - 3;
+    if (m <= 2) { mp = m + 9; }
+    const auto doy = (153 * mp + 2) / 5 + d - 1;
+    const auto doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
+
+DateTime from_unix(i64 t, i64 offset) {
+    const auto local = t + offset;
+    auto days = local / 86400;
+    auto secs = local % 86400;
+    if (secs < 0) { secs += 86400; days -= 1; }
+    const auto z = days + 719468;
+    auto era = z / 146097;
+    if (z < 0 && z % 146097 != 0) { era -= 1; }
+    const auto doe = z - era * 146097;
+    const auto yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const auto doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const auto mp = (5 * doy + 2) / 153;
+    const auto d = doy - (153 * mp + 2) / 5 + 1;
+    auto m = mp + 3;
+    if (mp >= 10) { m = mp - 9; }
+    auto y = yoe + era * 400;
+    if (m <= 2) { y += 1; }
+    return DateTime{ .year = y, .month = m, .day = d, .hour = secs / 3600, .minute = secs % 3600 / 60, .second = secs % 60, .offset = offset };
+}
+
+DateTime utc(i64 t) { return from_unix(t, 0); }
+
+/// the time zone offset of this machine at time t, in seconds east of UTC
+i64 local_offset(i64 t) {
+    auto tt = t;
+    auto tm = Tm{};
+    if (localtime_r(&tt, &tm) == null) { return 0; }
+    return tm.gmtoff;
+}
+
+DateTime local(i64 t) { return from_unix(t, local_offset(t)); }
+
+DateTime now_utc() {
+    auto ts = Timespec{ .sec = 0, .nsec = 0 };
+    _ = clock_gettime(0, &ts);
+    auto dt = utc(ts.sec);
+    dt.nsec = ts.nsec;
+    return dt;
+}
+
+DateTime now_local() {
+    auto ts = Timespec{ .sec = 0, .nsec = 0 };
+    _ = clock_gettime(0, &ts);
+    auto dt = local(ts.sec);
+    dt.nsec = ts.nsec;
+    return dt;
+}
+
+bool is_leap(i64 y) { return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0; }
+
+i64 days_in_month(i64 y, i64 m) {
+    match m {
+        2 => { if (is_leap(y)) { return 29; } return 28; }
+        4, 6, 9, 11 => return 30;
+    }
+    return 31;
+}
+
+!i64 digits(str s, i64 at, i64 n) {
+    if (at + n > s.len) { return error.InvalidDate; }
+    auto v = 0;
+    for (auto c : s[at..at + n]) {
+        if (!is_digit(c)) { return error.InvalidDate; }
+        v = v * 10 + (c - '0') as i64;
+    }
+    return v;
+}
+
+/// parses "2026-11-20", "2026-11-20T10:43:05", "2026-11-20 10:43:05.123Z" or with "+01:00";
+/// without a zone the time is taken as UTC
+!DateTime parse(str s) {
+    auto dt = DateTime{ .year = digits(s, 0, 4)?, .month = digits(s, 5, 2)?, .day = digits(s, 8, 2)? };
+    if (s.len < 10 || s[4] != '-' || s[7] != '-') { return error.InvalidDate; }
+    if (dt.month < 1 || dt.month > 12 || dt.day < 1 || dt.day > days_in_month(dt.year, dt.month)) { return error.InvalidDate; }
+    if (s.len == 10) { return dt; }
+    if (s[10] != 'T' && s[10] != ' ') { return error.InvalidDate; }
+    dt.hour = digits(s, 11, 2)?;
+    dt.minute = digits(s, 14, 2)?;
+    auto i = 16;
+    if (s.len > 16 && s[16] == ':') {
+        dt.second = digits(s, 17, 2)?;
+        i = 19;
+    }
+    if (i < s.len && s[i] == '.') {
+        i += 1;
+        auto scale = 100000000;
+        while (i < s.len && is_digit(s[i])) {
+            dt.nsec += (s[i] - '0') as i64 * scale;
+            scale /= 10;
+            i += 1;
+        }
+    }
+    if (dt.hour > 23 || dt.minute > 59 || dt.second > 60) { return error.InvalidDate; }
+    if (i == s.len) { return dt; }
+    if (s[i] == 'Z' && i + 1 == s.len) { return dt; }
+    if ((s[i] == '+' || s[i] == '-') && i + 6 == s.len && s[i + 3] == ':') {
+        dt.offset = digits(s, i + 1, 2)? * 3600 + digits(s, i + 4, 2)? * 60;
+        if (s[i] == '-') { dt.offset = -dt.offset; }
+        return dt;
+    }
+    return error.InvalidDate;
+}

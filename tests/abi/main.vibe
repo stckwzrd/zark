@@ -1,0 +1,43 @@
+// Structs passed to and returned from C by value (System V x86-64), checked against clang.
+struct Vec2 { f32 x; f32 y; }
+struct Color { u8 r; u8 g; u8 b; u8 a; }
+struct Rect { f32 x; f32 y; f32 w; f32 h; }
+struct Mixed { i64 a; f64 b; }
+struct Big { i32 id; f32 w; f32 h; f32 d; i64 tag; }
+struct V3 { f64 x; f64 y; f64 z; }
+struct V3f { f32 x; f32 y; f32 z; }
+struct I3 { i32 a; i32 b; i32 c; }
+struct CD { u8 c; f64 d; }
+struct FI { f32 f; i32 i; }
+extern f32 vlen2(Vec2 v);
+extern Vec2 vadd(Vec2 a, Vec2 b);
+extern i32 csum(Color c);
+extern Color cmake(i32 r, i32 g, i32 b);
+extern f32 rarea(Rect r);
+extern Rect rgrow(Rect r, f32 k);
+extern f64 msum(Mixed m);
+extern Mixed mmake(i64 a, f64 b);
+extern i64 bsum(Big b);
+extern Big bmake(i32 id);
+extern V3 v3scale(V3 v, f64 k);
+extern f32 v3fsum(V3f v);
+extern V3f v3fmake(f32 a);
+extern i32 i3sum(I3 v);
+extern I3 i3make(i32 a);
+extern f64 cdsum(CD v);
+extern CD cdmake(u8 c, f64 d);
+extern f32 fisum(FI v);
+extern FI fimake(f32 f, i32 i);
+extern f64 many(Vec2 a, Vec2 b, Vec2 c, Vec2 d, Vec2 e, Vec2 f, Vec2 g, Vec2 h, Vec2 i, Mixed m, i64 x, Big big);
+void main() {
+    const auto v = Vec2{ .x = 3.0, .y = 4.0 };
+    println(vlen2(v), vadd(v, Vec2{ .x = 1.0, .y = 2.0 }));
+    println(csum(Color{ .r = 1, .g = 2, .b = 3, .a = 4 }), cmake(10, 20, 30));
+    println(rarea(Rect{ .w = 2.0, .h = 5.0 }), rgrow(Rect{ .x = 1.0, .y = 2.0, .w = 3.0, .h = 4.0 }, 2.0));
+    println(msum(Mixed{ .a = 40, .b = 2.5 }), mmake(7, 0.5));
+    println(bsum(Big{ .id = 1, .w = 2.0, .h = 3.0, .d = 4.0, .tag = 1000 }), bmake(9));
+    println(v3scale(V3{ .x = 1.0, .y = 2.0, .z = 3.0 }, 10.0), v3fsum(V3f{ .x = 1.0, .y = 2.0, .z = 3.5 }), v3fmake(1.5));
+    println(i3sum(I3{ .a = 1, .b = 2, .c = 3 }), i3make(5), cdsum(CD{ .c = 2, .d = 0.25 }), cdmake(7, 1.5));
+    println(fisum(FI{ .f = 0.5, .i = 3 }), fimake(2.5, 4));
+    println(many(v, v, v, v, v, v, v, v, Vec2{ .x = 5.0, .y = 6.0 }, Mixed{ .a = 100, .b = 0.5 }, 1000, Big{ .id = 7, .tag = 10000 }));
+}

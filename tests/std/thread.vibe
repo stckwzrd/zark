@@ -1,0 +1,63 @@
+import "std/thread" as thread;
+
+test "threads, atomics and a mutex" {
+    auto counter = thread::AtomicI64{};
+    auto plain = 0;
+    auto mu = thread::Mutex{};
+    thread::Thread[8] ts;
+    for (auto i : 0..8) {
+        ts[i] = thread::spawn([&counter, &plain, &mu]() -> void {
+            for (auto k : 0..20000) {
+                counter.add(1);
+                mu.lock();
+                plain += 1;
+                mu.unlock();
+            }
+        })?;
+    }
+    for (auto i : 0..8) { ts[i].join(); }
+    assert(counter.load() == 160000 && plain == 160000);
+    assert(counter.compare_swap(160000, 1) && counter.load() == 1 && !counter.compare_swap(5, 6));
+}
+
+test "channel with several consumers" {
+    auto dbg = DebugAllocator::init();
+    {
+        const auto ch = thread::Channel<i64>::create(dbg.allocator(), 4)?;
+        defer ch.destroy();
+        auto sum = thread::AtomicI64{};
+        auto wg = thread::WaitGroup{};
+        wg.add(3);
+        thread::Thread[3] cs;
+        for (auto i : 0..3) {
+            cs[i] = thread::spawn([&ch, &wg, &sum]() -> void {
+                while (true) {
+                    const auto v = ch.recv() catch { break; };
+                    sum.add(v);
+                }
+                wg.done();
+            })?;
+        }
+        for (auto i : 1..1001) { ch.send(i)?; }
+        ch.close();
+        wg.wait();
+        for (auto i : 0..3) { cs[i].join(); }
+        assert(sum.load() == 500500);
+        auto closed = false;
+        ch.send(1) catch |e| { closed = e == error.Closed; };
+        assert(closed);
+        assert(ch.try_recv() is .None);
+    }
+    dbg.deinit()?;
+}
+
+test "parallel_for and timed waits" {
+    i64[1000] squares;
+    thread::parallel_for(1000, 0, [&squares](i64 i) -> void { squares[i] = i * i; })?;
+    for (auto i : 0..1000) { assert(squares[i] == i * i); }
+    auto m = thread::Mutex{};
+    auto c = thread::Cond{};
+    m.lock();
+    assert(!c.wait_ms(&m, 20));
+    m.unlock();
+}

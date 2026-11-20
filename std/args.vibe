@@ -1,0 +1,181 @@
+// Command-line options.
+//   import "std/args" as args;
+//   auto p = args::Parser::init(a, "mytool", "Copies files around.");
+//   defer p.deinit();
+//   p.flag("verbose", 'v', "print every file")?;
+//   p.option("out", 'o', "target directory", ".")?;
+//   p.parse() catch |e| { if (e == error.Help) { return; } return e; };
+//   if (p.has("verbose")) { ... }  const auto out = p.get("out");  for (auto f : p.rest()) { ... }
+// Accepted forms: --name, --name=value, --name value, -n value, -nvalue, -abc (flags), and
+// "--" ends the options. --help and -h print the usage and make parse() return error.Help.
+
+struct Opt {
+    str name;
+    u8 short;
+    str help;
+    bool takes_value;
+    str value;
+    str def;
+    bool seen;
+    str metavar;
+}
+
+struct Parser {
+    str prog;
+    str about;
+    List<Opt> opts;
+    List<str> positional;
+    str usage_args;
+    Allocator a;
+
+    static Self init(Allocator a, str prog, str about) {
+        return Self{ .prog = prog, .about = about, .opts = List<Opt>::init(a), .positional = List<str>::init(a), .a = a };
+    }
+
+    void deinit() {
+        this->opts.deinit();
+        this->positional.deinit();
+    }
+
+    /// a boolean switch: --name or -s
+    !void flag(str name, u8 short, str help) {
+        this->opts.push(Opt{ .name = name, .short = short, .help = help })?;
+    }
+
+    /// an option with a value and a default
+    !void option(str name, u8 short, str help, str def) {
+        this->opts.push(Opt{ .name = name, .short = short, .help = help, .takes_value = true, .def = def, .value = def, .metavar = "VALUE" })?;
+    }
+
+    /// how the positional arguments are shown in the usage line, e.g. "FILE..."
+    void positional_usage(str text) { this->usage_args = text; }
+
+    Opt* find(str name) {
+        for (auto i : 0..this->opts.len) { if (this->opts.items[i].name == name) { return &this->opts.items[i]; } }
+        return null;
+    }
+
+    Opt* find_short(u8 c) {
+        for (auto i : 0..this->opts.len) { if (this->opts.items[i].short == c && c != 0) { return &this->opts.items[i]; } }
+        return null;
+    }
+
+    /// parses the arguments of this process
+    !void parse() {
+        auto v = List<str>::init(this->a);
+        defer v.deinit();
+        for (auto i : 1..arg_count()) { v.push(arg(i))?; }
+        return this->parse_from(v.slice());
+    }
+
+    /// parses the given arguments (without the program name)
+    !void parse_from(str[] argv) {
+        auto i = 0;
+        auto only_pos = false;
+        while (i < argv.len) {
+            const auto x = argv[i];
+            i += 1;
+            if (only_pos || x.len < 2 || x[0] != '-') {
+                this->positional.push(x)?;
+                continue;
+            }
+            if (x == "--") { only_pos = true; continue; }
+            if (x == "--help" || x == "-h") {
+                this->print_usage();
+                return error.Help;
+            }
+            if (str_starts_with(x, "--")) {
+                auto name = x[2..];
+                auto val = "";
+                auto has_val = false;
+                const auto eq = str_find_byte(name, '=');
+                if (eq >= 0) {
+                    val = name[eq + 1..];
+                    name = name[0..eq];
+                    has_val = true;
+                }
+                const auto o = this->find(name);
+                if (o == null) { this->complain("unknown option --{name}"); return error.UnknownOption; }
+                o.seen = true;
+                if (o.takes_value) {
+                    if (!has_val) {
+                        if (i >= argv.len) { this->complain("--{name} needs a value"); return error.MissingValue; }
+                        val = argv[i];
+                        i += 1;
+                    }
+                    o.value = val;
+                } else if (has_val) {
+                    this->complain("--{name} does not take a value"); return error.UnexpectedValue;
+                }
+                continue;
+            }
+            // -abc or -ovalue or -o value
+            auto k = 1;
+            while (k < x.len) {
+                const auto o = this->find_short(x[k]);
+                if (o == null) { this->complain("unknown option -{x[k..k + 1]}"); return error.UnknownOption; }
+                o.seen = true;
+                k += 1;
+                if (o.takes_value) {
+                    if (k < x.len) {
+                        o.value = x[k..];
+                    } else {
+                        if (i >= argv.len) { this->complain("-{x[k - 1..k]} needs a value"); return error.MissingValue; }
+                        o.value = argv[i];
+                        i += 1;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    void complain(Fmt msg) {
+        eprintln("{this->prog}: {msg}");
+        eprintln("try '{this->prog} --help'");
+    }
+
+    /// was the flag or option given?
+    bool has(str name) {
+        const auto o = this->find(name);
+        return o != null && o.seen;
+    }
+
+    /// the value of an option (its default when not given)
+    str get(str name) {
+        const auto o = this->find(name);
+        if (o == null) { panic("args: no option named '{name}' was declared"); }
+        return o.value;
+    }
+
+    !i64 get_int(str name) {
+        return parse_int(this->get(name)) catch {
+            eprintln("{this->prog}: --{name} must be a number, got '{this->get(name)}'");
+            return error.InvalidArguments;
+        };
+    }
+
+    /// the positional arguments
+    str[] rest() { return this->positional.slice(); }
+
+    void print_usage() {
+        print("usage: {this->prog} [options]");
+        if (this->usage_args.len > 0) { print(" {this->usage_args}"); }
+        println("");
+        if (this->about.len > 0) { println("\n{this->about}"); }
+        println("\noptions:");
+        for (auto o : this->opts) {
+            u8[128] b;
+            auto left = bprint(b[..], "      --{o.name}") catch "";
+            if (o.short != 0) { left = bprint(b[..], "  -{o.short:c}, --{o.name}") catch ""; }
+            if (o.takes_value) {
+                u8[160] b2;
+                left = bprint(b2[..], "{left} {o.metavar}") catch left;
+                if (o.def.len > 0) { println("{left:-28} {o.help} (default: {o.def})"); } else { println("{left:-28} {o.help}"); }
+            } else {
+                println("{left:-28} {o.help}");
+            }
+        }
+        println("  -h, --help                 show this help");
+    }
+}

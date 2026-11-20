@@ -87,6 +87,14 @@ struct Allocator {
 | `bool contains(v)` | есть ли |
 | `reverse()` | разворот |
 | `sort()` | сортировка |
+| `T* at(i)` | указатель на элемент `i` (действителен до следующего роста) |
+| `i64 index_of(v)` | первый индекс `v` или -1 |
+| `!void insert(i, v)` | вставляет перед позицией `i` |
+| `!T remove_at(i)` | удаляет и возвращает элемент `i`, порядок сохраняется |
+| `!T swap_remove(i)` | удаляет элемент `i` за O(1), на его место встаёт последний |
+| `truncate(n)` | укорачивает до `n` элементов |
+| `!Self clone()` | копия со своей памятью |
+| `!T[] take()` | отдаёт элементы срезом точного размера, список становится пустым |
 | поля `items`, `len`, `a` | буфер, число элементов, аллокатор |
 
 ## `Map<V>`
@@ -98,6 +106,11 @@ struct Allocator {
 | `!void put(str key, v)` | вставка или замена |
 | `!V get(str key)` | значение, `error.NotFound` |
 | `bool has(str key)` | есть ли ключ |
+| `V* get_ptr(str key)` | указатель на значение для изменения на месте или `null` |
+| `V get_or(str key, d)` | значение или `d` |
+| `bool remove(str key)` | удаляет; `false`, если ключа не было |
+| `clear()` | удаляет всё |
+| `iter()` | `auto it = m.iter(); while (it.next()) { it.key(); it.value(); }` |
 | поля `len`, `entries` | число ключей; записи `{ key, value, used }` |
 
 Ключи не копируются.
@@ -253,6 +266,129 @@ void main() {
     println(s, ms >= 0.0);
 }
 ```
+
+## `HashMap<K, V>` и `HashSet<T>`
+
+Хеш-таблица с ключами любого типа, который можно напечатать и сравнить через `==`: целые, `str`, enum и структуры с `operator==`, сравнивающим все поля. Хеш считается по самому значению (`hash_of`), ничего объявлять не нужно. Ключи не копируются.
+
+```vibe run
+enum Color { Red, Green }
+
+!void main() {
+    const auto a = c_allocator();
+    auto ages = HashMap<str, i64>::init(a);
+    defer ages.deinit();
+    ages.put("ann", 31)?;
+    ages.put("bob", 25)?;
+    *ages.get_ptr("bob") += 1;
+    println(ages.get("bob")?, ages.get_or("zoe", -1), ages.has("ann"), ages.remove("ann"), ages.len);
+
+    auto seen = HashSet<Color>::init(a);
+    defer seen.deinit();
+    println(seen.add(Color::Red)?, seen.add(Color::Red)?, seen.len());
+}
+```
+
+| Метод `HashMap<K, V>` | Что делает |
+|---|---|
+| `init(a)`, `deinit()` | создать, освободить |
+| `!void put(k, v)` | вставляет или заменяет |
+| `!V get(k)`, `V get_or(k, d)`, `V* get_ptr(k)` | чтение; `get_ptr` даёт `null`, если ключа нет |
+| `bool has(k)`, `bool remove(k)`, `clear()` | |
+| `iter()` | `while (it.next()) { it.key(); it.value(); it.value_ptr(); }` |
+| `!List<K> keys(a)` | ключи в новом списке |
+| поле `len` | число ключей |
+
+У `HashSet<T>` есть `add` (`true`, если значения ещё не было), `has`, `remove`, `len()`, `clear()`, `iter()` и `items(a)`.
+
+## Ещё про строки
+
+Все эти функции возвращают срезы исходной строки или принимают `Allocator` для новой.
+
+| Функция | Что делает |
+|---|---|
+| `str_split(s, sep)` | итератор: `auto it = str_split(s, ","); while (it.next()) { it.part }` |
+| `str_fields(s)` | то же по пробельным промежуткам |
+| `str_lines(s)` | строки без `\n` / `\r\n`: `while (it.next()) { it.line }` |
+| `!List<str> str_split_all(a, s, sep)` | все части сразу |
+| `!str str_join(a, str[] parts, sep)`, `str_concat(a, parts)` | склейка |
+| `!str str_replace(a, s, from, to)` | замена всех вхождений |
+| `!str str_repeat(a, s, n)`, `str_to_upper(a, s)`, `str_to_lower(a, s)` | |
+| `str_contains`, `str_count`, `str_rfind` | поиск |
+| `str_trim_start`, `str_trim_end`, `str_strip_prefix`, `str_strip_suffix` | обрезка |
+| `str_eq_ignore_case`, `str_cmp`, `str_less` | сравнение (`str_less` подходит для `sort_by`) |
+| `is_space`, `is_lower`, `to_lower(c)`, `to_upper(c)` | символы |
+
+UTF-8: `utf8_len(s)` считает кодовые точки, `utf8_valid(s)`, `utf8_decode(s, i)` даёт `Rune{ code, size }`, `utf8_encode(buf, cp)`, а `utf8_runes(s)` перебирает (`it.code`, `it.at`).
+
+```vibe run
+!void main() {
+    const auto a = c_allocator();
+    auto it = str_split("name=Vibe;year=2026", ";");
+    while (it.next()) {
+        const auto eq = str_find_byte(it.part, '=');
+        println(it.part[0..eq], "->", it.part[eq + 1..]);
+    }
+    println(str_replace(a, "a-b-c", "-", " + ")?, utf8_len("привет"));
+}
+```
+
+## `sort_by`
+
+`!void sort_by(a, T[] s, fn(T, T) -> bool less)` сортирует любой срез вашим сравнением. Сортировка устойчивая (равные элементы сохраняют порядок), аллокатор нужен для временного буфера.
+
+```vibe run
+struct User { str name; i64 age; }
+bool by_age(User x, User y) { return x.age < y.age; }
+
+!void main() {
+    User[3] us = [User{ .name = "c", .age = 30 }, User{ .name = "a", .age = 20 }, User{ .name = "b", .age = 30 }];
+    sort_by(c_allocator(), us[..], by_age)?;
+    for (auto u : us) { print("{u.name} "); }
+    println("");
+}
+```
+
+## `DebugAllocator`
+
+Аллокатор для поиска ошибок памяти в тестах и отладочных сборках. Каждый блок получает свои страницы, сразу за ним идёт недоступная страница, а освобождённые блоки остаются недоступными:
+
+- чтение или запись за концом блока или после `free` останавливают программу с сообщением, где назван блок;
+- двойной `free`, освобождение чужого указателя или освобождение с неверным размером вызывают panic;
+- `deinit()` перечисляет неосвобождённые блоки и возвращает `error.MemoryLeak`;
+- `fail_after_n(n)` делает так, что выделение после `n` успешных завершится ошибкой: так проверяют ветки нехватки памяти;
+- `trap_id = k` останавливает отладчик там, где выделяется блок `#k`.
+
+```vibe run
+!void main() {
+    auto dbg = DebugAllocator::init();
+    {
+        auto xs = List<i64>::init(dbg.allocator());
+        defer xs.deinit();
+        for (auto i : 0..100) { xs.push(i)?; }
+    }
+    dbg.deinit()?;
+    println("no leaks");
+}
+```
+
+Он медленный и тратит минимум 8 КиБ на блок, поэтому в релизных сборках его не используют.
+
+## Сообщения о падении
+
+Каждая программа (кроме `--freestanding`) ставит обработчик падений. Вместо голого «segmentation fault» вы получите причину и место:
+
+```text
+fatal: segmentation fault: null pointer dereference (address 0x0)
+backtrace:
+  #0 0x2187 in ./app
+  #1 0x13ad in ./app
+where (addr2line):
+vb.get at /home/me/app.vibe:3
+vb.main at /home/me/app.vibe:7
+```
+
+Различаются причины: нулевой указатель, переполнение стека (бесконечная рекурсия), целочисленное деление на ноль, использование после освобождения и выход за границы блока `DebugAllocator`. Строки исходника берутся из `addr2line` (binutils), если он установлен. `VIBE_CRASH_HANDLER=0` отключает обработчик (например, чтобы получить core dump).
 
 ## Функции libc, доступные без объявления
 

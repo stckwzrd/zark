@@ -1,0 +1,165 @@
+// Processes and the environment.
+//   import "std/os" as os;
+//   auto r = os::exec(a, ["git", "status", "--short"])?;
+//   defer r.deinit();
+//   if (r.code == 0) { print(r.out); }
+// `run(a, argv)` in the prelude starts a process that shares our stdout/stderr;
+// exec captures its output instead.
+
+extern i32 pipe(i32* fds);
+extern i32 close(i32 fd);
+extern i32 dup2(i32 a, i32 b);
+extern i32 setenv(u8* name, u8* value, i32 overwrite);
+extern i32 unsetenv(u8* name);
+extern i32 getpid();
+extern i32 kill(i32 pid, i32 sig);
+extern i32 chdir(u8* path);
+
+struct PollFd { i32 fd; i16 events; i16 revents; }
+extern i32 poll(PollFd* fds, u64 n, i32 timeout);
+
+/// the result of exec: the exit code and everything the process wrote
+struct Output {
+    i32 code;          // exit code, or 128 + signal number when killed by a signal
+    str out;
+    str err;
+    Allocator a;
+
+    void deinit() {
+        this->a.free(this->out);
+        this->a.free(this->err);
+    }
+    bool ok() const { return this->code == 0; }
+}
+
+/// options for exec_with
+struct Command {
+    str[] argv;
+    str cwd;           // "" = ours
+    str input;         // written to the process's stdin, then closed
+}
+
+!Output exec(Allocator a, str[] argv) { return exec_with(a, Command{ .argv = argv }); }
+
+/// starts the program (found through PATH), waits for it and collects stdout and stderr
+!Output exec_with(Allocator a, Command c) {
+    if (c.argv.len == 0) { return error.NoProgram; }
+    auto cargs = a.alloc<u8*>(c.argv.len + 1)?;
+    defer a.free(cargs);
+    for (auto [i, s] : c.argv) { cargs[i] = a.dupz(s)?; }
+    defer { for (auto i : 0..c.argv.len) { a.free_fn(a.ctx, cargs[i], (c.argv[i].len + 1) as u64); } }
+    u8[4096] cwdb;
+    u8* cwdp = null;
+    if (c.cwd.len > 0) { cwdp = to_cstr(cwdb[..], c.cwd)?; }
+
+    i32[2] po;
+    i32[2] pe;
+    i32[2] pi;
+    if (pipe(&po[0]) != 0 || pipe(&pe[0]) != 0 || pipe(&pi[0]) != 0) { errno_error()?; }
+    const auto pid = fork();
+    if (pid < 0) { errno_error()?; }
+    if (pid == 0) {
+        _ = dup2(pi[0], 0);
+        _ = dup2(po[1], 1);
+        _ = dup2(pe[1], 2);
+        for (auto fd : [po[0], po[1], pe[0], pe[1], pi[0], pi[1]]) { _ = close(fd); }
+        if (cwdp != null && chdir(cwdp) != 0) { _exit(127); }
+        _ = execvp(cargs[0], cargs.ptr);
+        _exit(127);
+    }
+    _ = close(po[1]);
+    _ = close(pe[1]);
+    _ = close(pi[0]);
+    auto out = List<u8>::init(a);
+    errdefer out.deinit();
+    auto err = List<u8>::init(a);
+    errdefer err.deinit();
+    // feed stdin while reading both outputs, so that no pipe fills up and blocks the child
+    auto in_fd = pi[1];
+    auto in_off = 0;
+    if (c.input.len == 0) { _ = close(in_fd); in_fd = -1; }
+    auto open_out = true;
+    auto open_err = true;
+    u8[65536] buf;
+    while (open_out || open_err) {
+        PollFd[3] fds;
+        fds[0] = PollFd{ .fd = -1 };
+        fds[1] = PollFd{ .fd = -1 };
+        fds[2] = PollFd{ .fd = -1 };
+        if (open_out) { fds[0] = PollFd{ .fd = po[0], .events = 1 }; }
+        if (open_err) { fds[1] = PollFd{ .fd = pe[0], .events = 1 }; }
+        if (in_fd >= 0) { fds[2] = PollFd{ .fd = in_fd, .events = 4 }; }
+        if (poll(&fds[0], 3, -1) < 0) { continue; }
+        if (in_fd >= 0 && fds[2].revents != 0) {
+            const auto w = Sys::write(in_fd as i64, c.input.ptr + in_off, (c.input.len - in_off) as u64) catch -1;
+            if (w > 0) { in_off += w; }
+            if (w <= 0 || in_off >= c.input.len) { _ = close(in_fd); in_fd = -1; }
+        }
+        if (open_out && fds[0].revents != 0) {
+            const auto n = Sys::read(po[0] as i64, &buf[0], 65536) catch 0;
+            if (n <= 0) { open_out = false; } else { out.append(buf[0..n])?; }
+        }
+        if (open_err && fds[1].revents != 0) {
+            const auto n = Sys::read(pe[0] as i64, &buf[0], 65536) catch 0;
+            if (n <= 0) { open_err = false; } else { err.append(buf[0..n])?; }
+        }
+    }
+    if (in_fd >= 0) { _ = close(in_fd); }
+    _ = close(po[0]);
+    _ = close(pe[0]);
+    i32 status = 0;
+    if (waitpid(pid, &status, 0) < 0) { errno_error()?; }
+    auto code = (status >> 8) & 0xff;
+    if ((status & 0x7f) != 0) { code = 128 + (status & 0x7f); }
+    if (code == 127 && out.len == 0 && err.len == 0) { return error.ProgramNotFound; }
+    return Output{ .code = code, .out = out.take()?, .err = err.take()?, .a = a };
+}
+
+/// runs a command line through /bin/sh -c
+!Output shell(Allocator a, str cmd) { return exec(a, ["/bin/sh", "-c", cmd]); }
+
+!void set_env(str name, str value) {
+    u8[512] nb;
+    u8[8192] vb;
+    if (setenv(to_cstr(nb[..], name)?, to_cstr(vb[..], value)?, 1) != 0) { errno_error()?; }
+}
+
+!void unset_env(str name) {
+    u8[512] nb;
+    if (unsetenv(to_cstr(nb[..], name)?) != 0) { errno_error()?; }
+}
+
+/// the value of an environment variable, or `d` when it is not set
+str env_or(str name, str d) { return env(name) catch d; }
+
+i64 pid() { return getpid() as i64; }
+
+void exit(i32 code) {
+    _ = fflush(null);
+    _exit(code);
+}
+
+/// the path of the running executable (a new string)
+!str exe_path(Allocator a) {
+    u8[4096] b;
+    const auto n = readlink("/proc/self/exe", &b[0], 4095);
+    if (n <= 0) { errno_error()?; }
+    return a.dup(b[0..n]);
+}
+
+/// all command-line arguments, program name first (the strings belong to the process)
+!List<str> args(Allocator a) {
+    auto out = List<str>::init(a);
+    errdefer out.deinit();
+    for (auto i : 0..arg_count()) { out.push(arg(i))?; }
+    return out;
+}
+
+/// the number of online CPUs
+i64 cpu_count() {
+    const auto n = sysconf(84);
+    if (n < 1) { return 1; }
+    return n;
+}
+
+extern i64 sysconf(i32 name);

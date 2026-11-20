@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects and dependencies · Vibe</title>
+<meta name="description" content="vibe new, the vibe.toml manifest, C sources and libraries, path and git dependencies, vibe test in a project">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="">
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/projects.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
+<div class="layout">
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="tour.html">Quick tour</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a><a href="projects.html" class="current">Projects and dependencies</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="std-modules.html">Standard modules</a><a href="net-threads.html">Networking and threads</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
+<main><article>
+<h1>Projects and dependencies</h1>
+<p>A single file is enough to start. When a program grows into several files, C code or other people&#39;s libraries, describe it in a <code>vibe.toml</code> and <code>vibe run</code>, <code>vibe build</code> and <code>vibe test</code> work without a file name.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> new</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> hello</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">        # hello/vibe.toml, hello/src/main.vibe, hello/.gitignore</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> hello</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">              # compiles src/main.vibe and runs it</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --name</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> me</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D"> # arguments after -- go to the program</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> build</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --release</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">  # writes build/hello</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> test</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">             # the test blocks of src/main.vibe and of every file in tests/</span></span></code></pre></div><p>The commands find <code>vibe.toml</code> in the current directory or any directory above it, so they also work from <code>src/sub/</code>. A file named on the command line (<code>vibe run tools/gen.vibe</code>) inside a project still gets the project&#39;s dependencies, C sources and libraries.</p>
+<h2 id="vibe-toml"><a class="anchor" href="#vibe-toml">#</a><code>vibe.toml</code></h2>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>[package]</span></span>
+<span class="line"><span>name = "app"</span></span>
+<span class="line"><span>version = "0.1.0"</span></span>
+<span class="line"><span>main = "src/main.vibe"      # what run and build compile (default src/main.vibe)</span></span>
+<span class="line"><span>lib = "src/lib.vibe"        # what `import "app"` loads in projects that depend on this one</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>[build]</span></span>
+<span class="line"><span>sources = ["c/fast.c"]      # C or C++ files compiled and linked in</span></span>
+<span class="line"><span>libs = ["ssl", "m"]         # linked as -lssl -lm</span></span>
+<span class="line"><span>flags = ["-O"]              # default flags; the command line adds to them</span></span>
+<span class="line"><span>out = "build/app"           # where vibe build writes the program (default build/NAME)</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>[dependencies]</span></span>
+<span class="line"><span>utils = { path = "../utils" }</span></span>
+<span class="line"><span>json5 = { git = "https://github.com/someone/json5.vibe", rev = "v1.2" }</span></span></code></pre></div><p>The format is a small part of TOML: sections, <code>key = value</code>, strings, integers, booleans, lists and inline tables, and <code>#</code> comments. A mistake is reported with the line: <code>vibe.toml:2: error: unterminated string</code>.</p>
+<h2 id="dependencies"><a class="anchor" href="#dependencies">#</a>Dependencies</h2>
+<p>A dependency is imported by its name:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "utils"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> u;            </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// the dependency's lib file</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "utils/strings"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> us;   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// a file next to it (.vibe may be left out)</span></span></code></pre></div><ul>
+<li><code>path</code> dependencies point to a directory on disk.</li>
+<li><code>git</code> dependencies are cloned into <code>.vibe/deps/NAME</code> the first time a command needs them (<code>rev</code> is a tag or branch). Delete the directory to fetch again.</li>
+<li>A dependency with its own <code>vibe.toml</code> brings its own dependencies, C sources and libraries along. Without a manifest, its lib file is <code>src/lib.vibe</code> or <code>lib.vibe</code>.</li>
+<li>Imports that start with <code>./</code> or <code>../</code> are always relative files, so a dependency name never hides them.</li>
+</ul>
+<p>The language server reads the same manifest, so imports of dependencies are found in the editor too.</p>
+
+<div class="pager"><a class="prev" href="tooling.html"><small>Previous</small>Tools: fmt, lsp, flags</a><a class="next" href="stdlib.html"><small>Next</small>Standard library reference</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#vibe-toml">vibe.toml</a><a class="l2" href="#dependencies">Dependencies</a></aside></main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

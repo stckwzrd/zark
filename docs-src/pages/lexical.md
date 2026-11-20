@@ -148,17 +148,16 @@ void main() {
 }
 ```
 
-> **Gotcha:** the compiler does not check that a literal fits into the type. Extra high bits are simply dropped:
+A literal must fit into its type, otherwise it is a compile error:
 
-```vibe run
+```vibe error
 void main() {
     const u8 b = 300;
-    const i8 c = 200;
-    println(b, c);
+    println(b);
 }
 ```
 
-Watch the range yourself: `u8` is 0..255, `i8` is -128..127.
+`u8` is 0..255, `i8` is -128..127. To truncate on purpose, write `as`: `300 as u8` is `44`.
 
 ## Floating-point literals
 

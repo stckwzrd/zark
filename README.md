@@ -52,6 +52,7 @@ vibe run main.vibe lib.c engine.cpp       # link C/C++ sources directly
 vibe ir  main.vibe                        # print LLVM IR
 vibe test main.vibe                       # run the `test "name" { ... }` blocks
 vibe fmt main.vibe                        # format in place (--check to only report)
+vibe new app && cd app && vibe run        # a project with vibe.toml
 VIBE=build/vibe tests/run.sh              # test suite
 ```
 
@@ -162,6 +163,18 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 - `sort(slice)`, `min, max, abs, swap`, strings: `str_find, str_trim, str_starts_with, str_ends_with, parse_int, cstr, read_line(buf)`
 - `Arena`; files: `read_file, write_file, file_exists`; processes: `run(a, argv)`, `env`; `to_cstr`, `parse_int_radix`, `parse_float`
 - math, `clock()`, `arg_count()/arg(i)`; any libc function through `extern`
+- `HashMap<K, V>` / `HashSet<T>` for any printable key type, `str_split`, `str_join`, `str_replace`, UTF-8, `sort_by`
+- `DebugAllocator`: finds leaks, use after free, overflows and double frees; crashes print the cause and a backtrace with source lines
+
+### Standard modules (`import "std/fs" as fs;`)
+
+`std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`). See the guide page "Standard modules".
+
+A file that starts with `#!/usr/bin/env -S vibe run` can be run directly as a script; the arguments after it go to the program.
+
+### Projects
+
+`vibe new hello` creates a project with a `vibe.toml`; inside it `vibe run`, `vibe build` and `vibe test` need no file name. The manifest lists C sources, libraries, default flags, and dependencies by path or git (`utils = { path = "../utils" }`, then `import "utils" as u;`).
 
 The full language description is in [SPEC.md](SPEC.md).
 
@@ -197,5 +210,6 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [x] **v0.5: own x86-64 backend + ELF writer** (default); the native-built compiler reaches its own fixed point. Next steps: [ROADMAP.md](ROADMAP.md)
 - [x] **v0.4: self-hosted.** The compiler is written in Vibe and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
 - [ ] `comptime` blocks, `inline for`
-- [ ] `@cImport` via libclang; passing structs by value across the C ABI
+- [x] passing structs by value across the C ABI (`extern`)
+- [ ] `@cImport` via libclang
 - [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `vibe test`, `vibe fmt`

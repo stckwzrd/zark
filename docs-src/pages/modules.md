@@ -88,23 +88,22 @@ Inside the file itself its names work **without a prefix**: the renaming is seen
 
 Methods and variant literals (`.Y`, `.Yes(5)`) do not need a prefix: they are inferred from the type.
 
-## One file, one name
+## One file, several names
 
-The rules the compiler checks:
-
-1. A file is attached to the program under **one** name. You cannot attach `util.vibe` as `a` in one place and as `b` in another.
-2. A name belongs to one file.
+A file is loaded once, however many times and under whatever names it is imported. Two names for the same file both work:
 
 ```vibe file=util.vibe
 i64 tool() { return 1; }
 ```
 
-```vibe error
+```vibe run
 import "util.vibe" as a;
 import "util.vibe" as b;
 
-void main() {}
+void main() { println(a::tool() + b::tool()); }
 ```
+
+This is what lets a library import `std/thread` as `thread` while your program imports it as `t`. Two rules remain: a name belongs to one file, and a file imported with a name somewhere cannot also be imported plainly (without `as`).
 
 ## A plain import "leaks"
 
@@ -143,9 +142,9 @@ import "missing.vibe" as m;
 void main() {}
 ```
 
-## `extern` and `export` get no prefix
+## `extern` and `export` in a module
 
-The names of `extern` and `export` are C symbols, and they cannot have a prefix. They are always global, even with `import ... as`. More on the page [interoperating with C](c-interop.md).
+An `extern` declared in a module imported `as name` gets the prefix like everything else (`name::puts`), while the C symbol it links to stays the same. So a module can declare `extern i32 close(i32 fd);` and your program can still have its own `close`. An `export` is called from C by its exact name, so it stays global. More on the page [interoperating with C](c-interop.md).
 
 ## Name conflicts
 

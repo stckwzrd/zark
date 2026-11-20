@@ -1,0 +1,18 @@
+1 .ident void
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+2 .kw_const const
+2 .ident u8
+2 .ident b
+2 .eq =
+2 .int_lit 300
+2 .semi ;
+3 .ident println
+3 .lparen (
+3 .ident b
+3 .rparen )
+3 .semi ;
+4 .rbrace }
+5 .eof 
