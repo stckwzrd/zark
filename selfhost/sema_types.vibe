@@ -53,7 +53,7 @@ bool Gen::satisfies(Type* t, str name) {
         .Closure => return "{{ ptr, ptr }}";
         .Array => {
             auto b = this->sb();
-            sprint(&b, "[{t.len} x {this->llty(t.elem)?}]")?;
+            if (t.vec) { sprint(&b, "<{t.len} x {this->llty(t.elem)?}>")?; } else { sprint(&b, "[{t.len} x {this->llty(t.elem)?}]")?; }
             return b.slice();
         }
         .Strct => {
@@ -88,7 +88,9 @@ bool Gen::satisfies(Type* t, str name) {
         .Null => return "null";
         .Ptr => sprint(&b, "P{this->mangle(t.elem)?}")?;
         .Slice => sprint(&b, "S{this->mangle(t.elem)?}")?;
-        .Array => sprint(&b, "A{t.len}{this->mangle(t.elem)?}")?;
+        .Array => {
+            if (t.vec) { sprint(&b, "V{t.len}{this->mangle(t.elem)?}")?; } else { sprint(&b, "A{t.len}{this->mangle(t.elem)?}")?; }
+        }
         .Strct => return t.si.llname;
         .Enm => return t.ei.decl.name;
         .Errun => sprint(&b, "E{this->mangle(t.elem)?}")?;
@@ -115,7 +117,9 @@ bool Gen::satisfies(Type* t, str name) {
         .Null => return "null";
         .Ptr => sprint(&b, "{this->type_name(t.elem)?}*")?;
         .Slice => sprint(&b, "{this->type_name(t.elem)?}[]")?;
-        .Array => sprint(&b, "{this->type_name(t.elem)?}[{t.len}]")?;
+        .Array => {
+            if (t.vec) { sprint(&b, "{this->type_name(t.elem)?}x{t.len}")?; } else { sprint(&b, "{this->type_name(t.elem)?}[{t.len}]")?; }
+        }
         .Strct => return t.si.display;
         .Enm => return t.ei.decl.name;
         .Errun => sprint(&b, "!{this->type_name(t.elem)?}")?;
@@ -155,7 +159,24 @@ bool Gen::satisfies(Type* t, str name) {
         "void" => return this->t_void;
         "str" => return this->t_str;
     }
-    return null;
+    return this->vec_type(name);
+}
+
+!Type* Gen::vec_type(str name) {
+    const auto p = str_find_byte(name, 'x');
+    if (p < 2 || p + 1 >= name.len) { return null; }
+    const auto lanes = (parse_int_radix(name[p + 1..], 10) catch 0) as i64;
+    if (lanes != 2 && lanes != 4 && lanes != 8 && lanes != 16 && lanes != 32) { return null; }
+    const auto en = name[0..p];
+    if (en == "isize" || en == "usize") { return null; }
+    const auto elem = this->builtin_type(en)?;
+    if (elem == null || (elem.k != .Int && elem.k != .Float)) { return null; }
+    if ((elem.bits / 8) * lanes > 32) { return null; }
+    const auto t = this->mk_elem(.Array, elem)?;
+    t.len = lanes as u64;
+    t.vec = true;
+    this->needs_llvm = true;
+    return t;
 }
 
 !Type* Gen::resolve_type(TypeExpr* te, Env env) {
@@ -393,7 +414,10 @@ bool Gen::satisfies(Type* t, str name) {
 
 !u64 Gen::align_of(Type* t) {
     match t.k {
-        .Array => return this->align_of(t.elem);
+        .Array => {
+            if (t.vec) { return this->size_of(t); }
+            return this->align_of(t.elem);
+        }
         .Strct => {
             if (t.si.decl.is_union) { return 8; }
             if (t.si.decl.packed) { return 1; }
@@ -410,7 +434,10 @@ bool Gen::satisfies(Type* t, str name) {
 
 !u64 Gen::ll_align(Type* t) {
     match t.k {
-        .Array => return this->ll_align(t.elem);
+        .Array => {
+            if (t.vec) { return this->size_of(t); }
+            return this->ll_align(t.elem);
+        }
         .Strct => {
             if (t.si.decl.is_union) { return 8; }
             if (t.si.decl.packed || t.si.explicit) { return 1; }

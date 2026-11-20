@@ -395,6 +395,37 @@ void main() {
 }
 ```
 
+## SIMD vectors
+
+A SIMD vector holds several numbers that one instruction processes at once. The types are named after the element and the number of lanes: `f32x4`, `f32x8`, `f64x2`, `f64x4`, `i32x4`, `i32x8`, `i64x2`, `u8x16` and so on (2 to 32 lanes, at most 32 bytes).
+
+```vibe run
+f32 dot(f32[] a, f32[] b) {
+    f32x8 acc = f32x8(0.0);
+    for (auto i : 0..a.len / 8) {
+        f32x8 x = *(&a[i * 8] as *f32x8);
+        f32x8 y = *(&b[i * 8] as *f32x8);
+        acc = acc + x * y;
+    }
+    f32 s = 0.0;
+    for (auto k : 0..8) { s += acc[k]; }
+    return s;
+}
+
+void main() {
+    f32x4 a = f32x4(1.0, 2.0, 3.0, 4.0);
+    f32x4 b = f32x4(10.0);
+    println(a * b + a, -a, a[2]);
+    f32[8] u = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+    println(dot(u[..], u[..]));
+}
+```
+
+- `f32x4(a, b, c, d)` builds a vector from its lanes, and `f32x4(x)` puts the same value into every lane.
+- `+ - * /` (and `& | ^` on integer vectors) work lane by lane; a scalar on one side is spread over all lanes (`a * 2.0`). Unary `-` works too. Vectors cannot be compared with `==` or `<`.
+- `v[i]` reads and writes a lane. Loading a vector from memory with `*(p as *f32x4)` does not require alignment.
+- A program that uses vectors is built through LLVM automatically (the own backend has no vector instructions). With `--release` a loop like the one above runs several times faster than the scalar one.
+
 ## Conversions: `as`
 
 All the implicit conversions (there are few):

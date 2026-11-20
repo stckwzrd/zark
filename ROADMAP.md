@@ -30,7 +30,7 @@ Done: closures with explicit captures, `T: Ord` constraints (checked at the call
 - **Interfaces as generic constraints:** `fn sort[T: Ord](s: []T)`, checked when the generic is declared instead of when it is instantiated, which gives clearer errors.
 - **Real `comptime`:** run Vibe at compile time with an interpreter over our IR, for lookup tables, reflection over struct fields and code generation.
 - **Modules / namespaces:** `import "net.vibe" as net`, then `net.connect(...)`.
-- **SIMD types** `v4f32`, `v8f32` → SSE/AVX. Useful for numeric code and ML kernels (matmul, softmax).
+- **SIMD types**: done through LLVM (`f32x4`, `i32x8`, ...). Missing: vector instructions in the own backend, comparisons and masks, shuffles.
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
 
 ## 7. Tooling
