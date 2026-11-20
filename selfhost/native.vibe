@@ -119,6 +119,7 @@ struct Ins {
     i64 ib1;
     i64 ic1;
     i64 cl1;
+    i64 line;
 }
 
 struct Block { str label; List<Ins*> ins; }
@@ -150,6 +151,8 @@ struct Native {
     i64 sret_slot;
     i64 nlocal;
     str fname;
+    i64 fn_file;
+    i64 fn_line;
     List<i64> ivreg;
     List<Iv> ivs;
     List<i64> byn;
@@ -815,8 +818,20 @@ struct Native {
         auto blocks = List<Block>::init(this->a);
         auto phis_of = Map<List<Ins*>>::init(this->a);   // block label -> phis
         if (is_agg(ret)) { this->sret_slot = this->new_slot(8, 8); }
+        this->fn_file = 0;
+        this->fn_line = 0;
+        auto cur_line = 0;
         for (auto ln : body) {
             if (ln.len == 0) { continue; }
+            if (str_starts_with(ln, "  ;@F ")) {
+                this->fn_file = this->obj.file_index(ln[6..])?;
+                continue;
+            }
+            if (str_starts_with(ln, "  ;@L ")) {
+                cur_line = (parse_int_radix(ln[6..], 10) catch 0) as i64;
+                if (this->fn_line == 0) { this->fn_line = cur_line; }
+                continue;
+            }
             if (ln[0] != ' ') {
                 blocks.push(Block{ .label = ln[0..ln.len - 1], .ins = List<Ins*>::init(this->a) })?;
                 continue;
@@ -825,6 +840,7 @@ struct Native {
                 eprintln("native: cannot parse in {name}: {ln}");
                 return e;
             };
+            ins.line = cur_line;
             blocks.items[blocks.len - 1].ins.push(ins)?;
             if (ins.op == "phi") {
                 const auto bl = blocks.get(blocks.len - 1).label;
@@ -858,6 +874,8 @@ struct Native {
 
         // prologue
         const auto start = asm.pos();
+        if (this->fn_line > 0) { this->obj.add_row(start, this->fn_line, this->fn_file)?; }
+        auto row_line = this->fn_line;
         asm.b(0x55)?;                         // push rbp
         asm.mov_rr(RBP, RSP)?;                // mov rbp, rsp
         asm.rex(true, 0, RSP, false)?;        // sub rsp, imm32 (patched)
@@ -920,6 +938,10 @@ struct Native {
             while (k < blk.ins.len) {
                 const auto ins = blk.ins.get(k);
                 this->cur = ins;
+                if (ins.line > 0 && ins.line != row_line) {
+                    this->obj.add_row(asm.pos(), ins.line, this->fn_file)?;
+                    row_line = ins.line;
+                }
                 if (ins.op == "icmp" && this->fused.has(ins.dest) && k + 1 < blk.ins.len) {
                     this->cmp_br(ins, blk.ins.get(k + 1))?;
                     break;
@@ -933,6 +955,7 @@ struct Native {
         }
         patch_u32(&asm.code, frame_patch, align_up(this->frame, 16));
         asm.resolve_fixups()?;
+        if (this->fn_line > 0) { this->obj.add_row(asm.pos(), 0, this->fn_file)?; }
         this->obj.define(name, SEC_TEXT, start, asm.pos() - start, !internal, true)?;
     }
 

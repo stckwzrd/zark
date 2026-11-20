@@ -37,7 +37,10 @@ const auto R_X86_64_64 = 1;
 const auto R_X86_64_PC32 = 2;
 const auto R_X86_64_PLT32 = 4;
 
+extern u8* getcwd(u8* buf, u64 size);
+
 struct Reloc { i64 off; str sym; i64 kind; i64 addend; }
+struct LineRow { i64 off; i64 line; i64 file; }
 struct Fixup { i64 off; str label; }
 
 struct Asm {
@@ -281,6 +284,34 @@ Asm new_asm(Allocator a) {
     buf.push(((v >> 8) & 0xff) as u8)?;
 }
 
+!void put_uleb(List<u8>*buf, i64 v) {
+    auto x = v as u64;
+    while (x >= 128) {
+        buf.push(((x & 127) | 128) as u8)?;
+        x = x >> 7;
+    }
+    buf.push(x as u8)?;
+}
+
+!void put_sleb(List<u8>*buf, i64 v) {
+    auto x = v;
+    while (true) {
+        const auto byte = x & 127;
+        x = x >> 7;
+        if ((x == 0 && (byte & 64) == 0) || (x == -1 && (byte & 64) != 0)) {
+            buf.push(byte as u8)?;
+            return;
+        }
+        buf.push((byte | 128) as u8)?;
+    }
+}
+
+!void put_rela(List<u8>*buf, i64 off, i64 kind, i64 sym, i64 addend) {
+    put_u64(buf, off)?;
+    put_u64(buf, (sym << 32) | kind)?;
+    put_u64(buf, addend)?;
+}
+
 void patch_u32(List<u8>*buf, i64 at, i64 v) {
     buf.items[at] = (v & 0xff) as u8;
     buf.items[at + 1] = ((v >> 8) & 0xff) as u8;
@@ -311,6 +342,8 @@ struct ObjFile {
     List<u8> data;
     i64 data_align;
     List<Reloc> data_relocs;
+    List<LineRow> rows;
+    List<str> files;
     List<Sym> syms;
     Map<i64> sym_index;   // name -> index in syms
 
@@ -329,6 +362,108 @@ struct ObjFile {
         this->syms.push(Sym{ .name = name, .sec = sec, .value = value, .size = size, .global = global, .func = func })?;
     }
 
+    !i64 file_index(str name) {
+        for (auto [i, f] : this->files) { if (f == name) { return i + 1; } }
+        this->files.push(name)?;
+        return this->files.len;
+    }
+
+    !void add_row(i64 off, i64 line, i64 file) {
+        this->rows.push(LineRow{ .off = off, .line = line, .file = file })?;
+    }
+
+    !void debug_sections(List<u8>*abbrev, List<u8>*info, List<u8>*line, List<u8>*rinfo, List<u8>*rline) {
+        auto cwd = "";
+        const auto cp = getcwd(null, 0);
+        if (cp != null) { cwd = cstr(cp); }
+        put_uleb(abbrev, 1)?;
+        put_uleb(abbrev, 0x11)?;
+        abbrev.push(0)?;
+        const auto attrs = [0x25, 0x08, 0x13, 0x05, 0x03, 0x08, 0x1b, 0x08, 0x10, 0x17, 0x11, 0x01, 0x12, 0x07, 0, 0];
+        for (auto x : attrs) { abbrev.push(x as u8)?; }
+        abbrev.push(0)?;
+
+        put_u32(info, 0)?;
+        put_u16(info, 4)?;
+        put_u32(info, 0)?;
+        info.push(8)?;
+        put_uleb(info, 1)?;
+        info.append("vibe\x00")?;
+        put_u16(info, 0x0c)?;
+        if (this->files.len > 0) { info.append(this->files.get(0))?; }
+        info.push(0)?;
+        info.append(cwd)?;
+        info.push(0)?;
+        put_rela(rinfo, info.len, 10, 2, 0)?;
+        put_u32(info, 0)?;
+        put_rela(rinfo, info.len, 1, 1, 0)?;
+        put_u64(info, 0)?;
+        put_u64(info, this->text.code.len)?;
+        patch_u32(info, 0, info.len - 4);
+
+        put_u32(line, 0)?;
+        put_u16(line, 4)?;
+        put_u32(line, 0)?;
+        const auto hdr_start = line.len;
+        const auto params = [1, 1, 1, 0xFB, 14, 13, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1];
+        for (auto x : params) { line.push(x as u8)?; }
+        line.push(0)?;
+        for (auto f : this->files) {
+            line.append(f)?;
+            line.push(0)?;
+            line.push(0)?;
+            line.push(0)?;
+            line.push(0)?;
+        }
+        line.push(0)?;
+        patch_u32(line, 6, line.len - hdr_start);
+        auto cur_file = 1;
+        auto cur_line = 1;
+        auto addr = 0;
+        auto live = false;
+        for (auto r : this->rows) {
+            if (r.line == 0) {
+                if (live) {
+                    line.push(2)?;
+                    put_uleb(line, r.off - addr)?;
+                    line.push(0)?;
+                    line.push(1)?;
+                    line.push(1)?;
+                    live = false;
+                }
+                continue;
+            }
+            if (!live) {
+                line.push(0)?;
+                line.push(9)?;
+                line.push(2)?;
+                put_rela(rline, line.len, 1, 1, r.off)?;
+                put_u64(line, 0)?;
+                addr = r.off;
+                cur_file = 1;
+                cur_line = 1;
+                live = true;
+            }
+            if (r.file != cur_file) {
+                line.push(4)?;
+                put_uleb(line, r.file)?;
+                cur_file = r.file;
+            }
+            if (r.off != addr) {
+                line.push(2)?;
+                put_uleb(line, r.off - addr)?;
+                addr = r.off;
+            }
+            if (r.line != cur_line) {
+                line.push(3)?;
+                put_sleb(line, r.line - cur_line)?;
+                cur_line = r.line;
+            }
+            line.push(1)?;
+        }
+        patch_u32(line, 0, line.len - 4);
+    }
+
     !void reference(str name) {
         if (this->sym_index.has(name)) { return; }
         this->sym_index.put(name, this->syms.len)?;
@@ -342,16 +477,24 @@ struct ObjFile {
         // symbol order: null, locals, globals
         auto order = List<i64>::init(a);
         for (auto [i, s] : this->syms) { if (!s.global && s.sec != 0) { order.push(i)?; } }
-        const auto first_global = order.len + 1;
+        const auto first_global = order.len + 3;
         for (auto [i, s] : this->syms) { if (s.global || s.sec == 0) { order.push(i)?; } }
         auto final_index = List<i64>::init(a);
         for (auto _i : 0..this->syms.len) { final_index.push(0)?; }
-        for (auto [k, i] : order) { final_index.set(i, k + 1); }
+        for (auto [k, i] : order) { final_index.set(i, k + 3); }
 
         auto strtab = List<u8>::init(a);
         strtab.push(0)?;
         auto symtab = List<u8>::init(a);
         for (auto _k : 0..24) { symtab.push(0)?; }
+        for (auto sec : [1, 12]) {
+            put_u32(&symtab, 0)?;
+            symtab.push(3)?;
+            symtab.push(0)?;
+            put_u16(&symtab, sec)?;
+            put_u64(&symtab, 0)?;
+            put_u64(&symtab, 0)?;
+        }
         for (auto i : order) {
             const auto s = this->syms.get(i);
             const auto name_off = strtab.len;
@@ -406,6 +549,22 @@ struct ObjFile {
         shstr.append(".shstrtab\x00")?;
         const auto n_note = shstr.len;
         shstr.append(".note.GNU-stack\x00")?;
+        const auto n_dabbrev = shstr.len;
+        shstr.append(".debug_abbrev\x00")?;
+        const auto n_dinfo = shstr.len;
+        shstr.append(".debug_info\x00")?;
+        const auto n_dline = shstr.len;
+        shstr.append(".debug_line\x00")?;
+        const auto n_rdinfo = shstr.len;
+        shstr.append(".rela.debug_info\x00")?;
+        const auto n_rdline = shstr.len;
+        shstr.append(".rela.debug_line\x00")?;
+        auto dabbrev = List<u8>::init(a);
+        auto dinfo = List<u8>::init(a);
+        auto dline = List<u8>::init(a);
+        auto rdinfo = List<u8>::init(a);
+        auto rdline = List<u8>::init(a);
+        this->debug_sections(&dabbrev, &dinfo, &dline, &rdinfo, &rdline)?;
 
         // layout: header, then sections
         auto f = List<u8>::init(a);
@@ -430,7 +589,17 @@ struct ObjFile {
         f.append(strtab.slice())?;
         const auto o_shstr = f.len;
         f.append(shstr.slice())?;
+        const auto o_dabbrev = f.len;
+        f.append(dabbrev.slice())?;
+        const auto o_dinfo = f.len;
+        f.append(dinfo.slice())?;
+        const auto o_dline = f.len;
+        f.append(dline.slice())?;
         align_buf(&f, 8)?;
+        const auto o_rdinfo = f.len;
+        f.append(rdinfo.slice())?;
+        const auto o_rdline = f.len;
+        f.append(rdline.slice())?;
         const auto o_sh = f.len;
 
         // section headers: 0 null, 1 text, 2 rodata, 3 data, 4 rela.text, 5 rela.data, 6 symtab, 7 strtab, 8 shstrtab, 9 note
@@ -444,6 +613,11 @@ struct ObjFile {
         sec_hdr(&f, n_strtab, 3, 0, o_strtab, strtab.len, 0, 0, 1, 0)?;
         sec_hdr(&f, n_shstr, 3, 0, o_shstr, shstr.len, 0, 0, 1, 0)?;
         sec_hdr(&f, n_note, 1, 0, o_shstr, 0, 0, 0, 1, 0)?;
+        sec_hdr(&f, n_dabbrev, 1, 0, o_dabbrev, dabbrev.len, 0, 0, 1, 0)?;
+        sec_hdr(&f, n_dinfo, 1, 0, o_dinfo, dinfo.len, 0, 0, 1, 0)?;
+        sec_hdr(&f, n_dline, 1, 0, o_dline, dline.len, 0, 0, 1, 0)?;
+        sec_hdr(&f, n_rdinfo, 4, 0x40, o_rdinfo, rdinfo.len, 6, 11, 8, 24)?;
+        sec_hdr(&f, n_rdline, 4, 0x40, o_rdline, rdline.len, 6, 12, 8, 24)?;
 
         // ELF header
         auto h = List<u8>::init(a);
@@ -463,7 +637,7 @@ struct ObjFile {
         put_u16(&h, 0)?;
         put_u16(&h, 0)?;
         put_u16(&h, 64)?;     // shentsize
-        put_u16(&h, 10)?;     // shnum
+        put_u16(&h, 15)?;     // shnum
         put_u16(&h, 8)?;      // shstrndx
         for (auto k : 0..64) { f.items[k] = h.get(k); }
         write_file(path, f.slice())?;
@@ -475,7 +649,7 @@ const auto SEC_RODATA = 2;
 const auto SEC_DATA = 3;
 
 ObjFile new_obj(Allocator a) {
-    return ObjFile{ .a = a, .text = new_asm(a), .rodata = List<u8>::init(a), .data = List<u8>::init(a), .data_relocs = List<Reloc>::init(a), .syms = List<Sym>::init(a), .sym_index = Map<i64>::init(a) };
+    return ObjFile{ .a = a, .text = new_asm(a), .rodata = List<u8>::init(a), .data = List<u8>::init(a), .data_relocs = List<Reloc>::init(a), .rows = List<LineRow>::init(a), .files = List<str>::init(a), .syms = List<Sym>::init(a), .sym_index = Map<i64>::init(a) };
 }
 
 !void align_buf(List<u8>*buf, i64 al) {

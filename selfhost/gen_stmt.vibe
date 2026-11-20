@@ -10,6 +10,10 @@ struct MatchRes { Type* ty; str slot; }
     const auto saved_off = this->at_off;
     this->at_line = s.line;
     this->at_off = s.off;
+    if (this->dbg && s.k != .Block && s.line != this->last_line && !this->terminated) {
+        sprint(&this->body, "  ;@L {s.line}\n")?;
+        this->last_line = s.line;
+    }
     this->gen_stmt_at(s)?;
     this->at_line = saved_line;
     this->at_off = saved_off;

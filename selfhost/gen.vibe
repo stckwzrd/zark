@@ -104,6 +104,8 @@ struct Gen {
     bool test_mode;
     i64 nclos;
     i64 at_line;
+    i64 last_line;
+    bool dbg;
     i64 at_off;
     str pend_file;
     i64 pend_line;
@@ -359,6 +361,7 @@ struct Gen {
     !void label(str name) {
         if (!this->terminated) { sprint(&this->body, "  br label %{name}\n")?; }
         sprint(&this->body, "{name}:\n")?;
+        this->last_line = 0;
         this->cur_label = name;
         this->terminated = false;
     }
@@ -721,6 +724,8 @@ struct Gen {
     !void gen_function(FnInst* fi) {
         const auto decl = fi.decl;
         this->file = decl.file;
+        this->dbg = decl.file.len > 0 && decl.file[0] != '<';
+        this->last_line = 0;
         this->body = this->sb();
         this->allocas = this->sb();
         this->scopes = List<Scope>::init(this->a);
@@ -774,6 +779,7 @@ struct Gen {
         const auto w = &this->funcs_out;
         w.append(hdr.slice())?;
         w.append("entry:\n")?;
+        if (this->dbg) { sprint(w, "  ;@F {decl.file}\n  ;@L {decl.line}\n")?; }
         w.append(this->allocas.slice())?;
         w.append(this->body.slice())?;
         w.append("}\n\n")?;
