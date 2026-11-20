@@ -41,6 +41,8 @@ extern u8* getcwd(u8* buf, u64 size);
 
 struct Reloc { i64 off; str sym; i64 kind; i64 addend; }
 struct LineRow { i64 off; i64 line; i64 file; }
+struct DbgVar { str name; i64 off; str ty; i64 enc; i64 size; }
+struct DbgFunc { str name; i64 start; i64 end; List<DbgVar> vars; }
 struct Fixup { i64 off; str label; }
 
 struct Asm {
@@ -343,6 +345,7 @@ struct ObjFile {
     i64 data_align;
     List<Reloc> data_relocs;
     List<LineRow> rows;
+    List<DbgFunc> funcs;
     List<str> files;
     List<Sym> syms;
     Map<i64> sym_index;   // name -> index in syms
@@ -362,6 +365,13 @@ struct ObjFile {
         this->syms.push(Sym{ .name = name, .sec = sec, .value = value, .size = size, .global = global, .func = func })?;
     }
 
+    !str type_name(bool unsigned, i64 bits) {
+        auto b = List<u8>::init(this->a);
+        if (unsigned) { b.push('u')?; } else { b.push('i')?; }
+        sprint(&b, "{bits}")?;
+        return b.slice();
+    }
+
     !i64 file_index(str name) {
         for (auto [i, f] : this->files) { if (f == name) { return i + 1; } }
         this->files.push(name)?;
@@ -378,10 +388,12 @@ struct ObjFile {
         if (cp != null) { cwd = cstr(cp); }
         put_uleb(abbrev, 1)?;
         put_uleb(abbrev, 0x11)?;
-        abbrev.push(0)?;
-        const auto attrs = [0x25, 0x08, 0x13, 0x05, 0x03, 0x08, 0x1b, 0x08, 0x10, 0x17, 0x11, 0x01, 0x12, 0x07, 0, 0];
+        abbrev.push(1)?;
+        const auto attrs = [0x25, 0x08, 0x13, 0x05, 0x03, 0x08, 0x1b, 0x08, 0x10, 0x17, 0x11, 0x01, 0x12, 0x07, 0, 0,
+            2, 0x24, 0, 0x03, 0x08, 0x3e, 0x0b, 0x0b, 0x0b, 0, 0,
+            3, 0x2e, 1, 0x03, 0x08, 0x11, 0x01, 0x12, 0x07, 0x40, 0x18, 0, 0,
+            4, 0x34, 0, 0x03, 0x08, 0x49, 0x13, 0x02, 0x18, 0, 0, 0];
         for (auto x : attrs) { abbrev.push(x as u8)?; }
-        abbrev.push(0)?;
 
         put_u32(info, 0)?;
         put_u16(info, 4)?;
@@ -399,6 +411,41 @@ struct ObjFile {
         put_rela(rinfo, info.len, 1, 1, 0)?;
         put_u64(info, 0)?;
         put_u64(info, this->text.code.len)?;
+        auto type_at = Map<i64>::init(this->a);
+        for (auto f : this->funcs) {
+            for (auto v : f.vars) {
+                if (type_at.has(v.ty)) { continue; }
+                type_at.put(v.ty, info.len)?;
+                put_uleb(info, 2)?;
+                info.append(v.ty)?;
+                info.push(0)?;
+                info.push(v.enc as u8)?;
+                info.push(v.size as u8)?;
+            }
+        }
+        for (auto f : this->funcs) {
+            put_uleb(info, 3)?;
+            info.append(f.name)?;
+            info.push(0)?;
+            put_rela(rinfo, info.len, 1, 1, f.start)?;
+            put_u64(info, 0)?;
+            put_u64(info, f.end - f.start)?;
+            put_uleb(info, 1)?;
+            info.push(0x56)?;
+            for (auto v : f.vars) {
+                put_uleb(info, 4)?;
+                info.append(v.name)?;
+                info.push(0)?;
+                put_u32(info, type_at.get(v.ty)?)?;
+                auto loc = List<u8>::init(this->a);
+                loc.push(0x91)?;
+                put_sleb(&loc, v.off)?;
+                put_uleb(info, loc.len)?;
+                info.append(loc.slice())?;
+            }
+            info.push(0)?;
+        }
+        info.push(0)?;
         patch_u32(info, 0, info.len - 4);
 
         put_u32(line, 0)?;
@@ -649,7 +696,7 @@ const auto SEC_RODATA = 2;
 const auto SEC_DATA = 3;
 
 ObjFile new_obj(Allocator a) {
-    return ObjFile{ .a = a, .text = new_asm(a), .rodata = List<u8>::init(a), .data = List<u8>::init(a), .data_relocs = List<Reloc>::init(a), .rows = List<LineRow>::init(a), .files = List<str>::init(a), .syms = List<Sym>::init(a), .sym_index = Map<i64>::init(a) };
+    return ObjFile{ .a = a, .text = new_asm(a), .rodata = List<u8>::init(a), .data = List<u8>::init(a), .data_relocs = List<Reloc>::init(a), .rows = List<LineRow>::init(a), .funcs = List<DbgFunc>::init(a), .files = List<str>::init(a), .syms = List<Sym>::init(a), .sym_index = Map<i64>::init(a) };
 }
 
 !void align_buf(List<u8>*buf, i64 al) {

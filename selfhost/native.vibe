@@ -133,6 +133,7 @@ struct Save { i64 reg; i64 off; }
 }
 
 struct Native {
+    bool debug;
     Allocator a;
     ObjFile obj;
     Map<LT*> named;
@@ -610,7 +611,7 @@ struct Native {
                     if (ins.op == "alloca") {
                         ins.id1 = ivs.len + 1;
                         this->idx_put(ins.dest, ivs.len)?;
-                        ivs.push(Iv{ .name = ins.dest, .start = total + 1, .end = -2, .w = 0, .reg = -1, .alloca = true, .bad = false, .alias = -1, .nocall = false })?;
+                        ivs.push(Iv{ .name = ins.dest, .start = total + 1, .end = -2, .w = 0, .reg = -1, .alloca = true, .bad = this->debug, .alias = -1, .nocall = false })?;
                     } else if (ins.op != "phi" && ins.op != "insertvalue") {
                         ins.id1 = ivs.len + 1;
                         this->idx_put(ins.dest, ivs.len)?;
@@ -788,6 +789,42 @@ struct Native {
     }
 
     // ------------------------------------------------------------------ function
+    !void record_vars(str fname, i64 start, i64 end, List<str> dvars, List<Block>* blocks) {
+        auto fnn = fname;
+        if (str_starts_with(fnn, "vb.")) { fnn = fnn[3..]; }
+        auto f = DbgFunc{ .name = fnn, .start = start, .end = end, .vars = List<DbgVar>::init(this->a) };
+        for (auto d : dvars) {
+            const auto s1 = str_find_byte(d, ' ');
+            const auto rest = d[s1 + 1..];
+            const auto s2 = str_find_byte(rest, ' ');
+            const auto vname = d[0..s1];
+            const auto ptr = rest[0..s2];
+            const auto unsigned = rest[s2 + 1..] == "u";
+            if (!this->allocas.has(ptr)) { continue; }
+            LT* t = null;
+            for (auto blk : *blocks) {
+                for (auto ins : blk.ins) {
+                    if (ins.op == "alloca" && ins.dest == ptr) { t = ins.ty; }
+                }
+            }
+            if (t == null) { continue; }
+            auto tn = "";
+            auto enc = 5;
+            if (t.k == .I && t.bits == 1) { tn = "bool"; enc = 2; }
+            else if (t.k == .I) {
+                auto b = this->obj.type_name(unsigned, t.bits)?;
+                tn = b;
+                if (unsigned) { enc = 7; }
+            }
+            else if (t.k == .F32) { tn = "f32"; enc = 4; }
+            else if (t.k == .F64) { tn = "f64"; enc = 4; }
+            else if (t.k == .P) { tn = "ptr"; enc = 7; }
+            else { continue; }
+            f.vars.push(DbgVar{ .name = vname, .off = this->allocas.get(ptr)?, .ty = tn, .enc = enc, .size = t.size })?;
+        }
+        this->obj.funcs.push(f)?;
+    }
+
     !void function(str hdr, str[] body) {
         const auto asm = &this->obj.text;
         this->slot = Map<i64>::init(this->a);
@@ -821,8 +858,13 @@ struct Native {
         this->fn_file = 0;
         this->fn_line = 0;
         auto cur_line = 0;
+        auto dvars = List<str>::init(this->a);
         for (auto ln : body) {
             if (ln.len == 0) { continue; }
+            if (str_starts_with(ln, "  ;@D ")) {
+                dvars.push(ln[6..])?;
+                continue;
+            }
             if (str_starts_with(ln, "  ;@F ")) {
                 this->fn_file = this->obj.file_index(ln[6..])?;
                 continue;
@@ -955,7 +997,10 @@ struct Native {
         }
         patch_u32(&asm.code, frame_patch, align_up(this->frame, 16));
         asm.resolve_fixups()?;
-        if (this->fn_line > 0) { this->obj.add_row(asm.pos(), 0, this->fn_file)?; }
+        if (this->fn_line > 0) {
+            this->obj.add_row(asm.pos(), 0, this->fn_file)?;
+            if (this->debug) { this->record_vars(name, start, asm.pos(), dvars, &blocks)?; }
+        }
         this->obj.define(name, SEC_TEXT, start, asm.pos() - start, !internal, true)?;
     }
 
@@ -1875,8 +1920,9 @@ i64 f32_bits_of_hex(str s) {
 }
 
 /// compile a whole IR module to an ELF object file
-!void native_compile(Allocator a, str ir, str out_path) {
+!void native_compile(Allocator a, str ir, str out_path, bool debug) {
     const auto n = new_native(a)?;
+    n.debug = debug;
     n.compile_module(ir)?;
     n.obj.write(out_path)?;
 }

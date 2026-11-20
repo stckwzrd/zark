@@ -37,7 +37,7 @@ Done: closures with explicit captures, `T: Ord` constraints (checked at the call
 Done: `vibe lsp` (language server), `vibe test`, `vibe fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
 - `vibe fmt`: the parser already exists; add a printer for the AST.
 - `vibe test`: `test "name" { ... }` blocks collected and run by the driver.
-- DWARF line tables from the native backend: done (`break file:line`, `next`, `bt`). Missing: variable and type DIEs, and any debug info on the LLVM path.
+- DWARF line tables from the native backend: done (`break file:line`, `next`, `bt`). `-g` adds scalar variables (`print x`, `info locals`). Missing: structs and arrays, location lists for register variables, and any debug info on the LLVM path.
 
 ## 8. Platforms
 An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.vibe` stays the same; only the encoder and the ABI change.

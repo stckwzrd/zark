@@ -503,6 +503,11 @@ struct Gen {
         const auto sc = &this->scopes.items[this->scopes.len - 1];
         if (sc.vars.has(name)) { this->err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed; }
         sc.vars.put(name, v)?;
+        if (this->dbg && v.ptr.len > 3 && v.ptr[1] == 'v' && v.ptr[2] == '.') {
+            auto kind = "s";
+            if (v.ty.k == .Int && !v.ty.signed) { kind = "u"; }
+            sprint(&this->allocas, "  ;@D {name} {v.ptr} {kind}\n")?;
+        }
     }
 
     !Var lookup_var(str name) {

@@ -123,6 +123,7 @@ arg 2: b c
 | `--fast-math` | `--fast` plus permission to reorder floating-point operations (`fast` on `fadd`, `fmul` and so on, like `-ffast-math`): sums and products can be vectorized, but results may differ slightly |
 | `--check-overflow` | stops the program with a file and line when `+`, `-` or `*` on integers overflows in your code (the prelude is not checked); by default overflow wraps around, as in C |
 | `--fast` | `--release` plus the assumption that signed overflow does not happen (`nsw`, as in C++): sometimes faster on integer loops, but the behavior is undefined on overflow |
+| `-g` | own backend only: keep every local variable in memory and describe it for gdb (`print x`, `info locals`); slower code |
 | `--time` | print the time of the frontend, the backend and the link |
 | `-o name` | the name of the output file |
 | `-- ...` | arguments for `vibe run` |

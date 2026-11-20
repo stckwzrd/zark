@@ -164,6 +164,10 @@
 <td><code>--release</code> plus the assumption that signed overflow does not happen (<code>nsw</code>, as in C++): sometimes faster on integer loops, but the behavior is undefined on overflow</td>
 </tr>
 <tr>
+<td><code>-g</code></td>
+<td>own backend only: keep every local variable in memory and describe it for gdb (<code>print x</code>, <code>info locals</code>); slower code</td>
+</tr>
+<tr>
 <td><code>--time</code></td>
 <td>print the time of the frontend, the backend and the link</td>
 </tr>

@@ -140,6 +140,7 @@ str base_of(str path) {
     auto fast = false;
     auto fastmath = false;
     auto ovf = false;
+    auto debug = false;
     auto i = 2;
     while (i < arg_count()) {
         const auto x = arg(i);
@@ -160,6 +161,8 @@ str base_of(str path) {
             fastmath = true;
             opt = true;
             safety = false;
+        } else if (x == "-g") {
+            debug = true;
         } else if (x == "--check-overflow") {
             ovf = true;
         } else if (x == "--fast") {
@@ -226,7 +229,7 @@ str base_of(str path) {
     if (use_native) { sprint(&llb, "{cache}/{stem}.o")?; } else { sprint(&llb, "{cache}/{stem}.ll")?; }
     const auto ll_path = llb.slice();
     if (use_native) {
-        native_compile(a, ir.slice(), ll_path) catch |e| {
+        native_compile(a, ir.slice(), ll_path, debug) catch |e| {
             eprintln("error: native backend failed: {e}");
             return 1;
         }
