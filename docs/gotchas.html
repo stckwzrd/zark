@@ -39,12 +39,12 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> z </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">/</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> z);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
-fatal: arithmetic error: integer division by zero (address 0x401277)
+fatal: arithmetic error: integer division by zero (address 0x401287)
 backtrace:
-  #0 0x1277 in .vibe-cache/main
-  #1 0xbc3f in .vibe-cache/main
-  #2 0x2a1ca in /lib/x86_64-linux-gnu/libc.so.6
-  #3 0x2a28b in /lib/x86_64-linux-gnu/libc.so.6
+  #0 0x1287 in .vibe-cache/main
+  #1 0xbc4f in .vibe-cache/main
+  #2 0x27781 in /usr/lib/libc.so.6
+  #3 0x278b9 in /usr/lib/libc.so.6
   #4 0x1185 in .vibe-cache/main
 where (addr2line):
 vb.main at main.vibe:4
@@ -78,10 +78,10 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
 fatal: segmentation fault at address 0x40c010
 backtrace:
-  #0 0x12df in .vibe-cache/main
-  #1 0xbaa3 in .vibe-cache/main
-  #2 0x2a1ca in /lib/x86_64-linux-gnu/libc.so.6
-  #3 0x2a28b in /lib/x86_64-linux-gnu/libc.so.6
+  #0 0x12ef in .vibe-cache/main
+  #1 0xbab3 in .vibe-cache/main
+  #2 0x27781 in /usr/lib/libc.so.6
+  #3 0x278b9 in /usr/lib/libc.so.6
   #4 0x1185 in .vibe-cache/main
 where (addr2line):
 vb.main at main.vibe:3

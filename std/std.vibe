@@ -13,6 +13,7 @@ extern i32 memcmp(void* a, void* b, u64 n);
 extern void* memcpy(void* dst, void* src, u64 n);
 extern void* memmove(void* dst, void* src, u64 n);
 extern void* memset(void* dst, i32 c, u64 n);
+extern void* aligned_alloc(u64 align, u64 n);
 extern u64 strlen(u8* s);
 extern void* fdopen(i32 fd, u8* mode);
 extern u8* fgets(u8* buf, i32 n, void* f);
@@ -113,7 +114,14 @@ struct Allocator {
 }
 
 // -- libc heap
-void* __c_alloc(void* ctx, u64 n, u64 align) { return calloc(1, n); }
+void* __c_alloc(void* ctx, u64 n, u64 align) {
+    if (align > 16) {
+        const auto p = aligned_alloc(align, (n + align - 1) / align * align);
+        if (p != null) { memset(p, 0, n); }
+        return p;
+    }
+    return calloc(1, n);
+}
 void __c_free(void* ctx, void* p, u64 n) { free(p); }
 Allocator c_allocator() {
     return Allocator{ .ctx = null, .alloc_fn = __c_alloc, .free_fn = __c_free };
