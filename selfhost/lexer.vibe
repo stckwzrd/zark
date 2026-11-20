@@ -8,7 +8,7 @@ enum Tag {
     comma, dot, dotdot, ellipsis, colon, fat_arrow,
     plus, minus, star, slash, percent, amp, pipe, caret, tilde, bang, question,
     eq, eqeq, neq, lt, le, gt, ge, shl, shr, andand, oror,
-    plus_eq, minus_eq, star_eq, slash_eq, percent_eq,
+    plus_eq, minus_eq, star_eq, slash_eq, percent_eq, plus_wrap, minus_wrap, star_wrap,
     pipe_eq, amp_eq, caret_eq, shl_eq, shr_eq, plusplus, minusminus, coloncolon, arrow,
     kw_fn, kw_const, kw_if, kw_else, kw_while, kw_for,
     kw_return, kw_break, kw_continue, kw_struct, kw_enum, kw_extern,
@@ -87,6 +87,9 @@ Op operator(str s) {
             ">>" => return Op{ .tag = .shr, .len = 2 };
             "&&" => return Op{ .tag = .andand, .len = 2 };
             "||" => return Op{ .tag = .oror, .len = 2 };
+            "+%" => return Op{ .tag = .plus_wrap, .len = 2 };
+            "-%" => return Op{ .tag = .minus_wrap, .len = 2 };
+            "*%" => return Op{ .tag = .star_wrap, .len = 2 };
             "+=" => return Op{ .tag = .plus_eq, .len = 2 };
             "-=" => return Op{ .tag = .minus_eq, .len = 2 };
             "*=" => return Op{ .tag = .star_eq, .len = 2 };

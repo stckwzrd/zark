@@ -844,6 +844,19 @@ str operator_name(Tag t) {
         }
     }
     if (is_cmp) { return this->compare(op, l, r, line); }
+    if (op == .plus_wrap || op == .minus_wrap || op == .star_wrap) {
+        if (l.ty.k != .Int) { this->err(line); eprintln("wrapping operators work on integers, not '{this->type_name(l.ty)?}'"); return error.CompileFailed; }
+        auto plain = Tag.star;
+        if (op == .plus_wrap) { plain = .plus; }
+        if (op == .minus_wrap) { plain = .minus; }
+        this->wrapping = true;
+        const auto w = this->arith(plain, l, r, line) catch |e| {
+            this->wrapping = false;
+            return e;
+        };
+        this->wrapping = false;
+        return w;
+    }
     return this->arith(op, l, r, line);
 }
 
@@ -883,9 +896,9 @@ str operator_name(Tag t) {
     if (l.ty.k == .Int) {
         const auto sg = l.ty.signed;
         match op {
-            .plus => { if (sg && this->fast) { ins = "add nsw"; } else { ins = "add"; } }
-            .minus => { if (sg && this->fast) { ins = "sub nsw"; } else { ins = "sub"; } }
-            .star => { if (sg && this->fast) { ins = "mul nsw"; } else { ins = "mul"; } }
+            .plus => { if (sg && this->fast && !this->wrapping) { ins = "add nsw"; } else { ins = "add"; } }
+            .minus => { if (sg && this->fast && !this->wrapping) { ins = "sub nsw"; } else { ins = "sub"; } }
+            .star => { if (sg && this->fast && !this->wrapping) { ins = "mul nsw"; } else { ins = "mul"; } }
             .slash => { if (sg) { ins = "sdiv"; } else { ins = "udiv"; } }
             .percent => { if (sg) { ins = "srem"; } else { ins = "urem"; } }
             .amp => ins = "and";
@@ -918,7 +931,7 @@ str operator_name(Tag t) {
         return Value{ .ty = l.ty, .v = t };
     }
     sprint(this->ins()?, "  {t} = {ins} {ty} {l.v}, {r.v}\n")?;
-    if (this->ovf && this->dbg && l.ty.k == .Int && (op == .plus || op == .minus || op == .star)) { this->check_overflow(op, l, r, t, line)?; }
+    if (this->ovf && this->dbg && !this->wrapping && l.ty.k == .Int && (op == .plus || op == .minus || op == .star)) { this->check_overflow(op, l, r, t, line)?; }
     return Value{ .ty = l.ty, .v = t };
 }
 

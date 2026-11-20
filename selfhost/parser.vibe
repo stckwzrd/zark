@@ -919,8 +919,8 @@ i64 prec(Tag t) {
         .caret => return 5;
         .amp => return 6;
         .shl, .shr => return 7;
-        .plus, .minus => return 8;
-        .star, .slash, .percent => return 9;
+        .plus, .minus, .plus_wrap, .minus_wrap => return 8;
+        .star, .slash, .percent, .star_wrap => return 9;
     }
     return -1;
 }

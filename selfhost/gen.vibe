@@ -60,6 +60,7 @@ struct Gen {
     bool fast;
     bool fastmath;
     bool ovf;
+    bool wrapping;
 
     Map<FnDecl*> fns;
     Map<FnDecl*> methods;

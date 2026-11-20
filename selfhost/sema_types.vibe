@@ -297,9 +297,9 @@ bool Gen::satisfies(Type* t, str name) {
             const auto l = this->eval_const(e.l)?;
             const auto r = this->eval_const(e.r)?;
             match e.op {
-                .plus => return l + r;
-                .minus => return l - r;
-                .star => return l * r;
+                .plus, .plus_wrap => return l + r;
+                .minus, .minus_wrap => return l - r;
+                .star, .star_wrap => return l * r;
                 .slash, .percent => {
                     if (r == 0) { this->err(e.line); eprintln("division by zero in constant"); return error.CompileFailed; }
                     if (e.op == .slash) { return l / r; }

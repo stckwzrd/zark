@@ -18,7 +18,7 @@ bool ends_value(Token t) {
 bool is_binary_op(Tag t) {
     match t {
         .eq, .eqeq, .neq, .lt, .le, .gt, .ge, .shl, .shr, .andand, .oror, .plus_eq, .minus_eq, .star_eq, .slash_eq,
-        .percent_eq, .pipe_eq, .amp_eq, .caret_eq, .shl_eq, .shr_eq, .fat_arrow, .plus, .slash, .percent, .caret => return true;
+        .percent_eq, .pipe_eq, .amp_eq, .caret_eq, .shl_eq, .shr_eq, .fat_arrow, .plus, .slash, .percent, .caret, .plus_wrap, .minus_wrap, .star_wrap => return true;
     }
     return false;
 }

@@ -82,6 +82,18 @@ void main() {
 
 > **Gotcha:** overflow is not detected by default. Compile with `--check-overflow` to make `+`, `-` and `*` stop the program with a file and line, or compare in advance, or use a wider type.
 
+When wrapping is what you want (hashes, counters, checksums), say so with `+%`, `-%` and `*%`: they always wrap, even under `--check-overflow`, and never trigger the "signed overflow is undefined" assumption of `--fast`.
+
+```vibe run
+void main() {
+    u64 h = 14695981039346656037;
+    for (auto c : "vibe") { h = (h ^ c as u64) *% 1099511628211; }
+    println(h);
+    const u8 big = 250;
+    println(big +% 10);
+}
+```
+
 Integer division by zero crashes the program (a processor signal): `vibe run` shows `error: error.Signaled`. Check the divisor yourself.
 
 ### Implicit widening
