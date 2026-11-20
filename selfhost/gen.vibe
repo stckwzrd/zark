@@ -302,7 +302,11 @@ struct Gen {
         auto nb = this->sb();
         sprint(&nb, "@g.{c.name}")?;
         const auto name = nb.slice();
-        sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}\n")?;
+        if (c.align > 0) {
+            sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}, align {c.align}\n")?;
+        } else {
+            sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}\n")?;
+        }
         this->globals.put(c.name, Var{ .ptr = name, .ty = ty, .mutable = true })?;
     }
 

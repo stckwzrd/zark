@@ -268,6 +268,13 @@ bool Parser::lambda_ahead() {
     const auto t = this->peek();
     auto tps = this->strs();
     auto cons = this->strs();
+    i64 want_align = 0;
+    if (this->at(.ident) && t.text == "align" && this->peek_at(1).tag == .lparen) {
+        _ = this->advance();
+        _ = this->advance();
+        want_align = (parse_int_radix(this->expect(.int_lit)?.text, 0) catch 0) as i64;
+        _ = this->expect(.rparen)?;
+    }
     if (this->at(.kw_template)) {
         _ = this->advance();
         tps = this->parse_type_params(&cons)?;
@@ -321,7 +328,7 @@ bool Parser::lambda_ahead() {
     auto vty = ty;
     if (ty.k == .Name && ty.name == "auto" && ty.args.len == 0) { vty = null; }
     const auto cd = this->a.create<ConstDecl>()?;
-    *cd = ConstDecl{ .name = nt.text, .ty = vty, .value = v, .mutable = !is_const, .line = t.line, .name_off = nt.off };
+    *cd = ConstDecl{ .name = nt.text, .ty = vty, .value = v, .mutable = !is_const, .line = t.line, .name_off = nt.off, .align = want_align };
     out.push(Decl{ .k = .Const, .c = cd, .line = t.line })?;
 }
 

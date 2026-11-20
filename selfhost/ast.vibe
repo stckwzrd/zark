@@ -126,6 +126,7 @@ struct ConstDecl {
     bool mutable;
     i64 line;
     i64 name_off;
+    i64 align;
 }
 
 enum DK { Func, Struct, Enum, Const, Import, Alias }

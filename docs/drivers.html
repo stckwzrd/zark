@@ -184,6 +184,14 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Cpu</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">rdtsc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">>=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>true</code></pre></div></div>
+<h2 id="align-n-выравнивание-глобальной-переменной"><a class="anchor" href="#align-n-выравнивание-глобальной-переменной">#</a><code>align(N)</code>: выравнивание глобальной переменной</h2>
+<p>Таблицы страниц и буферы для DMA должны лежать по адресу, кратному размеру страницы. Перед глобальной переменной пишется <code>align(N)</code>; <code>N</code> — степень двойки.</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">align</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">4096</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">512</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] page_table </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">((</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">page_table[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">%</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4096</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>0</code></pre></div></div>
+<p>Структуры и локальные переменные выравниваются по своему типу.</p>
 <h2 id="атомарные-операции-и-spinlock"><a class="anchor" href="#атомарные-операции-и-spinlock">#</a>Атомарные операции и <code>Spinlock</code></h2>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    u32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> counter </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
@@ -205,15 +213,15 @@ true</code></pre></div></div>
 <th>Что делает</th>
 </tr>
 </thead><tbody><tr>
-<td><code>Atomic::fetch_add32(p, v)</code>, <code>fetch_add64</code></td>
+<td><code>Atomic::fetch_add32(p, v)</code>, <code>fetch_add8</code>, <code>fetch_add16</code>, <code>fetch_add64</code></td>
 <td>прибавляет и возвращает старое значение</td>
 </tr>
 <tr>
-<td><code>Atomic::swap32(p, v)</code>, <code>swap64</code></td>
+<td><code>Atomic::swap32(p, v)</code>, <code>swap8</code>, <code>swap16</code>, <code>swap64</code></td>
 <td>записывает и возвращает старое значение</td>
 </tr>
 <tr>
-<td><code>Atomic::cas32(p, expected, desired)</code>, <code>cas64</code></td>
+<td><code>Atomic::cas32(p, expected, desired)</code>, <code>cas8</code>, <code>cas16</code>, <code>cas64</code></td>
 <td>пишет <code>desired</code>, если там <code>expected</code>; возвращает прежнее значение</td>
 </tr>
 </tbody></table></div>
@@ -339,7 +347,7 @@ true</code></pre></div></div>
 </ul>
 
 <div class="pager"><a class="prev" href="c-interop.html"><small>Назад</small>Взаимодействие с C и C++</a><a class="next" href="testing.html"><small>Дальше</small>Тестирование</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#volatile">volatile</a><a class="l2" href="#packed-struct">packed struct</a><a class="l2" href="#биты-регистров-bits">Биты регистров: Bits</a><a class="l2" href="#процессор-cpu-и-порты-port">Процессор: Cpu и порты: Port</a><a class="l2" href="#атомарные-операции-и-spinlock">Атомарные операции и Spinlock</a><a class="l2" href="#asm-свои-инструкции">asm: свои инструкции</a><a class="l2" href="#драйверы-в-пространстве-пользователя-linux">Драйверы в пространстве пользователя (Linux)</a><a class="l2" href="#сборка-без-libc-freestanding">Сборка без libc: --freestanding</a><a class="l2" href="#пример-ядро-которое-загружается-в-qemu">Пример: ядро, которое загружается в QEMU</a><a class="l2" href="#чего-пока-нет">Чего пока нет</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#volatile">volatile</a><a class="l2" href="#packed-struct">packed struct</a><a class="l2" href="#биты-регистров-bits">Биты регистров: Bits</a><a class="l2" href="#процессор-cpu-и-порты-port">Процессор: Cpu и порты: Port</a><a class="l2" href="#align-n-выравнивание-глобальной-переменной">align(N): выравнивание глобальной переменной</a><a class="l2" href="#атомарные-операции-и-spinlock">Атомарные операции и Spinlock</a><a class="l2" href="#asm-свои-инструкции">asm: свои инструкции</a><a class="l2" href="#драйверы-в-пространстве-пользователя-linux">Драйверы в пространстве пользователя (Linux)</a><a class="l2" href="#сборка-без-libc-freestanding">Сборка без libc: --freestanding</a><a class="l2" href="#пример-ядро-которое-загружается-в-qemu">Пример: ядро, которое загружается в QEMU</a><a class="l2" href="#чего-пока-нет">Чего пока нет</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

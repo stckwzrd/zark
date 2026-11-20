@@ -1049,6 +1049,12 @@ struct Bits {
 struct Atomic {
     static u32 fetch_add32(u32* p, u32 v) { return asm<u32>("lock xaddl $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
     static u64 fetch_add64(u64* p, u64 v) { return asm<u64>("lock xaddq $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u8 fetch_add8(u8* p, u8 v) { return asm<u8>("lock xaddb $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u16 fetch_add16(u16* p, u16 v) { return asm<u16>("lock xaddw $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u8 swap8(u8* p, u8 v) { return asm<u8>("xchgb $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u16 swap16(u16* p, u16 v) { return asm<u16>("xchgw $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
+    static u8 cas8(u8* p, u8 expected, u8 desired) { return asm<u8>("lock cmpxchgb $2, ($1)", "=\{al\},r,r,0,~\{memory\}", p, desired, expected); }
+    static u16 cas16(u16* p, u16 expected, u16 desired) { return asm<u16>("lock cmpxchgw $2, ($1)", "=\{ax\},r,r,0,~\{memory\}", p, desired, expected); }
     static u32 swap32(u32* p, u32 v) { return asm<u32>("xchgl $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
     static u64 swap64(u64* p, u64 v) { return asm<u64>("xchgq $0, ($1)", "=r,r,0,~\{memory\}", p, v); }
     static u32 cas32(u32* p, u32 expected, u32 desired) { return asm<u32>("lock cmpxchgl $2, ($1)", "=\{ax\},r,r,0,~\{memory\}", p, desired, expected); }

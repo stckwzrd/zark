@@ -332,7 +332,13 @@ struct Native {
         if (c.eat_word("constant")) { is_const = true; } else { _ = c.eat_word("global"); }
         const auto t = this->ty(&c)?;
         c.ws();
-        const auto init = c.s[c.i..];
+        auto init = c.s[c.i..];
+        auto al = t.align;
+        const auto ai = str_find(init, ", align ");
+        if (!is_const && ai >= 0) {
+            al = max(al, (parse_int_radix(init[ai + 8..], 10) catch 1) as i64);
+            init = init[0..ai];
+        }
         auto buf = &this->obj.data;
         auto sec = SEC_DATA;
         const auto has_ptrs = str_find_byte(init, '@') >= 0;
@@ -340,7 +346,8 @@ struct Native {
             buf = &this->obj.rodata;
             sec = SEC_RODATA;
         }
-        align_buf(buf, t.align)?;
+        if (sec == SEC_DATA) { this->obj.data_align = max(this->obj.data_align, al); }
+        align_buf(buf, al)?;
         const auto off = buf.len;
         for (auto _k : 0..t.size) { buf.push(0)?; }
         this->const_bytes(t, init, buf, off, sec == SEC_DATA)?;
@@ -1677,6 +1684,12 @@ struct Native {
             asm.opc(0x0F05)?;
             return;
         }
+        if (t == "lock xaddb $0, ($1)") { put_bytes(asm, [0xF0, 0x40, 0x0F, 0xC0, 0x37, 0x40, 0x0F, 0xB6, 0xC6])?; return; }
+        if (t == "lock xaddw $0, ($1)") { put_bytes(asm, [0x66, 0xF0, 0x0F, 0xC1, 0x37, 0x0F, 0xB7, 0xC6])?; return; }
+        if (t == "xchgb $0, ($1)") { put_bytes(asm, [0x40, 0x86, 0x37, 0x40, 0x0F, 0xB6, 0xC6])?; return; }
+        if (t == "xchgw $0, ($1)") { put_bytes(asm, [0x66, 0x87, 0x37, 0x0F, 0xB7, 0xC6])?; return; }
+        if (t == "lock cmpxchgb $2, ($1)") { asm.opc(0x89D0)?; put_bytes(asm, [0xF0, 0x40, 0x0F, 0xB0, 0x37, 0x0F, 0xB6, 0xC0])?; return; }
+        if (t == "lock cmpxchgw $2, ($1)") { asm.opc(0x89D0)?; put_bytes(asm, [0x66, 0xF0, 0x0F, 0xB1, 0x37, 0x0F, 0xB7, 0xC0])?; return; }
         if (t == "lock xaddl $0, ($1)") { put_bytes(asm, [0xF0, 0x0F, 0xC1, 0x37])?; asm.opc(0x89F0)?; return; }
         if (t == "lock xaddq $0, ($1)") { put_bytes(asm, [0xF0, 0x48, 0x0F, 0xC1, 0x37])?; asm.opc(0x4889F0)?; return; }
         if (t == "xchgl $0, ($1)") { asm.opc(0x8737)?; asm.opc(0x89F0)?; return; }

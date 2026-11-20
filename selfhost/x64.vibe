@@ -309,6 +309,7 @@ struct ObjFile {
     Asm text;
     List<u8> rodata;
     List<u8> data;
+    i64 data_align;
     List<Reloc> data_relocs;
     List<Sym> syms;
     Map<i64> sym_index;   // name -> index in syms
@@ -415,7 +416,7 @@ struct ObjFile {
         align_buf(&f, 16)?;
         const auto o_rodata = f.len;
         f.append(this->rodata.slice())?;
-        align_buf(&f, 16)?;
+        align_buf(&f, max(16, this->data_align))?;
         const auto o_data = f.len;
         f.append(this->data.slice())?;
         align_buf(&f, 8)?;
@@ -436,7 +437,7 @@ struct ObjFile {
         for (auto _k : 0..64) { f.push(0)?; }
         sec_hdr(&f, n_text, 1, 6, o_text, this->text.code.len, 0, 0, 16, 0)?;
         sec_hdr(&f, n_rodata, 1, 2, o_rodata, this->rodata.len, 0, 0, 16, 0)?;
-        sec_hdr(&f, n_data, 1, 3, o_data, this->data.len, 0, 0, 16, 0)?;
+        sec_hdr(&f, n_data, 1, 3, o_data, this->data.len, 0, 0, max(16, this->data_align), 0)?;
         sec_hdr(&f, n_rtext, 4, 0x40, o_rtext, rela_text.len, 6, 1, 8, 24)?;
         sec_hdr(&f, n_rdata, 4, 0x40, o_rdata, rela_data.len, 6, 3, 8, 24)?;
         sec_hdr(&f, n_symtab, 2, 0, o_symtab, symtab.len, 7, first_global, 8, 24)?;
