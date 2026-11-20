@@ -25,6 +25,7 @@ This is the complete guide. Every example on these pages was compiled and run by
 
 <div class="cards">
 <a href="getting-started.html"><b>Installation and the first program</b><span>Build the compiler, run Hello World, learn the commands and flags.</span></a>
+<a href="showcase.html"><b>Showcase</b><span>A multithreaded ray tracer: interfaces, SIMD, JSON, threads, unions and tests in one program.</span></a>
 <a href="tour.html"><b>Quick tour</b><span>The whole language on one page: about twenty small programs.</span></a>
 <a href="types.html"><b>Types</b><span>Numbers, pointers, slices, strings, arrays and the conversion rules.</span></a>
 <a href="errors-and-optionals.html"><b>Errors</b><span><code>!T</code>, <code>?</code>, <code>catch</code>, <code>errdefer</code> and optional values.</span></a>

@@ -842,7 +842,7 @@ str operator_name(Tag t) {
         l = this->gen_expr(le, scalar_hint(r.ty))?;
     } else {
         l = this->gen_expr(le, exp)?;
-        r = this->gen_expr(re, scalar_hint(l.ty))?;
+        r = this->gen_expr(re, this->operand_hint(op, l.ty)?)?;
     }
     if (l.ty.k == .Array && l.ty.vec && !(r.ty.k == .Array && r.ty.vec)) { r = this->splat(this->coerce(r, l.ty.elem, line)?, l.ty)?; }
     if (r.ty.k == .Array && r.ty.vec && !(l.ty.k == .Array && l.ty.vec)) { l = this->splat(this->coerce(l, r.ty.elem, line)?, r.ty)?; }
@@ -1046,6 +1046,19 @@ str operator_name(Tag t) {
 }
 
 bool is_vec(Type* t) { return t.k == .Array && t.vec; }
+
+!Type* Gen::operand_hint(Tag op, Type* lt) {
+    if (lt.k == .Strct && !is_union(lt) && !lt.si.decl.is_iface && lt.si.args.len == 0) {
+        const auto on = operator_name(op);
+        auto kb = this->sb();
+        sprint(&kb, "{recv_name(lt)}.{on}")?;
+        if (on.len > 0 && this->methods.has(kb.slice())) {
+            const auto fd = this->methods.get(kb.slice())?;
+            if (fd.params.len >= 1) { return this->resolve_type(fd.params.get(fd.params.len - 1).ty, this->new_env()?); }
+        }
+    }
+    return scalar_hint(lt);
+}
 
 Type* scalar_hint(Type* t) {
     if (is_vec(t)) { return t.elem; }
