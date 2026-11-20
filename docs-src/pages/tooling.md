@@ -269,7 +269,7 @@ Highlighting for Zed, Sublime and other editors can use the TextMate grammar fro
 - **`panic("message {x}")`** prints the message with a file and line and ends the program with code 1.
 - **`assert(condition)`** panics with a file and line if the condition is false.
 - **`vibe ir`** lets you see how the compiler understood the program and find, for example, extra copies of aggregates.
-- **gdb**: the own backend puts a DWARF line table into the file. `break file.vibe:12`, `next`, `step` and `bt` with line numbers work; in a backtrace the functions look like `vb[fib]`, `vb[main]`. Add `-g` to also see variables: `vibe build x.vibe -g` keeps every local in a stack slot and describes it, so `print x`, `info locals` and `up` work (scalars only: integers, floats, `bool`, pointers; structs and arrays are not described yet). Without `-g` the variables may live in registers and are not described. Builds through `--llvm` and `--release` contain nothing but function symbols.
+- **gdb**: the own backend puts a DWARF line table into the file. `break file.vibe:12`, `next`, `step` and `bt` with line numbers work; in a backtrace the functions look like `vb[fib]`, `vb[main]`. Add `-g` to also see variables: `vibe build x.vibe -g` keeps every local in a stack slot and describes it, so `print x`, `info locals` and `up` work (integers, floats, `bool`, pointers, structs, arrays and strings; unions and interfaces are not described yet). Without `-g` the variables may live in registers and are not described. Builds through `--llvm` and `--release` contain nothing but function symbols.
 - **`vibe tokens`** helps when you suspect a lexer problem: an unclosed quote, a curly brace inside a string and the like.
 
 ## Cache and temporary files

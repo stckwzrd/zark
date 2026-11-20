@@ -41,7 +41,7 @@ extern u8* getcwd(u8* buf, u64 size);
 
 struct Reloc { i64 off; str sym; i64 kind; i64 addend; }
 struct LineRow { i64 off; i64 line; i64 file; }
-struct DbgVar { str name; i64 off; str ty; i64 enc; i64 size; }
+struct DbgVar { str name; i64 off; str ty; }
 struct DbgFunc { str name; i64 start; i64 end; List<DbgVar> vars; }
 struct Fixup { i64 off; str label; }
 
@@ -365,11 +365,81 @@ struct ObjFile {
         this->syms.push(Sym{ .name = name, .sec = sec, .value = value, .size = size, .global = global, .func = func })?;
     }
 
-    !str type_name(bool unsigned, i64 bits) {
-        auto b = List<u8>::init(this->a);
-        if (unsigned) { b.push('u')?; } else { b.push('i')?; }
-        sprint(&b, "{bits}")?;
-        return b.slice();
+    !i64 emit_desc(List<u8>*info, Map<i64>* memo, str d) {
+        if (memo.has(d)) { return memo.get(d)?; }
+        i64 at = 0;
+        if (d[0] == 'A') {
+            const auto p = str_find_byte(d, '[');
+            const auto n = (parse_int_radix(d[1..p], 10) catch 0) as i64;
+            const auto eo = this->emit_desc(info, memo, d[p + 1..d.len - 1])?;
+            at = info.len;
+            put_uleb(info, 7)?;
+            put_u32(info, eo)?;
+            put_uleb(info, 8)?;
+            put_uleb(info, n)?;
+            info.push(0)?;
+        } else if (d[0] == 'S' && d.len > 1 && d[1] == '{') {
+            const auto inner = d[2..d.len - 1];
+            auto c = str_find_byte(inner, ':');
+            auto head = inner;
+            auto body = "";
+            if (c >= 0) {
+                head = inner[0..c];
+                body = inner[c + 1..];
+            }
+            const auto hc = str_find_byte(head, ',');
+            const auto sname = head[0..hc];
+            const auto ssize = (parse_int_radix(head[hc + 1..], 10) catch 0) as i64;
+            auto fnames = List<str>::init(this->a);
+            auto foffs = List<i64>::init(this->a);
+            auto ftypes = List<i64>::init(this->a);
+            auto depth = 0;
+            auto st = 0;
+            for (auto k : 0..body.len + 1) {
+                if (k < body.len && (body[k] == '{' || body[k] == '[')) { depth += 1; }
+                if (k < body.len && (body[k] == '}' || body[k] == ']')) { depth -= 1; }
+                if (k == body.len || (body[k] == ',' && depth == 0)) {
+                    const auto f = body[st..k];
+                    st = k + 1;
+                    if (f.len == 0) { continue; }
+                    const auto a1 = str_find_byte(f, '@');
+                    const auto e1 = str_find_byte(f, '=');
+                    fnames.push(f[0..a1])?;
+                    foffs.push((parse_int_radix(f[a1 + 1..e1], 10) catch 0) as i64)?;
+                    ftypes.push(this->emit_desc(info, memo, f[e1 + 1..])?)?;
+                }
+            }
+            at = info.len;
+            put_uleb(info, 5)?;
+            info.append(sname)?;
+            info.push(0)?;
+            put_uleb(info, ssize)?;
+            for (auto [k, fname] : fnames) {
+                put_uleb(info, 6)?;
+                info.append(fname)?;
+                info.push(0)?;
+                put_u32(info, ftypes.get(k))?;
+                put_uleb(info, foffs.get(k))?;
+            }
+            info.push(0)?;
+        } else {
+            auto enc = 7;
+            auto size = 8;
+            if (d == "bool") { enc = 2; size = 1; }
+            else if (d != "ptr") {
+                size = (parse_int_radix(d[1..], 10) catch 64) as i64 / 8;
+                if (d[0] == 'i') { enc = 5; }
+                if (d[0] == 'f') { enc = 4; }
+            }
+            at = info.len;
+            put_uleb(info, 2)?;
+            info.append(d)?;
+            info.push(0)?;
+            info.push(enc as u8)?;
+            info.push(size as u8)?;
+        }
+        memo.put(d, at)?;
+        return at;
     }
 
     !i64 file_index(str name) {
@@ -392,7 +462,11 @@ struct ObjFile {
         const auto attrs = [0x25, 0x08, 0x13, 0x05, 0x03, 0x08, 0x1b, 0x08, 0x10, 0x17, 0x11, 0x01, 0x12, 0x07, 0, 0,
             2, 0x24, 0, 0x03, 0x08, 0x3e, 0x0b, 0x0b, 0x0b, 0, 0,
             3, 0x2e, 1, 0x03, 0x08, 0x11, 0x01, 0x12, 0x07, 0x40, 0x18, 0, 0,
-            4, 0x34, 0, 0x03, 0x08, 0x49, 0x13, 0x02, 0x18, 0, 0, 0];
+            4, 0x34, 0, 0x03, 0x08, 0x49, 0x13, 0x02, 0x18, 0, 0,
+            5, 0x13, 1, 0x03, 0x08, 0x0b, 0x0f, 0, 0,
+            6, 0x0d, 0, 0x03, 0x08, 0x49, 0x13, 0x38, 0x0f, 0, 0,
+            7, 0x01, 1, 0x49, 0x13, 0, 0,
+            8, 0x21, 0, 0x37, 0x0f, 0, 0, 0];
         for (auto x : attrs) { abbrev.push(x as u8)?; }
 
         put_u32(info, 0)?;
@@ -413,15 +487,7 @@ struct ObjFile {
         put_u64(info, this->text.code.len)?;
         auto type_at = Map<i64>::init(this->a);
         for (auto f : this->funcs) {
-            for (auto v : f.vars) {
-                if (type_at.has(v.ty)) { continue; }
-                type_at.put(v.ty, info.len)?;
-                put_uleb(info, 2)?;
-                info.append(v.ty)?;
-                info.push(0)?;
-                info.push(v.enc as u8)?;
-                info.push(v.size as u8)?;
-            }
+            for (auto v : f.vars) { _ = this->emit_desc(info, &type_at, v.ty)?; }
         }
         for (auto f : this->funcs) {
             put_uleb(info, 3)?;

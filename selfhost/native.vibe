@@ -789,7 +789,7 @@ struct Native {
     }
 
     // ------------------------------------------------------------------ function
-    !void record_vars(str fname, i64 start, i64 end, List<str> dvars, List<Block>* blocks) {
+    !void record_vars(str fname, i64 start, i64 end, List<str> dvars) {
         auto fnn = fname;
         if (str_starts_with(fnn, "vb.")) { fnn = fnn[3..]; }
         auto f = DbgFunc{ .name = fnn, .start = start, .end = end, .vars = List<DbgVar>::init(this->a) };
@@ -799,28 +799,9 @@ struct Native {
             const auto s2 = str_find_byte(rest, ' ');
             const auto vname = d[0..s1];
             const auto ptr = rest[0..s2];
-            const auto unsigned = rest[s2 + 1..] == "u";
-            if (!this->allocas.has(ptr)) { continue; }
-            LT* t = null;
-            for (auto blk : *blocks) {
-                for (auto ins : blk.ins) {
-                    if (ins.op == "alloca" && ins.dest == ptr) { t = ins.ty; }
-                }
-            }
-            if (t == null) { continue; }
-            auto tn = "";
-            auto enc = 5;
-            if (t.k == .I && t.bits == 1) { tn = "bool"; enc = 2; }
-            else if (t.k == .I) {
-                auto b = this->obj.type_name(unsigned, t.bits)?;
-                tn = b;
-                if (unsigned) { enc = 7; }
-            }
-            else if (t.k == .F32) { tn = "f32"; enc = 4; }
-            else if (t.k == .F64) { tn = "f64"; enc = 4; }
-            else if (t.k == .P) { tn = "ptr"; enc = 7; }
-            else { continue; }
-            f.vars.push(DbgVar{ .name = vname, .off = this->allocas.get(ptr)?, .ty = tn, .enc = enc, .size = t.size })?;
+            const auto desc = rest[s2 + 1..];
+            if (desc == "-" || !this->allocas.has(ptr)) { continue; }
+            f.vars.push(DbgVar{ .name = vname, .off = this->allocas.get(ptr)?, .ty = desc })?;
         }
         this->obj.funcs.push(f)?;
     }
@@ -999,7 +980,7 @@ struct Native {
         asm.resolve_fixups()?;
         if (this->fn_line > 0) {
             this->obj.add_row(asm.pos(), 0, this->fn_file)?;
-            if (this->debug) { this->record_vars(name, start, asm.pos(), dvars, &blocks)?; }
+            if (this->debug) { this->record_vars(name, start, asm.pos(), dvars)?; }
         }
         this->obj.define(name, SEC_TEXT, start, asm.pos() - start, !internal, true)?;
     }

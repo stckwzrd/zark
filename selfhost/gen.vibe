@@ -373,6 +373,47 @@ struct Gen {
         this->terminated = true;
     }
 
+    !str clean(str s) {
+        auto b = this->sb();
+        for (auto c : s) {
+            if (c == ' ' || c == ',' || c == '{' || c == '}' || c == '[' || c == ']' || c == ':' || c == '@' || c == '=') { b.push('_')?; } else { b.push(c)?; }
+        }
+        return b.slice();
+    }
+
+    !str type_desc(Type* t) {
+        auto b = this->sb();
+        match t.k {
+            .Int => {
+                if (t.signed) { sprint(&b, "i{t.bits}")?; } else { sprint(&b, "u{t.bits}")?; }
+            }
+            .Float => sprint(&b, "f{t.bits}")?;
+            .Bool => b.append("bool")?;
+            .Ptr, .Func => b.append("ptr")?;
+            .Enm => b.append("u32")?;
+            .Array => sprint(&b, "A{t.len}[{this->type_desc(t.elem)?}]")?;
+            .Slice => sprint(&b, "S{{str,16:ptr@0=ptr,len@8=i64}}")?;
+            .Strct => {
+                if (t.si.decl.is_union || t.si.decl.is_iface) { return "-"; }
+                sprint(&b, "S{{{this->clean(this->type_name(t)?)?},{this->size_of(t)?}")?;
+                u64 off = 0;
+                auto sep = ":";
+                for (auto f : t.si.fields) {
+                    if (!t.si.decl.packed) {
+                        const auto al = this->align_of(f.ty)?;
+                        off = (off + al - 1) / al * al;
+                    }
+                    sprint(&b, "{sep}{this->clean(f.name)?}@{off}={this->type_desc(f.ty)?}")?;
+                    sep = ",";
+                    off += this->size_of(f.ty)?;
+                }
+                b.push('}')?;
+            }
+            _ => return "-";
+        }
+        return b.slice();
+    }
+
     !str alloca(Type* ty, str hint) {
         this->ntmp += 1;
         auto b = this->sb();
@@ -504,9 +545,7 @@ struct Gen {
         if (sc.vars.has(name)) { this->err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed; }
         sc.vars.put(name, v)?;
         if (this->dbg && v.ptr.len > 3 && v.ptr[1] == 'v' && v.ptr[2] == '.') {
-            auto kind = "s";
-            if (v.ty.k == .Int && !v.ty.signed) { kind = "u"; }
-            sprint(&this->allocas, "  ;@D {name} {v.ptr} {kind}\n")?;
+            sprint(&this->allocas, "  ;@D {name} {v.ptr} {this->type_desc(v.ty)?}\n")?;
         }
     }
 
