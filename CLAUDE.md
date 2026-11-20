@@ -13,6 +13,7 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 - `std/std.vibe`: the prelude, embedded into the compiler with `embed`.
 - `std/<name>.vibe`: standard modules (fs, path, time, os, args, json, net, http, thread), also embedded; `import "std/fs" as fs;` loads `<std>/fs.vibe` (`selfhost/loader.vibe`). A new module needs a line in `std_source` there, and the compiler must be rebuilt to pick up module changes.
 - `tests/std/*.vibe`: `test` blocks for the standard library, run by `tests/run.sh`.
+- `selfhost/project.vibe`: `vibe.toml` (a TOML subset), dependencies (path, git into `.vibe/deps`), `vibe new`; `tests/project.sh` tests it.
 - `bootstrap/seed.ll.gz`: the bootstrap seed, the LLVM IR of the compiler itself. `./bootstrap.sh` builds stage1 from it with clang; no other compiler is needed.
 - `legacy/zig-stage0/`: the old Zig compiler, kept for history only. It is not built and not maintained.
 - `tools/update-seed.sh`: regenerates the seed from a stage that passed the fixed-point check.

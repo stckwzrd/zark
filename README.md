@@ -52,6 +52,7 @@ vibe run main.vibe lib.c engine.cpp       # link C/C++ sources directly
 vibe ir  main.vibe                        # print LLVM IR
 vibe test main.vibe                       # run the `test "name" { ... }` blocks
 vibe fmt main.vibe                        # format in place (--check to only report)
+vibe new app && cd app && vibe run        # a project with vibe.toml
 VIBE=build/vibe tests/run.sh              # test suite
 ```
 
@@ -170,6 +171,10 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 `std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`). See the guide page "Standard modules".
 
 A file that starts with `#!/usr/bin/env -S vibe run` can be run directly as a script; the arguments after it go to the program.
+
+### Projects
+
+`vibe new hello` creates a project with a `vibe.toml`; inside it `vibe run`, `vibe build` and `vibe test` need no file name. The manifest lists C sources, libraries, default flags, and dependencies by path or git (`utils = { path = "../utils" }`, then `import "utils" as u;`).
 
 The full language description is in [SPEC.md](SPEC.md).
 
