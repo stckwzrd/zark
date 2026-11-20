@@ -135,7 +135,7 @@ Arms are tested top to bottom, there is no fall-through, and a `match` is not re
 
 ## 6. Builtins and formatting
 
-The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__str_eq`, `__errname`. Everything else is ordinary code in `std/std.vibe`.
+The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`. Everything else is ordinary code in `std/std.vibe`.
 
 | Builtin | Notes |
 |---|---|
@@ -169,6 +169,7 @@ Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` 
 - `packed struct` and `packed union`: fields without padding, alignment 1.
 - `align(N) T name = v;` before a global variable aligns it to `N` bytes (a power of two, page tables and DMA buffers). Struct types and locals keep their natural alignment.
 - `asm<R>("template", "constraints", args...)` (`R` defaults to `void`): LLVM inline asm with `sideeffect`. Braces in the strings are written `\{` and `\}`. The native backend encodes the templates used by the prelude (`Cpu`, `Port`, `Atomic`) and rejects others with a message; `--llvm` accepts any.
+- `--check-overflow` makes `+`, `-` and `*` on integers in user code panic on overflow (`__ovf`); without it they wrap.
 - `--fast` is `--release` with `nsw` on signed `+ - *`; signed overflow is then undefined. Array and slice indexing is always emitted with `inbounds`.
 - `--freestanding` links with `-nostdlib -static`, disables bounds checks, and accepts `-Wl,...`, `-T...`, `.S`, `.c`, `.o` arguments. An `export` function with a body replaces an `extern` declaration of the same name (for `memset`, `memcpy`).
 - Prelude: `Cpu`, `Port`, `Bits`, `Atomic`, `Spinlock`.

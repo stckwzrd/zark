@@ -53,6 +53,11 @@ bool __str_eq(str a, str b) {
     return memcmp(a.ptr, b.ptr, a.len as u64) == 0;
 }
 
+void __ovf(str file, i64 line) {
+    eprintln("panic: integer overflow at {file}:{line}");
+    exit(1);
+}
+
 void __oob(i64 i, i64 n, str file, i64 line) {
     eprintln("panic: index {i} out of bounds (len {n}) at {file}:{line}");
     exit(1);

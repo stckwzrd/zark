@@ -918,7 +918,67 @@ str operator_name(Tag t) {
         return Value{ .ty = l.ty, .v = t };
     }
     sprint(this->ins()?, "  {t} = {ins} {ty} {l.v}, {r.v}\n")?;
+    if (this->ovf && this->dbg && l.ty.k == .Int && (op == .plus || op == .minus || op == .star)) { this->check_overflow(op, l, r, t, line)?; }
     return Value{ .ty = l.ty, .v = t };
+}
+
+!void Gen::check_overflow(Tag op, Value l, Value r, str res, i64 line) {
+    const auto ty = this->llty(l.ty)?;
+    const auto sg = l.ty.signed;
+    auto c = this->tmp()?;
+    if (op == .star && l.ty.bits < 64) {
+        auto ext = "zext";
+        if (sg) { ext = "sext"; }
+        const auto a = this->tmp()?;
+        const auto b = this->tmp()?;
+        const auto m = this->tmp()?;
+        const auto w = this->tmp()?;
+        sprint(this->ins()?, "  {a} = {ext} {ty} {l.v} to i64\n  {b} = {ext} {ty} {r.v} to i64\n  {m} = mul i64 {a}, {b}\n  {w} = {ext} {ty} {res} to i64\n  {c} = icmp ne i64 {w}, {m}\n")?;
+    } else if (op == .star && !sg) {
+        const auto nz = this->tmp()?;
+        const auto ls = this->tmp()?;
+        const auto q = this->tmp()?;
+        const auto ne = this->tmp()?;
+        sprint(this->ins()?, "  {nz} = icmp ne i64 {l.v}, 0\n  {ls} = select i1 {nz}, i64 {l.v}, i64 1\n  {q} = udiv i64 {res}, {ls}\n  {ne} = icmp ne i64 {q}, {r.v}\n  {c} = and i1 {nz}, {ne}\n")?;
+    } else if (op == .star) {
+        const auto z = this->tmp()?;
+        const auto m1 = this->tmp()?;
+        const auto sp = this->tmp()?;
+        const auto ls = this->tmp()?;
+        const auto q = this->tmp()?;
+        const auto qne = this->tmp()?;
+        const auto nsp = this->tmp()?;
+        const auto c1 = this->tmp()?;
+        const auto rmin = this->tmp()?;
+        const auto c2 = this->tmp()?;
+        sprint(this->ins()?, "  {z} = icmp eq i64 {l.v}, 0\n  {m1} = icmp eq i64 {l.v}, -1\n  {sp} = or i1 {z}, {m1}\n  {ls} = select i1 {sp}, i64 1, i64 {l.v}\n  {q} = sdiv i64 {res}, {ls}\n  {qne} = icmp ne i64 {q}, {r.v}\n  {nsp} = xor i1 {sp}, true\n  {c1} = and i1 {nsp}, {qne}\n  {rmin} = icmp eq i64 {r.v}, -9223372036854775808\n  {c2} = and i1 {m1}, {rmin}\n  {c} = or i1 {c1}, {c2}\n")?;
+    } else if (!sg && op == .plus) {
+        sprint(this->ins()?, "  {c} = icmp ult {ty} {res}, {l.v}\n")?;
+    } else if (!sg) {
+        sprint(this->ins()?, "  {c} = icmp ult {ty} {l.v}, {r.v}\n")?;
+    } else {
+        const auto x = this->tmp()?;
+        const auto y = this->tmp()?;
+        const auto z = this->tmp()?;
+        if (op == .plus) {
+            sprint(this->ins()?, "  {x} = xor {ty} {l.v}, {res}\n  {y} = xor {ty} {r.v}, {res}\n")?;
+        } else {
+            sprint(this->ins()?, "  {x} = xor {ty} {l.v}, {r.v}\n  {y} = xor {ty} {l.v}, {res}\n")?;
+        }
+        sprint(this->ins()?, "  {z} = and {ty} {x}, {y}\n  {c} = icmp slt {ty} {z}, 0\n")?;
+    }
+    const auto lbad = this->new_label("ovf")?;
+    const auto lok = this->new_label("ovfok")?;
+    sprint(this->ins()?, "  br i1 {c}, label %{lbad}, label %{lok}\n")?;
+    this->terminated = true;
+    this->label(lbad)?;
+    if (!this->fns.has("__ovf")) { this->err(line); eprintln("runtime helper __ovf missing (prelude)"); return error.CompileFailed; }
+    const auto fi = this->inst_fn(this->fns.get("__ovf")?, this->new_env()?, this->no_types())?;
+    const auto fname = this->str_global(this->file)?;
+    sprint(this->ins()?, "  call void @{fi.llname}({{ ptr, i64 }} {{ ptr {fname}, i64 {this->file.len} }}, i64 {line})\n")?;
+    sprint(this->ins()?, "  unreachable\n")?;
+    this->terminated = true;
+    this->label(lok)?;
 }
 
 !Value Gen::compare(Tag op, Value l, Value r, i64 line) {

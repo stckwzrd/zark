@@ -139,6 +139,7 @@ str base_of(str path) {
     auto freestanding = false;
     auto fast = false;
     auto fastmath = false;
+    auto ovf = false;
     auto i = 2;
     while (i < arg_count()) {
         const auto x = arg(i);
@@ -159,6 +160,8 @@ str base_of(str path) {
             fastmath = true;
             opt = true;
             safety = false;
+        } else if (x == "--check-overflow") {
+            ovf = true;
         } else if (x == "--fast") {
             opt = true;
             safety = false;
@@ -189,6 +192,7 @@ str base_of(str path) {
     const auto g = new_gen(a, safety)?;
     g.fast = fast;
     g.fastmath = fastmath;
+    g.ovf = ovf;
     auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = Map<str>::init(a) };
     diag_prelude = PRELUDE;
     g.test_mode = is_test;

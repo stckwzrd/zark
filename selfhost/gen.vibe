@@ -59,6 +59,7 @@ struct Gen {
     bool safety;
     bool fast;
     bool fastmath;
+    bool ovf;
 
     Map<FnDecl*> fns;
     Map<FnDecl*> methods;
