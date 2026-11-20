@@ -1,0 +1,27 @@
+align(64) struct Line { u8 tag; i64 val; }
+align(16) struct Cell { u8 a; u32 b; }
+struct Outer { u8 first; Cell c; u8 last; }
+struct Plain { u8 x; i64 y; }
+
+align(64) Line global = 0;
+Line[3] table = 0;
+
+i64 addr(void* p) { return p as i64; }
+
+Cell twice(Cell c) { return Cell{ .a = c.a * 2, .b = c.b * 2 }; }
+
+!void main() {
+    println(sizeof(Line), alignof(Line), sizeof(Cell), alignof(Cell), sizeof(Outer), alignof(Outer), sizeof(Plain), alignof(Plain));
+    Line a = Line{ .tag = 7, .val = 42 };
+    Outer o = Outer{ .first = 9, .c = Cell{ .a = 3, .b = 4 }, .last = 8 };
+    Cell t = twice(o.c);
+    println(a.tag, a.val, o.first, o.c.a, o.c.b, o.last, t.a, t.b);
+    println(addr(&a) % 64, addr(&o) % 16, addr(&o.c) % 16, addr(&global) % 64, addr(&table[0]) % 64);
+    table[2].val = 5;
+    println(table[2].val, addr(&table[1]) - addr(&table[0]));
+    auto h = c_allocator();
+    auto p = h.create<Line>()?;
+    defer h.destroy(p);
+    p.val = 11;
+    println(addr(p) % 64, p.val);
+}

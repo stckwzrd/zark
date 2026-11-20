@@ -51,6 +51,7 @@ See [lexical structure](lexical.md).
 | error / optional | `!T`, `?T` |
 | functions | `fn(A, B) -> R`, closure `fn[](A) -> R` |
 | alias | `type Name = Type;` |
+| SIMD | `f32x4`, `i32x8`, `u8x16`: `f32x4(a, b, c, d)`, `f32x4(x)`, `v[i]` |
 
 See [types](types.md).
 
