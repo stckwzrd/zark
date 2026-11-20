@@ -311,7 +311,7 @@ void main() {
 }
 ```
 
-There are no ready-made `split`, `join`, `to_upper` or `replace`. They take a minute to write.
+The prelude has `str_split`, `str_join`, `str_replace`, `str_to_upper` and more (see [the reference](stdlib.md#more-strings)). The recipes below show how such functions are written by hand.
 
 ### Splitting by a separator
 

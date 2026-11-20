@@ -162,6 +162,14 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 - `sort(slice)`, `min, max, abs, swap`, strings: `str_find, str_trim, str_starts_with, str_ends_with, parse_int, cstr, read_line(buf)`
 - `Arena`; files: `read_file, write_file, file_exists`; processes: `run(a, argv)`, `env`; `to_cstr`, `parse_int_radix`, `parse_float`
 - math, `clock()`, `arg_count()/arg(i)`; any libc function through `extern`
+- `HashMap<K, V>` / `HashSet<T>` for any printable key type, `str_split`, `str_join`, `str_replace`, UTF-8, `sort_by`
+- `DebugAllocator`: finds leaks, use after free, overflows and double frees; crashes print the cause and a backtrace with source lines
+
+### Standard modules (`import "std/fs" as fs;`)
+
+`std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`). See the guide page "Standard modules".
+
+A file that starts with `#!/usr/bin/env -S vibe run` can be run directly as a script; the arguments after it go to the program.
 
 The full language description is in [SPEC.md](SPEC.md).
 

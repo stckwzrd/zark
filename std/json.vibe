@@ -1,0 +1,581 @@
+// JSON: parse into a tree, build a tree, print it, or write JSON directly with Builder.
+//   import "std/json" as json;
+//   auto ar = Arena::init(c_allocator());       // the tree is freed all at once
+//   defer ar.deinit();
+//   const auto doc = json::parse(ar.allocator(), text)?;
+//   const auto name = doc.get("user").get("name").as_str() catch "?";
+//   for (auto item : doc.get("items").items()) { ... }
+//   println(*doc);                               // compact JSON; "{*doc:p}" is indented
+// Lookups never fail on a missing key or index: get/at return a shared null Value, so chains
+// stay short; the as_* accessors return an error when the type does not match.
+// String values without escapes point into the input text, which must stay alive.
+
+enum Kind { Null, Bool, Number, String, Array, Object }
+
+struct Member { str key; Value* value; }
+
+struct Value {
+    Kind kind;
+    bool b;
+    f64 num;
+    str text;          // String: the decoded text; Number: the literal as written
+    List<Value*> arr;
+    List<Member> obj;
+
+    bool is_null() const { return this->kind is .Null; }
+    bool is_object() const { return this->kind is .Object; }
+    bool is_array() const { return this->kind is .Array; }
+
+    /// a member of an object, or the null value
+    Value* get(str key) {
+        if (this->kind is .Object) {
+            for (auto m : this->obj) { if (m.key == key) { return m.value; } }
+        }
+        return &NULL_VALUE;
+    }
+
+    bool has(str key) {
+        if (this->kind is .Object) {
+            for (auto m : this->obj) { if (m.key == key) { return true; } }
+        }
+        return false;
+    }
+
+    /// an element of an array, or the null value
+    Value* at(i64 i) {
+        if (this->kind is .Array && i >= 0 && i < this->arr.len) { return this->arr.get(i); }
+        return &NULL_VALUE;
+    }
+
+    /// elements of an array or members' count of an object
+    i64 len() {
+        if (this->kind is .Array) { return this->arr.len; }
+        if (this->kind is .Object) { return this->obj.len; }
+        return 0;
+    }
+
+    /// the elements of an array (empty for anything else)
+    Value*[] items() {
+        if (this->kind is .Array) { return this->arr.slice(); }
+        return this->arr.items[0..0];
+    }
+
+    /// the members of an object, in input order (empty for anything else)
+    Member[] members() {
+        if (this->kind is .Object) { return this->obj.slice(); }
+        return this->obj.items[0..0];
+    }
+
+    !str as_str() {
+        if (this->kind is .String) { return this->text; }
+        return error.NotAString;
+    }
+
+    !f64 as_f64() {
+        if (this->kind is .Number) { return this->num; }
+        return error.NotANumber;
+    }
+
+    /// integers are read from the literal, so values above 2^53 stay exact
+    !i64 as_i64() {
+        if (!(this->kind is .Number)) { return error.NotANumber; }
+        return parse_int(this->text) catch {
+            const auto f = this->num;
+            if (f != floor(f)) { return error.NotAnInteger; }
+            return f as i64;
+        };
+    }
+
+    !bool as_bool() {
+        if (this->kind is .Bool) { return this->b; }
+        return error.NotABool;
+    }
+
+    str str_or(str d) { return this->as_str() catch d; }
+    i64 int_or(i64 d) { return this->as_i64() catch d; }
+    f64 f64_or(f64 d) { return this->as_f64() catch d; }
+    bool bool_or(bool d) { return this->as_bool() catch d; }
+
+    // ---- building ----
+
+    /// sets or replaces a member of an object
+    !void set(str key, Value* v) {
+        if (!(this->kind is .Object)) { return error.NotAnObject; }
+        for (auto i : 0..this->obj.len) {
+            if (this->obj.items[i].key == key) {
+                this->obj.items[i].value = v;
+                return;
+            }
+        }
+        this->obj.push(Member{ .key = key, .value = v })?;
+    }
+
+    !void push(Value* v) {
+        if (!(this->kind is .Array)) { return error.NotAnArray; }
+        this->arr.push(v)?;
+    }
+
+    /// println(*v) prints compact JSON, "{*v:p}" prints it indented
+    !void fmt(Writer* w, str spec) { return write_value(w, this, spec == "p", 0); }
+}
+
+Value NULL_VALUE = Value{};
+
+!Value* make(Allocator a, Kind k) {
+    const auto v = a.create<Value>()?;
+    v.kind = k;
+    v.arr = List<Value*>::init(a);
+    v.obj = List<Member>::init(a);
+    return v;
+}
+
+!Value* object(Allocator a) { return make(a, Kind::Object); }
+!Value* array(Allocator a) { return make(a, Kind::Array); }
+!Value* null_value(Allocator a) { return make(a, Kind::Null); }
+
+!Value* string(Allocator a, str s) {
+    const auto v = make(a, Kind::String)?;
+    v.text = s;
+    return v;
+}
+
+!Value* number(Allocator a, f64 n) {
+    const auto v = make(a, Kind::Number)?;
+    v.num = n;
+    return v;
+}
+
+!Value* integer(Allocator a, i64 n) {
+    const auto v = make(a, Kind::Number)?;
+    v.num = n as f64;
+    u8[24] b;
+    v.text = a.dup(bprint(b[..], "{n}")?)?;
+    return v;
+}
+
+!Value* boolean(Allocator a, bool x) {
+    const auto v = make(a, Kind::Bool)?;
+    v.b = x;
+    return v;
+}
+
+// ---------------------------------------------------------------- parsing
+
+/// where parsing stopped and why
+struct ParseError {
+    i64 line;
+    i64 col;
+    str msg;
+
+    !void fmt(Writer* w, str spec) {
+        u8[160] b;
+        return w.write(bprint(b[..], "{this->line}:{this->col}: {this->msg}")?);
+    }
+}
+
+struct JsonParser {
+    str s;
+    i64 i;
+    i64 depth;
+    Allocator a;
+    ParseError* err;
+
+    !void fail(str msg) {
+        auto line = 1;
+        auto col = 1;
+        for (auto c : this->s[0..min(this->i, this->s.len)]) {
+            if (c == '\n') { line += 1; col = 1; } else { col += 1; }
+        }
+        if (this->err != null) { *this->err = ParseError{ .line = line, .col = col, .msg = msg }; }
+        return error.InvalidJson;
+    }
+
+    void ws() {
+        while (this->i < this->s.len) {
+            const auto c = this->s[this->i];
+            if (c != ' ' && c != '\n' && c != '\t' && c != '\r') { return; }
+            this->i += 1;
+        }
+    }
+
+    bool lit(str word) {
+        if (this->i + word.len <= this->s.len && this->s[this->i..this->i + word.len] == word) {
+            this->i += word.len;
+            return true;
+        }
+        return false;
+    }
+
+    !Value* value() {
+        this->ws();
+        if (this->i >= this->s.len) { this->fail("unexpected end of input")?; }
+        const auto c = this->s[this->i];
+        if (c == '{') { return this->object(); }
+        if (c == '[') { return this->array(); }
+        if (c == '"') {
+            const auto v = make(this->a, Kind::String)?;
+            v.text = this->string()?;
+            return v;
+        }
+        if (c == '-' || is_digit(c)) { return this->number(); }
+        if (this->lit("true")) { return boolean(this->a, true); }
+        if (this->lit("false")) { return boolean(this->a, false); }
+        if (this->lit("null")) { return make(this->a, Kind::Null); }
+        this->fail("unexpected character")?;
+        return error.InvalidJson;
+    }
+
+    !Value* object() {
+        this->depth += 1;
+        if (this->depth > 512) { this->fail("nesting is too deep")?; }
+        this->i += 1;
+        const auto v = make(this->a, Kind::Object)?;
+        this->ws();
+        if (this->i < this->s.len && this->s[this->i] == '}') {
+            this->i += 1;
+            this->depth -= 1;
+            return v;
+        }
+        while (true) {
+            this->ws();
+            if (this->i >= this->s.len || this->s[this->i] != '"') { this->fail("expected a string key")?; }
+            const auto key = this->string()?;
+            this->ws();
+            if (this->i >= this->s.len || this->s[this->i] != ':') { this->fail("expected ':'")?; }
+            this->i += 1;
+            const auto item = this->value()?;
+            v.obj.push(Member{ .key = key, .value = item })?;
+            this->ws();
+            if (this->i < this->s.len && this->s[this->i] == ',') { this->i += 1; continue; }
+            if (this->i < this->s.len && this->s[this->i] == '}') { this->i += 1; break; }
+            this->fail("expected ',' or '}'")?;
+        }
+        this->depth -= 1;
+        return v;
+    }
+
+    !Value* array() {
+        this->depth += 1;
+        if (this->depth > 512) { this->fail("nesting is too deep")?; }
+        this->i += 1;
+        const auto v = make(this->a, Kind::Array)?;
+        this->ws();
+        if (this->i < this->s.len && this->s[this->i] == ']') {
+            this->i += 1;
+            this->depth -= 1;
+            return v;
+        }
+        while (true) {
+            v.arr.push(this->value()?)?;
+            this->ws();
+            if (this->i < this->s.len && this->s[this->i] == ',') { this->i += 1; continue; }
+            if (this->i < this->s.len && this->s[this->i] == ']') { this->i += 1; break; }
+            this->fail("expected ',' or ']'")?;
+        }
+        this->depth -= 1;
+        return v;
+    }
+
+    !Value* number() {
+        const auto start = this->i;
+        if (this->s[this->i] == '-') { this->i += 1; }
+        if (this->i >= this->s.len || !is_digit(this->s[this->i])) { this->fail("invalid number")?; }
+        if (this->s[this->i] == '0' && this->i + 1 < this->s.len && is_digit(this->s[this->i + 1])) { this->fail("leading zeros are not allowed")?; }
+        while (this->i < this->s.len && is_digit(this->s[this->i])) { this->i += 1; }
+        if (this->i < this->s.len && this->s[this->i] == '.') {
+            this->i += 1;
+            if (this->i >= this->s.len || !is_digit(this->s[this->i])) { this->fail("digits expected after '.'")?; }
+            while (this->i < this->s.len && is_digit(this->s[this->i])) { this->i += 1; }
+        }
+        if (this->i < this->s.len && (this->s[this->i] == 'e' || this->s[this->i] == 'E')) {
+            this->i += 1;
+            if (this->i < this->s.len && (this->s[this->i] == '+' || this->s[this->i] == '-')) { this->i += 1; }
+            if (this->i >= this->s.len || !is_digit(this->s[this->i])) { this->fail("digits expected in the exponent")?; }
+            while (this->i < this->s.len && is_digit(this->s[this->i])) { this->i += 1; }
+        }
+        const auto v = make(this->a, Kind::Number)?;
+        v.text = this->s[start..this->i];
+        v.num = parse_float(v.text) catch 0.0;
+        return v;
+    }
+
+    !u32 hex4() {
+        if (this->i + 4 > this->s.len) { this->fail("bad \\u escape")?; }
+        auto v = 0 as u32;
+        for (auto c : this->s[this->i..this->i + 4]) {
+            v = v << 4;
+            if (is_digit(c)) { v |= (c - '0') as u32; }
+            else if (c >= 'a' && c <= 'f') { v |= (c - 'a' + 10) as u32; }
+            else if (c >= 'A' && c <= 'F') { v |= (c - 'A' + 10) as u32; }
+            else { this->fail("bad \\u escape")?; }
+        }
+        this->i += 4;
+        return v;
+    }
+
+    /// a string starting at the opening quote; no copy when it has no escapes
+    !str string() {
+        this->i += 1;
+        const auto start = this->i;
+        while (this->i < this->s.len) {
+            const auto c = this->s[this->i];
+            if (c == '"') {
+                this->i += 1;
+                return this->s[start..this->i - 1];
+            }
+            if (c == '\\') { break; }
+            if (c < 0x20) { this->fail("control character in string")?; }
+            this->i += 1;
+        }
+        auto out = List<u8>::init(this->a);
+        errdefer out.deinit();
+        out.append(this->s[start..this->i])?;
+        while (true) {
+            if (this->i >= this->s.len) { this->fail("unterminated string")?; }
+            const auto c = this->s[this->i];
+            this->i += 1;
+            if (c == '"') { break; }
+            if (c < 0x20) { this->fail("control character in string")?; }
+            if (c != '\\') {
+                out.push(c)?;
+                continue;
+            }
+            if (this->i >= this->s.len) { this->fail("unterminated string")?; }
+            const auto e = this->s[this->i];
+            this->i += 1;
+            match e {
+                '"' => out.push('"')?;
+                '\\' => out.push('\\')?;
+                '/' => out.push('/')?;
+                'b' => out.push(8)?;
+                'f' => out.push(12)?;
+                'n' => out.push('\n')?;
+                'r' => out.push('\r')?;
+                't' => out.push('\t')?;
+                'u' => {
+                    auto cp = this->hex4()?;
+                    if (cp >= 0xd800 && cp <= 0xdbff) {
+                        if (!this->lit("\\u")) { this->fail("lone surrogate")?; }
+                        const auto lo = this->hex4()?;
+                        if (lo < 0xdc00 || lo > 0xdfff) { this->fail("bad surrogate pair")?; }
+                        cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
+                    } else if (cp >= 0xdc00 && cp <= 0xdfff) {
+                        this->fail("lone surrogate")?;
+                    }
+                    u8[4] b;
+                    out.append(utf8_encode(b[..], cp)?)?;
+                }
+                _ => this->fail("unknown escape")?;
+            }
+        }
+        return out.take();
+    }
+}
+
+/// parses a whole document; on error.InvalidJson use parse_ex for the position
+!Value* parse(Allocator a, str text) { return parse_ex(a, text, null); }
+
+/// like parse, and fills `err` with the line, column and reason on error.InvalidJson
+!Value* parse_ex(Allocator a, str text, ParseError* err) {
+    auto p = JsonParser{ .s = text, .a = a, .err = err };
+    const auto v = p.value()?;
+    p.ws();
+    if (p.i != text.len) { p.fail("unexpected text after the value")?; }
+    return v;
+}
+
+// ---------------------------------------------------------------- writing
+
+!void write_string(Writer* w, str s) {
+    w.write("\"")?;
+    auto start = 0;
+    for (auto [i, c] : s) {
+        auto rep = "";
+        u8[8] b;
+        if (c == '"') { rep = "\\\""; }
+        else if (c == '\\') { rep = "\\\\"; }
+        else if (c == '\n') { rep = "\\n"; }
+        else if (c == '\r') { rep = "\\r"; }
+        else if (c == '\t') { rep = "\\t"; }
+        else if (c < 0x20) { rep = bprint(b[..], "\\u{c as u32:04x}")?; }
+        else { continue; }
+        w.write(s[start..i])?;
+        w.write(rep)?;
+        start = i + 1;
+    }
+    w.write(s[start..])?;
+    return w.write("\"");
+}
+
+!void write_number(Writer* w, Value* v) {
+    if (v.text.len > 0) { return w.write(v.text); }
+    u8[64] b;
+    const auto f = v.num;
+    if (f != f || f - f != 0.0) { return w.write("null"); }
+    if (f == floor(f) && fabs(f) < 1e15) { return w.write(bprint(b[..], "{f as i64}")?); }
+    const auto short = bprint(b[..], "{f:.15g}")?;
+    if ((parse_float(short) catch 0.0) == f) { return w.write(short); }
+    return w.write(bprint(b[..], "{f:.17g}")?);
+}
+
+!void indent(Writer* w, i64 n) {
+    w.write("\n")?;
+    for (auto k : 0..n) { w.write("  ")?; }
+}
+
+!void write_value(Writer* w, Value* v, bool pretty, i64 depth) {
+    match v.kind {
+        .Null => return w.write("null");
+        .Bool => { if (v.b) { return w.write("true"); } return w.write("false"); }
+        .Number => return write_number(w, v);
+        .String => return write_string(w, v.text);
+        .Array => {
+            if (v.arr.len == 0) { return w.write("[]"); }
+            w.write("[")?;
+            for (auto [i, x] : v.arr) {
+                if (i > 0) { w.write(",")?; }
+                if (pretty) { indent(w, depth + 1)?; }
+                write_value(w, x, pretty, depth + 1)?;
+            }
+            if (pretty) { indent(w, depth)?; }
+            return w.write("]");
+        }
+        .Object => {
+            if (v.obj.len == 0) { return w.write("{{}"); }
+            w.write("{{")?;
+            for (auto [i, m] : v.obj) {
+                if (i > 0) { w.write(",")?; }
+                if (pretty) { indent(w, depth + 1)?; }
+                write_string(w, m.key)?;
+                if (pretty) { w.write(": ")?; } else { w.write(":")?; }
+                write_value(w, m.value, pretty, depth + 1)?;
+            }
+            if (pretty) { indent(w, depth)?; }
+            return w.write("}");
+        }
+    }
+}
+
+/// the JSON text of a tree (a new string)
+!str stringify(Allocator a, Value* v, bool pretty) {
+    auto out = List<u8>::init(a);
+    errdefer out.deinit();
+    auto w = Writer{ .ctx = &out as *void, .write_fn = list_write };
+    write_value(&w, v, pretty, 0)?;
+    return out.take();
+}
+
+// ---------------------------------------------------------------- Builder
+
+/// Writes JSON straight into a List<u8>, without building a tree; commas are automatic.
+///   auto b = json::Builder::init(&out);
+///   b.begin_object()?; b.key("id")?; b.integer(7)?; b.key("tags")?; b.begin_array()?; b.string("x")?; b.end()?; b.end()?;
+struct Builder {
+    List<u8>* out;
+    u64[64] first;     // per nesting level: 1 while nothing was written at this level
+    i64 depth;
+    bool after_key;
+
+    static Builder init(List<u8>* out) {
+        auto b = Builder{ .out = out };
+        b.first[0] = 1;
+        return b;
+    }
+
+    !void sep() {
+        if (this->after_key) {
+            this->after_key = false;
+            return;
+        }
+        if (this->first[this->depth] == 0) { this->out.push(',')?; }
+        this->first[this->depth] = 0;
+    }
+
+    !void open(u8 c) {
+        this->sep()?;
+        this->out.push(c)?;
+        if (this->depth >= 63) { return error.TooDeep; }
+        this->depth += 1;
+        this->first[this->depth] = 1;
+    }
+
+    !void begin_object() { return this->open('{'); }
+    !void begin_array() { return this->open('['); }
+
+    !void end_object() { return this->end(); }
+    !void end_array() { return this->end(); }
+
+    /// closes the innermost object or array
+    !void end() {
+        if (this->depth == 0) { return error.NothingOpen; }
+        this->depth -= 1;
+        auto opener = '{';
+        auto i = this->out.len - 1;
+        auto level = 0;
+        // find what we are closing: scan back for the matching unclosed bracket
+        auto in_str = false;
+        while (i >= 0) {
+            const auto c = this->out.items[i];
+            if (c == '"' && (i == 0 || this->out.items[i - 1] != '\\')) { in_str = !in_str; }
+            if (!in_str) {
+                if (c == '}' || c == ']') { level += 1; }
+                if (c == '{' || c == '[') {
+                    if (level == 0) { opener = c; break; }
+                    level -= 1;
+                }
+            }
+            i -= 1;
+        }
+        if (opener == '{') { return this->out.push('}'); }
+        return this->out.push(']');
+    }
+
+    !void key(str k) {
+        this->sep()?;
+        auto w = Writer{ .ctx = this->out as *void, .write_fn = list_write };
+        write_string(&w, k)?;
+        this->out.push(':')?;
+        this->after_key = true;
+    }
+
+    !void string(str s) {
+        this->sep()?;
+        auto w = Writer{ .ctx = this->out as *void, .write_fn = list_write };
+        return write_string(&w, s);
+    }
+
+    !void integer(i64 n) {
+        this->sep()?;
+        return sprint(this->out, "{n}");
+    }
+
+    !void number(f64 f) {
+        this->sep()?;
+        auto v = Value{ .kind = Kind::Number, .num = f };
+        auto w = Writer{ .ctx = this->out as *void, .write_fn = list_write };
+        return write_number(&w, &v);
+    }
+
+    !void boolean(bool x) {
+        this->sep()?;
+        if (x) { return this->out.append("true"); }
+        return this->out.append("false");
+    }
+
+    !void null_value() {
+        this->sep()?;
+        return this->out.append("null");
+    }
+
+    /// a tree as one value
+    !void value(Value* v) {
+        this->sep()?;
+        auto w = Writer{ .ctx = this->out as *void, .write_fn = list_write };
+        return write_value(&w, v, false, 0);
+    }
+}
+
+!void list_write(void* ctx, str s) {
+    const auto l = ctx as *List<u8>;
+    return l.append(s);
+}

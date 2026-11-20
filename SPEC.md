@@ -135,7 +135,7 @@ Arms are tested top to bottom, there is no fall-through, and a `match` is not re
 
 ## 6. Builtins and formatting
 
-The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`. Everything else is ordinary code in `std/std.vibe`.
+The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`, `__rt_init` (called first by `main` and by the test runner unless `--freestanding`; the prelude uses it to install the crash handler). Everything else is ordinary code in `std/std.vibe`.
 
 | Builtin | Notes |
 |---|---|

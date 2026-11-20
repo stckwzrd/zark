@@ -5,6 +5,47 @@ import "resolve.vibe";
 
 const auto PRELUDE = embed("../std/std.vibe");
 
+// Standard library modules, embedded like the prelude. `import "std/fs" as fs;` loads "<std>/fs.vibe".
+const auto STD_FS = embed("../std/fs.vibe");
+const auto STD_PATH = embed("../std/path.vibe");
+const auto STD_TIME = embed("../std/time.vibe");
+const auto STD_JSON = embed("../std/json.vibe");
+const auto STD_ARGS = embed("../std/args.vibe");
+const auto STD_OS = embed("../std/os.vibe");
+const auto STD_NET = embed("../std/net.vibe");
+const auto STD_HTTP = embed("../std/http.vibe");
+const auto STD_THREAD = embed("../std/thread.vibe");
+
+/// the embedded source of "<std>/name.vibe"
+!str std_source(str path) {
+    match path {
+        "<std>/fs.vibe" => return STD_FS;
+        "<std>/path.vibe" => return STD_PATH;
+        "<std>/time.vibe" => return STD_TIME;
+        "<std>/json.vibe" => return STD_JSON;
+        "<std>/args.vibe" => return STD_ARGS;
+        "<std>/os.vibe" => return STD_OS;
+        "<std>/net.vibe" => return STD_NET;
+        "<std>/http.vibe" => return STD_HTTP;
+        "<std>/thread.vibe" => return STD_THREAD;
+    }
+    return error.NotFound;
+}
+
+bool is_std_path(str path) { return str_starts_with(path, "<std>/"); }
+
+/// the file an `import "rel"` written in directory `dir` refers to
+!str import_target(Allocator a, str dir, str rel) {
+    if (str_starts_with(rel, "std/") || dir == "<std>") {
+        auto name = rel;
+        if (str_starts_with(name, "std/")) { name = name[4..]; }
+        auto b = List<u8>::init(a);
+        if (str_ends_with(name, ".vibe")) { sprint(&b, "<std>/{name}")?; } else { sprint(&b, "<std>/{name}.vibe")?; }
+        return b.slice();
+    }
+    return canonical(a, join_path(a, dir, rel)?);
+}
+
 extern u8* realpath(u8* path, u8* resolved);
 
 struct Loader {
@@ -20,7 +61,7 @@ struct Loader {
         const auto decls = p.parse_file()?;
         const auto dir = dir_of(path);
         for (auto d : decls) {
-            if (d.k == .Import) { this->load_file(canonical(this->a, join_path(this->a, dir, d.path)?)?, d.alias)? };
+            if (d.k == .Import) { this->load_file(import_target(this->a, dir, d.path)?, d.alias)? };
         }
         if (prefix.len > 0) { resolve_module(this->a, decls, prefix)?; }
         this->g.add_decls(decls, path)?;
@@ -43,6 +84,16 @@ struct Loader {
         if (prefix.len > 0) { this->prefixes.put(prefix, path)?; }
         if (this->overrides.has(path)) {
             this->load_source(this->overrides.get(path)?, path, prefix)?;
+            return;
+        }
+        if (is_std_path(path)) {
+            const auto ssrc = std_source(path) catch {
+                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread)");
+                return error.CompileFailed;
+            };
+            if (diag_files.a.alloc_fn == null) { diag_files = Map<str>::init(c_allocator()); }
+            diag_files.put(path, ssrc)?;
+            this->load_source(ssrc, path, prefix)?;
             return;
         }
         const auto src = read_file(this->a, path) catch |e| {

@@ -13,6 +13,10 @@ check interop $VIBE run examples/interop/main.vibe examples/interop/mathlib.c ex
 for f in tests/errors/*.vibe; do
   if $VIBE run "$f" >/dev/null 2>&1; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
 done
+for f in tests/std/*.vibe; do
+  if out=$($VIBE test "$f" $FLAGS 2>&1); then pass=$((pass+1)); echo "ok   $f ($(echo "$out" | tail -1))"
+  else fail=$((fail+1)); echo "FAIL $f"; echo "$out" | grep -v "^ok" | head -20; fi
+done
 tok_bad=0
 for f in examples/*.vibe examples/interop/*.vibe tests/errors/*.vibe; do
   n=$(echo ${f%.vibe} | tr / _)

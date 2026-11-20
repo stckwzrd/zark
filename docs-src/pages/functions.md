@@ -334,7 +334,7 @@ Calling through `null` crashes the program, so check before calling.
 A typical example is the comparison in a sort:
 
 ```vibe run
-void sort_by(i64[] xs, fn(i64, i64) -> bool less) {
+void bubble_sort(i64[] xs, fn(i64, i64) -> bool less) {
     for (auto i : 0..xs.len) {
         for (auto j : i + 1..xs.len) {
             if (less(xs[j], xs[i])) { swap(&xs[i], &xs[j]); }
@@ -346,7 +346,7 @@ bool desc(i64 a, i64 b) { return a > b; }
 
 void main() {
     auto v = [3, 1, 2];
-    sort_by(v[..], desc);
+    bubble_sort(v[..], desc);
     println(v);
 }
 ```

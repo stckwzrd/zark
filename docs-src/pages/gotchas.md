@@ -105,7 +105,7 @@ Writing into a literal crashes the program. Copy into a buffer.
 
 ### There is no `+` for strings
 
-Joining is done with `bprint` / `sprint`. There are no `split`, `join`, `replace`, `to_upper`; you write them yourself (recipes in [strings](strings.md)).
+Joining is done with `str_join`, `str_concat`, `bprint` or `sprint`; there are also `str_split`, `str_replace` and `str_to_upper` (see [the reference](stdlib.md#more-strings)). They take an `Allocator` because the result is a new string.
 
 ### A wrong format is printed as `<bad format>`
 
@@ -324,7 +324,7 @@ A zero `List` has no allocator, and `push` on it will crash. Always call `List<T
 
 The buffer may move. Take the pointer when you have finished adding.
 
-### `Map`: keys are not copied, no `remove`, the order is undefined
+### `Map`: keys are not copied, the order is undefined
 
 If a key is built in a temporary buffer, use `a.dup(key)`.
 

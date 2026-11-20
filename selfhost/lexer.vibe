@@ -288,7 +288,12 @@ struct Lexer {
 }
 
 !List<Token> tokenize(Allocator a, str src, str file) {
-    auto lx = Lexer{ .src = src, .file = file, .i = 0, .line = 1, .depth = 0, .toks = List<Token>::init(a) };
+    // a first line starting with "#!" is a shebang (`#!/usr/bin/env -S vibe run`): skipped
+    auto start = 0;
+    if (src.len >= 2 && src[0] == '#' && src[1] == '!') {
+        while (start < src.len && src[start] != '\n') { start += 1; }
+    }
+    auto lx = Lexer{ .src = src, .file = file, .i = start, .line = 1, .depth = 0, .toks = List<Token>::init(a) };
     lx.run()?;
     return lx.toks;
 }

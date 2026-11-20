@@ -98,6 +98,8 @@ struct Gen {
     FnInst* cur;
     bool const_this;
     bool in_cast;          // a literal under `as` may be truncated on purpose
+    bool freestanding;     // no libc: main does not call the runtime hook __rt_init
+    FnInst* rt_init;
     Env env;
     bool terminated;
     str cur_label;
@@ -684,6 +686,9 @@ struct Gen {
             main_inst = this->inst_fn(m, this->new_env()?, this->no_types())?;
         }
         for (auto f : this->fn_order) { if (f.is_export) { _ = this->inst_fn(f, this->new_env()?, this->no_types())?; } }
+        if (!this->freestanding && (main_inst != null || this->test_mode) && this->fns.has("__rt_init")) {
+            this->rt_init = this->inst_fn(this->fns.get("__rt_init")?, this->new_env()?, this->no_types())?;
+        }
         auto nerr = 0;
         auto next = 0;
         while (next < this->pending.len && nerr < 10) {
@@ -735,6 +740,7 @@ struct Gen {
         this->declare("fflush", "declare i32 @fflush(ptr)")?;
         const auto f = this->str_global("error: %s\n")?;
         w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?;
+        if (this->rt_init != null) { sprint(w, "  call void @{this->rt_init.llname}()\n")?; }
         w.append("  %has = icmp sgt i32 %argc, 1\n  br i1 %has, label %go, label %none\nnone:\n  ret i32 2\ngo:\n")?;
         w.append("  %ap = getelementptr ptr, ptr %argv, i64 1\n  %as = load ptr, ptr %ap\n  %i = call i32 @atoi(ptr %as)\n  br label %c0\n")?;
         for (auto [k, fi] : insts) {
@@ -753,6 +759,7 @@ struct Gen {
         if (this->globals.has("__argc")) {
             w.append("  %argc64 = sext i32 %argc to i64\n  store i64 %argc64, ptr @g.__argc\n  store ptr %argv, ptr @g.__argv\n")?;
         }
+        if (this->rt_init != null) { sprint(w, "  call void @{this->rt_init.llname}()\n")?; }
         const auto rt = mi.ret;
         if (rt.k == .Void) {
             sprint(w, "  call void @{mi.llname}()\n  ret i32 0\n")?;
