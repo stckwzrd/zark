@@ -5,6 +5,7 @@ import "json.vibe";
 import "fmt.vibe";
 import "textpos.vibe";
 import "ide.vibe";
+import "project.vibe";
 
 extern i64 read(i32 fd, u8* buf, u64 n);
 extern i32 dup(i32 fd);
@@ -368,6 +369,7 @@ void run_frontend(Server* s, Allocator a, Doc* d) {
         g.flush_diag();
         return;
     };
+    project_setup_for(a, d.path);
     loader.load_file(d.path, "") catch {
         g.flush_diag();
         return;

@@ -459,6 +459,14 @@ struct MatchRes { Type* ty; str slot; }
     auto is_err = false;
     auto has_val = false;
     auto val = Value{ .ty = null, .v = "" };
+    if (re != null && re.k == .Unary && re.op == .amp) {
+        const auto root = this->local_root(re.l);
+        if (root.len > 0) {
+            this->err(line);
+            eprintln("returning the address of local '{root}', which dies when the function returns; allocate it with an Allocator or take a pointer from the caller");
+            return error.CompileFailed;
+        }
+    }
     if (re != null) {
         if (rt.k == .Void) { this->err(line); eprintln("function returns void but a value was returned"); return error.CompileFailed };
         is_err = re.k == .ErrorVal;
@@ -492,4 +500,25 @@ struct MatchRes { Type* ty; str slot; }
     this->run_defers(this->scopes.len - 1, 0, is_err)?;
     if (has_val) { sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?; } else { sprint(this->ins()?, "  ret void\n")?; }
     this->terminated = true;
+}
+
+// the name of the local variable whose own storage `e` denotes, or "" (globals, pointees, slices)
+str Gen::local_root(Expr* e) {
+    if (e.k == .Ident) {
+        if (e.name == "this") { return ""; }
+        auto i = this->scopes.len;
+        while (i > 0) {
+            i -= 1;
+            if (this->scopes.items[i].vars.has(e.name)) { return e.name; }
+        }
+        return "";
+    }
+    if ((e.k == .Field || e.k == .Index) && e.l.k == .Ident) {
+        const auto root = this->local_root(e.l);
+        if (root.len == 0) { return ""; }
+        const auto v = this->lookup_var(root) catch { return ""; };
+        if (e.k == .Field && v.ty.k == .Strct) { return root; }
+        if (e.k == .Index && v.ty.k == .Array) { return root; }
+    }
+    return "";
 }

@@ -75,6 +75,8 @@ struct Project {
         auto src = "";
         if (this->overrides.has(path)) {
             src = this->overrides.get(path)?;
+        } else if (is_std_path(path)) {
+            src = std_source(path) catch return;
         } else {
             src = read_file(this->a, path) catch return;
         }
@@ -83,7 +85,7 @@ struct Project {
         const auto dir = dir_of(path);
         for (auto d : fi.decls) {
             if (d.k != .Import) { continue };
-            const auto full = canonical(this->a, join_path(this->a, dir, d.path)?)?;
+            const auto full = import_target(this->a, dir, d.path)?;
             this->load(full, d.alias)?;
         }
         if (prefix.len > 0 && fi.ok) { resolve_module(this->a, fi.decls, prefix)?; }

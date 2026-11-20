@@ -337,6 +337,64 @@ struct List<T> {
     }
 
     void sort() { sort(this->slice()); }
+
+    /// a pointer to element i (valid until the next push or insert)
+    T* at(i64 i) { return &this->slice()[i]; }
+
+    /// index of the first element equal to v, or -1
+    i64 index_of(T v) {
+        for (auto [i, x] : this->slice()) { if (x == v) { return i; } }
+        return -1;
+    }
+
+    /// inserts v before position i (0 <= i <= len), shifting the rest
+    !void insert(i64 i, T v) {
+        if (i < 0 || i > this->len) { return error.OutOfRange; }
+        this->reserve(this->len + 1)?;
+        auto j = this->len;
+        while (j > i) {
+            this->items[j] = this->items[j - 1];
+            j -= 1;
+        }
+        this->items[i] = v;
+        this->len += 1;
+    }
+
+    /// removes element i keeping the order of the rest
+    !T remove_at(i64 i) {
+        if (i < 0 || i >= this->len) { return error.OutOfRange; }
+        const auto v = this->items[i];
+        for (auto j : i..this->len - 1) { this->items[j] = this->items[j + 1]; }
+        this->len -= 1;
+        return v;
+    }
+
+    /// removes element i in O(1) by moving the last element into its place
+    !T swap_remove(i64 i) {
+        if (i < 0 || i >= this->len) { return error.OutOfRange; }
+        const auto v = this->items[i];
+        this->items[i] = this->items[this->len - 1];
+        this->len -= 1;
+        return v;
+    }
+
+    /// hands the elements over as an exactly sized slice (free it with the same allocator)
+    /// and leaves the list empty
+    !T[] take() {
+        auto r = this->a.alloc<T>(this->len)?;
+        for (auto i : 0..this->len) { r[i] = this->items[i]; }
+        this->deinit();
+        return r;
+    }
+
+    void truncate(i64 n) { if (n < this->len) { this->len = max(n, 0); } }
+
+    /// a copy with its own memory from the same allocator
+    !Self clone() {
+        auto c = Self::init(this->a);
+        c.append(this->slice())?;
+        return c;
+    }
 }
 
 // ================================================================ Map[V]
@@ -404,6 +462,65 @@ struct Map<V> {
         if (this->entries.len == 0) { return false; }
         return this->entries[this->__find(key)].used;
     }
+
+    /// a pointer to the value for in-place changes, or null
+    V* get_ptr(str key) {
+        if (this->entries.len == 0) { return null; }
+        const auto e = &this->entries[this->__find(key)];
+        if (!e.used) { return null; }
+        return &e.value;
+    }
+
+    V get_or(str key, V d) { return this->get(key) catch d; }
+
+    /// removes the key; false when it was not there
+    bool remove(str key) {
+        if (this->entries.len == 0) { return false; }
+        const auto cap = this->entries.len;
+        auto i = this->__find(key);
+        if (!this->entries[i].used) { return false; }
+        auto j = i;
+        while (true) {
+            j = (j + 1) % cap;
+            if (!this->entries[j].used) { break; }
+            const auto home = (hash_str(this->entries[j].key) % (cap as u64)) as i64;
+            if (!__probe_between(i, home, j)) {
+                this->entries[i] = this->entries[j];
+                i = j;
+            }
+        }
+        this->entries[i] = MapEntry<V>{};
+        this->len -= 1;
+        return true;
+    }
+
+    void clear() {
+        for (auto i : 0..this->entries.len) { this->entries[i] = MapEntry<V>{}; }
+        this->len = 0;
+    }
+
+    /// auto it = m.iter(); while (it.next()) { println(it.key(), it.value()); }
+    MapIter<V> iter() { return MapIter<V>{ .entries = this->entries, .i = -1 }; }
+}
+
+struct MapIter<V> {
+    MapEntry<V>[] entries;
+    i64 i;
+
+    bool next() {
+        this->i += 1;
+        while (this->i < this->entries.len && !this->entries[this->i].used) { this->i += 1; }
+        return this->i < this->entries.len;
+    }
+    str key() { return this->entries[this->i].key; }
+    V value() { return this->entries[this->i].value; }
+    V* value_ptr() { return &this->entries[this->i].value; }
+}
+
+/// is `home` cyclically in (i, j]? (linear probing: the entry at j may stay)
+bool __probe_between(i64 i, i64 home, i64 j) {
+    if (i <= j) { return i < home && home <= j; }
+    return i < home || home <= j;
 }
 
 u64 hash_str(str s) {
@@ -653,6 +770,14 @@ struct Timespec { i64 sec; i64 nsec; }
 extern i32 clock_gettime(i32 id, Timespec* ts);
 
 /// monotonic wall clock in nanoseconds
+extern i32* __errno_location();
+
+/// the libc errno of the last failed call as an error (error.NotFound, error.PermissionDenied, ...)
+!void errno_error() {
+    _ = __sys_result(0 - (*__errno_location()) as i64)?;
+    return error.SystemCall;
+}
+
 i64 now_ns() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
     _ = clock_gettime(1, &ts);
@@ -915,6 +1040,7 @@ struct FmtSpec {
 }
 
 !void __fmt_int(Writer* w, i64 v, str spec) {
+    if (spec.len == 1 && spec[0] == 1) { return __fmt_raw(w, v as u64); }
     if (spec.len == 0) {
         u8[24] digits;
         auto n = 24;
@@ -943,6 +1069,7 @@ struct FmtSpec {
 }
 
 !void __fmt_uint(Writer* w, u64 v, str spec) {
+    if (spec.len == 1 && spec[0] == 1) { return __fmt_raw(w, v); }
     if (spec.len == 0) {
         u8[24] digits;
         auto n = 24;
@@ -962,6 +1089,7 @@ struct FmtSpec {
 }
 
 !void __fmt_float(Writer* w, f64 v, str spec) {
+    if (spec.len == 1 && spec[0] == 1) { return __fmt_raw(w, bits_f64(v)); }
     u8[48] f;
     u8[512] out;
     auto n = 0;
@@ -991,6 +1119,7 @@ struct FmtSpec {
 }
 
 !void __fmt_str(Writer* w, str s, str spec, bool quoted) {
+    if (spec.len == 1 && spec[0] == 1) { __fmt_raw(w, s.len as u64)?; return w.write(s); }
     if (quoted) {
         w.write("\"")?;
         w.write(s)?;
@@ -1005,11 +1134,13 @@ struct FmtSpec {
 }
 
 !void __fmt_bool(Writer* w, bool b, str spec) {
+    if (spec.len == 1 && spec[0] == 1) { if (b) { return __fmt_raw(w, 1); } return __fmt_raw(w, 0); }
     if (b) { return __fmt_str(w, "true", spec, false); }
     return __fmt_str(w, "false", spec, false);
 }
 
 !void __fmt_ptr(Writer* w, u64 v, str spec) {
+    if (spec.len == 1 && spec[0] == 1) { return __fmt_raw(w, v); }
     if (v == 0) { return w.write("(nil)"); }
     w.write("0x")?;
     return __fmt_num(w, v, false, "x");
@@ -1095,7 +1226,18 @@ struct Spinlock {
         5 => return error.IoError;
         12 => return error.OutOfMemory;
         14 => return error.BadAddress;
+        17 => return error.AlreadyExists;
+        20 => return error.NotADirectory;
+        21 => return error.IsADirectory;
         22 => return error.InvalidArgument;
+        24 => return error.TooManyOpenFiles;
+        28 => return error.NoSpaceLeft;
+        32 => return error.BrokenPipe;
+        39 => return error.DirectoryNotEmpty;
+        104 => return error.ConnectionReset;
+        110 => return error.TimedOut;
+        111 => return error.ConnectionRefused;
+        113 => return error.HostUnreachable;
         _ => return error.SystemCall;
     }
     return error.SystemCall;
@@ -1121,13 +1263,14 @@ struct Sys {
         const auto fd = Sys::open(p, 0, 0)?;
         defer _ = Sys::close(fd);
         auto out = List<u8>::init(a);
+        errdefer out.deinit();
         u8[4096] chunk;
         while (true) {
             const auto n = Sys::read(fd, &chunk[0], 4096)?;
             if (n == 0) { break; }
             out.append(chunk[0..n])?;
         }
-        return out.slice();
+        return out.take();
     }
     static !u64 file_size(str path) {
         u8[256] pb;
@@ -1297,5 +1440,802 @@ struct Pci {
             }
         }
         return out;
+    }
+}
+
+// ================================================================ strings (more)
+// Splitting and searching return slices of the input: nothing is copied.
+// Functions that build a new string take an Allocator.
+
+bool is_space(u8 c) { return __is_space(c); }
+bool is_lower(u8 c) { return c >= 'a' && c <= 'z'; }
+u8 to_lower(u8 c) { if (is_upper(c)) { return c + 32; } return c; }
+u8 to_upper(u8 c) { if (is_lower(c)) { return c - 32; } return c; }
+
+bool str_contains(str s, str needle) { return str_find(s, needle) >= 0; }
+
+/// index of the last occurrence of `needle`, or -1
+i64 str_rfind(str s, str needle) {
+    if (needle.len > s.len) { return -1; }
+    auto i = s.len - needle.len;
+    while (i >= 0) {
+        if (s[i..i + needle.len] == needle) { return i; }
+        i -= 1;
+    }
+    return -1;
+}
+
+/// non-overlapping occurrences of `needle` (0 for an empty needle)
+i64 str_count(str s, str needle) {
+    if (needle.len == 0) { return 0; }
+    auto n = 0;
+    auto i = 0;
+    while (i + needle.len <= s.len) {
+        if (s[i..i + needle.len] == needle) { n += 1; i += needle.len; } else { i += 1; }
+    }
+    return n;
+}
+
+str str_trim_start(str s) {
+    auto a = 0;
+    while (a < s.len && __is_space(s[a])) { a += 1; }
+    return s[a..];
+}
+
+str str_trim_end(str s) {
+    auto b = s.len;
+    while (b > 0 && __is_space(s[b - 1])) { b -= 1; }
+    return s[0..b];
+}
+
+/// `s` without `prefix` when it starts with it, otherwise `s` unchanged
+str str_strip_prefix(str s, str prefix) {
+    if (str_starts_with(s, prefix)) { return s[prefix.len..]; }
+    return s;
+}
+
+str str_strip_suffix(str s, str suffix) {
+    if (str_ends_with(s, suffix)) { return s[0..s.len - suffix.len]; }
+    return s;
+}
+
+bool str_eq_ignore_case(str a, str b) {
+    if (a.len != b.len) { return false; }
+    for (auto [i, c] : a) { if (to_lower(c) != to_lower(b[i])) { return false; } }
+    return true;
+}
+
+/// -1, 0 or 1, byte order (for sort_by)
+i64 str_cmp(str a, str b) {
+    const auto n = min(a.len, b.len);
+    for (auto i : 0..n) {
+        if (a[i] < b[i]) { return -1; }
+        if (a[i] > b[i]) { return 1; }
+    }
+    if (a.len < b.len) { return -1; }
+    if (a.len > b.len) { return 1; }
+    return 0;
+}
+
+bool str_less(str a, str b) { return str_cmp(a, b) < 0; }
+
+/// Iterates over the parts of a string between separators:
+///   auto it = str_split("a,b,,c", ",");
+///   while (it.next()) { println(it.part); }     // a, b, "", c
+struct Split {
+    str rest;
+    str sep;
+    str part;
+    bool done;
+    bool ws;       // split on runs of whitespace, skip empty parts
+
+    bool next() {
+        if (this->ws) {
+            auto i = 0;
+            while (i < this->rest.len && __is_space(this->rest[i])) { i += 1; }
+            if (i == this->rest.len) { this->done = true; return false; }
+            auto j = i;
+            while (j < this->rest.len && !__is_space(this->rest[j])) { j += 1; }
+            this->part = this->rest[i..j];
+            this->rest = this->rest[j..];
+            return true;
+        }
+        if (this->done) { return false; }
+        const auto i = str_find(this->rest, this->sep);
+        if (i < 0 || this->sep.len == 0) {
+            this->part = this->rest;
+            this->done = true;
+            return true;
+        }
+        this->part = this->rest[0..i];
+        this->rest = this->rest[i + this->sep.len..];
+        return true;
+    }
+}
+
+Split str_split(str s, str sep) { return Split{ .rest = s, .sep = sep }; }
+
+/// words separated by any amount of whitespace
+Split str_fields(str s) { return Split{ .rest = s, .ws = true }; }
+
+/// Iterates over lines; a trailing "\r" is removed and a final empty line is skipped.
+struct Lines {
+    str rest;
+    str line;
+
+    bool next() {
+        if (this->rest.len == 0) { return false; }
+        auto i = str_find_byte(this->rest, '\n');
+        if (i < 0) {
+            this->line = this->rest;
+            this->rest = this->rest[this->rest.len..];
+        } else {
+            this->line = this->rest[0..i];
+            this->rest = this->rest[i + 1..];
+        }
+        if (this->line.len > 0 && this->line[this->line.len - 1] == '\r') { this->line = this->line[0..this->line.len - 1]; }
+        return true;
+    }
+}
+
+Lines str_lines(str s) { return Lines{ .rest = s }; }
+
+/// all the parts at once; the parts point into `s`
+!List<str> str_split_all(Allocator a, str s, str sep) {
+    auto out = List<str>::init(a);
+    errdefer out.deinit();
+    auto it = str_split(s, sep);
+    while (it.next()) { out.push(it.part)?; }
+    return out;
+}
+
+!str str_join(Allocator a, str[] parts, str sep) {
+    auto n = 0;
+    for (auto [i, p] : parts) {
+        n += p.len;
+        if (i > 0) { n += sep.len; }
+    }
+    auto out = a.alloc<u8>(n)?;
+    auto o = 0;
+    for (auto [i, p] : parts) {
+        if (i > 0 && sep.len > 0) { memcpy(out.ptr + o, sep.ptr, sep.len as u64); o += sep.len; }
+        if (p.len > 0) { memcpy(out.ptr + o, p.ptr, p.len as u64); o += p.len; }
+    }
+    return out;
+}
+
+!str str_concat(Allocator a, str[] parts) { return str_join(a, parts, ""); }
+
+/// every occurrence of `from` replaced by `to` (a new string)
+!str str_replace(Allocator a, str s, str from, str to) {
+    auto out = List<u8>::init(a);
+    errdefer out.deinit();
+    if (from.len == 0) {
+        out.append(s)?;
+        return out.take();
+    }
+    auto i = 0;
+    while (i < s.len) {
+        if (i + from.len <= s.len && s[i..i + from.len] == from) {
+            out.append(to)?;
+            i += from.len;
+        } else {
+            out.push(s[i])?;
+            i += 1;
+        }
+    }
+    return out.take();
+}
+
+!str str_repeat(Allocator a, str s, i64 n) {
+    auto out = a.alloc<u8>(s.len * max(n, 0))?;
+    for (auto k : 0..n) { if (s.len > 0) { memcpy(out.ptr + k * s.len, s.ptr, s.len as u64); } }
+    return out;
+}
+
+/// ASCII letters converted; other bytes (UTF-8 included) are kept
+!str str_to_lower(Allocator a, str s) {
+    auto out = a.alloc<u8>(s.len)?;
+    for (auto [i, c] : s) { out[i] = to_lower(c); }
+    return out;
+}
+
+!str str_to_upper(Allocator a, str s) {
+    auto out = a.alloc<u8>(s.len)?;
+    for (auto [i, c] : s) { out[i] = to_upper(c); }
+    return out;
+}
+
+// ---- UTF-8 ----
+
+struct Rune { u32 code; i64 size; }
+
+/// decodes the code point that starts at byte `i`
+!Rune utf8_decode(str s, i64 i) {
+    if (i < 0 || i >= s.len) { return error.OutOfRange; }
+    const auto b0 = s[i] as u32;
+    if (b0 < 0x80) { return Rune{ .code = b0, .size = 1 }; }
+    auto n = 0;
+    auto cp = 0 as u32;
+    auto lo = 0 as u32;
+    if ((b0 & 0xe0) == 0xc0) { n = 2; cp = b0 & 0x1f; lo = 0x80; }
+    else if ((b0 & 0xf0) == 0xe0) { n = 3; cp = b0 & 0x0f; lo = 0x800; }
+    else if ((b0 & 0xf8) == 0xf0) { n = 4; cp = b0 & 0x07; lo = 0x10000; }
+    else { return error.InvalidUtf8; }
+    if (i + n > s.len) { return error.InvalidUtf8; }
+    for (auto k : 1..n) {
+        const auto b = s[i + k] as u32;
+        if ((b & 0xc0) != 0x80) { return error.InvalidUtf8; }
+        cp = (cp << 6) | (b & 0x3f);
+    }
+    if (cp < lo || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) { return error.InvalidUtf8; }
+    return Rune{ .code = cp, .size = n };
+}
+
+/// writes the UTF-8 bytes of `cp` into `buf` (at least 4 bytes) and returns them
+!str utf8_encode(u8[] buf, u32 cp) {
+    if (buf.len < 4) { return error.NoSpace; }
+    if (cp < 0x80) { buf[0] = cp as u8; return buf[0..1]; }
+    if (cp < 0x800) {
+        buf[0] = (0xc0 | (cp >> 6)) as u8;
+        buf[1] = (0x80 | (cp & 0x3f)) as u8;
+        return buf[0..2];
+    }
+    if (cp >= 0xd800 && cp <= 0xdfff) { return error.InvalidUtf8; }
+    if (cp < 0x10000) {
+        buf[0] = (0xe0 | (cp >> 12)) as u8;
+        buf[1] = (0x80 | ((cp >> 6) & 0x3f)) as u8;
+        buf[2] = (0x80 | (cp & 0x3f)) as u8;
+        return buf[0..3];
+    }
+    if (cp > 0x10ffff) { return error.InvalidUtf8; }
+    buf[0] = (0xf0 | (cp >> 18)) as u8;
+    buf[1] = (0x80 | ((cp >> 12) & 0x3f)) as u8;
+    buf[2] = (0x80 | ((cp >> 6) & 0x3f)) as u8;
+    buf[3] = (0x80 | (cp & 0x3f)) as u8;
+    return buf[0..4];
+}
+
+bool utf8_valid(str s) {
+    auto i = 0;
+    while (i < s.len) {
+        const auto r = utf8_decode(s, i) catch { return false; };
+        i += r.size;
+    }
+    return true;
+}
+
+/// the number of code points; an invalid byte counts as one
+i64 utf8_len(str s) {
+    auto n = 0;
+    auto i = 0;
+    while (i < s.len) {
+        const auto r = utf8_decode(s, i) catch Rune{ .code = 0xfffd, .size = 1 };
+        i += r.size;
+        n += 1;
+    }
+    return n;
+}
+
+/// Iterates over code points; an invalid byte yields U+FFFD:
+///   auto it = utf8_runes("привет");
+///   while (it.next()) { println(it.code, it.at); }
+struct Runes {
+    str s;
+    i64 i;
+    i64 at;        // byte offset of the current code point
+    u32 code;
+
+    bool next() {
+        if (this->i >= this->s.len) { return false; }
+        const auto r = utf8_decode(this->s, this->i) catch Rune{ .code = 0xfffd, .size = 1 };
+        this->at = this->i;
+        this->code = r.code;
+        this->i += r.size;
+        return true;
+    }
+}
+
+Runes utf8_runes(str s) { return Runes{ .s = s }; }
+
+// ================================================================ sorting with a comparison
+
+/// sorts with `less(a, b)`; stable (insertion merges), O(n log n)
+template<T> !void sort_by(Allocator a, T[] s, fn(T, T) -> bool less) {
+    if (s.len < 2) { return; }
+    auto tmp = a.alloc<T>(s.len)?;
+    defer a.free(tmp);
+    __merge_sort(s, tmp, less);
+}
+
+template<T> void __merge_sort(T[] s, T[] tmp, fn(T, T) -> bool less) {
+    const auto n = s.len;
+    if (n <= 16) {
+        for (auto i : 1..n) {
+            const auto x = s[i];
+            auto j = i - 1;
+            while (j >= 0 && less(x, s[j])) {
+                s[j + 1] = s[j];
+                j -= 1;
+            }
+            s[j + 1] = x;
+        }
+        return;
+    }
+    const auto mid = n / 2;
+    __merge_sort(s[0..mid], tmp[0..mid], less);
+    __merge_sort(s[mid..], tmp[mid..n], less);
+    auto i = 0;
+    auto j = mid;
+    auto k = 0;
+    while (i < mid && j < n) {
+        if (less(s[j], s[i])) { tmp[k] = s[j]; j += 1; } else { tmp[k] = s[i]; i += 1; }
+        k += 1;
+    }
+    while (i < mid) { tmp[k] = s[i]; i += 1; k += 1; }
+    while (j < n) { tmp[k] = s[j]; j += 1; k += 1; }
+    for (auto x : 0..n) { s[x] = tmp[x]; }
+}
+
+// ================================================================ hashing any value
+
+struct FnvHasher { u64 h; }
+
+!void __hash_write(void* ctx, str s) {
+    const auto hs = ctx as *FnvHasher;
+    auto h = hs.h;
+    if (s.len == 8) {
+        h = (h ^ *(s.ptr as *u64)) *% 0x100000001b3;
+        h = h ^ (h >> 29);
+    } else {
+        for (auto c : s) { h = (h ^ (c as u64)) *% 1099511628211; }
+    }
+    hs.h = h;
+}
+
+/// the "raw" format used by hash_of: the 8 bytes of a scalar instead of its digits
+!void __fmt_raw(Writer* w, u64 v) {
+    auto x = v;
+    return w.write((&x as *u8)[0..8]);
+}
+
+/// A hash of the printed form of the arguments, so it works for every printable type:
+/// ints, strings, enums, and structs compared field by field.
+u64 hash_of(Fmt f) {
+    auto hs = FnvHasher{ .h = 14695981039346656037 };
+    auto w = Writer{ .ctx = &hs, .write_fn = __hash_write };
+    for (auto i : 0..f.pieces.len) {
+        const auto pc = &f.pieces[i];
+        w.write(pc.lit) catch |e| {};
+        pc.thunk(&w, pc.value, "\x01", 0) catch |e| {};
+    }
+    w.write(f.tail) catch |e| {};
+    // final mix (splitmix64) so that close keys spread over the table
+    auto x = hs.h;
+    x = (x ^ (x >> 30)) *% 0xbf58476d1ce4e5b9;
+    x = (x ^ (x >> 27)) *% 0x94d049bb133111eb;
+    return x ^ (x >> 31);
+}
+
+// ================================================================ HashMap<K, V>, HashSet<T>
+// Any key type that can be printed and compared with `==`: integers, str, enums, structs
+// (a struct key needs `operator==` that compares all fields). Keys are not copied.
+
+struct HashEntry<K, V> { K key; V value; u64 hash; bool used; }
+
+struct HashMap<K, V> {
+    HashEntry<K, V>[] entries;
+    i64 len;
+    Allocator a;
+
+    static Self init(Allocator a) { return Self{ .a = a }; }
+
+    void deinit() {
+        this->a.free(this->entries);
+        this->entries = this->entries[0..0];
+        this->len = 0;
+    }
+
+    i64 __slot(K key, u64 h) {
+        const auto cap = this->entries.len;
+        const auto mask = (cap - 1) as u64;
+        auto i = (h & mask) as i64;
+        while (true) {
+            const auto e = &this->entries[i];
+            if (!e.used) { return i; }
+            if (e.hash == h && e.key == key) { return i; }
+            i = ((i + 1) as u64 & mask) as i64;
+        }
+        return -1;
+    }
+
+    !void __grow() {
+        const auto old = this->entries;
+        auto nc = old.len * 2;
+        if (nc < 16) { nc = 16; }
+        this->entries = this->a.alloc<HashEntry<K, V>>(nc)?;
+        for (auto e : old) {
+            if (e.used) { this->entries[this->__slot(e.key, e.hash)] = e; }
+        }
+        this->a.free(old);
+    }
+
+    /// inserts or replaces
+    !void put(K key, V value) {
+        if ((this->len + 1) * 4 > this->entries.len * 3) { this->__grow()?; }
+        const auto h = hash_of(key);
+        const auto e = &this->entries[this->__slot(key, h)];
+        if (!e.used) { this->len += 1; }
+        *e = HashEntry<K, V>{ .key = key, .value = value, .hash = h, .used = true };
+    }
+
+    /// a copy of the value, or error.NotFound
+    !V get(K key) {
+        const auto p = this->get_ptr(key);
+        if (p == null) { return error.NotFound; }
+        return *p;
+    }
+
+    V get_or(K key, V d) {
+        const auto p = this->get_ptr(key);
+        if (p == null) { return d; }
+        return *p;
+    }
+
+    /// a pointer to the stored value for in-place changes, or null; valid until the next put
+    V* get_ptr(K key) {
+        if (this->len == 0) { return null; }
+        const auto e = &this->entries[this->__slot(key, hash_of(key))];
+        if (!e.used) { return null; }
+        return &e.value;
+    }
+
+    bool has(K key) { return this->get_ptr(key) != null; }
+
+    /// removes the key; false when it was not there
+    bool remove(K key) {
+        if (this->len == 0) { return false; }
+        const auto cap = this->entries.len;
+        auto i = this->__slot(key, hash_of(key));
+        if (!this->entries[i].used) { return false; }
+        auto j = i;
+        while (true) {
+            j = (j + 1) & (cap - 1);
+            if (!this->entries[j].used) { break; }
+            const auto home = (this->entries[j].hash & ((cap - 1) as u64)) as i64;
+            if (!__probe_between(i, home, j)) {
+                this->entries[i] = this->entries[j];
+                i = j;
+            }
+        }
+        this->entries[i] = HashEntry<K, V>{};
+        this->len -= 1;
+        return true;
+    }
+
+    void clear() {
+        for (auto i : 0..this->entries.len) { this->entries[i] = HashEntry<K, V>{}; }
+        this->len = 0;
+    }
+
+    /// auto it = m.iter(); while (it.next()) { println(it.key(), it.value()); }
+    HashIter<K, V> iter() { return HashIter<K, V>{ .entries = this->entries, .i = -1 }; }
+
+    /// the keys in a new list (in table order)
+    !List<K> keys(Allocator a) {
+        auto out = List<K>::init(a);
+        errdefer out.deinit();
+        out.reserve(this->len)?;
+        for (auto e : this->entries) { if (e.used) { out.push(e.key)?; } }
+        return out;
+    }
+}
+
+struct HashIter<K, V> {
+    HashEntry<K, V>[] entries;
+    i64 i;
+
+    bool next() {
+        this->i += 1;
+        while (this->i < this->entries.len && !this->entries[this->i].used) { this->i += 1; }
+        return this->i < this->entries.len;
+    }
+    K key() { return this->entries[this->i].key; }
+    V value() { return this->entries[this->i].value; }
+    V* value_ptr() { return &this->entries[this->i].value; }
+}
+
+struct HashSet<T> {
+    HashMap<T, bool> m;
+
+    static Self init(Allocator a) { return Self{ .m = HashMap<T, bool>::init(a) }; }
+    void deinit() { this->m.deinit(); }
+    /// true when the value was new
+    !bool add(T v) {
+        if (this->m.has(v)) { return false; }
+        this->m.put(v, true)?;
+        return true;
+    }
+    bool has(T v) { return this->m.has(v); }
+    bool remove(T v) { return this->m.remove(v); }
+    i64 len() { return this->m.len; }
+    void clear() { this->m.clear(); }
+    HashIter<T, bool> iter() { return this->m.iter(); }
+    !List<T> items(Allocator a) { return this->m.keys(a); }
+}
+
+// ================================================================ DebugAllocator
+// An allocator for finding memory bugs. Every block gets its own pages with an inaccessible
+// page right after it, and freed blocks become inaccessible instead of being reused:
+//   - reading or writing past the end of a block, or after free, stops the program with a
+//     message that names the block (through the crash handler);
+//   - double free, freeing a foreign pointer and freeing with the wrong size panic;
+//   - deinit() lists the blocks that were never freed and returns error.MemoryLeak.
+// Slow and memory hungry (at least 8 KiB per block): use it in tests and debug builds.
+//
+//   auto dbg = DebugAllocator::init();
+//   const auto a = dbg.allocator();
+//   ... use a ...
+//   dbg.deinit()?;
+
+struct DbgBlock { u64 base; u64 map_len; u64 user; u64 size; i64 id; bool freed; }
+
+DebugAllocator* __dbg_list = null;
+
+struct DebugAllocator {
+    HashMap<u64, DbgBlock> blocks;
+    i64 next_id;
+    i64 live;
+    u64 live_bytes;
+    u64 peak_bytes;
+    i64 fail_after;       // < 0: never fail; n: the allocation after n more succeeds returns null
+    i64 trap_id;          // > 0: stop in the debugger (int3) when block #trap_id is allocated
+    DebugAllocator* next_dbg;
+    bool registered;
+
+    static Self init() {
+        return Self{ .blocks = HashMap<u64, DbgBlock>::init(c_allocator()), .fail_after = -1 };
+    }
+
+    Allocator allocator() {
+        if (!this->registered) {
+            this->next_dbg = __dbg_list;
+            __dbg_list = this;
+            this->registered = true;
+        }
+        return Allocator{ .ctx = this, .alloc_fn = __dbg_alloc, .free_fn = __dbg_free };
+    }
+
+    /// makes the allocation after `n` more successful ones return out-of-memory
+    void fail_after_n(i64 n) { this->fail_after = n; }
+
+    !void deinit() {
+        auto leaks = 0;
+        auto it = this->blocks.iter();
+        while (it.next()) {
+            const auto b = it.value();
+            if (!b.freed) {
+                leaks += 1;
+                if (leaks <= 20) { eprintln("leak: block #{b.id}, {b.size} bytes at 0x{b.user:x}"); }
+            }
+            _ = Sys::munmap(b.base as *void, b.map_len) catch 0;
+        }
+        if (leaks > 20) { eprintln("... and {leaks - 20} more"); }
+        if (leaks > 0) { eprintln("DebugAllocator: {leaks} block(s) leaked, {this->live_bytes} bytes (set trap_id to a block number to stop in gdb where it is allocated)"); }
+        this->blocks.deinit();
+        if (this->registered) {
+            if (__dbg_list == this) {
+                __dbg_list = this->next_dbg;
+            } else {
+                auto p = __dbg_list;
+                while (p != null && p.next_dbg != this) { p = p.next_dbg; }
+                if (p != null) { p.next_dbg = this->next_dbg; }
+            }
+            this->registered = false;
+        }
+        if (leaks > 0) { return error.MemoryLeak; }
+    }
+}
+
+void* __dbg_alloc(void* ctx, u64 n, u64 align) {
+    const auto d = ctx as *DebugAllocator;
+    if (d.fail_after == 0) { return null; }
+    if (d.fail_after > 0) { d.fail_after -= 1; }
+    const auto al = max(align, 1);
+    const auto rounded = (n + al - 1) / al * al;
+    const auto pages = (rounded + 4095) / 4096 + 1;
+    const auto len = pages * 4096;
+    const auto base = Sys::mmap(null, len, 3, 0x22, -1, 0) catch { return null; };
+    const auto guard = (base as u64) + (pages - 1) * 4096;
+    _ = Sys::call(10, guard as i64, 4096, 0, 0, 0, 0) catch 0;
+    const auto user = guard - rounded;
+    d.next_id += 1;
+    const auto blk = DbgBlock{ .base = base as u64, .map_len = len, .user = user, .size = n, .id = d.next_id };
+    d.blocks.put(user, blk) catch {
+        _ = Sys::munmap(base as *void, len) catch 0;
+        return null;
+    };
+    d.live += 1;
+    d.live_bytes += n;
+    d.peak_bytes = max(d.peak_bytes, d.live_bytes);
+    if (d.trap_id > 0 && d.next_id == d.trap_id) { Cpu::breakpoint(); }
+    return user as *void;
+}
+
+void __dbg_free(void* ctx, void* p, u64 n) {
+    const auto d = ctx as *DebugAllocator;
+    const auto b = d.blocks.get_ptr(p as u64);
+    if (b == null) { panic("DebugAllocator: free of {p} which this allocator never handed out"); }
+    if (b.freed) { panic("DebugAllocator: double free of block #{b.id} ({b.size} bytes)"); }
+    if (n != b.size) { panic("DebugAllocator: block #{b.id} has {b.size} bytes but was freed with size {n}"); }
+    _ = Sys::call(10, b.base as i64, b.map_len as i64, 0, 0, 0, 0) catch 0;
+    b.freed = true;
+    d.live -= 1;
+    d.live_bytes -= b.size;
+}
+
+/// what the debug allocators know about an address (for the crash handler)
+!str __dbg_describe(u8[] buf, u64 addr) {
+    auto d = __dbg_list;
+    while (d != null) {
+        auto it = d.blocks.iter();
+        while (it.next()) {
+            const auto b = it.value();
+            if (addr >= b.base && addr < b.base + b.map_len) {
+                if (b.freed) { return bprint(buf, "use after free: block #{b.id} ({b.size} bytes) was already freed"); }
+                if (addr >= b.user + b.size) { return bprint(buf, "out of bounds: {addr - b.user - b.size} byte(s) past the end of block #{b.id} ({b.size} bytes)"); }
+                return bprint(buf, "inside block #{b.id} ({b.size} bytes)");
+            }
+        }
+        d = d.next_dbg;
+    }
+    return "";
+}
+
+// ================================================================ crash handler
+// __rt_init is called by main before anything else (not with --freestanding). It installs a
+// handler that turns SIGSEGV, SIGBUS, SIGFPE and SIGILL into a readable message with the cause
+// and a backtrace. Set VIBE_CRASH_HANDLER=0 to keep the default behavior (core dumps).
+
+struct RtSigAction { fn(i32, u8*, u8*) handler; u64[16] mask; i32 flags; i32 pad; void* restorer; }
+struct RtStack { void* sp; i32 flags; i32 pad; u64 size; }
+struct DlInfo { u8* fname; void* fbase; u8* sname; void* saddr; }
+
+extern i32 sigaction(i32 sig, RtSigAction* act, RtSigAction* old);
+extern i32 sigaltstack(RtStack* ss, RtStack* old);
+extern i32 backtrace(void** buf, i32 n);
+extern i32 dladdr(void* addr, DlInfo* info);
+extern i32 dup2(i32 a, i32 b);
+extern i64 readlink(u8* path, u8* buf, u64 n);
+
+void __rt_init() {
+    const auto e = getenv("VIBE_CRASH_HANDLER");
+    if (e != null && cstr(e) == "0") { return; }
+    const auto st = Sys::mmap(null, 65536, 3, 0x22, -1, 0) catch { return; };
+    auto ss = RtStack{ .sp = st as *void, .size = 65536 };
+    _ = sigaltstack(&ss, null);
+    // SA_SIGINFO | SA_ONSTACK | SA_RESETHAND: the second fault of the same kind kills the process
+    auto act = RtSigAction{ .handler = __crash_handler, .flags = 0x4 | 0x08000000 | (0x80000000 as u32) as i32 };
+    for (auto sig : [11, 7, 8, 4]) { _ = sigaction(sig as i32, &act, null); }
+}
+
+void __crash_write(str s) {
+    auto rest = s;
+    while (rest.len > 0) {
+        const auto n = Sys::write(2, rest.ptr, rest.len as u64) catch 0;
+        if (n <= 0) { return; }
+        rest = rest[n..];
+    }
+}
+
+void __crash_handler(i32 sig, u8* info, u8* uc) {
+    u8[512] line;
+    u8[256] extra;
+    const auto code = *((info + 8) as *i32);
+    const auto addr = *((info + 16) as *u64);
+    const auto rip = *((uc + 168) as *u64);
+    const auto rsp = *((uc + 160) as *u64);
+    _ = fflush(null);
+    auto what = "crash";
+    auto why = "";
+    match sig {
+        11 => {
+            what = "segmentation fault";
+            if (addr < 4096) { why = "null pointer dereference"; }
+            else if (addr < rsp + 4096 && rsp - addr < 1048576) { why = "stack overflow (endless recursion?)"; }
+        }
+        7 => what = "bus error";
+        8 => {
+            what = "arithmetic error";
+            if (code == 1) { why = "integer division by zero"; }
+            if (code == 2) { why = "integer overflow"; }
+        }
+        4 => what = "illegal instruction";
+    }
+    const auto dbg = __dbg_describe(extra[..], addr) catch "";
+    if (dbg.len > 0) { why = dbg; }
+    if (why.len > 0) {
+        __crash_write(bprint(line[..], "\nfatal: {what}: {why} (address 0x{addr:x})\n") catch "\nfatal: crash\n");
+    } else {
+        __crash_write(bprint(line[..], "\nfatal: {what} at address 0x{addr:x}\n") catch "\nfatal: crash\n");
+    }
+
+    // backtrace: the faulting instruction, then the callers the unwinder can find
+    void*[48] frames;
+    frames[0] = rip as *void;
+    auto n = 1;
+    void*[48] raw;
+    const auto got = backtrace(&raw[0], 48);
+    auto started = false;
+    for (auto i : 0..got as i64) {
+        if (raw[i] as u64 == rip) { started = true; continue; }
+        if (started && n < 48) { frames[n] = raw[i]; n += 1; }
+    }
+    if (n == 1) {
+        // no unwind tables (our own backend): follow the frame-pointer chain while it stays on the stack
+        auto fp = *((uc + 120) as *u64);
+        while (n < 48 && fp > rsp && fp < rsp + 67108864 && (fp & 7) == 0) {
+            const auto ret = *((fp + 8) as *u64);
+            if (ret < 4096) { break; }
+            frames[n] = ret as *void;
+            n += 1;
+            const auto next = *(fp as *u64);
+            if (next <= fp) { break; }
+            fp = next;
+        }
+    }
+    DlInfo self;
+    auto fp = __rt_init;
+    _ = dladdr(*(&fp as **void), &self);
+    u8[2048] args;
+    auto ao = 0;
+    u8*[56] argv;
+    auto ac = 0;
+    u8[1024] exe;
+    const auto el = readlink("/proc/self/exe", &exe[0], 1023);
+    if (el <= 0) { return; }
+    exe[el] = 0;
+    for (auto a : ["addr2line", "-f", "-C", "-i", "-p", "-e"]) {
+        argv[ac] = a.ptr;
+        ac += 1;
+    }
+    argv[ac] = &exe[0];
+    ac += 1;
+    __crash_write("backtrace:\n");
+    for (auto i : 0..n) {
+        const auto pc = frames[i] as u64;
+        DlInfo di;
+        auto off = pc;
+        auto file = "?";
+        if (dladdr(frames[i], &di) != 0) {
+            off = pc - (di.fbase as u64);
+            if (di.fname != null) { file = cstr(di.fname); }
+        }
+        __crash_write(bprint(line[..], "  #{i} 0x{off:x} in {file}\n") catch "");
+        if (di.fbase == self.fbase && ac < 55) {
+            auto o = off;
+            if (*((di.fbase as u64 + 16) as *u16) == 2) { o = pc; }   // ET_EXEC: addr2line wants the address
+            if (i > 0) { o -= 1; }
+            const auto t = bprint(args[ao..], "0x{o:x}") catch "";
+            if (t.len > 0) {
+                argv[ac] = &args[ao];
+                ac += 1;
+                ao += t.len + 1;
+            }
+        }
+    }
+    if (ac > 7) {
+        argv[ac] = null;
+        __crash_write("where (addr2line):\n");
+        const auto pid = fork();
+        if (pid == 0) {
+            _ = dup2(2, 1);
+            _ = execvp(argv[0], &argv[0]);
+            _exit(127);
+        }
+        if (pid > 0) {
+            i32 status = 0;
+            _ = waitpid(pid, &status, 0);
+        }
     }
 }

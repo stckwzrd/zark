@@ -1,0 +1,73 @@
+import "std/json" as json;
+
+test "parse, query, print" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto ar = Arena::init(dbg.allocator());
+        defer ar.deinit();
+        const auto a = ar.allocator();
+        const auto text = "{{\"user\": {{\"name\": \"Ann \\\"A\\\"\", \"age\": 31, \"tags\": [\"x\", \"y\\u00e9\\ud83d\\ude00\"]}, \"big\": 9007199254740993, \"pi\": 3.14e0, \"ok\": true, \"none\": null, \"empty\": {{}, \"arr\": []}";
+        const auto doc = json::parse(a, text)?;
+        assert(doc.get("user").get("name").as_str()? == "Ann \"A\"");
+        assert(doc.get("user").get("age").as_i64()? == 31);
+        assert(doc.get("big").as_i64()? == 9007199254740993);
+        assert(doc.get("user").get("tags").at(1).str_or("?") == "yé😀");
+        assert(doc.get("missing").get("deeper").is_null());
+        assert(doc.get("pi").as_f64()? == 3.14 && doc.get("ok").as_bool()?);
+        assert(doc.members().len == 7 && doc.get("user").get("tags").items().len == 2);
+        auto wrong = false;
+        _ = doc.get("user").get("age").as_str() catch |e| { wrong = e == error.NotAString; "" };
+        assert(wrong);
+        const auto again = json::stringify(a, doc, false)?;
+        assert(json::stringify(a, json::parse(a, again)?, false)? == again);
+        const auto pretty = json::stringify(a, doc.get("user"), true)?;
+        assert(str_starts_with(pretty, "{{\n  \"name\": "));
+    }
+    dbg.deinit()?;
+}
+
+test "errors carry a position" {
+    const auto a = c_allocator();
+    json::ParseError pe;
+    auto failed = false;
+    _ = json::parse_ex(a, "{{\n  \"a\": [1, 2,,]\n}", &pe) catch |e| { failed = e == error.InvalidJson; null };
+    assert(failed && pe.line == 2 && pe.col == 14);
+    _ = json::parse_ex(a, "[01]", &pe) catch null;
+    assert(pe.msg == "leading zeros are not allowed");
+    _ = json::parse_ex(a, "\"abc", &pe) catch null;
+    assert(pe.msg == "unterminated string");
+    _ = json::parse_ex(a, "{{} x", &pe) catch null;
+    assert(pe.msg == "unexpected text after the value");
+}
+
+test "build a tree and use the Builder" {
+    auto ar = Arena::init(c_allocator());
+    defer ar.deinit();
+    const auto a = ar.allocator();
+    const auto o = json::object(a)?;
+    o.set("name", json::string(a, "new\nline")?)?;
+    o.set("n", json::integer(a, -5)?)?;
+    o.set("f", json::number(a, 0.1)?)?;
+    const auto arr = json::array(a)?;
+    arr.push(json::boolean(a, false)?)?;
+    arr.push(json::null_value(a)?)?;
+    o.set("list", arr)?;
+    o.set("n", json::integer(a, 6)?)?;
+    assert(json::stringify(a, o, false)? == "{{\"name\":\"new\\nline\",\"n\":6,\"f\":0.1,\"list\":[false,null]}");
+    auto out = List<u8>::init(a);
+    auto b = json::Builder::init(&out);
+    b.begin_object()?;
+    b.key("id")?;
+    b.integer(7)?;
+    b.key("tags")?;
+    b.begin_array()?;
+    b.string("a\"b")?;
+    b.number(2.5)?;
+    b.begin_object()?;
+    b.end()?;
+    b.end()?;
+    b.key("tree")?;
+    b.value(arr)?;
+    b.end()?;
+    assert(out.slice() == "{{\"id\":7,\"tags\":[\"a\\\"b\",2.5,{{}],\"tree\":[false,null]}");
+}

@@ -9,17 +9,16 @@ This page collects what is not obvious: places where you can make a mistake and 
 
 ## Numbers
 
-### A literal is not checked against the range
+### A literal must fit its type
 
-```vibe run
+```vibe error
 void main() {
     const u8 b = 300;
-    const i8 c = 200;
-    println(b, c);
+    println(b);
 }
 ```
 
-The extra bits are silently dropped. Watch the range of the type yourself.
+`const u8 b = 300;` and `const u32 x = -1;` are compile errors. A value computed at run time still wraps silently (see below).
 
 ### Integers overflow without a warning
 
@@ -106,7 +105,7 @@ Writing into a literal crashes the program. Copy into a buffer.
 
 ### There is no `+` for strings
 
-Joining is done with `bprint` / `sprint`. There are no `split`, `join`, `replace`, `to_upper`; you write them yourself (recipes in [strings](strings.md)).
+Joining is done with `str_join`, `str_concat`, `bprint` or `sprint`; there are also `str_split`, `str_replace` and `str_to_upper` (see [the reference](stdlib.md#more-strings)). They take an `Allocator` because the result is a new string.
 
 ### A wrong format is printed as `<bad format>`
 
@@ -151,9 +150,7 @@ In a nested block you can shadow, in the same one you cannot.
 
 You cannot declare functions `max`, `min`, `abs`, `sort`, `swap`, `run`, `env`, `arg`, `cstr`: "duplicate function". Choose other names.
 
-### Global strings are not initialized
 
-`str name = "x";` at the top level stays empty, and `auto name = "x";` is rejected. Assign at the start of `main`.
 
 ### A global array requires an initializer
 
@@ -200,20 +197,19 @@ To leave an outer loop, label it (`outer: for (...)`) and write `break outer;`. 
 
 A forgotten variant causes no error: nothing simply happens. For a `match` expression, exhaustiveness is checked.
 
-### A function without a `return` on all paths compiles
+### A function must return a value on every path
 
-```vibe run
+```vibe error
 i64 f(i64 n) {
     if (n > 0) { return 1; }
-    return 0;
 }
 
 void main() {
-    println(f(1), f(-1));
+    println(f(1));
 }
 ```
 
-The compiler does not check that all paths return a value. Always end a function with a `return`.
+The compiler checks that a function with a result never falls off its end. A path returns when it ends in `return`, an `if` with an `else` where both branches return, a `match` where every arm returns, an endless `while (true)` without a `break`, or a call to `panic`.
 
 ## Errors and optional values
 
@@ -310,7 +306,7 @@ An ordinary function cannot be passed where a closure is expected, and the other
 
 ### Only going out of bounds of a slice and an array is checked
 
-Going out through a pointer, use-after-free, a double `free`, leaks and dangling pointers to the stack are not detected.
+Going out through a pointer, use-after-free, a double `free` and leaks are not detected. Of the dangling pointers to the stack, only a direct `return &local;` (and `&local.field`, `&local_array[i]`) is caught.
 
 ### `FixedBuf.reset()` invalidates what was handed out
 
@@ -328,7 +324,7 @@ A zero `List` has no allocator, and `push` on it will crash. Always call `List<T
 
 The buffer may move. Take the pointer when you have finished adding.
 
-### `Map`: keys are not copied, no `remove`, the order is undefined
+### `Map`: keys are not copied, the order is undefined
 
 If a key is built in a temporary buffer, use `a.dup(key)`.
 
@@ -341,10 +337,6 @@ If a key is built in a temporary buffer, use `a.dup(key)`.
 ### A plain import "leaks"
 
 A file imported without `as` puts all its names into the common namespace, and they are visible from all the files of the program.
-
-### One file, one name
-
-You cannot attach `util.vibe` as `a` and as `b` in one program.
 
 ### Unreachable code is not checked
 

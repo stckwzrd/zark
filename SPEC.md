@@ -72,9 +72,9 @@ Only reachable functions are compiled. Generic code is type-checked when it is i
 
 ### Modules
 
-`import "file.vibe" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. `extern` and `export` names stay global. Rules, all checked by the compiler:
+`import "file.vibe" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. An `extern` gets the prefix too but links to the same C symbol; `export` names stay global. Rules, all checked by the compiler:
 
-- A file is imported under one name for the whole program, and a name belongs to one file.
+- A file is loaded once; it may be imported under several names, which all refer to it. A name belongs to one file, and a file imported with a name somewhere cannot also be imported plainly.
 - A plain `import "file.vibe"` still puts everything in the global namespace.
 - The alias is reserved in the importing file: `net::x` always means the module member.
 
@@ -135,7 +135,7 @@ Arms are tested top to bottom, there is no fall-through, and a `match` is not re
 
 ## 6. Builtins and formatting
 
-The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`. Everything else is ordinary code in `std/std.vibe`.
+The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`, `__rt_init` (called first by `main` and by the test runner unless `--freestanding`; the prelude uses it to install the crash handler). Everything else is ordinary code in `std/std.vibe`.
 
 | Builtin | Notes |
 |---|---|
@@ -201,7 +201,7 @@ Containers such as `List<T>` and `Map<V>` take the allocator in `init` and relea
 - `extern` declares a C function and `export` defines one.
 - `void*` is C's `void*`. String literals pass as `u8*` (they are NUL-terminated). Any other `str` must be passed as `s.ptr` explicitly.
 - C varargs follow the usual promotions; slices are rejected.
-- Structs are passed by pointer. By-value passing is not supported yet.
+- Structs (and slices) are passed to and returned from `extern` functions by value following the System V x86-64 ABI: up to 16 bytes in registers by eightbyte class (INTEGER or SSE), larger or when the registers run out on the stack (`byval`), large results through a hidden pointer (`sret`). `export` functions and function pointers called from C take aggregates by pointer.
 - `vibe run main.vibe x.c y.cpp lib.o -lfoo` compiles and links everything, using `clang++` if C++ is present.
 
 ## 9. System (prelude)

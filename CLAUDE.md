@@ -11,6 +11,9 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
   - `x64.vibe`: encoder + ELF `.o` writer.
   - `main.vibe`: the driver.
 - `std/std.vibe`: the prelude, embedded into the compiler with `embed`.
+- `std/<name>.vibe`: standard modules (fs, path, time, os, args, json, net, http, thread), also embedded; `import "std/fs" as fs;` loads `<std>/fs.vibe` (`selfhost/loader.vibe`). A new module needs a line in `std_source` there, and the compiler must be rebuilt to pick up module changes.
+- `tests/std/*.vibe`: `test` blocks for the standard library, run by `tests/run.sh`.
+- `selfhost/project.vibe`: `vibe.toml` (a TOML subset), dependencies (path, git into `.vibe/deps`), `vibe new`; `tests/project.sh` tests it.
 - `bootstrap/seed.ll.gz`: the bootstrap seed, the LLVM IR of the compiler itself. `./bootstrap.sh` builds stage1 from it with clang; no other compiler is needed.
 - `legacy/zig-stage0/`: the old Zig compiler, kept for history only. It is not built and not maintained.
 - `tools/update-seed.sh`: regenerates the seed from a stage that passed the fixed-point check.
@@ -25,7 +28,7 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
   2. Builds the native-only chain native1 → native2 → native3, checks native2 == native3.
   3. Runs the tests.
   4. Writes the result to `build/vibe`.
-- `VIBE=build/vibe tests/run.sh`: run the tests. `FLAGS=--llvm` or `FLAGS=-O` tests the other backends. 21 tests, all must pass.
+- `VIBE=build/vibe tests/run.sh`: run the tests. `FLAGS=--llvm` or `FLAGS=-O` tests the other backends. All tests must pass.
 - `build/vibe run|build|ir|tokens file.vibe [x.c y.cpp] [-o out] [-O|--release|--llvm|--native] [--time]`
 - clang 18 is required (it builds the seed, links programs and runs `--release`). Zig is not needed.
 

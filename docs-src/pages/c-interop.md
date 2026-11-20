@@ -145,7 +145,7 @@ For output from Vibe itself, `println` is better: it is safer. `printf` is handy
 
 Vibe structs lie in memory the same way as C structs (the same sizes and alignment). So the description on the Vibe side is a copy of the description in C.
 
-**Structs are passed to C by pointer only.** Passing and returning by value is not supported yet.
+Structs can be passed to `extern` functions and returned from them **by value**, as in C: the compiler follows the System V x86-64 rules (small structs travel in registers, larger ones on the stack or through a hidden pointer), on every backend. This is what libraries like raylib need: `extern void DrawCircleV(Vector2 center, f32 radius, Color color);` works as written. Passing by pointer works as well:
 
 ```vibe file=vec.c
 typedef struct { double x, y, z; } Vec3;
@@ -173,6 +173,29 @@ void main() {
     println(vec3_dot(&a, &b));
     vec3_scale(&a, 10.0);
     println(a);
+}
+```
+
+By value:
+
+```vibe file=v2.c
+typedef struct { float x, y; } Vector2;
+typedef struct { unsigned char r, g, b, a; } Color;
+
+Vector2 v2_add(Vector2 a, Vector2 b) { Vector2 r = { a.x + b.x, a.y + b.y }; return r; }
+Color fade(Color c, float k) { Color o = { c.r, c.g, c.b, (unsigned char)(c.a * k) }; return o; }
+```
+
+```vibe run with=v2.c
+struct Vector2 { f32 x; f32 y; }
+struct Color { u8 r; u8 g; u8 b; u8 a; }
+
+extern Vector2 v2_add(Vector2 a, Vector2 b);
+extern Color fade(Color c, f32 k);
+
+void main() {
+    println(v2_add(Vector2{ .x = 1.0, .y = 2.0 }, Vector2{ .x = 3.0, .y = 4.0 }));
+    println(fade(Color{ .r = 255, .g = 128, .b = 0, .a = 200 }, 0.5));
 }
 ```
 
@@ -300,7 +323,7 @@ Math (`sqrt`, `sin`, `pow`) is linked automatically: `-lm` is already included.
 ## Rules and pitfalls
 
 - There is no `@cImport` and no header parsing: you write the signatures by hand. This is a place for mistakes: the type of your `extern` must match C.
-- Structs do not cross the boundary by value.
+- Structs cross the boundary by value only through `extern` declarations. A C library calling back into Vibe (an `export` function or a function pointer) must take structs by pointer.
 - `bool` in C is `_Bool`/`uint8_t`. Use `u8` or `i32`, not `bool`, if in doubt.
 - Do not pass a `str` instead of a `u8*`: you need `s.ptr` (and a zero byte, see above).
 - `size_t` is `u64`, `ssize_t` is `i64`.

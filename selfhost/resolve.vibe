@@ -8,6 +8,8 @@ struct Resolver {
     str prefix;
     Map<bool> names;
     List<str> locals;
+    str from;          // alias mode: names written "from.x" become "to.x"
+    str to;
 
     !str qual(str name) {
         auto b = List<u8>::init(this->a);
@@ -21,6 +23,16 @@ struct Resolver {
     }
 
     !str rename(str name) {
+        if (this->from.len > 0) {
+            if (name.len > this->from.len && name[this->from.len] == '.' && str_starts_with(name, this->from)) {
+                const auto rest = name[this->from.len + 1..];
+                if (this->to.len == 0) { return rest; }
+                auto b = List<u8>::init(this->a);
+                sprint(&b, "{this->to}.{rest}")?;
+                return b.slice();
+            }
+            return name;
+        }
         if (this->names.has(name) && !this->is_local(name)) { return this->qual(name); }
         return name;
     }
@@ -146,8 +158,21 @@ struct Resolver {
         for (auto p : f.params) { this->locals.push(p.name)?; }
         this->rstmt(f.body)?;
         this->locals.len = mark;
+        if (f.receiver.len == 0 && f.is_extern && this->from.len == 0) {
+            // an extern of a module gets a prefixed name in Vibe, so it cannot collide with the
+            // program's own functions, and keeps its C symbol for linking
+            if (f.link_name.len == 0) { f.link_name = f.name; }
+            f.name = this->rename(f.name)?;
+        }
         if (f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test) { f.name = this->rename(f.name)?; }
     }
+}
+
+/// in `decls`, references written through the import name `from` (from::x) are rewritten to
+/// the name `to` the module was first imported under ("" = the global namespace)
+!void alias_module(Allocator a, List<Decl> decls, str from, str to) {
+    auto r = Resolver{ .a = a, .prefix = "", .names = Map<bool>::init(a), .locals = List<str>::init(a), .from = from, .to = to };
+    r.walk(decls)?;
 }
 
 !void resolve_module(Allocator a, List<Decl> decls, str prefix) {
@@ -156,7 +181,7 @@ struct Resolver {
         match d.k {
             .Func => {
                 const auto f = d.f;
-                if (f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test) { r.names.put(f.name, true)?; }
+                if (f.receiver.len == 0 && !f.is_export && !f.is_test) { r.names.put(f.name, true)?; }
             }
             .Struct => r.names.put(d.s.name, true)?;
             .Enum => r.names.put(d.en.name, true)?;
@@ -164,6 +189,11 @@ struct Resolver {
             .Alias => r.names.put(d.path, true)?;
         }
     }
+    r.walk(decls)?;
+}
+
+!void Resolver::walk(List<Decl> decls) {
+    const auto r = this;
     for (auto i : 0..decls.len) {
         const auto d = &decls.items[i];
         match d.k {

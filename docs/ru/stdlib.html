@@ -10,7 +10,7 @@
 <body class="">
 <header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../stdlib.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html" class="current">Справочник стандартной библиотеки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="tour.html">Быстрый тур</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html" class="current">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
 <main><article>
 <h1>Справочник стандартной библиотеки</h1>
 <p>Стандартная библиотека — один файл <code>std/std.vibe</code>, написанный на самом Vibe. Он подключается к каждой программе <strong>автоматически</strong> (прелюдия). Ничего импортировать не нужно.</p>
@@ -205,6 +205,38 @@
 <td>сортировка</td>
 </tr>
 <tr>
+<td><code>T* at(i)</code></td>
+<td>указатель на элемент <code>i</code> (действителен до следующего роста)</td>
+</tr>
+<tr>
+<td><code>i64 index_of(v)</code></td>
+<td>первый индекс <code>v</code> или -1</td>
+</tr>
+<tr>
+<td><code>!void insert(i, v)</code></td>
+<td>вставляет перед позицией <code>i</code></td>
+</tr>
+<tr>
+<td><code>!T remove_at(i)</code></td>
+<td>удаляет и возвращает элемент <code>i</code>, порядок сохраняется</td>
+</tr>
+<tr>
+<td><code>!T swap_remove(i)</code></td>
+<td>удаляет элемент <code>i</code> за O(1), на его место встаёт последний</td>
+</tr>
+<tr>
+<td><code>truncate(n)</code></td>
+<td>укорачивает до <code>n</code> элементов</td>
+</tr>
+<tr>
+<td><code>!Self clone()</code></td>
+<td>копия со своей памятью</td>
+</tr>
+<tr>
+<td><code>!T[] take()</code></td>
+<td>отдаёт элементы срезом точного размера, список становится пустым</td>
+</tr>
+<tr>
 <td>поля <code>items</code>, <code>len</code>, <code>a</code></td>
 <td>буфер, число элементов, аллокатор</td>
 </tr>
@@ -233,6 +265,26 @@
 <tr>
 <td><code>bool has(str key)</code></td>
 <td>есть ли ключ</td>
+</tr>
+<tr>
+<td><code>V* get_ptr(str key)</code></td>
+<td>указатель на значение для изменения на месте или <code>null</code></td>
+</tr>
+<tr>
+<td><code>V get_or(str key, d)</code></td>
+<td>значение или <code>d</code></td>
+</tr>
+<tr>
+<td><code>bool remove(str key)</code></td>
+<td>удаляет; <code>false</code>, если ключа не было</td>
+</tr>
+<tr>
+<td><code>clear()</code></td>
+<td>удаляет всё</td>
+</tr>
+<tr>
+<td><code>iter()</code></td>
+<td><code>auto it = m.iter(); while (it.next()) { it.key(); it.value(); }</code></td>
 </tr>
 <tr>
 <td>поля <code>len</code>, <code>entries</code></td>
@@ -504,6 +556,161 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ms </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">now_ns</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> t0) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">as</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> f64</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> /</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1000000.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(s, ms </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">>=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>499999500000 true</code></pre></div></div>
+<h2 id="hashmapk-v-и-hashsett"><a class="anchor" href="#hashmapk-v-и-hashsett">#</a><code>HashMap&lt;K, V&gt;</code> и <code>HashSet&lt;T&gt;</code></h2>
+<p>Хеш-таблица с ключами любого типа, который можно напечатать и сравнить через <code>==</code>: целые, <code>str</code>, enum и структуры с <code>operator==</code>, сравнивающим все поля. Хеш считается по самому значению (<code>hash_of</code>), ничего объявлять не нужно. Ключи не копируются.</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">enum</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Color</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Red</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Green</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ages </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> HashMap</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">put</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"ann"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">31</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">put</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"bob"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">25</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    *</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get_ptr</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"bob"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"bob"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">get_or</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"zoe"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">has</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"ann"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), ages.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">remove</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"ann"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">), ages.len);</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> seen </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> HashSet</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Color</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> seen.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(seen.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Color</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Red</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, seen.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Color</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">Red</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, seen.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">len</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>26 -1 true true 1
+true false 1</code></pre></div></div>
+<div class="table-wrap"><table><thead><tr>
+<th>Метод <code>HashMap&lt;K, V&gt;</code></th>
+<th>Что делает</th>
+</tr>
+</thead><tbody><tr>
+<td><code>init(a)</code>, <code>deinit()</code></td>
+<td>создать, освободить</td>
+</tr>
+<tr>
+<td><code>!void put(k, v)</code></td>
+<td>вставляет или заменяет</td>
+</tr>
+<tr>
+<td><code>!V get(k)</code>, <code>V get_or(k, d)</code>, <code>V* get_ptr(k)</code></td>
+<td>чтение; <code>get_ptr</code> даёт <code>null</code>, если ключа нет</td>
+</tr>
+<tr>
+<td><code>bool has(k)</code>, <code>bool remove(k)</code>, <code>clear()</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>iter()</code></td>
+<td><code>while (it.next()) { it.key(); it.value(); it.value_ptr(); }</code></td>
+</tr>
+<tr>
+<td><code>!List&lt;K&gt; keys(a)</code></td>
+<td>ключи в новом списке</td>
+</tr>
+<tr>
+<td>поле <code>len</code></td>
+<td>число ключей</td>
+</tr>
+</tbody></table></div>
+<p>У <code>HashSet&lt;T&gt;</code> есть <code>add</code> (<code>true</code>, если значения ещё не было), <code>has</code>, <code>remove</code>, <code>len()</code>, <code>clear()</code>, <code>iter()</code> и <code>items(a)</code>.</p>
+<h2 id="ещ-про-строки"><a class="anchor" href="#ещ-про-строки">#</a>Ещё про строки</h2>
+<p>Все эти функции возвращают срезы исходной строки или принимают <code>Allocator</code> для новой.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Функция</th>
+<th>Что делает</th>
+</tr>
+</thead><tbody><tr>
+<td><code>str_split(s, sep)</code></td>
+<td>итератор: <code>auto it = str_split(s, &quot;,&quot;); while (it.next()) { it.part }</code></td>
+</tr>
+<tr>
+<td><code>str_fields(s)</code></td>
+<td>то же по пробельным промежуткам</td>
+</tr>
+<tr>
+<td><code>str_lines(s)</code></td>
+<td>строки без <code>\n</code> / <code>\r\n</code>: <code>while (it.next()) { it.line }</code></td>
+</tr>
+<tr>
+<td><code>!List&lt;str&gt; str_split_all(a, s, sep)</code></td>
+<td>все части сразу</td>
+</tr>
+<tr>
+<td><code>!str str_join(a, str[] parts, sep)</code>, <code>str_concat(a, parts)</code></td>
+<td>склейка</td>
+</tr>
+<tr>
+<td><code>!str str_replace(a, s, from, to)</code></td>
+<td>замена всех вхождений</td>
+</tr>
+<tr>
+<td><code>!str str_repeat(a, s, n)</code>, <code>str_to_upper(a, s)</code>, <code>str_to_lower(a, s)</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>str_contains</code>, <code>str_count</code>, <code>str_rfind</code></td>
+<td>поиск</td>
+</tr>
+<tr>
+<td><code>str_trim_start</code>, <code>str_trim_end</code>, <code>str_strip_prefix</code>, <code>str_strip_suffix</code></td>
+<td>обрезка</td>
+</tr>
+<tr>
+<td><code>str_eq_ignore_case</code>, <code>str_cmp</code>, <code>str_less</code></td>
+<td>сравнение (<code>str_less</code> подходит для <code>sort_by</code>)</td>
+</tr>
+<tr>
+<td><code>is_space</code>, <code>is_lower</code>, <code>to_lower(c)</code>, <code>to_upper(c)</code></td>
+<td>символы</td>
+</tr>
+</tbody></table></div>
+<p>UTF-8: <code>utf8_len(s)</code> считает кодовые точки, <code>utf8_valid(s)</code>, <code>utf8_decode(s, i)</code> даёт <code>Rune{ code, size }</code>, <code>utf8_encode(buf, cp)</code>, а <code>utf8_runes(s)</code> перебирает (<code>it.code</code>, <code>it.at</code>).</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> it </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> str_split</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"name=Vibe;year=2026"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">";"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    while</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (it.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">next</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()) {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> eq </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> str_find_byte</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(it.part, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">'='</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(it.part[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">eq], </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"->"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, it.part[eq </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">]);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">str_replace</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a-b-c"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"-"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">" + "</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">utf8_len</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"привет"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>name -&gt; Vibe
+year -&gt; 2026
+a + b + c 6</code></pre></div></div>
+<h2 id="sort-by"><a class="anchor" href="#sort-by">#</a><code>sort_by</code></h2>
+<p><code>!void sort_by(a, T[] s, fn(T, T) -&gt; bool less)</code> сортирует любой срез вашим сравнением. Сортировка устойчивая (равные элементы сохраняют порядок), аллокатор нужен для временного буфера.</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> age; }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">bool </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">by_age</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> y) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x.age </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> y.age; }</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] us </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.name</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "c"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.age</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 30</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.name</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.age</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 20</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }, </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">User</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.name</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.age</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 30</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> }];</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    sort_by</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(), us[</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">], by_age)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> u : us) { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">print</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"{u.name} "</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">); }</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">""</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>a c b </code></pre></div></div>
+<h2 id="debugallocator"><a class="anchor" href="#debugallocator">#</a><code>DebugAllocator</code></h2>
+<p>Аллокатор для поиска ошибок памяти в тестах и отладочных сборках. Каждый блок получает свои страницы, сразу за ним идёт недоступная страница, а освобождённые блоки остаются недоступными:</p>
+<ul>
+<li>чтение или запись за концом блока или после <code>free</code> останавливают программу с сообщением, где назван блок;</li>
+<li>двойной <code>free</code>, освобождение чужого указателя или освобождение с неверным размером вызывают panic;</li>
+<li><code>deinit()</code> перечисляет неосвобождённые блоки и возвращает <code>error.MemoryLeak</code>;</li>
+<li><code>fail_after_n(n)</code> делает так, что выделение после <code>n</code> успешных завершится ошибкой: так проверяют ветки нехватки памяти;</li>
+<li><code>trap_id = k</code> останавливает отладчик там, где выделяется блок <code>#k</code>.</li>
+</ul>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dbg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> DebugAllocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> List</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        defer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        for</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i : </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { xs.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(i)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"no leaks"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>no leaks</code></pre></div></div>
+<p>Он медленный и тратит минимум 8 КиБ на блок, поэтому в релизных сборках его не используют.</p>
+<h2 id="сообщения-о-падении"><a class="anchor" href="#сообщения-о-падении">#</a>Сообщения о падении</h2>
+<p>Каждая программа (кроме <code>--freestanding</code>) ставит обработчик падений. Вместо голого «segmentation fault» вы получите причину и место:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>fatal: segmentation fault: null pointer dereference (address 0x0)</span></span>
+<span class="line"><span>backtrace:</span></span>
+<span class="line"><span>  #0 0x2187 in ./app</span></span>
+<span class="line"><span>  #1 0x13ad in ./app</span></span>
+<span class="line"><span>where (addr2line):</span></span>
+<span class="line"><span>vb.get at /home/me/app.vibe:3</span></span>
+<span class="line"><span>vb.main at /home/me/app.vibe:7</span></span></code></pre></div><p>Различаются причины: нулевой указатель, переполнение стека (бесконечная рекурсия), целочисленное деление на ноль, использование после освобождения и выход за границы блока <code>DebugAllocator</code>. Строки исходника берутся из <code>addr2line</code> (binutils), если он установлен. <code>VIBE_CRASH_HANDLER=0</code> отключает обработчик (например, чтобы получить core dump).</p>
 <h2 id="функции-libc-доступные-без-объявления"><a class="anchor" href="#функции-libc-доступные-без-объявления">#</a>Функции libc, доступные без объявления</h2>
 <p>Из C-библиотеки в прелюдии уже объявлены: <code>printf</code>, <code>malloc</code>, <code>calloc</code>, <code>free</code>, <code>exit</code>, <code>memcmp</code>, <code>memcpy</code>, <code>memmove</code>, <code>memset</code>, <code>strlen</code>, <code>fdopen</code>, <code>fgets</code>, <code>fopen</code>, <code>fclose</code>, <code>fread</code>, <code>fwrite</code>, <code>fseek</code>, <code>ftell</code>, <code>remove</code>, <code>mkdir</code>, <code>fork</code>, <code>execvp</code>, <code>waitpid</code>, <code>getenv</code>, <code>fflush</code>, <code>strtod</code>, <code>clock_gettime</code>, <code>clock</code>, <code>rand</code>, <code>srand</code>, <code>time</code> и математика. Любую другую вызывайте через <code>extern fn</code> (см. <a href="c-interop.html">C</a>).</p>
 <h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>
@@ -512,8 +719,8 @@
 <li>Если что-то не работает как ожидали: <a href="gotchas.html">ловушки и FAQ</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="tooling.html"><small>Назад</small>Инструменты: fmt, lsp, флаги</a><a class="next" href="cookbook.html"><small>Дальше</small>Рецепты и готовые программы</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#вывод-и-форматирование">Вывод и форматирование</a><a class="l2" href="#аллокаторы">Аллокаторы</a><a class="l3" href="#fixedbuf">FixedBuf</a><a class="l3" href="#arena">Arena</a><a class="l2" href="#listt">List&amp;lt;T&amp;gt;</a><a class="l2" href="#mapv">Map&amp;lt;V&amp;gt;</a><a class="l2" href="#optiont">Option&amp;lt;T&amp;gt;</a><a class="l2" href="#математические-и-общие-функции">Математические и общие функции</a><a class="l2" href="#строки-и-символы">Строки и символы</a><a class="l2" href="#числа-из-текста">Числа из текста</a><a class="l2" href="#файлы">Файлы</a><a class="l2" href="#ввод">Ввод</a><a class="l2" href="#процессы-и-окружение">Процессы и окружение</a><a class="l2" href="#время-и-случайные-числа">Время и случайные числа</a><a class="l2" href="#функции-libc-доступные-без-объявления">Функции libc, доступные без объявления</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
+<div class="pager"><a class="prev" href="projects.html"><small>Назад</small>Проекты и зависимости</a><a class="next" href="std-modules.html"><small>Дальше</small>Стандартные модули</a></div>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#вывод-и-форматирование">Вывод и форматирование</a><a class="l2" href="#аллокаторы">Аллокаторы</a><a class="l3" href="#fixedbuf">FixedBuf</a><a class="l3" href="#arena">Arena</a><a class="l2" href="#listt">List&amp;lt;T&amp;gt;</a><a class="l2" href="#mapv">Map&amp;lt;V&amp;gt;</a><a class="l2" href="#optiont">Option&amp;lt;T&amp;gt;</a><a class="l2" href="#математические-и-общие-функции">Математические и общие функции</a><a class="l2" href="#строки-и-символы">Строки и символы</a><a class="l2" href="#числа-из-текста">Числа из текста</a><a class="l2" href="#файлы">Файлы</a><a class="l2" href="#ввод">Ввод</a><a class="l2" href="#процессы-и-окружение">Процессы и окружение</a><a class="l2" href="#время-и-случайные-числа">Время и случайные числа</a><a class="l2" href="#hashmapk-v-и-hashsett">HashMap&amp;lt;K, V&amp;gt; и HashSet&amp;lt;T&amp;gt;</a><a class="l2" href="#ещ-про-строки">Ещё про строки</a><a class="l2" href="#sort-by">sort_by</a><a class="l2" href="#debugallocator">DebugAllocator</a><a class="l2" href="#сообщения-о-падении">Сообщения о падении</a><a class="l2" href="#функции-libc-доступные-без-объявления">Функции libc, доступные без объявления</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
 </div>
 <script src="../assets/site.js"></script>
 </body>

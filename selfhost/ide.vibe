@@ -349,7 +349,7 @@ Symbol* sym_for(Project* p, str path, str src, i64 off) {
     if (fi != null) {
         for (auto d : fi.decls) {
             if (d.k == .Import && off >= d.path_off && off <= d.path_off + d.path.len) {
-                const auto full = canonical(a, join_path(a, dir_of(path), d.path)?)?;
+                const auto full = import_target(a, dir_of(path), d.path)?;
                 if (p.by_path.has(full)) { location(a, &w, p, full, 0, 0)?; }
                 w.end()?;
                 return w.text();

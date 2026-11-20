@@ -87,6 +87,14 @@ More: [memory](memory.md).
 | `bool contains(v)` | whether it is there |
 | `reverse()` | reverses |
 | `sort()` | sorts |
+| `T* at(i)` | a pointer to element `i` (valid until the next growth) |
+| `i64 index_of(v)` | the first index of `v`, or -1 |
+| `!void insert(i, v)` | inserts before position `i` |
+| `!T remove_at(i)` | removes and returns element `i`, keeping the order |
+| `!T swap_remove(i)` | removes element `i` in O(1) by moving the last one in |
+| `truncate(n)` | shortens to `n` elements |
+| `!Self clone()` | a copy with its own memory |
+| `!T[] take()` | hands the elements over as an exactly sized slice, the list becomes empty |
 | fields `items`, `len`, `a` | the buffer, the number of elements, the allocator |
 
 ## `Map<V>`
@@ -98,6 +106,11 @@ More: [memory](memory.md).
 | `!void put(str key, v)` | inserts or replaces |
 | `!V get(str key)` | the value, `error.NotFound` |
 | `bool has(str key)` | whether the key exists |
+| `V* get_ptr(str key)` | a pointer to the value for in-place changes, or `null` |
+| `V get_or(str key, d)` | the value or `d` |
+| `bool remove(str key)` | removes; `false` when the key was not there |
+| `clear()` | removes everything |
+| `iter()` | `auto it = m.iter(); while (it.next()) { it.key(); it.value(); }` |
 | fields `len`, `entries` | the number of keys; records `{ key, value, used }` |
 
 Keys are not copied.
@@ -253,6 +266,129 @@ void main() {
     println(s, ms >= 0.0);
 }
 ```
+
+## `HashMap<K, V>` and `HashSet<T>`
+
+A hash table with keys of any type that can be printed and compared with `==`: integers, `str`, enums, and structs with an `operator==` that compares all fields. The hash is computed from the value itself (`hash_of`), so nothing has to be declared. Keys are not copied.
+
+```vibe run
+enum Color { Red, Green }
+
+!void main() {
+    const auto a = c_allocator();
+    auto ages = HashMap<str, i64>::init(a);
+    defer ages.deinit();
+    ages.put("ann", 31)?;
+    ages.put("bob", 25)?;
+    *ages.get_ptr("bob") += 1;
+    println(ages.get("bob")?, ages.get_or("zoe", -1), ages.has("ann"), ages.remove("ann"), ages.len);
+
+    auto seen = HashSet<Color>::init(a);
+    defer seen.deinit();
+    println(seen.add(Color::Red)?, seen.add(Color::Red)?, seen.len());
+}
+```
+
+| `HashMap<K, V>` method | What it does |
+|---|---|
+| `init(a)`, `deinit()` | create, free |
+| `!void put(k, v)` | inserts or replaces |
+| `!V get(k)`, `V get_or(k, d)`, `V* get_ptr(k)` | read; `get_ptr` gives `null` when missing |
+| `bool has(k)`, `bool remove(k)`, `clear()` | |
+| `iter()` | `while (it.next()) { it.key(); it.value(); it.value_ptr(); }` |
+| `!List<K> keys(a)` | the keys in a new list |
+| field `len` | the number of keys |
+
+`HashSet<T>` has `add` (returns `true` when the value was new), `has`, `remove`, `len()`, `clear()`, `iter()` and `items(a)`.
+
+## More strings
+
+All of these return slices of the input or take an `Allocator` for a new string.
+
+| Function | What it does |
+|---|---|
+| `str_split(s, sep)` | an iterator: `auto it = str_split(s, ","); while (it.next()) { it.part }` |
+| `str_fields(s)` | the same over runs of whitespace |
+| `str_lines(s)` | lines without `\n` / `\r\n`: `while (it.next()) { it.line }` |
+| `!List<str> str_split_all(a, s, sep)` | all the parts at once |
+| `!str str_join(a, str[] parts, sep)`, `str_concat(a, parts)` | joining |
+| `!str str_replace(a, s, from, to)` | replaces every occurrence |
+| `!str str_repeat(a, s, n)`, `str_to_upper(a, s)`, `str_to_lower(a, s)` | |
+| `str_contains`, `str_count`, `str_rfind` | searching |
+| `str_trim_start`, `str_trim_end`, `str_strip_prefix`, `str_strip_suffix` | trimming |
+| `str_eq_ignore_case`, `str_cmp`, `str_less` | comparing (`str_less` fits `sort_by`) |
+| `is_space`, `is_lower`, `to_lower(c)`, `to_upper(c)` | characters |
+
+UTF-8: `utf8_len(s)` counts code points, `utf8_valid(s)`, `utf8_decode(s, i)` gives a `Rune{ code, size }`, `utf8_encode(buf, cp)`, and `utf8_runes(s)` iterates (`it.code`, `it.at`).
+
+```vibe run
+!void main() {
+    const auto a = c_allocator();
+    auto it = str_split("name=Vibe;year=2026", ";");
+    while (it.next()) {
+        const auto eq = str_find_byte(it.part, '=');
+        println(it.part[0..eq], "->", it.part[eq + 1..]);
+    }
+    println(str_replace(a, "a-b-c", "-", " + ")?, utf8_len("привет"));
+}
+```
+
+## `sort_by`
+
+`!void sort_by(a, T[] s, fn(T, T) -> bool less)` sorts any slice with your comparison. It is stable (equal elements keep their order) and needs an allocator for a temporary buffer.
+
+```vibe run
+struct User { str name; i64 age; }
+bool by_age(User x, User y) { return x.age < y.age; }
+
+!void main() {
+    User[3] us = [User{ .name = "c", .age = 30 }, User{ .name = "a", .age = 20 }, User{ .name = "b", .age = 30 }];
+    sort_by(c_allocator(), us[..], by_age)?;
+    for (auto u : us) { print("{u.name} "); }
+    println("");
+}
+```
+
+## `DebugAllocator`
+
+An allocator for finding memory bugs in tests and debug builds. Every block gets its own pages with an inaccessible page right after it, and freed blocks stay inaccessible:
+
+- reading or writing past the end of a block, or after `free`, stops the program with a message that names the block;
+- a double `free`, freeing a foreign pointer, or freeing with the wrong size panics;
+- `deinit()` lists the blocks that were never freed and returns `error.MemoryLeak`;
+- `fail_after_n(n)` makes the allocation after `n` successful ones fail, to test out-of-memory paths;
+- `trap_id = k` stops in the debugger where block `#k` is allocated.
+
+```vibe run
+!void main() {
+    auto dbg = DebugAllocator::init();
+    {
+        auto xs = List<i64>::init(dbg.allocator());
+        defer xs.deinit();
+        for (auto i : 0..100) { xs.push(i)?; }
+    }
+    dbg.deinit()?;
+    println("no leaks");
+}
+```
+
+It is slow and uses at least 8 KiB per block, so keep it out of release builds.
+
+## Crash messages
+
+Every program (not `--freestanding`) installs a handler for crashes. Instead of a bare "segmentation fault" you get the cause and the place:
+
+```text
+fatal: segmentation fault: null pointer dereference (address 0x0)
+backtrace:
+  #0 0x2187 in ./app
+  #1 0x13ad in ./app
+where (addr2line):
+vb.get at /home/me/app.vibe:3
+vb.main at /home/me/app.vibe:7
+```
+
+The causes it tells apart: null pointer, stack overflow (endless recursion), integer division by zero, use after free and out-of-bounds access in a `DebugAllocator` block. The source lines come from `addr2line` (binutils), when it is installed. `VIBE_CRASH_HANDLER=0` turns the handler off (for core dumps).
 
 ## libc functions available without a declaration
 

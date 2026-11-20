@@ -145,7 +145,7 @@ void main() {
 
 Структуры Vibe лежат в памяти так же, как C-структуры (те же размеры и выравнивание). Поэтому описание на стороне Vibe — копия описания на C.
 
-**Структуры передаются в C только по указателю.** Передача и возврат по значению пока не поддерживаются.
+Структуры можно передавать в `extern`-функции и получать из них **по значению**, как в C: компилятор следует правилам System V x86-64 (маленькие структуры идут в регистрах, большие — через стек или скрытый указатель) на всех бэкендах. Это нужно библиотекам вроде raylib: `extern void DrawCircleV(Vector2 center, f32 radius, Color color);` работает как написано. Передача по указателю тоже работает:
 
 ```vibe file=vec.c
 typedef struct { double x, y, z; } Vec3;
@@ -173,6 +173,29 @@ void main() {
     println(vec3_dot(&a, &b));
     vec3_scale(&a, 10.0);
     println(a);
+}
+```
+
+По значению:
+
+```vibe file=v2.c
+typedef struct { float x, y; } Vector2;
+typedef struct { unsigned char r, g, b, a; } Color;
+
+Vector2 v2_add(Vector2 a, Vector2 b) { Vector2 r = { a.x + b.x, a.y + b.y }; return r; }
+Color fade(Color c, float k) { Color o = { c.r, c.g, c.b, (unsigned char)(c.a * k) }; return o; }
+```
+
+```vibe run with=v2.c
+struct Vector2 { f32 x; f32 y; }
+struct Color { u8 r; u8 g; u8 b; u8 a; }
+
+extern Vector2 v2_add(Vector2 a, Vector2 b);
+extern Color fade(Color c, f32 k);
+
+void main() {
+    println(v2_add(Vector2{ .x = 1.0, .y = 2.0 }, Vector2{ .x = 3.0, .y = 4.0 }));
+    println(fade(Color{ .r = 255, .g = 128, .b = 0, .a = 200 }, 0.5));
 }
 ```
 
@@ -300,7 +323,7 @@ vibe build main.vibe libbar.a -o app
 ## Правила и подводные камни
 
 - Нет `@cImport` и разбора заголовков: сигнатуры пишете руками. Это место для ошибок: тип вашего `extern` обязан совпадать с C.
-- Структуры по значению через границу не ходят.
+- Структуры по значению переходят границу только через объявления `extern`. Если C-библиотека вызывает Vibe (функция `export` или указатель на функцию), структуры нужно принимать по указателю.
 - `bool` в C — это `_Bool`/`uint8_t`. Используйте `u8` или `i32`, а не `bool`, если сомневаетесь.
 - Не передавайте `str` вместо `u8*`: нужна `s.ptr` (и нулевой байт, см. выше).
 - `size_t` — это `u64`, `ssize_t` — `i64`.

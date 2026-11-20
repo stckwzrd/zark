@@ -1,0 +1,8 @@
+struct Point { i64 x; i64 y; }
+
+Point* make() {
+    auto p = Point{ .x = 1, .y = 2 };
+    return &p;
+}
+
+void main() { println(make().x); }

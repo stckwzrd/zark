@@ -1,0 +1,79 @@
+// Strings, UTF-8 and sort_by.
+
+test "split, fields and lines" {
+    auto it = str_split("a,b,,c", ",");
+    auto n = 0;
+    str[4] want = ["a", "b", "", "c"];
+    while (it.next()) { assert(it.part == want[n]); n += 1; }
+    assert(n == 4);
+    auto f = str_fields("  hello   big\tworld \n");
+    n = 0;
+    while (f.next()) { n += 1; }
+    assert(n == 3);
+    auto ln = str_lines("one\r\ntwo\n\nthree\n");
+    str[4] lw = ["one", "two", "", "three"];
+    n = 0;
+    while (ln.next()) { assert(ln.line == lw[n]); n += 1; }
+    assert(n == 4);
+}
+
+test "building strings has no leaks" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    auto parts = str_split_all(a, "x-y-z", "-")?;
+    const auto j = str_join(a, parts.slice(), " + ")?;
+    assert(j == "x + y + z");
+    const auto r = str_replace(a, "the cat and the hat", "the", "a")?;
+    assert(r == "a cat and a hat");
+    const auto up = str_to_upper(a, "Hello, Мир")?;
+    assert(up == "HELLO, Мир");
+    const auto rep = str_repeat(a, "ab", 3)?;
+    assert(rep == "ababab");
+    a.free(j); a.free(r); a.free(up); a.free(rep);
+    parts.deinit();
+    dbg.deinit()?;
+}
+
+test "search and trim" {
+    assert(str_count("aaaa", "aa") == 2);
+    assert(str_rfind("abcabc", "bc") == 4);
+    assert(str_contains("haystack", "st"));
+    assert(str_trim_start("  x ") == "x ");
+    assert(str_trim_end("  x ") == "  x");
+    assert(str_strip_prefix("--name", "--") == "name");
+    assert(str_strip_suffix("a.txt", ".md") == "a.txt");
+    assert(str_eq_ignore_case("HeLLo", "hello"));
+    assert(str_cmp("abc", "abd") < 0 && str_cmp("b", "a") > 0 && str_cmp("x", "x") == 0);
+}
+
+test "utf8" {
+    assert(utf8_len("привет") == 6);
+    assert("привет".len == 12);
+    assert(!utf8_valid("ok\xff"));
+    assert(utf8_valid("aж€😀"));
+    auto r = utf8_runes("aж€😀");
+    u32[4] want = [0x61, 0x436, 0x20ac, 0x1f600];
+    auto n = 0;
+    while (r.next()) { assert(r.code == want[n]); n += 1; }
+    assert(n == 4);
+    u8[4] buf;
+    assert(utf8_encode(buf[..], 0x1f600)? == "😀");
+    assert(utf8_encode(buf[..], 0x416)? == "Ж");
+    _ = utf8_decode("\xc0\x80", 0) catch |e| { assert(e == error.InvalidUtf8); Rune{} };
+}
+
+struct P { str name; i64 age; }
+bool by_age(P a, P b) { return a.age < b.age; }
+
+test "sort_by is stable" {
+    P[4] ps = [P{ .name = "c", .age = 30 }, P{ .name = "a", .age = 20 }, P{ .name = "b", .age = 30 }, P{ .name = "d", .age = 10 }];
+    sort_by(c_allocator(), ps[..], by_age)?;
+    assert(ps[0].name == "d" && ps[1].name == "a" && ps[2].name == "c" && ps[3].name == "b");
+    str[5] ws = ["pear", "apple", "fig", "banana", "apple"];
+    sort_by(c_allocator(), ws[..], str_less)?;
+    assert(ws[0] == "apple" && ws[2] == "banana" && ws[4] == "pear");
+    i64[100] big;
+    for (auto i : 0..100) { big[i] = (i * 37) % 100; }
+    sort(big[..]);
+    for (auto i : 0..100) { assert(big[i] == i); }
+}

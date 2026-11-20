@@ -6,6 +6,9 @@ import "resolve.vibe";
 import "fmt.vibe";
 import "loader.vibe";
 import "lsp.vibe";
+import "project.vibe";
+import "std/os" as osm;
+import "std/path" as pth;
 
 void usage() {
     eprintln("vibe 0.4 (self-hosted) — a compact systems language (LLVM backend)
@@ -17,6 +20,8 @@ usage:
   vibe fmt   [--check] <file.vibe ...>  format source files in place
   vibe lsp                          language server on stdin/stdout
   vibe ir    <file.vibe>            print LLVM IR to stdout
+  vibe new   NAME                   create a project (vibe.toml, src/main.vibe)
+  in a project, run/build/test work without a file: they read vibe.toml
   vibe tokens <file.vibe ...>       dump tokens
 ");
 }
@@ -95,12 +100,84 @@ str base_of(str path) {
 
 !i32 compile(Allocator a) {
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
-    if (arg_count() < 3) {
+    if (arg_count() >= 2 && arg(1) == "new") {
+        if (arg_count() != 3) {
+            eprintln("usage: vibe new NAME");
+            return 1;
+        }
+        return scaffold_project(a, arg(2));
+    }
+    // inside a project (a vibe.toml here or above), `vibe run`, `vibe build` and `vibe test`
+    // work without a file name
+    auto in_project = false;
+    if (arg_count() >= 2 && (arg(1) == "run" || arg(1) == "build" || arg(1) == "test")) {
+        auto named = false;
+        for (auto k : 2..arg_count()) {
+            if (arg(k) == "--") { break; }
+            if (str_ends_with(arg(k), ".vibe")) { named = true; }
+        }
+        in_project = !named;
+    }
+    if (arg_count() < 3 && !in_project) {
         usage();
         return 1;
     }
     const auto cmd = arg(1);
     if (cmd == "fmt") { return run_fmt(a); }
+
+    auto argv = List<str>::init(a);
+    for (auto k : 2..arg_count()) { argv.push(arg(k))?; }
+    if (in_project) {
+        const auto pdir = find_project(a, ".")?;
+        if (pdir.len == 0) {
+            eprintln("error: no .vibe file given and no vibe.toml in this directory or above (create a project with `vibe new NAME`)");
+            return 1;
+        }
+        const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
+        if (cmd == "test") {
+            i32 worst = 0;
+            const auto self = osm::exe_path(a)?;
+            const auto files = project_test_files(a, proj)?;
+            for (auto f : files) {
+                println("== {pth::relative(a, f, pdir)?}");
+                auto full = List<str>::init(a);
+                full.append([self, "test"])?;
+                full.append(project_args(a, proj, cmd, argv)?.slice())?;
+                full.items[2] = f;
+                const auto code = run(a, full.slice())?;
+                if (code != 0) { worst = code; }
+            }
+            return worst;
+        }
+        argv = project_args(a, proj, cmd, argv)?;
+    } else {
+        // a file inside a project still sees the project's dependencies
+        for (auto x : argv) {
+            if (x == "--") { break; }
+            if (str_ends_with(x, ".vibe")) {
+                const auto pdir = find_project(a, pth::dir(x)) catch "";
+                if (pdir.len > 0) {
+                    const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
+                    auto more = List<str>::init(a);
+                    for (auto src : proj.sources) { more.push(src)?; }
+                    for (auto l : proj.libs) {
+                        auto b = List<u8>::init(a);
+                        sprint(&b, "-l{l}")?;
+                        more.push(b.slice())?;
+                    }
+                    auto at = argv.index_of("--");
+                    if (at < 0) { at = argv.len; }
+                    for (auto m : more) {
+                        if (argv.index_of(m) < 0) {
+                            argv.insert(at, m)?;
+                            at += 1;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
 
     if (cmd == "tokens") {
         auto out = List<u8>::init(a);
@@ -141,11 +218,11 @@ str base_of(str path) {
     auto fastmath = false;
     auto ovf = false;
     auto debug = false;
-    auto i = 2;
-    while (i < arg_count()) {
-        const auto x = arg(i);
+    auto i = 0;
+    while (i < argv.len) {
+        const auto x = argv.get(i);
         if (x == "--") {
-            for (auto j : i + 1..arg_count()) { prog_args.push(arg(j))?; }
+            for (auto j : i + 1..argv.len) { prog_args.push(argv.get(j))?; }
             break;
         } else if (x == "-O") {
             opt = true;
@@ -178,9 +255,14 @@ str base_of(str path) {
             safety = false;
         } else if (x == "-o") {
             i += 1;
-            if (i < arg_count()) { out_path = arg(i); }
+            if (i < argv.len) { out_path = argv.get(i); }
         } else if (str_ends_with(x, ".vibe")) {
             src_file = x;
+            // `vibe run script.vibe a b` from a shebang line: everything after a script is its arguments
+            if (arg(1) == "run" && !in_project && starts_with_shebang(a, x)) {
+                for (auto j : i + 1..argv.len) { if (argv.get(j) != "--" || j > i + 1) { prog_args.push(argv.get(j))?; } }
+                break;
+            }
         } else {
             extras.push(x)?;
         }
@@ -193,6 +275,7 @@ str base_of(str path) {
 
     const auto t0 = now_ns();
     const auto g = new_gen(a, safety)?;
+    g.freestanding = freestanding;
     g.fast = fast;
     g.fastmath = fastmath;
     g.ovf = ovf;
@@ -317,4 +400,9 @@ i32 main() {
         1;
     };
     return code;
+}
+
+bool starts_with_shebang(Allocator a, str path) {
+    const auto src = read_file(a, path) catch { return false; };
+    return src.len >= 2 && src[0] == '#' && src[1] == '!';
 }

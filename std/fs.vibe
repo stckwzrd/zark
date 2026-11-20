@@ -1,0 +1,258 @@
+// File system: metadata, directories, copying, removing.
+//   import "std/fs" as fs;
+//   if (fs::is_dir("src")) { auto d = fs::list_dir(a, "src")?; defer d.deinit(); ... }
+// Reading and writing whole files is in the prelude: read_file, write_file, file_exists.
+
+extern void* opendir(u8* path);
+extern u8* readdir(void* d);
+extern i32 closedir(void* d);
+extern i32 rmdir(u8* path);
+extern i32 unlink(u8* path);
+extern i32 rename(u8* from, u8* to);
+extern u8* getcwd(u8* buf, u64 n);
+extern i32 chdir(u8* path);
+extern i32 chmod(u8* path, u32 mode);
+
+enum Kind { File, Dir, Link, Other }
+
+struct Info {
+    Kind kind;
+    u64 size;
+    i64 modified;      // unix seconds
+    u32 mode;          // permission bits, e.g. 0o644
+}
+
+struct Entry { str name; Kind kind; }
+
+/// the entries of one directory, sorted by name, without "." and ".."
+struct DirList {
+    List<Entry> entries;
+    Allocator a;
+
+    void deinit() {
+        for (auto e : this->entries) { this->a.free(e.name); }
+        this->entries.deinit();
+    }
+    Entry[] slice() { return this->entries.slice(); }
+}
+
+/// a list of strings that owns them
+struct Paths {
+    List<str> items;
+    Allocator a;
+
+    void deinit() {
+        for (auto s : this->items) { this->a.free(s); }
+        this->items.deinit();
+    }
+    str[] slice() { return this->items.slice(); }
+}
+
+Kind kind_of_mode(u32 m) {
+    match (m & 0o170000) {
+        0o100000 => return Kind::File;
+        0o040000 => return Kind::Dir;
+        0o120000 => return Kind::Link;
+    }
+    return Kind::Other;
+}
+
+!Info stat_impl(str path, i64 nr) {
+    u8[4096] pb;
+    const auto p = to_cstr(pb[..], path)?;
+    u64[18] st;
+    _ = Sys::call(nr, p as i64, &st[0] as i64, 0, 0, 0, 0)?;
+    const auto mode = (st[3] & 0xffffffff) as u32;
+    return Info{ .kind = kind_of_mode(mode), .size = st[6], .modified = st[11] as i64, .mode = mode & 0o7777 };
+}
+
+/// metadata; follows symbolic links
+!Info info(str path) { return stat_impl(path, 4); }
+
+/// metadata of the link itself
+!Info link_info(str path) { return stat_impl(path, 6); }
+
+bool exists(str path) {
+    _ = info(path) catch { return false; };
+    return true;
+}
+
+bool is_dir(str path) {
+    const auto i = info(path) catch { return false; };
+    return i.kind is .Dir;
+}
+
+bool is_file(str path) {
+    const auto i = info(path) catch { return false; };
+    return i.kind is .File;
+}
+
+bool entry_less(Entry x, Entry y) { return str_less(x.name, y.name); }
+
+!DirList list_dir(Allocator a, str path) {
+    u8[4096] pb;
+    const auto d = opendir(to_cstr(pb[..], path)?);
+    if (d == null) { errno_error()?; }
+    defer _ = closedir(d);
+    auto out = DirList{ .entries = List<Entry>::init(a), .a = a };
+    errdefer out.deinit();
+    while (true) {
+        const auto ent = readdir(d);
+        if (ent == null) { break; }
+        const auto name = cstr(ent + 19);
+        if (name == "." || name == "..") { continue; }
+        auto k = Kind::Other;
+        match ent[18] {
+            8 => k = Kind::File;
+            4 => k = Kind::Dir;
+            10 => k = Kind::Link;
+        }
+        out.entries.push(Entry{ .name = a.dup(name)?, .kind = k })?;
+    }
+    sort_by(a, out.entries.slice(), entry_less)?;
+    return out;
+}
+
+!void walk_into(Allocator a, str root, str rel, Paths* out, bool dirs) {
+    auto full = List<u8>::init(a);
+    defer full.deinit();
+    if (rel.len == 0) { full.append(root)?; } else { sprint(&full, "{root}/{rel}")?; }
+    auto d = list_dir(a, full.slice())?;
+    defer d.deinit();
+    for (auto e : d.slice()) {
+        auto r = List<u8>::init(a);
+        defer r.deinit();
+        if (rel.len == 0) { r.append(e.name)?; } else { sprint(&r, "{rel}/{e.name}")?; }
+        if (e.kind is .Dir) {
+            if (dirs) { out.items.push(a.dup(r.slice())?)?; }
+            walk_into(a, root, r.slice(), out, dirs)?;
+        } else {
+            out.items.push(a.dup(r.slice())?)?;
+        }
+    }
+}
+
+/// every file below `root` (recursively), as paths relative to it, sorted per directory
+!Paths walk(Allocator a, str root) {
+    auto out = Paths{ .items = List<str>::init(a), .a = a };
+    errdefer out.deinit();
+    walk_into(a, root, "", &out, false)?;
+    return out;
+}
+
+/// like walk, but directories are listed too (before their contents)
+!Paths walk_all(Allocator a, str root) {
+    auto out = Paths{ .items = List<str>::init(a), .a = a };
+    errdefer out.deinit();
+    walk_into(a, root, "", &out, true)?;
+    return out;
+}
+
+/// creates one directory; error.AlreadyExists if it is there
+!void make_dir(str path) {
+    u8[4096] pb;
+    if (mkdir(to_cstr(pb[..], path)?, 0o755) != 0) { errno_error()?; }
+}
+
+/// creates the directory and every missing parent; fine if it already exists
+!void make_dirs(str path) {
+    if (path.len == 0 || is_dir(path)) { return; }
+    const auto slash = str_rfind_byte(path, '/');
+    if (slash > 0) { make_dirs(path[0..slash])?; }
+    make_dir(path) catch |e| {
+        if (e != error.AlreadyExists) { return e; }
+    };
+}
+
+!void remove_file(str path) {
+    u8[4096] pb;
+    if (unlink(to_cstr(pb[..], path)?) != 0) { errno_error()?; }
+}
+
+/// removes an empty directory
+!void remove_dir(str path) {
+    u8[4096] pb;
+    if (rmdir(to_cstr(pb[..], path)?) != 0) { errno_error()?; }
+}
+
+/// removes a file, or a directory with everything in it
+!void remove_all(Allocator a, str path) {
+    const auto i = link_info(path)?;
+    if (!(i.kind is .Dir)) {
+        remove_file(path)?;
+        return;
+    }
+    auto d = list_dir(a, path)?;
+    defer d.deinit();
+    for (auto e : d.slice()) {
+        auto p = List<u8>::init(a);
+        defer p.deinit();
+        sprint(&p, "{path}/{e.name}")?;
+        remove_all(a, p.slice())?;
+    }
+    remove_dir(path)?;
+}
+
+/// renames or moves (within one file system)
+!void move(str from, str to) {
+    u8[4096] fb;
+    u8[4096] tb;
+    if (rename(to_cstr(fb[..], from)?, to_cstr(tb[..], to)?) != 0) { errno_error()?; }
+}
+
+!void copy_file(str from, str to) {
+    u8[4096] fb;
+    u8[4096] tb;
+    const auto src = Sys::open(to_cstr(fb[..], from)?, 0, 0)?;
+    defer _ = Sys::close(src);
+    const auto mode = info(from)?.mode;
+    const auto dst = Sys::open(to_cstr(tb[..], to)?, 0o1 | 0o100 | 0o1000, mode as i64)?;
+    defer _ = Sys::close(dst);
+    u8[65536] buf;
+    while (true) {
+        const auto n = Sys::read(src, &buf[0], 65536)?;
+        if (n == 0) { break; }
+        auto off = 0;
+        while (off < n) { off += Sys::write(dst, &buf[off], (n - off) as u64)?; }
+    }
+}
+
+/// appends to a file, creating it when missing
+!void append_file(str path, str data) {
+    u8[4096] pb;
+    const auto fd = Sys::open(to_cstr(pb[..], path)?, 0o1 | 0o100 | 0o2000, 0o644)?;
+    defer _ = Sys::close(fd);
+    auto off = 0;
+    while (off < data.len) { off += Sys::write(fd, data.ptr + off, (data.len - off) as u64)?; }
+}
+
+!void set_mode(str path, u32 mode) {
+    u8[4096] pb;
+    if (chmod(to_cstr(pb[..], path)?, mode) != 0) { errno_error()?; }
+}
+
+/// the current working directory (a new string)
+!str cwd(Allocator a) {
+    u8[4096] buf;
+    if (getcwd(&buf[0], 4096) == null) { errno_error()?; }
+    return a.dup(cstr(&buf[0]));
+}
+
+!void set_cwd(str path) {
+    u8[4096] pb;
+    if (chdir(to_cstr(pb[..], path)?) != 0) { errno_error()?; }
+}
+
+/// a fresh empty directory under /tmp (or $TMPDIR), named prefix-XXXXXX
+!str temp_dir(Allocator a, str prefix) {
+    auto base = env("TMPDIR") catch "/tmp";
+    auto b = List<u8>::init(a);
+    errdefer b.deinit();
+    sprint(&b, "{base}/{prefix}-XXXXXX")?;
+    b.push(0)?;
+    if (mkdtemp(b.items.ptr) == null) { errno_error()?; }
+    b.len -= 1;
+    return b.take();
+}
+
+extern u8* mkdtemp(u8* tmpl);

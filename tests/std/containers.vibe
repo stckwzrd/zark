@@ -1,0 +1,96 @@
+// HashMap, HashSet, Map and List additions.
+
+enum Color { Red, Green, Blue }
+struct Pt { i64 x; i64 y; bool operator==(Pt o) const { return x == o.x && y == o.y; } }
+
+test "HashMap with integer keys: put, get, remove" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto m = HashMap<i64, i64>::init(dbg.allocator());
+        defer m.deinit();
+        for (auto i : 0..2000) { m.put(i * 7, i)?; }
+        assert(m.len == 2000);
+        for (auto i : 0..2000) { if (i % 3 == 0) { assert(m.remove(i * 7)); } }
+        assert(!m.remove(5));
+        for (auto i : 0..2000) {
+            assert(m.has(i * 7) == (i % 3 != 0));
+            if (i % 3 != 0) { assert(m.get(i * 7)? == i); }
+        }
+        assert(m.get_or(3, -1) == -1);
+        m.put(14, 100)?;
+        assert(m.get(14)? == 100);
+        *m.get_ptr(14) += 1;
+        assert(m.get(14)? == 101);
+    }
+    dbg.deinit()?;
+}
+
+test "HashMap with string, enum and struct keys" {
+    const auto a = c_allocator();
+    auto words = HashMap<str, i64>::init(a);
+    defer words.deinit();
+    auto it = str_fields("the cat saw the dog and the cat");
+    while (it.next()) {
+        const auto p = words.get_ptr(it.part);
+        if (p == null) { words.put(it.part, 1)?; } else { *p += 1; }
+    }
+    assert(words.get("the")? == 3 && words.get("cat")? == 2 && words.len == 5);
+    auto keys = words.keys(a)?;
+    defer keys.deinit();
+    assert(keys.len == 5);
+    auto sum = 0;
+    auto wi = words.iter();
+    while (wi.next()) { sum += wi.value(); }
+    assert(sum == 8);
+
+    auto colors = HashMap<Color, i64>::init(a);
+    defer colors.deinit();
+    colors.put(Color::Red, 1)?;
+    colors.put(Color::Blue, 3)?;
+    colors.put(Color::Red, 10)?;
+    assert(colors.len == 2 && colors.get(Color::Red)? == 10 && !colors.has(Color::Green));
+
+    auto pts = HashSet<Pt>::init(a);
+    defer pts.deinit();
+    assert(pts.add(Pt{ .x = 1, .y = 2 })?);
+    assert(!pts.add(Pt{ .x = 1, .y = 2 })?);
+    assert(pts.add(Pt{ .x = 2, .y = 1 })?);
+    assert(pts.len() == 2);
+    assert(pts.remove(Pt{ .x = 1, .y = 2 }));
+    assert(!pts.has(Pt{ .x = 1, .y = 2 }) && pts.has(Pt{ .x = 2, .y = 1 }));
+}
+
+test "Map: remove, get_ptr, iter" {
+    auto sm = Map<i64>::init(c_allocator());
+    defer sm.deinit();
+    for (auto w : ["a", "b", "c", "d"]) { sm.put(w, 1)?; }
+    assert(sm.remove("b") && !sm.remove("zz"));
+    assert(sm.len == 3 && !sm.has("b") && sm.has("c"));
+    *sm.get_ptr("a") += 41;
+    auto it = sm.iter();
+    auto total = 0;
+    while (it.next()) { total += it.value(); }
+    assert(total == 44);
+    assert(sm.get_or("nope", 7) == 7);
+}
+
+test "List: insert, remove_at, swap_remove, clone, take" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    auto xs = List<i64>::init(a);
+    xs.append([1, 2, 4, 5])?;
+    xs.insert(2, 3)?;
+    assert(xs.index_of(4) == 3);
+    assert(xs.remove_at(0)? == 1);
+    assert(xs.swap_remove(0)? == 2);
+    assert(xs.len == 3 && xs.get(0) == 5);
+    auto ys = xs.clone()?;
+    *ys.at(0) = 100;
+    assert(xs.get(0) == 5 && ys.get(0) == 100);
+    _ = xs.insert(9, 1) catch |e| { assert(e == error.OutOfRange); };
+    const auto owned = ys.take()?;
+    assert(owned.len == 3 && ys.len == 0);
+    a.free(owned);
+    xs.deinit();
+    dbg.deinit()?;
+}

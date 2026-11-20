@@ -101,6 +101,9 @@ struct Gen {
     List<Loop> loops;
     FnInst* cur;
     bool const_this;
+    bool in_cast;          // a literal under `as` may be truncated on purpose
+    bool freestanding;     // no libc: main does not call the runtime hook __rt_init
+    FnInst* rt_init;
     Env env;
     bool terminated;
     str cur_label;
@@ -291,11 +294,21 @@ struct Gen {
             ty = this->t_f64;
         } else if (c.value.k == .BoolLit) {
             ty = this->t_bool;
+        } else if (c.value.k == .StrLit) {
+            ty = this->t_str;
         } else {
             ty = this->t_i64;
         }
         auto init = "zeroinitializer";
-        if (ty.k == .Int) {
+        if (c.value != null && c.value.k == .StrLit && is_str(ty)) {
+            const auto gs = this->str_global(c.value.name)?;
+            auto ib = this->sb();
+            sprint(&ib, "{{ ptr {gs}, i64 {c.value.name.len} }}")?;
+            init = ib.slice();
+        } else if (c.value != null && c.value.k == .StrLit) {
+            this->err(c.line); eprintln("a string literal cannot initialize a global of type '{this->type_name(ty)?}'");
+            return error.CompileFailed;
+        } else if (ty.k == .Int) {
             auto b = this->sb();
             sprint(&b, "{this->eval_const(c.value)?}")?;
             init = b.slice();
@@ -597,7 +610,9 @@ struct Gen {
     // ------------------------------------------------------------------ functions
     !FnInst* inst_fn(FnDecl* decl, Env env, List<Type*> type_args) {
         auto name = this->sb();
-        if (decl.is_extern || decl.is_export) {
+        if (decl.is_extern && decl.link_name.len > 0) {
+            name.append(decl.link_name)?;
+        } else if (decl.is_extern || decl.is_export) {
             name.append(decl.name)?;
         } else {
             name.append("vb.")?;
@@ -623,16 +638,27 @@ struct Gen {
         this->fn_insts.put(key, fi)?;
         if (decl.is_extern) {
             auto txt = this->sb();
-            sprint(&txt, "declare {this->llty(ret)?} @{decl.name}(")?;
+            auto sret = false;
+            if (!decl.variadic && is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
+            if (decl.variadic) {
+                sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+            } else {
+                sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
+            }
+            if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; }
+            auto cm = List<i64>::init(this->a);
+            if (!decl.variadic) { cm = this->c_modes(params, ret)?; }
             for (auto [i, p] : params) {
-                if (i > 0) { txt.append(", ")?; }
-                txt.append(this->llty(p)?)?;
+                if (i > 0 || sret) { txt.append(", ")?; }
+                auto mode = 0;
+                if (i < cm.len) { mode = cm.get(i); }
+                txt.append(this->c_param_ty(p, mode)?)?;
             }
             if (decl.variadic) {
                 if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
             }
             txt.append(")")?;
-            this->declare(decl.name, txt.slice())?;
+            this->declare(key, txt.slice())?;
         } else {
             this->pending.push(fi)?;
         }
@@ -699,6 +725,9 @@ struct Gen {
             main_inst = this->inst_fn(m, this->new_env()?, this->no_types())?;
         }
         for (auto f : this->fn_order) { if (f.is_export) { _ = this->inst_fn(f, this->new_env()?, this->no_types())?; } }
+        if (!this->freestanding && (main_inst != null || this->test_mode) && this->fns.has("__rt_init")) {
+            this->rt_init = this->inst_fn(this->fns.get("__rt_init")?, this->new_env()?, this->no_types())?;
+        }
         auto nerr = 0;
         auto next = 0;
         while (next < this->pending.len && nerr < 10) {
@@ -750,6 +779,7 @@ struct Gen {
         this->declare("fflush", "declare i32 @fflush(ptr)")?;
         const auto f = this->str_global("error: %s\n")?;
         w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?;
+        if (this->rt_init != null) { sprint(w, "  call void @{this->rt_init.llname}()\n")?; }
         w.append("  %has = icmp sgt i32 %argc, 1\n  br i1 %has, label %go, label %none\nnone:\n  ret i32 2\ngo:\n")?;
         w.append("  %ap = getelementptr ptr, ptr %argv, i64 1\n  %as = load ptr, ptr %ap\n  %i = call i32 @atoi(ptr %as)\n  br label %c0\n")?;
         for (auto [k, fi] : insts) {
@@ -768,6 +798,7 @@ struct Gen {
         if (this->globals.has("__argc")) {
             w.append("  %argc64 = sext i32 %argc to i64\n  store i64 %argc64, ptr @g.__argc\n  store ptr %argv, ptr @g.__argv\n")?;
         }
+        if (this->rt_init != null) { sprint(w, "  call void @{this->rt_init.llname}()\n")?; }
         const auto rt = mi.ret;
         if (rt.k == .Void) {
             sprint(w, "  call void @{mi.llname}()\n  ret i32 0\n")?;
@@ -842,6 +873,11 @@ struct Gen {
             } else if (fi.ret.k == .Errun && fi.ret.elem.k == .Void) {
                 sprint(this->ins()?, "  ret {{ i32 }} zeroinitializer\n")?;
             } else {
+                if (!always_returns(decl.body)) {
+                    this->err(decl.line);
+                    eprintln("function '{decl.name}' does not return a value on every path; add a 'return' at the end");
+                    return error.CompileFailed;
+                }
                 sprint(this->ins()?, "  unreachable\n")?;
             }
             this->terminated = true;
@@ -906,6 +942,48 @@ struct Gen {
     g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?;
     g.error_names.push("ok")?;
     return g;
+}
+
+// ------------------------------------------------------------------ control flow
+
+// true when control can never fall off the end of `s`
+bool always_returns(Stmt* s) {
+    if (s == null) { return false; }
+    match s.k {
+        .Ret => return true;
+        .Block => {
+            for (auto x : s.stmts) { if (always_returns(x)) { return true; } }
+            return false;
+        }
+        .If => return s.els != null && always_returns(s.body) && always_returns(s.els);
+        .While => return s.e.k == .BoolLit && s.e.bval && !breaks_out(s.body, s.label, 0);
+        .Match => {
+            if (s.arms.len == 0) { return false; }
+            for (auto arm : s.arms) { if (!always_returns(arm.body)) { return false; } }
+            return true;
+        }
+        .ExprS => return s.e.k == .Call && s.e.l.k == .Ident && s.e.l.name == "panic";
+    }
+    return false;
+}
+
+// true when `s` contains a break that leaves the loop at nesting `depth` 0 (or labeled `lbl`)
+bool breaks_out(Stmt* s, str lbl, i64 depth) {
+    if (s == null) { return false; }
+    match s.k {
+        .Brk => return (s.label.len == 0 && depth == 0) || (s.label.len > 0 && s.label == lbl);
+        .Block => {
+            for (auto x : s.stmts) { if (breaks_out(x, lbl, depth)) { return true; } }
+            return false;
+        }
+        .If => return breaks_out(s.body, lbl, depth) || breaks_out(s.els, lbl, depth);
+        .While, .ForRange, .ForEach => return breaks_out(s.body, lbl, depth + 1);
+        .Match => {
+            for (auto arm : s.arms) { if (breaks_out(arm.body, lbl, depth)) { return true; } }
+            return false;
+        }
+    }
+    return false;
 }
 
 // ------------------------------------------------------------------ type predicates
