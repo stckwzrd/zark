@@ -264,6 +264,42 @@ bool Gen::satisfies(Type* t, str name) {
         sprint(&this->types_out, "%\"{inst.llname}\" = type {{ i32, [{inst.payload_words} x i64] }}\n")?;
         return inst;
     }
+    auto need = sd.align > 0;
+    if (!sd.packed) {
+        for (auto f : inst.fields) {
+            if (this->align_of(f.ty)? != this->ll_align(f.ty)?) { need = true; }
+        }
+    }
+    if (need && !sd.packed) {
+        inst.explicit = true;
+        inst.llidx = List<i64>::init(this->a);
+        u64 maxa = max(1 as u64, sd.align as u64);
+        for (auto f : inst.fields) { maxa = max(maxa, this->align_of(f.ty)?); }
+        sprint(&this->types_out, "%\"{inst.llname}\" = type <{{ ")?;
+        u64 off = 0;
+        i64 entries = 0;
+        for (auto f : inst.fields) {
+            const auto al = this->align_of(f.ty)?;
+            const auto start = (off + al - 1) / al * al;
+            if (start > off) {
+                if (entries > 0) { this->types_out.append(", ")?; }
+                sprint(&this->types_out, "[{start - off} x i8]")?;
+                entries += 1;
+            }
+            if (entries > 0) { this->types_out.append(", ")?; }
+            this->types_out.append(this->llty(f.ty)?)?;
+            inst.llidx.push(entries)?;
+            entries += 1;
+            off = start + this->size_of(f.ty)?;
+        }
+        const auto total = (off + maxa - 1) / maxa * maxa;
+        if (total > off) {
+            if (entries > 0) { this->types_out.append(", ")?; }
+            sprint(&this->types_out, "[{total - off} x i8]")?;
+        }
+        this->types_out.append(" }>\n")?;
+        return inst;
+    }
     if (sd.packed) {
         sprint(&this->types_out, "%\"{inst.llname}\" = type <{{ ")?;
     } else {
@@ -332,6 +368,7 @@ bool Gen::satisfies(Type* t, str name) {
             if (t.si.decl.is_union) { return 8 + 8 * t.si.payload_words; }
             u64 off = 0;
             u64 maxa = 1;
+            if (!t.si.decl.packed) { maxa = max(1 as u64, t.si.decl.align as u64); }
             if (t.si.decl.packed) {
                 for (auto f : t.si.fields) { off += this->size_of(f.ty)?; }
                 return off;
@@ -360,12 +397,29 @@ bool Gen::satisfies(Type* t, str name) {
         .Strct => {
             if (t.si.decl.is_union) { return 8; }
             if (t.si.decl.packed) { return 1; }
-            u64 m = 1;
+            u64 m = max(1 as u64, t.si.decl.align as u64);
             for (auto f : t.si.fields) { m = max(m, this->align_of(f.ty)?); }
             return m;
         }
         .Slice => return 8;
         .Errun => return max(4 as u64, this->align_of(t.elem)?);
+        .Void => return 1;
+    }
+    return max(1 as u64, this->size_of(t)?);
+}
+
+!u64 Gen::ll_align(Type* t) {
+    match t.k {
+        .Array => return this->ll_align(t.elem);
+        .Strct => {
+            if (t.si.decl.is_union) { return 8; }
+            if (t.si.decl.packed || t.si.explicit) { return 1; }
+            u64 m = 1;
+            for (auto f : t.si.fields) { m = max(m, this->ll_align(f.ty)?); }
+            return m;
+        }
+        .Slice => return 8;
+        .Errun => return max(4 as u64, this->ll_align(t.elem)?);
         .Void => return 1;
     }
     return max(1 as u64, this->size_of(t)?);
