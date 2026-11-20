@@ -25,6 +25,7 @@ void main() {
 
 <div class="cards">
 <a href="getting-started.html"><b>Установка и первая программа</b><span>Собрать компилятор, запустить Hello World, понять команды и флаги.</span></a>
+<a href="showcase.html"><b>Витрина</b><span>Многопоточный трассировщик лучей: интерфейсы, SIMD, JSON, потоки, union и тесты в одной программе.</span></a>
 <a href="tour.html"><b>Быстрый тур</b><span>Весь язык на одной странице: примерно двадцать маленьких программ.</span></a>
 <a href="types.html"><b>Типы</b><span>Числа, указатели, срезы, строки, массивы и правила преобразований.</span></a>
 <a href="errors-and-optionals.html"><b>Ошибки</b><span><code>!T</code>, <code>?</code>, <code>catch</code>, <code>errdefer</code> и опциональные значения.</span></a>

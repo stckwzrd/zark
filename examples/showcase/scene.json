@@ -1,0 +1,11 @@
+{
+  "width": 96,
+  "height": 40,
+  "light": [-2.0, 4.0, -1.0],
+  "objects": [
+    { "type": "plane", "y": -1.0, "material": { "kind": "diffuse", "color": [0.8, 0.8, 0.8] } },
+    { "type": "sphere", "center": [0.0, 0.0, 4.0], "radius": 1.0, "material": { "kind": "diffuse", "color": [0.9, 0.2, 0.2] } },
+    { "type": "sphere", "center": [-2.2, -0.3, 5.0], "radius": 0.7, "material": { "kind": "mirror", "color": [0.9, 0.9, 1.0] } },
+    { "type": "sphere", "center": [2.0, 0.2, 3.5], "radius": 0.9, "material": { "kind": "emissive", "color": [1.0, 0.8, 0.3] } }
+  ]
+}
