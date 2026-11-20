@@ -889,7 +889,11 @@ struct Native {
                 }
                 if (ins.rd >= 0) { continue; }
                 if (ins.op == "alloca") {
-                    this->allocas.put(ins.dest, this->new_slot(ins.ty.size, ins.ty.align))?;
+                    if (ins.n > 16) {
+                        eprintln("native: a local variable needs alignment {ins.n}, the native backend supports 16; build with --llvm");
+                        return error.CompileFailed;
+                    }
+                    this->allocas.put(ins.dest, this->new_slot(ins.ty.size, max(ins.ty.align, ins.n)))?;
                 } else if (ins.dest.len > 0) {
                     this->def_slot(ins.dest, ins.ty)?;
                 }
@@ -1068,6 +1072,10 @@ struct Native {
         const auto op = ins.op;
         if (op == "alloca") {
             ins.ty = this->ty(&c)?;
+            if (c.eat(',') && c.eat_word("align")) {
+                c.ws();
+                ins.n = parse_num(c.s[c.i..]);
+            }
         } else if (op == "load") {
             _ = c.eat_word("volatile");
             ins.ty = this->ty(&c)?;

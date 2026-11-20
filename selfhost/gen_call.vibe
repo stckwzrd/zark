@@ -97,6 +97,8 @@ bool Gen::names_type(Expr* e) {
         if (!this->consts.has(name)) {
             const auto mf = this->member_method(callee)?;
             if (mf != null) { return this->gen_field_call(mf, e.args, this->no_types(), expected, e.line); }
+            const auto vt = this->vec_type(name)?;
+            if (vt != null) { return this->gen_vec_ctor(vt, e); }
         }
         if (!this->consts.has(name)) { this->err(e.line); eprintln("unknown function '{name}'{this->hint(name, this->visible_names())}"); return error.CompileFailed; }
     }

@@ -277,7 +277,13 @@ bool can_coerce(Type* from, Type* to) {
                 if (this->methods.has(kb.slice())) { return this->call_method(this->methods.get(kb.slice())?, this->spill(v)?, List<Expr*>::init(this->a), this->no_types(), null, e.line); }
             }
             const auto t = this->tmp()?;
-            if (v.ty.k == .Int) {
+            if (v.ty.k == .Array && v.ty.vec) {
+                if (v.ty.elem.k == .Int) {
+                    sprint(this->ins()?, "  {t} = sub {this->llty(v.ty)?} zeroinitializer, {v.v}\n")?;
+                } else {
+                    sprint(this->ins()?, "  {t} = fneg {this->llty(v.ty)?} {v.v}\n")?;
+                }
+            } else if (v.ty.k == .Int) {
                 sprint(this->ins()?, "  {t} = sub {this->llty(v.ty)?} 0, {v.v}\n")?;
             } else if (v.ty.k == .Float) {
                 sprint(this->ins()?, "  {t} = fneg {this->llty(v.ty)?} {v.v}\n")?;
@@ -671,7 +677,11 @@ bool has_defaults(Type* t) {
         }
         if (base.ty.k == .Array) {
             this->bounds_check(iv.v, this->num(base.ty.len as i64)?, e.line)?;
-            sprint(this->ins()?, "  {t} = getelementptr inbounds {this->llty(base.ty)?}, ptr {base.v}, i64 0, i64 {iv.v}\n")?;
+            if (base.ty.vec) {
+                sprint(this->ins()?, "  {t} = getelementptr inbounds {this->llty(base.ty.elem)?}, ptr {base.v}, i64 {iv.v}\n")?;
+            } else {
+                sprint(this->ins()?, "  {t} = getelementptr inbounds {this->llty(base.ty)?}, ptr {base.v}, i64 0, i64 {iv.v}\n")?;
+            }
             return Addr{ .ty = base.ty.elem, .v = t, .imm = base.imm };
         }
         if (base.ty.k == .Slice) {
@@ -829,11 +839,13 @@ str operator_name(Tag t) {
     auto r = Value{ .ty = null, .v = "" };
     if (is_literal(le) && !is_literal(re)) {
         r = this->gen_expr(re, exp)?;
-        l = this->gen_expr(le, r.ty)?;
+        l = this->gen_expr(le, scalar_hint(r.ty))?;
     } else {
         l = this->gen_expr(le, exp)?;
-        r = this->gen_expr(re, l.ty)?;
+        r = this->gen_expr(re, scalar_hint(l.ty))?;
     }
+    if (l.ty.k == .Array && l.ty.vec && !(r.ty.k == .Array && r.ty.vec)) { r = this->splat(this->coerce(r, l.ty.elem, line)?, l.ty)?; }
+    if (r.ty.k == .Array && r.ty.vec && !(l.ty.k == .Array && l.ty.vec)) { l = this->splat(this->coerce(l, r.ty.elem, line)?, r.ty)?; }
     if (l.ty.k == .Strct && !is_union(l.ty) && !l.ty.si.decl.is_iface) {
         const auto on = operator_name(op);
         auto kb = this->sb();
@@ -877,7 +889,10 @@ str operator_name(Tag t) {
             return error.CompileFailed;
         }
     }
-    if (is_cmp) { return this->compare(op, l, r, line); }
+    if (is_cmp) {
+        if (l.ty.k == .Array && l.ty.vec) { this->err(line); eprintln("vectors cannot be compared; compare the lanes"); return error.CompileFailed; }
+        return this->compare(op, l, r, line);
+    }
     if (op == .plus_wrap || op == .minus_wrap || op == .star_wrap) {
         if (l.ty.k != .Int) { this->err(line); eprintln("wrapping operators work on integers, not '{this->type_name(l.ty)?}'"); return error.CompileFailed; }
         auto plain = Tag.star;
@@ -927,8 +942,10 @@ str operator_name(Tag t) {
     const auto t = this->tmp()?;
     const auto ty = this->llty(l.ty)?;
     auto ins = "";
-    if (l.ty.k == .Int) {
-        const auto sg = l.ty.signed;
+    auto et = l.ty;
+    if (l.ty.k == .Array && l.ty.vec) { et = l.ty.elem; }
+    if (et.k == .Int) {
+        const auto sg = et.signed;
         match op {
             .plus => { if (sg && this->fast && !this->wrapping) { ins = "add nsw"; } else { ins = "add"; } }
             .minus => { if (sg && this->fast && !this->wrapping) { ins = "sub nsw"; } else { ins = "sub"; } }
@@ -941,7 +958,7 @@ str operator_name(Tag t) {
             .shl => ins = "shl";
             .shr => { if (sg) { ins = "ashr"; } else { ins = "lshr"; } }
         }
-    } else if (l.ty.k == .Float) {
+    } else if (et.k == .Float) {
         match op {
             .plus => ins = "fadd";
             .minus => ins = "fsub";
@@ -960,7 +977,7 @@ str operator_name(Tag t) {
         return error.CompileFailed;
     }
     if (ins.len == 0) { this->err(line); eprintln("bad operator for '{this->type_name(l.ty)?}'"); return error.CompileFailed; }
-    if (this->fastmath && l.ty.k == .Float && (ins == "fadd" || ins == "fsub" || ins == "fmul" || ins == "fdiv")) {
+    if (this->fastmath && et.k == .Float && (ins == "fadd" || ins == "fsub" || ins == "fmul" || ins == "fdiv")) {
         sprint(this->ins()?, "  {t} = {ins} fast {ty} {l.v}, {r.v}\n")?;
         return Value{ .ty = l.ty, .v = t };
     }
@@ -1026,6 +1043,41 @@ str operator_name(Tag t) {
     sprint(this->ins()?, "  unreachable\n")?;
     this->terminated = true;
     this->label(lok)?;
+}
+
+bool is_vec(Type* t) { return t.k == .Array && t.vec; }
+
+Type* scalar_hint(Type* t) {
+    if (is_vec(t)) { return t.elem; }
+    return t;
+}
+
+!Value Gen::splat(Value v, Type* vt) {
+    const auto lt = this->llty(vt)?;
+    const auto a = this->tmp()?;
+    sprint(this->ins()?, "  {a} = insertelement {lt} poison, {this->llty(vt.elem)?} {v.v}, i32 0\n")?;
+    const auto b = this->tmp()?;
+    sprint(this->ins()?, "  {b} = shufflevector {lt} {a}, {lt} poison, <{vt.len} x i32> zeroinitializer\n")?;
+    return Value{ .ty = vt, .v = b };
+}
+
+!Value Gen::gen_vec_ctor(Type* vt, Expr* e) {
+    if (e.args.len == 1) {
+        return this->splat(this->coerce(this->gen_expr(e.args.get(0), vt.elem)?, vt.elem, e.line)?, vt);
+    }
+    if (e.args.len as u64 != vt.len) {
+        this->err(e.line); eprintln("'{this->type_name(vt)?}' takes 1 or {vt.len} arguments, got {e.args.len}");
+        return error.CompileFailed;
+    }
+    auto cur = "poison";
+    const auto lt = this->llty(vt)?;
+    for (auto [i, a] : e.args) {
+        const auto v = this->coerce(this->gen_expr(a, vt.elem)?, vt.elem, e.line)?;
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = insertelement {lt} {cur}, {this->llty(vt.elem)?} {v.v}, i32 {i}\n")?;
+        cur = t;
+    }
+    return Value{ .ty = vt, .v = cur };
 }
 
 !Value Gen::compare(Tag op, Value l, Value r, i64 line) {

@@ -307,7 +307,7 @@ str base_of(str path) {
     const auto cache = ".vibe-cache";
     _ = mkdir(".vibe-cache", 493);
     const auto stem = stem_of(src_file);
-    const auto use_native = force_native || (!opt && !force_llvm);
+    const auto use_native = force_native || (!opt && !force_llvm && !g.needs_llvm);
     auto llb = List<u8>::init(a);
     if (use_native) { sprint(&llb, "{cache}/{stem}.o")?; } else { sprint(&llb, "{cache}/{stem}.ll")?; }
     const auto ll_path = llb.slice();
