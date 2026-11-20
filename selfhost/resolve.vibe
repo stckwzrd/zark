@@ -158,6 +158,12 @@ struct Resolver {
         for (auto p : f.params) { this->locals.push(p.name)?; }
         this->rstmt(f.body)?;
         this->locals.len = mark;
+        if (f.receiver.len == 0 && f.is_extern && this->from.len == 0) {
+            // an extern of a module gets a prefixed name in Vibe, so it cannot collide with the
+            // program's own functions, and keeps its C symbol for linking
+            if (f.link_name.len == 0) { f.link_name = f.name; }
+            f.name = this->rename(f.name)?;
+        }
         if (f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test) { f.name = this->rename(f.name)?; }
     }
 }
@@ -175,7 +181,7 @@ struct Resolver {
         match d.k {
             .Func => {
                 const auto f = d.f;
-                if (f.receiver.len == 0 && !f.is_extern && !f.is_export && !f.is_test) { r.names.put(f.name, true)?; }
+                if (f.receiver.len == 0 && !f.is_export && !f.is_test) { r.names.put(f.name, true)?; }
             }
             .Struct => r.names.put(d.s.name, true)?;
             .Enum => r.names.put(d.en.name, true)?;

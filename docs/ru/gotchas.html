@@ -19,9 +19,7 @@
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 300</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:2: error: integer literal 300 does not fit in 'u8'; use a wider type or an explicit 'as'
-    2 |     const u8 b = 300;
-      |                  ^</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code></code></pre></div></div>
 <p><code>const u8 b = 300;</code> и <code>const u32 x = -1;</code> — ошибки компиляции. Значение, вычисленное во время выполнения, по-прежнему обрезается молча (см. ниже).</p>
 <h3 id="целые-переполняются-без-предупреждения"><a class="anchor" href="#целые-переполняются-без-предупреждения">#</a>Целые переполняются без предупреждения</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -30,27 +28,14 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> i32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2147483647</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>4
--2147483648</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <p>Результат «заворачивается» в пределах типа. Нужна проверка — считайте в более широком типе.</p>
 <h3 id="деление-целого-на-ноль-роняет-программу"><a class="anchor" href="#деление-целого-на-ноль-роняет-программу">#</a>Деление целого на ноль роняет программу</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> z </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">/</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> z);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>
-fatal: arithmetic error: integer division by zero (address 0x401277)
-backtrace:
-  #0 0x1277 in .vibe-cache/main
-  #1 0xbc3f in .vibe-cache/main
-  #2 0x2a1ca in /lib/x86_64-linux-gnu/libc.so.6
-  #3 0x2a28b in /lib/x86_64-linux-gnu/libc.so.6
-  #4 0x1185 in .vibe-cache/main
-where (addr2line):
-vb.main at main.vibe:4
-main at ??:?
-_start at ??:?
-error: error.Signaled</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <p>Это аппаратное исключение, а не <code>error</code>. <code>vibe run</code> покажет <code>error: error.Signaled</code>. Проверяйте делитель до деления.</p>
 <h3 id="для-целых-отбрасывает-дробную-часть"><a class="anchor" href="#для-целых-отбрасывает-дробную-часть">#</a><code>/</code> для целых отбрасывает дробную часть</h3>
 <p><code>7 / 2</code> — это <code>3</code>, а <code>-7 / 2</code> — это <code>-3</code> (к нулю). Для дробного результата приводите: <code>7 as f64 / 2 as f64</code>.</p>
@@ -64,30 +49,18 @@ error: error.Signaled</code></pre></div></div>
 <h3 id="в-строке-открывает-интерполяцию"><a class="anchor" href="#в-строке-открывает-интерполяцию">#</a><code>{</code> в строке открывает интерполяцию</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"{"key": </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>key</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <p>Компилятор принял <code>{&quot;key&quot;...</code> за интерполяцию строки <code>&quot;key&quot;</code>, и вместо JSON получился неожиданный вывод. Литеральную скобку пишите <code>{{</code> и <code>}}</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">{{\"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">key</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">: 1</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">}}</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>{&quot;key&quot;: 1}</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <h3 id="интерполяция-работает-только-в-функциях-вывода"><a class="anchor" href="#интерполяция-работает-только-в-функциях-вывода">#</a>Интерполяция работает только в функциях вывода</h3>
 <p><code>const auto s = &quot;n = {n}&quot;;</code> — ошибка. Строку-значение собирайте через <code>bprint</code> или <code>sprint</code> (см. <a href="strings.html#сборка-строк">строки</a>).</p>
 <h3 id="нельзя-изменять-литерал"><a class="anchor" href="#нельзя-изменять-литерал">#</a>Нельзя изменять литерал</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abc"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    s[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 65</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>
-fatal: segmentation fault at address 0x40c010
-backtrace:
-  #0 0x12df in .vibe-cache/main
-  #1 0xbaa3 in .vibe-cache/main
-  #2 0x2a1ca in /lib/x86_64-linux-gnu/libc.so.6
-  #3 0x2a28b in /lib/x86_64-linux-gnu/libc.so.6
-  #4 0x1185 in .vibe-cache/main
-where (addr2line):
-vb.main at main.vibe:3
-main at ??:?
-_start at ??:?
-error: error.Signaled</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <p>Запись в литерал роняет программу. Копируйте в буфер.</p>
 <h3 id="str-байты-а-не-символы"><a class="anchor" href="#str-байты-а-не-символы">#</a><code>str</code> — байты, а не символы</h3>
 <p><code>&quot;привет&quot;.len</code> — это <code>12</code>, а не <code>6</code>. Индексация даёт байты. Для ASCII всё просто, для кириллицы нужно разбирать UTF-8 вручную.</p>
@@ -109,13 +82,11 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <p>Параметры и переменные изменяемы, но функция меняет свою копию. Чтобы запретить менять параметр, пишите <code>const i64 x</code>. Чтобы изменить данные вызывающего, передайте указатель.</p>
 <h3 id="одно-имя-дважды-в-одном-блоке"><a class="anchor" href="#одно-имя-дважды-в-одном-блоке">#</a>Одно имя дважды в одном блоке</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:2: error: 'x' is already declared in this scope
-    2 | const auto x = 2;
-      | ^</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code></code></pre></div></div>
 <p>Во вложенном блоке перекрывать можно, в том же — нельзя.</p>
 <h3 id="переменная-заслоняет-функцию"><a class="anchor" href="#переменная-заслоняет-функцию">#</a>Переменная заслоняет функцию</h3>
 <p><code>const auto max = 5;</code> сделает вызов <code>max(1, 2)</code> невозможным в этом блоке.</p>
@@ -131,9 +102,7 @@ error: error.Signaled</code></pre></div></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(total);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:3: error: expected ';' (near 'println')
-    3 |     println(total);
-      |     ^</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code></code></pre></div></div>
 <h3 id="if-не-выражение"><a class="anchor" href="#if-не-выражение">#</a><code>if</code> — не выражение</h3>
 <p><code>auto x = if (a) { 1 } else { 2 };</code> — ошибка. Используйте <code>match</code> (<code>match a { true =&gt; 1, false =&gt; 2 }</code>) или переменную, объявленную заранее.</p>
 <h3 id="в-catch-блоке-последним-должно-идти-выражение"><a class="anchor" href="#в-catch-блоке-последним-должно-идти-выражение">#</a>В <code>catch</code>-блоке последним должно идти выражение</h3>
@@ -153,8 +122,7 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:1: error: function 'f' does not return a value on every path; add a 'return' at the end
-    1 | i64 f(i64 n) {</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code></code></pre></div></div>
 <p>Компилятор проверяет, что функция с результатом не «проваливается» в конец. Путём, который возвращает, считаются <code>return</code>, <code>if</code> с <code>else</code>, где обе ветви возвращают, <code>match</code>, где возвращает каждая ветвь, бесконечный <code>while (true)</code> без <code>break</code> и вызов <code>panic</code>.</p>
 <h2 id="ошибки-и-опциональные-значения"><a class="anchor" href="#ошибки-и-опциональные-значения">#</a>Ошибки и опциональные значения</h2>
 <h3 id="catch-и-orelse-забирают-вс-правее"><a class="anchor" href="#catch-и-orelse-забирают-вс-правее">#</a><code>catch</code> и <code>orelse</code> забирают всё правее</h3>
@@ -186,7 +154,7 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> C</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.n</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> };</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    c.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">inc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(c.n);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода -1</span></div><pre><code></code></pre></div></div>
 <p>Компилятор не проверяет изменяемость при вызове метода: он передаёт указатель.</p>
 <h3 id="имя-нужен-контекст"><a class="anchor" href="#имя-нужен-контекст">#</a><code>.Имя</code> нужен контекст</h3>
 <p><code>const auto x = .Red;</code> не компилируется: непонятно, чей это вариант. Пишите <code>Color::Red</code> или <code>const Color x = .Red;</code>.</p>

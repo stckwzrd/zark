@@ -19,9 +19,7 @@
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> u8</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> b </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 300</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:2: error: integer literal 300 does not fit in 'u8'; use a wider type or an explicit 'as'
-    2 |     const u8 b = 300;
-      |                  ^</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code></code></pre></div></div>
 <p><code>const u8 b = 300;</code> and <code>const u32 x = -1;</code> are compile errors. A value computed at run time still wraps silently (see below).</p>
 <h3 id="integers-overflow-without-a-warning"><a class="anchor" href="#integers-overflow-without-a-warning">#</a>Integers overflow without a warning</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -30,27 +28,14 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(b);</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> i32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2147483647</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(i </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>4
--2147483648</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <p>The result wraps around within the type. To catch it, build with <code>--check-overflow</code> (a panic with file and line) or compute in a wider type.</p>
 <h3 id="integer-division-by-zero-crashes-the-program"><a class="anchor" href="#integer-division-by-zero-crashes-the-program">#</a>Integer division by zero crashes the program</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> z </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">/</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> z);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
-fatal: arithmetic error: integer division by zero (address 0x401277)
-backtrace:
-  #0 0x1277 in .vibe-cache/main
-  #1 0xbc3f in .vibe-cache/main
-  #2 0x2a1ca in /lib/x86_64-linux-gnu/libc.so.6
-  #3 0x2a28b in /lib/x86_64-linux-gnu/libc.so.6
-  #4 0x1185 in .vibe-cache/main
-where (addr2line):
-vb.main at main.vibe:4
-main at ??:?
-_start at ??:?
-error: error.Signaled</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <p>This is a hardware exception, not an <code>error</code>. <code>vibe run</code> shows <code>error: error.Signaled</code>. Check the divisor before dividing.</p>
 <h3 id="on-integers-drops-the-fraction"><a class="anchor" href="#on-integers-drops-the-fraction">#</a><code>/</code> on integers drops the fraction</h3>
 <p><code>7 / 2</code> is <code>3</code>, and <code>-7 / 2</code> is <code>-3</code> (towards zero). For a fractional result convert: <code>7 as f64 / 2 as f64</code>.</p>
@@ -64,30 +49,18 @@ error: error.Signaled</code></pre></div></div>
 <h3 id="in-a-string-opens-an-interpolation"><a class="anchor" href="#in-a-string-opens-an-interpolation">#</a><code>{</code> in a string opens an interpolation</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"{"key": </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>key</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <p>The compiler took <code>{&quot;key&quot;...</code> for an interpolation of the string <code>&quot;key&quot;</code>, and instead of JSON you got an unexpected output. Write a literal brace as <code>{{</code> and <code>}}</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">{{\"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">key</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">\"</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">: 1</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">}}</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>{&quot;key&quot;: 1}</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <h3 id="interpolation-works-only-in-print-functions"><a class="anchor" href="#interpolation-works-only-in-print-functions">#</a>Interpolation works only in print functions</h3>
 <p><code>const auto s = &quot;n = {n}&quot;;</code> is an error. Build a string value with <code>bprint</code> or <code>sprint</code> (see <a href="strings.html#building-strings">strings</a>).</p>
 <h3 id="you-cannot-modify-a-literal"><a class="anchor" href="#you-cannot-modify-a-literal">#</a>You cannot modify a literal</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abc"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    s[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 65</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
-fatal: segmentation fault at address 0x40c010
-backtrace:
-  #0 0x12df in .vibe-cache/main
-  #1 0xbaa3 in .vibe-cache/main
-  #2 0x2a1ca in /lib/x86_64-linux-gnu/libc.so.6
-  #3 0x2a28b in /lib/x86_64-linux-gnu/libc.so.6
-  #4 0x1185 in .vibe-cache/main
-where (addr2line):
-vb.main at main.vibe:3
-main at ??:?
-_start at ??:?
-error: error.Signaled</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <p>Writing into a literal crashes the program. Copy into a buffer.</p>
 <h3 id="str-is-bytes-not-characters"><a class="anchor" href="#str-is-bytes-not-characters">#</a><code>str</code> is bytes, not characters</h3>
 <p><code>&quot;привет&quot;.len</code> is <code>12</code>, not <code>6</code>. Indexing gives bytes. For ASCII everything is simple; for other scripts you have to parse UTF-8 by hand.</p>
@@ -109,13 +82,11 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n);</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <p>Parameters and variables are mutable, but the function changes its own copy. To forbid changing a parameter, write <code>const i64 x</code>. To change the caller&#39;s data, pass a pointer.</p>
 <h3 id="the-same-name-twice-in-one-block"><a class="anchor" href="#the-same-name-twice-in-one-block">#</a>The same name twice in one block</h3>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:2: error: 'x' is already declared in this scope
-    2 | const auto x = 2;
-      | ^</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code></code></pre></div></div>
 <p>In a nested block you can shadow, in the same one you cannot.</p>
 <h3 id="a-variable-hides-a-function"><a class="anchor" href="#a-variable-hides-a-function">#</a>A variable hides a function</h3>
 <p><code>const auto max = 5;</code> makes the call <code>max(1, 2)</code> impossible in that block.</p>
@@ -131,9 +102,7 @@ error: error.Signaled</code></pre></div></div>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(total);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:3: error: expected ';' (near 'println')
-    3 |     println(total);
-      |     ^</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code></code></pre></div></div>
 <h3 id="if-is-not-an-expression"><a class="anchor" href="#if-is-not-an-expression">#</a><code>if</code> is not an expression</h3>
 <p><code>auto x = if (a) { 1 } else { 2 };</code> is an error. Use <code>match</code> (<code>match a { true =&gt; 1, false =&gt; 2 }</code>) or a variable declared in advance.</p>
 <h3 id="in-a-catch-block-an-expression-must-come-last"><a class="anchor" href="#in-a-catch-block-an-expression-must-come-last">#</a>In a <code>catch</code> block an expression must come last</h3>
@@ -153,8 +122,7 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:1: error: function 'f' does not return a value on every path; add a 'return' at the end
-    1 | i64 f(i64 n) {</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code></code></pre></div></div>
 <p>The compiler checks that a function with a result never falls off its end. A path returns when it ends in <code>return</code>, an <code>if</code> with an <code>else</code> where both branches return, a <code>match</code> where every arm returns, an endless <code>while (true)</code> without a <code>break</code>, or a call to <code>panic</code>.</p>
 <h2 id="errors-and-optional-values"><a class="anchor" href="#errors-and-optional-values">#</a>Errors and optional values</h2>
 <h3 id="catch-and-orelse-take-everything-to-the-right"><a class="anchor" href="#catch-and-orelse-take-everything-to-the-right">#</a><code>catch</code> and <code>orelse</code> take everything to the right</h3>
@@ -186,7 +154,7 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> c </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> C</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.n</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> };</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    c.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">inc</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(c.n);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1</code></pre></div></div>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code -1</span></div><pre><code></code></pre></div></div>
 <p>The compiler does not check mutability at a method call: it passes a pointer. Declare the method <code>const</code> to forbid changing fields inside it.</p>
 <h3 id="name-needs-a-context"><a class="anchor" href="#name-needs-a-context">#</a><code>.Name</code> needs a context</h3>
 <p><code>const auto x = .Red;</code> does not compile: it is unclear whose variant this is. Write <code>Color::Red</code> or <code>const Color x = .Red;</code>.</p>

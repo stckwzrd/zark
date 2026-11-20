@@ -584,7 +584,9 @@ struct Gen {
     // ------------------------------------------------------------------ functions
     !FnInst* inst_fn(FnDecl* decl, Env env, List<Type*> type_args) {
         auto name = this->sb();
-        if (decl.is_extern || decl.is_export) {
+        if (decl.is_extern && decl.link_name.len > 0) {
+            name.append(decl.link_name)?;
+        } else if (decl.is_extern || decl.is_export) {
             name.append(decl.name)?;
         } else {
             name.append("vb.")?;
@@ -610,7 +612,7 @@ struct Gen {
         this->fn_insts.put(key, fi)?;
         if (decl.is_extern) {
             auto txt = this->sb();
-            sprint(&txt, "declare {this->llty(ret)?} @{decl.name}(")?;
+            sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
             for (auto [i, p] : params) {
                 if (i > 0) { txt.append(", ")?; }
                 txt.append(this->llty(p)?)?;
@@ -619,7 +621,7 @@ struct Gen {
                 if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
             }
             txt.append(")")?;
-            this->declare(decl.name, txt.slice())?;
+            this->declare(key, txt.slice())?;
         } else {
             this->pending.push(fi)?;
         }

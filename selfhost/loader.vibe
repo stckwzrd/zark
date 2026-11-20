@@ -34,6 +34,19 @@ const auto STD_THREAD = embed("../std/thread.vibe");
 
 bool is_std_path(str path) { return str_starts_with(path, "<std>/"); }
 
+// dependencies of the current project: name -> directory, and name -> the file `import "name"` loads
+Map<str> dep_dirs = Map<str>{};
+Map<str> dep_libs = Map<str>{};
+
+!void register_dep(str name, str dir, str lib) {
+    if (dep_dirs.a.alloc_fn == null) {
+        dep_dirs = Map<str>::init(c_allocator());
+        dep_libs = Map<str>::init(c_allocator());
+    }
+    dep_dirs.put(name, dir)?;
+    dep_libs.put(name, lib)?;
+}
+
 /// the file an `import "rel"` written in directory `dir` refers to
 !str import_target(Allocator a, str dir, str rel) {
     if (str_starts_with(rel, "std/") || dir == "<std>") {
@@ -42,6 +55,18 @@ bool is_std_path(str path) { return str_starts_with(path, "<std>/"); }
         auto b = List<u8>::init(a);
         if (str_ends_with(name, ".vibe")) { sprint(&b, "<std>/{name}")?; } else { sprint(&b, "<std>/{name}.vibe")?; }
         return b.slice();
+    }
+    if (dep_dirs.len > 0 && rel.len > 0 && rel[0] != '.' && rel[0] != '/') {
+        const auto slash = str_find_byte(rel, '/');
+        auto first = rel;
+        if (slash >= 0) { first = rel[0..slash]; }
+        if (dep_dirs.has(first)) {
+            if (slash < 0) { return canonical(a, dep_libs.get(first)?); }
+            auto b = List<u8>::init(a);
+            sprint(&b, "{dep_dirs.get(first)?}/{rel[slash + 1..]}")?;
+            if (!str_ends_with(rel, ".vibe")) { b.append(".vibe")?; }
+            return canonical(a, b.slice());
+        }
     }
     return canonical(a, join_path(a, dir, rel)?);
 }

@@ -142,9 +142,9 @@ import "missing.vibe" as m;
 void main() {}
 ```
 
-## `extern` and `export` get no prefix
+## `extern` and `export` in a module
 
-The names of `extern` and `export` are C symbols, and they cannot have a prefix. They are always global, even with `import ... as`. More on the page [interoperating with C](c-interop.md).
+An `extern` declared in a module imported `as name` gets the prefix like everything else (`name::puts`), while the C symbol it links to stays the same. So a module can declare `extern i32 close(i32 fd);` and your program can still have its own `close`. An `export` is called from C by its exact name, so it stays global. More on the page [interoperating with C](c-interop.md).
 
 ## Name conflicts
 

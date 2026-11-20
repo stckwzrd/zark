@@ -72,7 +72,7 @@ Only reachable functions are compiled. Generic code is type-checked when it is i
 
 ### Modules
 
-`import "file.vibe" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. `extern` and `export` names stay global. Rules, all checked by the compiler:
+`import "file.vibe" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. An `extern` gets the prefix too but links to the same C symbol; `export` names stay global. Rules, all checked by the compiler:
 
 - A file is loaded once; it may be imported under several names, which all refer to it. A name belongs to one file, and a file imported with a name somewhere cannot also be imported plainly.
 - A plain `import "file.vibe"` still puts everything in the global namespace.
