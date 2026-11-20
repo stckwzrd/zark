@@ -1,0 +1,4 @@
+ok   the scene loads
+ok   bad scenes fail with a clear error
+ok   rendering is deterministic across thread counts
+3 passed, 0 failed

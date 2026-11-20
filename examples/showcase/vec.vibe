@@ -1,0 +1,57 @@
+struct Vec3 {
+    f32x4 v;
+
+    Vec3(f32 x, f32 y, f32 z) { v = f32x4(x, y, z, 0.0); }
+
+    f32 x() const { return v[0]; }
+    f32 y() const { return v[1]; }
+    f32 z() const { return v[2]; }
+
+    Vec3 operator+(Vec3 o) const { Vec3 r; r.v = v + o.v; return r; }
+    Vec3 operator-(Vec3 o) const { Vec3 r; r.v = v - o.v; return r; }
+    Vec3 operator*(f32 k) const { Vec3 r; r.v = v * k; return r; }
+    Vec3 operator-() const { Vec3 r; r.v = -v; return r; }
+
+    Vec3 mul(Vec3 o) const { Vec3 r; r.v = v * o.v; return r; }
+
+    f32 dot(Vec3 o) const {
+        const auto m = v * o.v;
+        return m[0] + m[1] + m[2];
+    }
+
+    f32 length() const { return sqrt(this->dot(*this) as f64) as f32; }
+
+    Vec3 normalized() const { return *this * (1.0 / this->length()); }
+
+    Vec3 reflect(Vec3 n) const { return *this - n * (2.0 * this->dot(n)); }
+}
+
+template<T: Ord> T clamp(T x, T lo, T hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+test "vector arithmetic" {
+    const auto a = Vec3(1.0, 2.0, 3.0);
+    const auto b = Vec3(4.0, 5.0, 6.0);
+    assert((a + b).z() == 9.0);
+    assert((b - a).x() == 3.0);
+    assert(a.dot(b) == 32.0);
+    assert((a * 2.0).y() == 4.0);
+    assert((-a).x() == -1.0);
+}
+
+test "length and reflection" {
+    const auto v = Vec3(3.0, 4.0, 0.0);
+    assert(v.length() == 5.0);
+    assert(v.normalized().length() > 0.999);
+    const auto r = Vec3(1.0, -1.0, 0.0).reflect(Vec3(0.0, 1.0, 0.0));
+    assert(r.x() == 1.0 && r.y() == 1.0);
+}
+
+test "clamp works for any ordered type" {
+    assert(clamp(15, 0, 10) == 10);
+    assert(clamp(-2.5, -1.0, 1.0) == -1.0);
+    assert(clamp(5 as u8, 1 as u8, 9 as u8) == 5);
+}

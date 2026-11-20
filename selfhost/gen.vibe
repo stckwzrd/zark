@@ -458,8 +458,9 @@ struct Gen {
             plain.vol = false;
             return Value{ .ty = plain, .v = t };
         }
-        if (ty.k == .Array && ty.vec) {
-            sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}, align {this->size_of(ty.elem)?}\n")?;
+        const auto ua = this->vec_access_align(ty)?;
+        if (ua > 0) {
+            sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}, align {ua}\n")?;
             return Value{ .ty = ty, .v = t };
         }
         sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}\n")?;
@@ -477,8 +478,9 @@ struct Gen {
 
     !void store(Value v, str ptr) {
         if (v.ty.k == .Void) { return };
-        if (v.ty.k == .Array && v.ty.vec) {
-            sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}, align {this->size_of(v.ty.elem)?}\n")?;
+        const auto ua = this->vec_access_align(v.ty)?;
+        if (ua > 0) {
+            sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}, align {ua}\n")?;
             return;
         }
         sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}\n")?;
@@ -504,6 +506,20 @@ struct Gen {
     i64 fidx(Type* t, i64 idx) {
         if (t.k == .Strct && !t.si.decl.is_union && t.si.explicit) { return t.si.llidx.get(idx); }
         return idx;
+    }
+
+    bool has_vec(Type* t) {
+        if (t.k == .Array) { return t.vec || this->has_vec(t.elem); }
+        if (t.k == .Strct && !t.si.decl.is_union) {
+            for (auto f : t.si.fields) { if (this->has_vec(f.ty)) { return true; } }
+        }
+        return false;
+    }
+
+    !u64 vec_access_align(Type* t) {
+        if (t.k == .Array && t.vec) { return this->size_of(t.elem); }
+        if (this->has_vec(t)) { return 4; }
+        return 0;
     }
 
     !Value extract(Value agg, i64 idx, Type* ty) {

@@ -9,6 +9,9 @@ check() { # name, cmd...
   else fail=$((fail+1)); echo "FAIL $name"; diff -u "tests/expected/$name.out" <("$@" 2>&1) | head -20; fi
 }
 for n in hello features edge memory funcs unions minilang stdlib2 io cpp_style driver memtool interfaces classes operators_oop checks simd align_structs; do check $n $VIBE run examples/$n.vibe $FLAGS; done
+check showcase $VIBE run examples/showcase/main.vibe $FLAGS
+check showcase_tests $VIBE test examples/showcase/main.vibe $FLAGS
+check showcase_vec $VIBE test examples/showcase/vec.vibe $FLAGS
 check interop $VIBE run examples/interop/main.vibe examples/interop/mathlib.c examples/interop/engine.cpp $FLAGS
 check abi $VIBE run tests/abi/main.vibe tests/abi/lib.c $FLAGS
 for f in tests/errors/*.vibe; do
