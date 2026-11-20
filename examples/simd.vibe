@@ -1,0 +1,35 @@
+struct Particle { u8 id; f32x4 pos; }
+
+f32 hsum(f32x4 v) { return v[0] + v[1] + v[2] + v[3]; }
+
+f32 dot(f32[] a, f32[] b) {
+    f32x8 acc = f32x8(0.0);
+    for (auto i : 0..a.len / 8) {
+        f32x8 x = *(&a[i * 8] as *f32x8);
+        f32x8 y = *(&b[i * 8] as *f32x8);
+        acc = acc + x * y;
+    }
+    f32 s = 0.0;
+    for (auto k : 0..8) { s += acc[k]; }
+    return s;
+}
+
+void main() {
+    f32x4 a = f32x4(1.0, 2.0, 3.0, 4.0);
+    f32x4 b = f32x4(10.0);
+    f32x4 c = a * b + a;
+    println(c, hsum(c), -a);
+    println(a * 2.0, 1.0 + a, sizeof(f32x4), alignof(f32x4), sizeof(Particle), alignof(Particle));
+    i32x8 x = i32x8(1, 2, 3, 4, 5, 6, 7, 8);
+    i32x8 y = x * x - i32x8(1);
+    println(y, y[7]);
+    c[2] = 100.0;
+    println(c);
+    println(f64x2(1.5, 2.5) / f64x2(2.0));
+    println(u8x16(200) + u8x16(100));
+    Particle p = Particle{ .id = 3, .pos = a };
+    println(p.id, p.pos, (p.pos + a)[3]);
+    f32[16] u = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+    f32[16] w = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+    println(dot(u[..], w[..]));
+}
