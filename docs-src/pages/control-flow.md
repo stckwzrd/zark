@@ -152,7 +152,7 @@ for (auto x : 5) { println(x); }
 
 ## `break` и `continue`
 
-`break` выходит из ближайшего цикла, `continue` переходит к следующей итерации. Меток для выхода из нескольких вложенных циклов нет: выносите внутренний цикл в функцию и используйте `return`.
+`break` выходит из ближайшего цикла, `continue` переходит к следующей итерации. Чтобы выйти из внешнего цикла, поставьте перед ним метку и назовите её в `break` или `continue`.
 
 ```vibe run
 void main() {
@@ -170,6 +170,22 @@ void main() {
             println("a={a} b={b}");
         }
     }
+}
+```
+
+Метка пишется перед `for` или `while`:
+
+```vibe run
+void main() {
+    auto found = 0;
+    rows: for (auto i : 0..5) {
+        for (auto j : 0..5) {
+            if (j == 3) { continue rows; }
+            if (i == 2) { break rows; }
+            found += 1;
+        }
+    }
+    println(found);
 }
 ```
 

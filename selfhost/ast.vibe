@@ -61,6 +61,7 @@ struct Stmt {
     i64 off;
     str name;              // Let/For var name
     i64 name_off;
+    str label;             // loop label, or the target of break/continue
     str idx;               // ForEach index name
     i64 idx_off;
     i64 end_off;           // Block: offset of the closing brace

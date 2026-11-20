@@ -353,6 +353,13 @@ struct Parser {
 
     !Stmt* parse_stmt() {
         const auto t = this->peek();
+        if (t.tag == .ident && this->peek_at(1).tag == .colon && (this->peek_at(2).tag == .kw_for || this->peek_at(2).tag == .kw_while)) {
+            _ = this->advance();
+            _ = this->advance();
+            const auto ls = this->parse_stmt()?;
+            ls.label = t.text;
+            return ls;
+        }
         match t.tag {
             .lbrace => return this->parse_block();
             .kw_const => return this->parse_decl_stmt_new(t, true);
@@ -381,11 +388,15 @@ struct Parser {
             }
             .kw_break => {
                 _ = this->advance();
-                return this->st(.Brk, t);
+                const auto s = this->st(.Brk, t)?;
+                if (this->at(.ident)) { s.label = this->advance().text; }
+                return s;
             }
             .kw_continue => {
                 _ = this->advance();
-                return this->st(.Cont, t);
+                const auto s = this->st(.Cont, t)?;
+                if (this->at(.ident)) { s.label = this->advance().text; }
+                return s;
             }
             .kw_defer, .kw_errdefer => {
                 _ = this->advance();

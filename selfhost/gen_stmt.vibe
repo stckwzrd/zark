@@ -105,7 +105,7 @@ struct MatchRes { Type* ty; str slot; }
             sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
             this->terminated = true;
             this->label(lb)?;
-            this->loops.push(Loop{ .brk = le, .cont = lc, .depth = this->scopes.len })?;
+            this->loops.push(Loop{ .brk = le, .cont = lc, .depth = this->scopes.len, .label = s.label })?;
             this->gen_stmt(s.body)?;
             this->loops.len -= 1;
             if (!this->terminated) { this->br(lc)?; }
@@ -143,7 +143,7 @@ struct MatchRes { Type* ty; str slot; }
             const auto slot = this->alloca(lo.ty, s.name)?;
             this->store(cur, slot)?;
             this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
-            this->loops.push(Loop{ .brk = le, .cont = lstep, .depth = this->scopes.len })?;
+            this->loops.push(Loop{ .brk = le, .cont = lstep, .depth = this->scopes.len, .label = s.label })?;
             this->gen_stmt(s.body)?;
             this->loops.len -= 1;
             this->pop_scope()?;
@@ -160,7 +160,12 @@ struct MatchRes { Type* ty; str slot; }
         .Ret => this->gen_return(s.line, s.e)?;
         .Brk, .Cont => {
             if (this->loops.len == 0) { this->err(s.line); eprintln("break/continue outside of a loop"); return error.CompileFailed; }
-            const auto lp = this->loops.get(this->loops.len - 1);
+            auto li = this->loops.len - 1;
+            if (s.label.len > 0) {
+                while (li >= 0 && this->loops.get(li).label != s.label) { li -= 1; }
+                if (li < 0) { this->err(s.line); eprintln("no loop labeled '{s.label}'"); return error.CompileFailed; }
+            }
+            const auto lp = this->loops.get(li);
             if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false)?; }
             if (s.k == .Brk) { this->br(lp.brk)? } else { this->br(lp.cont)?; }
         }
@@ -435,7 +440,7 @@ struct MatchRes { Type* ty; str slot; }
         this->store(cur, islot)?;
         this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
     }
-    this->loops.push(Loop{ .brk = le, .cont = lstep, .depth = this->scopes.len })?;
+    this->loops.push(Loop{ .brk = le, .cont = lstep, .depth = this->scopes.len, .label = s.label })?;
     this->gen_stmt(s.body)?;
     this->loops.len -= 1;
     this->pop_scope()?;
