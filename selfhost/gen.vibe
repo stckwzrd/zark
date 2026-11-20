@@ -16,6 +16,7 @@ struct Type {
     List<Type*> params; // Func
     Type* ret;          // Func
     bool vol;           // lives in volatile storage when reached through an lvalue
+    bool vec;           // Array: a SIMD vector
 }
 
 struct FieldInfo { str name; Type* ty; Expr* init; }
@@ -444,6 +445,10 @@ struct Gen {
             plain.vol = false;
             return Value{ .ty = plain, .v = t };
         }
+        if (ty.k == .Array && ty.vec) {
+            sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}, align {this->size_of(ty.elem)?}\n")?;
+            return Value{ .ty = ty, .v = t };
+        }
         sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}\n")?;
         return Value{ .ty = ty, .v = t };
     }
@@ -459,6 +464,10 @@ struct Gen {
 
     !void store(Value v, str ptr) {
         if (v.ty.k == .Void) { return };
+        if (v.ty.k == .Array && v.ty.vec) {
+            sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}, align {this->size_of(v.ty.elem)?}\n")?;
+            return;
+        }
         sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}\n")?;
     }
 
@@ -908,7 +917,7 @@ bool type_eq(Type* a, Type* b) {
         .Int => return a.bits == b.bits && a.signed == b.signed;
         .Float => return a.bits == b.bits;
         .Ptr, .Slice, .Errun => return type_eq(a.elem, b.elem);
-        .Array => return a.len == b.len && type_eq(a.elem, b.elem);
+        .Array => return a.len == b.len && a.vec == b.vec && type_eq(a.elem, b.elem);
         .Strct => return a.si == b.si;
         .Enm => return a.ei == b.ei;
         .Func, .Closure => {
