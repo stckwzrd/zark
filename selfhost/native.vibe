@@ -1673,6 +1673,34 @@ struct Native {
             this->store_res(ins, acc)?;
             return;
         }
+        if ((op == "sdiv" || op == "srem" || op == "udiv" || op == "urem") && this->is_imm(t, ins.b)) {
+            const auto c = parse_num(ins.b);
+            if (c > 1 && c <= 0x40000000 && (c & (c - 1)) == 0) {
+                auto k = 0;
+                while ((1 << k) < c) { k += 1; }
+                this->load_op(acc, t, ins.a, signed)?;
+                if (op == "udiv") {
+                    asm.shift_imm(5, acc, k)?;
+                } else if (op == "urem") {
+                    asm.alu_imm(4, acc, c - 1)?;
+                } else if (op == "sdiv") {
+                    asm.mov_rr(RDX, acc)?;
+                    asm.shift_imm(7, RDX, 63)?;
+                    asm.shift_imm(5, RDX, 64 - k)?;
+                    asm.add(acc, RDX)?;
+                    asm.shift_imm(7, acc, k)?;
+                } else {
+                    asm.mov_rr(RDX, acc)?;
+                    asm.shift_imm(7, RDX, 63)?;
+                    asm.shift_imm(5, RDX, 64 - k)?;
+                    asm.add(RDX, acc)?;
+                    asm.alu_imm(4, RDX, 0 - c)?;
+                    asm.sub(acc, RDX)?;
+                }
+                this->store_res(ins, acc)?;
+                return;
+            }
+        }
         this->load_op(RAX, t, ins.a, signed)?;
         const auto rb = this->src_reg(RCX, t, ins.b, signed)?;
         if (rb != RCX && (op == "shl" || op == "lshr" || op == "ashr")) { asm.mov_rr(RCX, rb)?; }
