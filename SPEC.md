@@ -167,7 +167,7 @@ Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` 
 
 - `volatile T`: a type qualifier for pointees, fields and variables (`volatile u32* p`, `volatile u32 ctrl;`). Every access through such an lvalue is emitted as a volatile load or store of the exact width of `T`. Type equality ignores `volatile`.
 - `packed struct` and `packed union`: fields without padding, alignment 1.
-- `align(N) T name = v;` before a global variable aligns it to `N` bytes (a power of two, page tables and DMA buffers). Struct types and locals keep their natural alignment.
+- `align(N) T name = v;` before a global variable aligns it to `N` bytes (a power of two, page tables and DMA buffers). `align(N) struct S { ... }` aligns the struct (and every variable, array element and field of that type) to `N` bytes and pads its size to a multiple of `N`; the native backend supports locals up to 16 and switches to LLVM for more.
 - `asm<R>("template", "constraints", args...)` (`R` defaults to `void`): LLVM inline asm with `sideeffect`. Braces in the strings are written `\{` and `\}`. The native backend encodes the templates used by the prelude (`Cpu`, `Port`, `Atomic`) and rejects others with a message; `--llvm` accepts any.
 - `a +% b`, `a -% b`, `a *% b` are integer operators that always wrap (same precedence as `+` `-` and `*`); they are never checked by `--check-overflow` and never get `nsw` under `--fast`.
 - `--check-overflow` makes `+`, `-` and `*` on integers in user code panic on overflow (`__ovf`); without it they wrap.

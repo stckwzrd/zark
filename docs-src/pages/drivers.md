@@ -140,7 +140,7 @@ void main() {
 }
 ```
 
-Structs and local variables are aligned by their type.
+A struct type can be aligned too: `align(64) struct Line { u8 tag; i64 val; }` makes `alignof(Line)` and `sizeof(Line)` 64, and every variable, array element and field of that type is placed accordingly. The own backend handles locals aligned to 16; for more the compiler switches to LLVM by itself.
 
 ## Atomic operations and `Spinlock`
 
@@ -300,7 +300,6 @@ The script builds the kernel, turns the ELF into a 32-bit image for Multiboot (`
 
 - Linux kernel modules: they need the kernel headers (`linux-headers`), a third-party C file with `module_init` and a check in a virtual machine. The object file from `--freestanding` can be plugged into Kbuild, but there is no ready example yet.
 - An `interrupt` attribute: interrupt handlers are written as assembly stubs (see `boot.S`) that call a Vibe function.
-- `align(N)` for struct types and local variables.
 - Bit fields in `struct`: use `Bits`.
 - Encoding of arbitrary `asm` in the own backend.
 - Targets other than x86-64.
