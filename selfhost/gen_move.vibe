@@ -34,8 +34,8 @@ void Gen::prune_scope(i64 idx) {
 }
 
 bool Gen::live_ptr(str ptr, str except) {
-    if (ptr == except) { return false; }
     if (this->declared_before(ptr, this->scopes.len)) { return true; }
+    if (ptr == except) { return false; }
     for (auto lp : this->loops) { if (lp.iter.len > 0 && lp.iter == ptr) { return true; } }
     return false;
 }
