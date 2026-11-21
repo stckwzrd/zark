@@ -19,10 +19,11 @@ bool Gen::ct_plain(Type* t) {
     const auto saved_nlbl = this->nlbl;
     const auto saved_label = this->cur_label;
     const auto saved_term = this->terminated;
-    const auto saved_moved = this->move_copy(this->moved)?;
+    const auto saved_moved = this->snap();
     const auto saved_scopes = this->scopes;
     const auto saved_env = this->env;
     const auto saved_loops = this->loops;
+    const auto saved_colds = this->colds_copy()?;
     defer {
         this->body.len = saved_body;
         this->allocas.len = saved_allocas;
@@ -30,10 +31,11 @@ bool Gen::ct_plain(Type* t) {
         this->nlbl = saved_nlbl;
         this->cur_label = saved_label;
         this->terminated = saved_term;
-        this->moved = saved_moved;
+        this->restore_state(saved_moved);
         this->scopes = saved_scopes;
         this->env = saved_env;
         this->loops = saved_loops;
+        this->colds = saved_colds;
     }
     this->scopes = List<Scope>::init(this->a);
     this->loops = List<Loop>::init(this->a);

@@ -37,4 +37,5 @@ if [ $tok_bad -eq 0 ]; then pass=$((pass+1)); echo "ok   tokens match tests/toke
 if VIBE=$VIBE tests/baremetal.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if VIBE=$VIBE tests/project.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if VIBE=$VIBE tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if VIBE=$VIBE tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]

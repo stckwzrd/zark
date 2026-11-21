@@ -125,7 +125,7 @@ struct MatchRes { Type* ty; str slot; }
             const auto lb = this->new_label("wbody")?;
             const auto le = this->new_label("wend")?;
             const auto md = this->scopes.len;
-            const auto s0 = this->move_copy(this->moved)?;
+            const auto s0 = this->snap();
             this->label(lc)?;
             const auto c = this->gen_cond(s.e)?;
             sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
@@ -140,7 +140,7 @@ struct MatchRes { Type* ty; str slot; }
         }
         .ForRange => {
             const auto md = this->scopes.len;
-            const auto s0 = this->move_copy(this->moved)?;
+            const auto s0 = this->snap();
             this->push_scope()?;
             auto lo = Value{ .ty = null, .v = "" };
             auto hi = Value{ .ty = null, .v = "" };
@@ -423,7 +423,7 @@ struct MatchRes { Type* ty; str slot; }
 
 !void Gen::gen_for_each(Stmt* s) {
     const auto md = this->scopes.len;
-    const auto s0 = this->move_copy(this->moved)?;
+    const auto s0 = this->snap();
     this->push_scope()?;
     this->bor_field = null;
     auto a = this->gen_addr(s.e)?;
