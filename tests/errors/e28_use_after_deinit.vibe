@@ -1,0 +1,6 @@
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    l.push(1) catch return;
+    l.deinit();
+    l.push(2) catch return;
+}
