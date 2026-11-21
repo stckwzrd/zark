@@ -1,0 +1,14 @@
+!void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1)?;
+    auto n = 0;
+    for (auto x : l) {
+        while (true) {
+            n += 1;
+            if (n % 4 == 0) { break; }
+            l.push(n)?;
+        }
+        println(x);
+    }
+}

@@ -57,7 +57,7 @@ bool Gen::live_ptr(str ptr, str except) {
     auto out = this->move_copy(x)?;
     for (auto r : y) {
         auto found = false;
-        for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind) { found = true; } }
+        for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { found = true; } }
         if (!found) {
             if (out.len >= 512) {
                 this->err(this->at_line);
@@ -94,18 +94,34 @@ str Gen::local_ptr(str name) {
     return v.ty;
 }
 
-void Gen::note_event(str ptr, bool is_reinit) {
-    if (this->loops.len == 0) { return; }
-    const auto lp = &this->loops.items[this->loops.len - 1];
-    for (auto e : lp.evs) { if (e.ptr == ptr) { return; } }
-    lp.evs.push(LoopEv{ .ptr = ptr, .first_reinit = is_reinit && this->cond_depth == lp.base }) catch {};
+bool Gen::has_reinit(str ptr, str lid) {
+    for (auto r : this->moved) { if (r.kind == 5 && r.ptr == ptr && r.cont == lid) { return true; } }
+    return false;
+}
+
+void Gen::note_use(str ptr) {
+    for (auto k : 0..this->loops.len) {
+        const auto lp = &this->loops.items[k];
+        auto seen = false;
+        for (auto e : lp.evs) { if (e.ptr == ptr) { seen = true; } }
+        if (seen || this->has_reinit(ptr, lp.id)) { continue; }
+        lp.evs.push(LoopEv{ .ptr = ptr }) catch {};
+    }
+}
+
+!void Gen::note_reinit(str ptr) {
+    for (auto k : 0..this->loops.len) {
+        const auto lp = this->loops.get(k);
+        if (!this->declared_before(ptr, lp.md) || this->has_reinit(ptr, lp.id)) { continue; }
+        this->add_rec(MoveRec{ .ptr = ptr, .kind = 5, .cont = lp.id })?;
+    }
 }
 
 !void Gen::move_use(str name, i64 line) {
     if (this->reinit) { return; }
     const auto p = this->local_ptr(name);
     if (p.len == 0) { return; }
-    this->note_event(p, false);
+    this->note_use(p);
     if (this->moved.len == 0) { return; }
     const auto i = this->move_find(p);
     if (i < 0) { return; }
@@ -295,17 +311,32 @@ str Gen::escaped_local(Expr* e) {
     j.any = true;
 }
 
+bool is_must(i64 kind) { return kind == 4 || kind == 5; }
+
 bool state_has(List<MoveRec> st, str ptr, i64 kind) {
     for (auto r : st) { if (r.ptr == ptr && r.kind == kind) { return true; } }
     return false;
 }
 
+bool rec_in(List<MoveRec> st, MoveRec r) {
+    for (auto q : st) {
+        if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { return true; }
+    }
+    return false;
+}
+
 !List<MoveRec> Gen::filter_must(List<MoveRec> x, List<MoveRec> allowed) {
     auto drop = false;
-    for (auto r : x) { if (r.kind == 4 && !state_has(allowed, r.ptr, 4)) { drop = true; } }
+    for (auto r : x) { if (is_must(r.kind) && !rec_in(allowed, r)) { drop = true; } }
     if (!drop) { return x; }
     auto out = List<MoveRec>::init(this->a);
-    for (auto r : x) { if (r.kind != 4 || state_has(allowed, r.ptr, 4)) { out.push(r)?; } }
+    for (auto r : x) { if (!is_must(r.kind) || rec_in(allowed, r)) { out.push(r)?; } }
+    return out;
+}
+
+!List<MoveRec> Gen::must_meet(List<MoveRec> acc, i64 n, List<MoveRec> st) {
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : st) { if (is_must(r.kind) && (n == 0 || rec_in(acc, r))) { out.push(r)?; } }
     return out;
 }
 
@@ -323,7 +354,7 @@ bool state_has(List<MoveRec> st, str ptr, i64 kind) {
     auto changed = false;
     for (auto r : j.acc) {
         auto keep = true;
-        if (r.kind == 4) { for (auto arm : j.arms) { if (!state_has(arm, r.ptr, 4)) { keep = false; } } }
+        if (is_must(r.kind)) { for (auto arm : j.arms) { if (!rec_in(arm, r)) { keep = false; } } }
         if (keep) { out.push(r)?; } else { changed = true; }
     }
     if (changed) { this->restore_state(out); } else { this->restore_state(j.acc); }
@@ -360,23 +391,34 @@ bool Gen::declared_before(str ptr, i64 depth) {
 }
 
 !Loop Gen::loop_new(str brk, str cont, i64 depth, str label, i64 md, bool infinite) {
-    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .base = this->cond_depth + 1, .infinite = infinite, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a), .bmust = List<MoveRec>::init(this->a), .evs = List<LoopEv>::init(this->a) };
+    this->nloop += 1;
+    auto ib = this->sb();
+    sprint(&ib, "L{this->nloop}")?;
+    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .id = ib.slice(), .infinite = infinite, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a), .bmust = List<MoveRec>::init(this->a), .cmust = List<MoveRec>::init(this->a), .evs = List<LoopEv>::init(this->a) };
 }
 
-!void Gen::loop_break(i64 li) {
+!void Gen::loop_edge(i64 li, bool is_break) {
     const auto lp = &this->loops.items[li];
-    lp.brks = this->move_join(lp.brks, this->moved)?;
-    auto must = List<MoveRec>::init(this->a);
-    for (auto r : this->moved) {
-        if (r.kind == 4 && (lp.nbrk == 0 || state_has(lp.bmust, r.ptr, 4))) { must.push(r)?; }
+    if (is_break) {
+        lp.brks = this->move_join(lp.brks, this->moved)?;
+        lp.bmust = this->must_meet(lp.bmust, lp.nbrk, this->moved)?;
+        lp.nbrk += 1;
+    } else {
+        lp.conts = this->move_join(lp.conts, this->moved)?;
+        lp.cmust = this->must_meet(lp.cmust, lp.ncont, this->moved)?;
+        lp.ncont += 1;
     }
-    lp.bmust = must;
-    lp.nbrk += 1;
 }
 
 !void Gen::loop_end(Loop lp, List<MoveRec> s0) {
     auto back = lp.conts;
-    if (!this->terminated) { back = this->move_join(back, this->moved)?; }
+    auto back_must = lp.cmust;
+    auto nback = lp.ncont;
+    if (!this->terminated) {
+        back = this->move_join(back, this->moved)?;
+        back_must = this->must_meet(back_must, nback, this->moved)?;
+        nback += 1;
+    }
     for (auto r : back) {
         if (r.kind == 3 && lp.iter.len > 0 && r.ptr == lp.iter) {
             this->err(r.line);
@@ -384,10 +426,10 @@ bool Gen::declared_before(str ptr, i64 depth) {
             return error.CompileFailed;
         }
         if (r.kind != 0 && r.kind != 3) { continue; }
-        if (state_has(s0, r.ptr, r.kind) || !this->declared_before(r.ptr, lp.md)) { continue; }
-        auto used_first = false;
-        for (auto ev : lp.evs) { if (ev.ptr == r.ptr && !ev.first_reinit) { used_first = true; } }
-        if (!used_first) { continue; }
+        if (rec_in(s0, r) || !this->declared_before(r.ptr, lp.md)) { continue; }
+        auto used = false;
+        for (auto ev : lp.evs) { if (ev.ptr == r.ptr) { used = true; } }
+        if (!used) { continue; }
         this->err(r.line);
         if (r.kind == 3) {
             eprintln("'{r.cname}' is changed by '{r.by}' inside a loop while a pointer into it is kept for the next iteration; take the pointer again inside the loop");
@@ -396,28 +438,24 @@ bool Gen::declared_before(str ptr, i64 depth) {
         }
         return error.CompileFailed;
     }
-    if (this->loops.len >= 2) {
-        const auto outer = &this->loops.items[this->loops.len - 2];
-        for (auto ev : lp.evs) {
-            auto seen = false;
-            for (auto o : outer.evs) { if (o.ptr == ev.ptr) { seen = true; } }
-            if (!seen) { outer.evs.push(LoopEv{ .ptr = ev.ptr, .first_reinit = false })?; }
+    auto may = this->move_join(lp.brks, back)?;
+    if (!lp.infinite) { may = this->move_join(s0, may)?; }
+    auto post = List<MoveRec>::init(this->a);
+    for (auto r : may) { if (!is_must(r.kind) && this->live_ptr(r.ptr, lp.iter)) { post.push(r)?; } }
+    auto cand = s0;
+    if (lp.infinite) { cand = lp.bmust; }
+    for (auto r : cand) {
+        if (!is_must(r.kind) || (r.kind == 5 && r.cont == lp.id) || !this->live_ptr(r.ptr, "")) { continue; }
+        auto keep = true;
+        if (lp.infinite) {
+            if (rec_in(s0, r) && nback > 0 && !rec_in(back_must, r)) { keep = false; }
+        } else {
+            if (nback > 0 && !rec_in(back_must, r)) { keep = false; }
+            if (lp.nbrk > 0 && !rec_in(lp.bmust, r)) { keep = false; }
         }
+        if (keep) { post.push(r)?; }
     }
-    auto post = lp.brks;
-    if (!lp.infinite) {
-        post = this->move_join(s0, back)?;
-        post = this->move_join(post, lp.brks)?;
-        post = this->filter_must(post, s0)?;
-    } else {
-        auto only = List<MoveRec>::init(this->a);
-        for (auto r : lp.brks) { if (r.kind != 4) { only.push(r)?; } }
-        for (auto r : lp.bmust) { only.push(r)?; }
-        post = only;
-    }
-    auto live = List<MoveRec>::init(this->a);
-    for (auto r : post) { if (this->live_ptr(r.ptr, lp.iter)) { live.push(r)?; } }
-    this->restore_state(live);
+    this->restore_state(post);
 }
 
 bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.decl.owned; }

@@ -555,7 +555,6 @@ bool has_defaults(Type* t) {
     this->br(lend)?;
     this->label(lerr)?;
     const auto pre_moved = this->snap();
-    this->cond_depth += 1;
     this->push_scope()?;
     if (e.has_name && e.k == .Catch) {
         const auto slot = this->alloca(this->t_errval, e.name)?;
@@ -582,7 +581,6 @@ bool has_defaults(Type* t) {
         this->gen_stmt(h)?;
     }
     this->pop_scope()?;
-    this->cond_depth -= 1;
     const auto err_reaches = !this->terminated;
     if (err_reaches) { this->restore_state(this->filter_must(this->move_join(pre_moved, this->moved)?, pre_moved)?); } else { this->restore_state(pre_moved); }
     const auto err_lbl = this->cur_label;
@@ -833,7 +831,9 @@ str operator_name(Tag t) {
         }
         this->terminated = true;
         this->label(lr)?;
+        const auto pre_rhs = this->snap();
         const auto r = this->gen_cond(re)?;
+        this->restore_state(this->filter_must(this->move_join(pre_rhs, this->moved)?, pre_rhs)?);
         const auto r_lbl = this->cur_label;
         this->br(lend)?;
         this->label(lend)?;

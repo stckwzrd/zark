@@ -44,8 +44,8 @@ struct Cold { str helper; str label; i64 nlead; List<ColdIn> ins; }
 struct OwnedVar { str ptr; str name; str tname; i64 line; }
 struct Scope { Map<Var> vars; List<Defer> defers; List<OwnedVar> owned; }
 struct MoveRec { str ptr; str by; i64 line; i64 kind; str cont; str cname; }
-struct LoopEv { str ptr; bool first_reinit; }
-struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; i64 base; bool infinite; i64 nbrk; List<MoveRec> brks; List<MoveRec> conts; List<MoveRec> bmust; List<LoopEv> evs; }
+struct LoopEv { str ptr; }
+struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; str id; bool infinite; i64 nbrk; i64 ncont; List<MoveRec> brks; List<MoveRec> conts; List<MoveRec> bmust; List<MoveRec> cmust; List<LoopEv> evs; }
 
 type Env = Map<Type*>*;
 
@@ -74,7 +74,7 @@ struct Gen {
     i64 cdepth;
     List<MoveRec> moved;
     bool shared;
-    i64 cond_depth;
+    i64 nloop;
     List<Cold> colds;
     Map<Expr*> cts;
     List<Expr*> ct_checks;
@@ -895,7 +895,7 @@ struct Gen {
         this->colds = List<Cold>::init(this->a);
         this->reinit = false;
         this->shared = false;
-        this->cond_depth = 0;
+        this->nloop = 0;
         this->ntmp = 0;
         this->nlbl = 0;
         this->terminated = false;
@@ -1029,8 +1029,12 @@ bool always_returns(Stmt* s) {
         .While => return s.e.k == .BoolLit && s.e.bval && !breaks_out(s.body, s.label, 0);
         .Match => {
             if (s.arms.len == 0) { return false; }
-            for (auto arm : s.arms) { if (!always_returns(arm.body)) { return false; } }
-            return true;
+            auto wild = false;
+            for (auto arm : s.arms) {
+                if (arm.pats.len == 0) { wild = true; }
+                if (!always_returns(arm.body)) { return false; }
+            }
+            return wild;
         }
         .ExprS => return s.e.k == .Call && s.e.l.k == .Ident && s.e.l.name == "panic";
     }
