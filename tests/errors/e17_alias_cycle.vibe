@@ -1,0 +1,7 @@
+type A = B;
+type B = A;
+
+void main() {
+    A x = 0;
+    println(x);
+}

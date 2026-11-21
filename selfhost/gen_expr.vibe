@@ -112,6 +112,9 @@ bool can_coerce(Type* from, Type* to) {
                 const auto c = this->consts.get(n)?;
                 auto t = expected;
                 if (c.ty != null) { t = this->resolve_type(c.ty, this->env)?; }
+                this->cdepth += 1;
+                defer this->cdepth -= 1;
+                if (this->cdepth > 200) { this->err(e.line); eprintln("constant '{n}' refers to itself"); return error.CompileFailed; }
                 const auto v = this->gen_expr(c.value, t)?;
                 if (t != null) { return this->coerce(v, t, e.line); }
                 return v;
@@ -771,12 +774,13 @@ bool has_defaults(Type* t) {
         return error.CompileFailed;
     }
     if (len.len > 0 && this->safety) {
-        const auto hp1 = this->tmp()?;
-        sprint(this->ins()?, "  {hp1} = add i64 {len}, 1\n")?;
-        this->bounds_check(hi, hp1, e.line)?;
-        const auto lp1 = this->tmp()?;
-        sprint(this->ins()?, "  {lp1} = add i64 {hi}, 1\n")?;
-        this->bounds_check(lo, lp1, e.line)?;
+        const auto c1 = this->tmp()?;
+        const auto c2 = this->tmp()?;
+        const auto cc = this->tmp()?;
+        sprint(this->ins()?, "  {c1} = icmp ugt i64 {hi}, {len}\n  {c2} = icmp ugt i64 {lo}, {hi}\n  {cc} = or i1 {c1}, {c2}\n")?;
+        auto pb = this->sb();
+        sprint(&pb, "i64 {lo}, i64 {hi}, i64 {len}, ")?;
+        this->guard(cc, "__oobs", pb.slice(), e.line)?;
     }
     const auto np = this->tmp()?;
     sprint(this->ins()?, "  {np} = getelementptr {this->llty(elem)?}, ptr {ptr}, i64 {lo}\n")?;
@@ -977,6 +981,14 @@ str operator_name(Tag t) {
         return error.CompileFailed;
     }
     if (ins.len == 0) { this->err(line); eprintln("bad operator for '{this->type_name(l.ty)?}'"); return error.CompileFailed; }
+    if (l.ty.k == .Int && (op == .slash || op == .percent)) { return this->guarded_div(op, l, r, line); }
+    if (l.ty.k == .Int && (op == .shl || op == .shr)) {
+        const auto bm = l.ty.bits - 1;
+        const auto m = this->tmp()?;
+        sprint(this->ins()?, "  {m} = and {ty} {r.v}, {bm}\n")?;
+        sprint(this->ins()?, "  {t} = {ins} {ty} {l.v}, {m}\n")?;
+        return Value{ .ty = l.ty, .v = t };
+    }
     if (this->fastmath && et.k == .Float && (ins == "fadd" || ins == "fsub" || ins == "fmul" || ins == "fdiv")) {
         sprint(this->ins()?, "  {t} = {ins} fast {ty} {l.v}, {r.v}\n")?;
         return Value{ .ty = l.ty, .v = t };
@@ -1046,6 +1058,120 @@ str operator_name(Tag t) {
 }
 
 bool is_vec(Type* t) { return t.k == .Array && t.vec; }
+
+!Value Gen::sat_fptoi(Value v, Type* src, Type* to, str from, str tt) {
+    const auto bits = to.bits;
+    f64 hi_f = 1.0;
+    for (auto _k : 0..(bits - 1)) { hi_f *= 2.0; }
+    if (!to.signed) { hi_f *= 2.0; }
+    auto lo_f = 0.0;
+    if (to.signed) { lo_f = 0.0 - hi_f; }
+    auto min_i = "0";
+    auto max_i = "-1";
+    if (to.signed) {
+        auto mb = this->sb();
+        auto xb = this->sb();
+        if (bits == 64) {
+            mb.append("-9223372036854775808")?;
+            xb.append("9223372036854775807")?;
+        } else {
+            sprint(&mb, "-{(1 as i64) << (bits - 1)}")?;
+            sprint(&xb, "{((1 as i64) << (bits - 1)) - 1}")?;
+        }
+        min_i = mb.slice();
+        max_i = xb.slice();
+    } else if (bits < 64) {
+        auto xb = this->sb();
+        sprint(&xb, "{((1 as i64) << bits) - 1}")?;
+        max_i = xb.slice();
+    }
+    const auto hi_c = this->float_const(hi_f, src.bits)?;
+    const auto lo_c = this->float_const(lo_f, src.bits)?;
+    const auto zero = this->float_const(0.0, src.bits)?;
+    const auto nan = this->tmp()?;
+    const auto lo = this->tmp()?;
+    const auto hi = this->tmp()?;
+    const auto bad1 = this->tmp()?;
+    const auto bad2 = this->tmp()?;
+    const auto safe = this->tmp()?;
+    const auto raw = this->tmp()?;
+    const auto r1 = this->tmp()?;
+    const auto r2 = this->tmp()?;
+    const auto r3 = this->tmp()?;
+    auto op = "fptoui";
+    if (to.signed) { op = "fptosi"; }
+    sprint(this->ins()?, "  {nan} = fcmp une {from} {v.v}, {v.v}\n  {lo} = fcmp ole {from} {v.v}, {lo_c}\n  {hi} = fcmp oge {from} {v.v}, {hi_c}\n")?;
+    sprint(this->ins()?, "  {bad1} = or i1 {lo}, {hi}\n  {bad2} = or i1 {bad1}, {nan}\n  {safe} = select i1 {bad2}, {from} {zero}, {from} {v.v}\n")?;
+    sprint(this->ins()?, "  {raw} = {op} {from} {safe} to {tt}\n  {r1} = select i1 {hi}, {tt} {max_i}, {tt} {raw}\n  {r2} = select i1 {lo}, {tt} {min_i}, {tt} {r1}\n  {r3} = select i1 {nan}, {tt} 0, {tt} {r2}\n")?;
+    return Value{ .ty = to, .v = r3 };
+}
+
+!void Gen::guard(str cond, str helper, str prefix, i64 line) {
+    const auto lbad = this->new_label("chk")?;
+    const auto lok = this->new_label("chkok")?;
+    sprint(this->ins()?, "  br i1 {cond}, label %{lbad}, label %{lok}\n")?;
+    this->terminated = true;
+    this->label(lbad)?;
+    if (!this->fns.has(helper)) { this->err(line); eprintln("runtime helper {helper} missing (prelude)"); return error.CompileFailed; }
+    const auto fi = this->inst_fn(this->fns.get(helper)?, this->new_env()?, this->no_types())?;
+    const auto fname = this->str_global(this->file)?;
+    sprint(this->ins()?, "  call void @{fi.llname}({prefix}{{ ptr, i64 }} {{ ptr {fname}, i64 {this->file.len} }}, i64 {line})\n")?;
+    sprint(this->ins()?, "  unreachable\n")?;
+    this->terminated = true;
+    this->label(lok)?;
+}
+
+bool is_safe_divisor(str v) {
+    if (v.len == 0 || v[0] == '%') { return false; }
+    auto i = 0;
+    if (v[0] == '-') { i = 1; }
+    if (i >= v.len) { return false; }
+    for (auto k : i..v.len) { if (v[k] < '0' || v[k] > '9') { return false; } }
+    if (v == "0" || v == "-1" || v == "-0") { return false; }
+    return true;
+}
+
+!Value Gen::guarded_div(Tag op, Value l, Value r, i64 line) {
+    const auto ty = this->llty(l.ty)?;
+    const auto sg = l.ty.signed;
+    auto dv = r.v;
+    auto m1 = "";
+    if (!this->freestanding && !is_safe_divisor(r.v)) {
+        const auto z = this->tmp()?;
+        sprint(this->ins()?, "  {z} = icmp eq {ty} {r.v}, 0\n")?;
+        this->guard(z, "__divz", "", line)?;
+        if (sg) {
+            m1 = this->tmp()?;
+            sprint(this->ins()?, "  {m1} = icmp eq {ty} {r.v}, -1\n")?;
+            if (this->safety) {
+                auto minb = this->sb();
+                if (l.ty.bits == 64) { minb.append("-9223372036854775808")?; } else { sprint(&minb, "-{(1 as i64) << (l.ty.bits - 1)}")?; }
+                const auto isn = this->tmp()?;
+                const auto both = this->tmp()?;
+                sprint(this->ins()?, "  {isn} = icmp eq {ty} {l.v}, {minb.slice()}\n  {both} = and i1 {isn}, {m1}\n")?;
+                this->guard(both, "__ovf", "", line)?;
+            }
+            dv = this->tmp()?;
+            sprint(this->ins()?, "  {dv} = select i1 {m1}, {ty} 1, {ty} {r.v}\n")?;
+        }
+    }
+    auto ins = "udiv";
+    if (sg) { ins = "sdiv"; }
+    if (op == .percent) {
+        if (sg) { ins = "srem"; } else { ins = "urem"; }
+    }
+    const auto q = this->tmp()?;
+    sprint(this->ins()?, "  {q} = {ins} {ty} {l.v}, {dv}\n")?;
+    if (m1.len == 0) { return Value{ .ty = l.ty, .v = q }; }
+    const auto res = this->tmp()?;
+    if (op == .slash) {
+        const auto neg = this->tmp()?;
+        sprint(this->ins()?, "  {neg} = sub {ty} 0, {l.v}\n  {res} = select i1 {m1}, {ty} {neg}, {ty} {q}\n")?;
+    } else {
+        sprint(this->ins()?, "  {res} = select i1 {m1}, {ty} 0, {ty} {q}\n")?;
+    }
+    return Value{ .ty = l.ty, .v = res };
+}
 
 !Type* Gen::operand_hint(Tag op, Type* lt) {
     if (lt.k == .Strct && !is_union(lt) && !lt.si.decl.is_iface && lt.si.args.len == 0) {
@@ -1169,12 +1295,7 @@ Type* scalar_hint(Type* t) {
         sprint(this->ins()?, "  {t} = {op} {from} {v.v} to {tt}\n")?;
         return Value{ .ty = to, .v = t };
     }
-    if (src.k == .Float && to.k == .Int) {
-        auto op = "fptoui";
-        if (to.signed) { op = "fptosi"; }
-        sprint(this->ins()?, "  {t} = {op} {from} {v.v} to {tt}\n")?;
-        return Value{ .ty = to, .v = t };
-    }
+    if (src.k == .Float && to.k == .Int) { return this->sat_fptoi(v, src, to, from, tt); }
     if (src.k == .Float && to.k == .Float) {
         auto op = "fptrunc";
         if (to.bits > src.bits) { op = "fpext"; }

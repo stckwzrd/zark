@@ -98,7 +98,41 @@ str base_of(str path) {
     return 0;
 }
 
+struct RLimit { u64 cur; u64 max; }
+extern i32 getrlimit(i32 resource, RLimit* lim);
+extern i32 setrlimit(i32 resource, RLimit* lim);
+extern i32 execv(u8* path, u8** argv);
+extern i32 setenv(u8* name, u8* value, i32 overwrite);
+
+void grow_stack() {
+    if (getenv("VIBE_STACK") != null) { return; }
+    RLimit lim;
+    if (getrlimit(3, &lim) != 0) { return; }
+    const u64 want = 1073741824;
+    if (lim.cur >= want || lim.max < want) { return; }
+    u8[32] orig;
+    auto ob = FixedBuf::init(orig[..]);
+    auto sb = List<u8>::init(ob.allocator());
+    sprint(&sb, "{lim.cur}") catch return;
+    sb.push(0) catch return;
+    lim.cur = want;
+    if (setrlimit(3, &lim) != 0) { return; }
+    setenv("VIBE_STACK", sb.items.ptr, 1);
+    execv("/proc/self/exe", __argv);
+}
+
+void restore_stack() {
+    const auto v = getenv("VIBE_STACK");
+    if (v == null) { return; }
+    const auto n = parse_int(cstr(v)) catch { return; };
+    RLimit lim;
+    if (getrlimit(3, &lim) != 0) { return; }
+    lim.cur = n as u64;
+    _ = setrlimit(3, &lim);
+}
+
 !i32 compile(Allocator a) {
+    grow_stack();
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
     if (arg_count() >= 2 && arg(1) == "new") {
         if (arg_count() != 3) {
@@ -295,6 +329,10 @@ str base_of(str path) {
         g.flush_diag();
         return 1;
     };
+    if (!g.fns.has("main") && !is_test && !is_ir && !freestanding) {
+        eprintln("error: {src_file} has no 'main' function");
+        return 1;
+    }
 
     auto ir = List<u8>::init(a);
     g.output(&ir)?;
@@ -376,6 +414,7 @@ str base_of(str path) {
         eprintln("time: frontend {(t1 - t0) as f64 / 1000000.0:.1} ms, {backend} backend {(t2 - t1) as f64 / 1000000.0:.1} ms, link {(t3 - t2) as f64 / 1000000.0:.1} ms");
     }
 
+    restore_stack();
     if (is_test) { return run_tests(a, exe, g.tests); }
 
     if (is_run) {

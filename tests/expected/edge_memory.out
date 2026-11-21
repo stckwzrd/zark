@@ -1,0 +1,9 @@
+huge: error.OutOfMemory
+negative: error.OutOfMemory
+wraps to a small size: error.OutOfMemory
+0 0 0
+list without init: error.NoAllocator
+map without init: error.NoAllocator
+320 0 4 0 4 4
+[] [] 5
+-1 0 0

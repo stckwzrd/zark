@@ -1,0 +1,2 @@
+i64 id(i64 x) { return x; }
+void main() { println((id(-9223372036854775807) - 1) / id(-1)); }

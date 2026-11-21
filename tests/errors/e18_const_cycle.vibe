@@ -1,0 +1,6 @@
+const auto A = B;
+const auto B = A;
+
+void main() {
+    println(A);
+}

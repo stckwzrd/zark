@@ -4,7 +4,7 @@ FILES="selfhost/gen.vibe selfhost/gen_*.vibe selfhost/parser.vibe selfhost/loade
 NAMES='List|Map|Allocator|Arena|FixedBuf|StrBuf|println|print|eprint|eprintln|bprint|sprint|sort|min|max|swap|abs|c_allocator|cstr|parse_int|read_file|write_file|memcpy|malloc|calloc|free'
 bad=$(grep -nE "\"($NAMES)\"" $FILES)
 protocol='Fmt|Writer|FmtPiece|Option|panic|assert|embed|asm|sizeof|alignof|main|Self'
-other=$(grep -noE '"__[a-z_]+"' $FILES | grep -vE '"__(panic|errname|oob|ovf|str_eq|argc|argv|rt_init)"')
+other=$(grep -noE '"__[a-z_]+"' $FILES | grep -vE '"__(panic|errname|oob|oobs|ovf|divz|str_eq|argc|argv|rt_init)"')
 if [ -n "$bad$other" ]; then
   echo "FAIL compiler sources mention standard library names:"
   echo "$bad"

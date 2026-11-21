@@ -1609,7 +1609,28 @@ struct Native {
             const auto dbl = ins.ty2.k == .F64;
             this->load_op(RAX, ins.ty2, ins.a, false)?;
             asm.movq_x_r(0, RAX, dbl)?;
-            asm.cvttf2si(dbl, RAX, 0)?;
+            if (op == "fptoui" && ins.ty.bits == 64) {
+                const auto lbig = this->local_label()?;
+                const auto ldone = this->local_label()?;
+                if (dbl) { asm.mov_imm(RCX, 0x43E0000000000000)?; } else { asm.mov_imm(RCX, 0x5F000000)?; }
+                asm.movq_x_r(1, RCX, dbl)?;
+                auto pc = -1;
+                if (dbl) { pc = 0x66; }
+                asm.sse(pc, 0x0F2E, 0, 1)?;
+                asm.jcc(CC_AE, lbig)?;
+                asm.cvttf2si(dbl, RAX, 0)?;
+                asm.jmp(ldone)?;
+                asm.bind(lbig)?;
+                auto ps = 0xF3;
+                if (dbl) { ps = 0xF2; }
+                asm.sse(ps, 0x0F5C, 0, 1)?;
+                asm.cvttf2si(dbl, RAX, 0)?;
+                asm.mov_imm(RDX, 0 - 0x7fffffffffffffff - 1)?;
+                asm.xor_(RAX, RDX)?;
+                asm.bind(ldone)?;
+            } else {
+                asm.cvttf2si(dbl, RAX, 0)?;
+            }
             this->store_res(ins, RAX)?;
             return true;
         }

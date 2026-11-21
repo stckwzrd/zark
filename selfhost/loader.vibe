@@ -106,8 +106,10 @@ struct Loader {
 
     /// loads a file once; returns the name its declarations live under (the first import's)
     !str load_file(str path, str prefix) {
-        if (this->seen.has(path)) {
-            const auto old = this->seen.get(path)?;
+        auto key = path;
+        if (!is_std_path(path) && !this->overrides.has(path)) { key = canonical(this->a, path)?; }
+        if (this->seen.has(key)) {
+            const auto old = this->seen.get(key)?;
             if (old != prefix && prefix.len == 0) {
                 eprintln("error: '{path}' is imported as '{old}' elsewhere, so a plain import cannot see its names; write `import \"...\" as {old};`");
                 return error.CompileFailed;
@@ -118,7 +120,7 @@ struct Loader {
             eprintln("error: the name '{prefix}' is already used for '{this->prefixes.get(prefix)?}'; pick another name for '{path}'");
             return error.CompileFailed;
         }
-        this->seen.put(path, prefix)?;
+        this->seen.put(key, prefix)?;
         if (prefix.len > 0) { this->prefixes.put(prefix, path)?; }
         if (this->overrides.has(path)) {
             this->load_source(this->overrides.get(path)?, path, prefix)?;

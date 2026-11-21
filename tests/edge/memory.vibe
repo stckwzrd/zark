@@ -1,0 +1,22 @@
+!void main() {
+    auto c = c_allocator();
+    const auto huge = c.alloc<u8>(9223372036854775807) catch |e| { println("huge: {e}"); (null as *u8)[0..0]; };
+    const auto neg = c.alloc<i64>(-5) catch |e| { println("negative: {e}"); (null as *i64)[0..0]; };
+    const auto wrap = c.alloc<i64>(2305843009213693953) catch |e| { println("wraps to a small size: {e}"); (null as *i64)[0..0]; };
+    println(huge.len, neg.len, wrap.len);
+
+    List<i64> zero;
+    zero.push(1) catch |e| { println("list without init: {e}"); };
+    Map<i64> zm;
+    zm.put("a", 1) catch |e| { println("map without init: {e}"); };
+
+    auto l = List<i64>::init(c);
+    defer l.deinit();
+    for (auto i : 0..5) { l.push(i)?; }
+    for (auto r : 0..6) { l.append(l.slice())?; }
+    println(l.len, l.get(0), l.get(4), l.get(5), l.get(159), l.get(319));
+
+    auto a = [1, 2, 3, 4, 5];
+    println(a[2..2], a[5..5], a[0..5].len);
+    println(str_find("", "x"), str_find("abc", ""), str_trim("   ").len);
+}

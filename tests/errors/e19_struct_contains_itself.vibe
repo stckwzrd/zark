@@ -1,0 +1,9 @@
+struct Node {
+    i64 v;
+    Node next;
+}
+
+void main() {
+    Node n;
+    println(n.v);
+}
