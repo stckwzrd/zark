@@ -1,0 +1,124 @@
+import "sema_iface.vibe";
+
+struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; }
+
+!List<MoveRec> Gen::move_copy(List<MoveRec> src) {
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : src) { out.push(r)?; }
+    return out;
+}
+
+!List<MoveRec> Gen::move_join(List<MoveRec> x, List<MoveRec> y) {
+    auto out = this->move_copy(x)?;
+    for (auto r : y) {
+        auto found = false;
+        for (auto q : out) { if (q.ptr == r.ptr) { found = true; } }
+        if (!found) { out.push(r)?; }
+    }
+    return out;
+}
+
+i64 Gen::move_find(str ptr) {
+    for (auto [i, r] : this->moved) { if (r.ptr == ptr) { return i; } }
+    return -1;
+}
+
+str Gen::local_ptr(str name) {
+    auto i = this->scopes.len;
+    while (i > 0) {
+        i -= 1;
+        const auto sc = &this->scopes.items[i];
+        if (sc.vars.has(name)) {
+            const auto v = sc.vars.get(name) catch { return ""; };
+            return v.ptr;
+        }
+    }
+    return "";
+}
+
+!void Gen::move_use(str name, i64 line) {
+    if (this->reinit || this->moved.len == 0) { return; }
+    const auto p = this->local_ptr(name);
+    if (p.len == 0) { return; }
+    const auto i = this->move_find(p);
+    if (i < 0) { return; }
+    const auto r = this->moved.get(i);
+    this->err(line);
+    eprintln("'{name}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+    return error.CompileFailed;
+}
+
+!void Gen::move_mark(Expr* x, str by, i64 line) {
+    if (x.k != .Ident) { return; }
+    const auto p = this->local_ptr(x.name);
+    if (p.len == 0) { return; }
+    if (this->move_find(p) >= 0) { return; }
+    this->moved.push(MoveRec{ .ptr = p, .by = by, .line = line })?;
+}
+
+!void Gen::move_args(FnDecl* decl, List<Expr*> args, i64 off, i64 line) {
+    for (auto [i, x] : args) {
+        const auto pi = i + off;
+        if (pi < decl.params.len && decl.params.get(pi).move) { this->move_mark(x, decl.name, line)?; }
+    }
+}
+
+void Gen::move_clear(str name) {
+    const auto p = this->local_ptr(name);
+    const auto i = this->move_find(p);
+    if (i < 0) { return; }
+    this->moved.items[i] = this->moved.items[this->moved.len - 1];
+    this->moved.len -= 1;
+}
+
+!Join Gen::join_begin() {
+    return Join{ .s0 = this->move_copy(this->moved)?, .acc = List<MoveRec>::init(this->a), .any = false };
+}
+
+!void Gen::join_arm(Join* j) {
+    this->moved = this->move_copy(j.s0)?;
+}
+
+!void Gen::join_end(Join* j) {
+    if (this->terminated) { return; }
+    j.acc = this->move_join(j.acc, this->moved)?;
+    j.any = true;
+}
+
+!void Gen::join_finish(Join* j, bool fallthrough) {
+    if (fallthrough) {
+        j.acc = this->move_join(j.acc, j.s0)?;
+        j.any = true;
+    }
+    if (j.any) { this->moved = j.acc; } else { this->moved = j.s0; }
+}
+
+bool Gen::declared_before(str ptr, i64 depth) {
+    auto i = 0;
+    while (i < depth && i < this->scopes.len) {
+        for (auto e : this->scopes.items[i].vars.entries) { if (e.used && e.value.ptr == ptr) { return true; } }
+        i += 1;
+    }
+    return false;
+}
+
+!Loop Gen::loop_new(str brk, str cont, i64 depth, str label, i64 md) {
+    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a) };
+}
+
+!void Gen::loop_end(Loop lp, List<MoveRec> s0) {
+    auto back = lp.conts;
+    if (!this->terminated) { back = this->move_join(back, this->moved)?; }
+    for (auto r : back) {
+        auto before = false;
+        for (auto q : s0) { if (q.ptr == r.ptr) { before = true; } }
+        if (!before && this->declared_before(r.ptr, lp.md)) {
+            this->err(r.line);
+            eprintln("a variable is consumed by '{r.by}' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return");
+            return error.CompileFailed;
+        }
+    }
+    auto post = this->move_join(s0, back)?;
+    post = this->move_join(post, lp.brks)?;
+    this->moved = post;
+}

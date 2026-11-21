@@ -1,0 +1,6 @@
+struct Buf { i64 n; void close() move { } }
+void main() {
+    auto b = Buf{ .n = 1 };
+    if (b.n > 0) { b.close(); }
+    println(b.n);
+}

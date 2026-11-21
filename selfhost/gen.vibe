@@ -40,7 +40,8 @@ struct Addr { Type* ty; str v; bool imm; }
 struct Var { str ptr; Type* ty; bool mutable; }
 struct Defer { Stmt* stmt; bool is_err; }
 struct Scope { Map<Var> vars; List<Defer> defers; }
-struct Loop { str brk; str cont; i64 depth; str label; }
+struct MoveRec { str ptr; str by; i64 line; }
+struct Loop { str brk; str cont; i64 depth; str label; i64 md; List<MoveRec> brks; List<MoveRec> conts; }
 
 type Env = Map<Type*>*;
 
@@ -67,6 +68,8 @@ struct Gen {
     bool needs_llvm;
     i64 rdepth;
     i64 cdepth;
+    List<MoveRec> moved;
+    bool reinit;
     i64 sdepth;
 
     Map<FnDecl*> fns;
@@ -576,6 +579,8 @@ struct Gen {
 
     /// run defers of scopes[hi] down to scopes[lo], innermost first
     !void run_defers(i64 hi, i64 lo, bool is_err) {
+        const auto saved_moved = this->move_copy(this->moved)?;
+        defer this->moved = saved_moved;
         auto i = hi + 1;
         while (i > lo) {
             i -= 1;
@@ -857,6 +862,7 @@ struct Gen {
         this->allocas = this->sb();
         this->scopes = List<Scope>::init(this->a);
         this->loops = List<Loop>::init(this->a);
+        this->moved = List<MoveRec>::init(this->a);
         this->ntmp = 0;
         this->nlbl = 0;
         this->terminated = false;
