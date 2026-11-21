@@ -118,6 +118,7 @@ struct StructDecl {
     i64 name_off;
     bool is_union;
     bool packed;
+    bool owned;
     bool is_iface;
     i64 align;
 }

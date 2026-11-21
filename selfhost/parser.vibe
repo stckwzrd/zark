@@ -24,6 +24,7 @@ struct Parser {
     bool arrow_only;
     List<i64> splits;
     bool at_packed;
+    bool at_owned;
     i64 at_align;
     List<Expr*> cts;
 
@@ -177,6 +178,11 @@ struct Parser {
             this->pos += 4;
             return this->parse_decl(out);
         }
+        if (t.tag == .ident && t.text == "owned" && this->peek_at(1).tag == .kw_struct) {
+            _ = this->advance();
+            this->at_owned = true;
+            return this->parse_decl(out);
+        }
         if (t.tag == .ident && t.text == "packed" && (this->peek_at(1).tag == .kw_struct || this->peek_at(1).tag == .kw_union)) {
             _ = this->advance();
             this->at_packed = true;
@@ -227,8 +233,9 @@ struct Parser {
                 }
                 _ = this->expect(.rbrace)?;
                 const auto sd = this->a.create<StructDecl>()?;
-                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union, .packed = this->at_packed, .align = this->at_align };
+                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union, .packed = this->at_packed, .owned = this->at_owned, .align = this->at_align };
                 this->at_packed = false;
+                this->at_owned = false;
                 this->at_align = 0;
                 d.k = .Struct;
                 d.s = sd;

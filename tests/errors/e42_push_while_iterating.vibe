@@ -1,0 +1,9 @@
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    for (auto i : 0..3) { l.push(i) catch return; }
+    for (auto x : l) {
+        l.push(x * 10) catch return;
+    }
+    println(l.len);
+}
