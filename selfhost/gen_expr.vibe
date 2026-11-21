@@ -550,6 +550,7 @@ bool has_defaults(Type* t) {
     const auto ok_lbl = this->cur_label;
     this->br(lend)?;
     this->label(lerr)?;
+    const auto pre_moved = this->move_copy(this->moved)?;
     this->push_scope()?;
     if (e.has_name && e.k == .Catch) {
         const auto slot = this->alloca(this->t_errval, e.name)?;
@@ -577,6 +578,7 @@ bool has_defaults(Type* t) {
     }
     this->pop_scope()?;
     const auto err_reaches = !this->terminated;
+    if (err_reaches) { this->moved = this->move_join(pre_moved, this->moved)?; } else { this->moved = pre_moved; }
     const auto err_lbl = this->cur_label;
     if (err_reaches && vt.k != .Void && !has_errv) { this->err(e.line); eprintln("catch block must produce a value or leave (return/break/panic)"); return error.CompileFailed; }
     if (err_reaches) { this->br(lend)?; }

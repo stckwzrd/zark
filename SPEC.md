@@ -196,6 +196,8 @@ You can write your own allocator by filling in the two function pointers.
 
 Containers such as `List<T>` and `Map<V>` take the allocator in `init` and release memory in `deinit`. Every growing operation returns `!void`, so running out of memory is an ordinary error you handle.
 
+Ownership: a parameter written `move T x`, or a method written `R name(...) move { ... }` (which consumes `this`), takes the argument over. When the argument is a plain local variable or parameter, the compiler rejects any later use of that variable until it is assigned again. The state is merged over `if`, `match`, `catch` and loops (a variable consumed in a loop body must be reassigned or left through `break`/`return`). `defer` and `errdefer` bodies are checked where they run. The check follows variable names only: copies of a pointer and field paths are not tracked. `move` is contextual, not a keyword. The prelude marks `Allocator.free`, `Allocator.destroy` and the `deinit`/`close`/`join` methods.
+
 ## 8. C interop
 
 - `extern` declares a C function and `export` defines one.

@@ -104,7 +104,7 @@ struct Allocator {
         if (p == null) { return error.OutOfMemory; }
         return (p as *T)[0..n];
     }
-    template<T> void free(T[] s) {
+    template<T> void free(move T[] s) {
         if (s.len > 0 && this->free_fn != null) { this->free_fn(this->ctx, s.ptr, (s.len as u64) * sizeof(T)); }
     }
     /// one zeroed T
@@ -112,7 +112,7 @@ struct Allocator {
         const auto s = this->alloc<T>(1)?;
         return s.ptr;
     }
-    template<T> void destroy(T* p) { if (this->free_fn != null) { this->free_fn(this->ctx, p, sizeof(T)); } }
+    template<T> void destroy(move T* p) { if (this->free_fn != null) { this->free_fn(this->ctx, p, sizeof(T)); } }
     /// copy a string into memory owned by this allocator
     !str dup(str s) {
         const auto d = this->alloc<u8>(s.len)?;
@@ -294,7 +294,7 @@ struct List<T> {
 
     static Self init(Allocator a) { return Self{ .a = a } };
 
-    void deinit() {
+    void deinit() move {
         this->a.free(this->items);
         this->items = this->items[0..0];
         this->len = 0;
@@ -433,7 +433,7 @@ struct Map<V> {
 
     static Self init(Allocator a) { return Self{ .a = a } };
 
-    void deinit() {
+    void deinit() move {
         this->a.free(this->entries);
         this->entries = this->entries[0..0];
         this->len = 0;
@@ -696,7 +696,7 @@ struct Arena {
     Allocator allocator() {
         return Allocator{ .ctx = this, .alloc_fn = __arena_alloc, .free_fn = __arena_free };
     }
-    void deinit() {
+    void deinit() move {
         auto c = this->head;
         while (c != null) {
             const auto prev = c.prev;
@@ -1859,7 +1859,7 @@ struct HashMap<K, V> {
 
     static Self init(Allocator a) { return Self{ .a = a }; }
 
-    void deinit() {
+    void deinit() move {
         this->a.free(this->entries);
         this->entries = this->entries[0..0];
         this->len = 0;
@@ -1978,7 +1978,7 @@ struct HashSet<T> {
     HashMap<T, bool> m;
 
     static Self init(Allocator a) { return Self{ .m = HashMap<T, bool>::init(a) }; }
-    void deinit() { this->m.deinit(); }
+    void deinit() move { this->m.deinit(); }
     /// true when the value was new
     !bool add(T v) {
         if (this->m.has(v)) { return false; }
@@ -2038,7 +2038,7 @@ struct DebugAllocator {
     /// makes the allocation after `n` more successful ones return out-of-memory
     void fail_after_n(i64 n) { this->fail_after = n; }
 
-    !void deinit() {
+    !void deinit() move {
         auto leaks = 0;
         auto it = this->blocks.iter();
         while (it.next()) {
