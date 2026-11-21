@@ -243,14 +243,16 @@ void count_free(void* ctx, void* p, u64 size) {
 
 A pointer to a local variable must not be returned:
 
-```vibe
+```vibe error
 i64* bad() {
     auto x = 5;
     return &x;
 }
+
+void main() { println(*bad()); }
 ```
 
-Such code compiles, but after `bad` exits the stack is overwritten, and the pointer "dangles". The compiler does **not** check this. The same goes for a slice of a local array and for a closure (see [closures](functions.md#closures)).
+After `bad` exits the stack is overwritten and the pointer would "dangle", so the compiler refuses the code. The same goes for a slice of a local array and for a thread whose closure captured a local (see [pointers that outlive their memory](#pointers-that-outlive-their-memory)). A closure that you return by hand is still your responsibility (see [closures](functions.md#closures)).
 
 The rule: data that outlives a function must live in memory owned by the caller (a slice parameter, a pointer, an allocator).
 
@@ -378,6 +380,21 @@ void main() {
     println(l.get(0), l.get(1));
 }
 ```
+
+Changing a container while a loop walks over it is the same mistake in another costume: the loop keeps reading the old buffer. The compiler follows `for` loops too, and `this->items` counts as much as a local variable:
+
+```vibe error
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    for (auto i : 0..3) { l.push(i) catch return; }
+    for (auto x : l) {
+        l.push(x * 10) catch return;
+    }
+}
+```
+
+Collect what you want to add and add it after the loop, or leave the loop right after the change (`break` or `return`); both are accepted.
 
 Your own types can use the same words after the parameter list: `T* at(i64 i) borrows { ... }` and `!void push(T v) invalidates { ... }`. As with `move`, the check follows variable names: a pointer stored in a struct field or copied through a function call is not tracked.
 

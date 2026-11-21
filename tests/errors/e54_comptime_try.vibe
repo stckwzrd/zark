@@ -1,0 +1,3 @@
+!i64 parse() { return 5; }
+comptime parse()?;
+void main() {}

@@ -24,6 +24,7 @@ struct Parser {
     bool arrow_only;
     List<i64> splits;
     bool at_packed;
+    bool at_owned;
     i64 at_align;
     List<Expr*> cts;
 
@@ -150,7 +151,13 @@ struct Parser {
         const auto t = this->peek();
         auto d = Decl{ .k = .Import, .line = t.line };
         if (t.tag == .ident && t.text == "comptime") {
-            const auto ce = this->parse_expr()?;
+            _ = this->advance();
+            const auto ce = this->ex(.Comptime, t)?;
+            auto kb = List<u8>::init(this->a);
+            sprint(&kb, "{this->file}:{t.off}")?;
+            ce.name = kb.slice();
+            ce.l = this->parse_expr()?;
+            this->cts.push(ce)?;
             out.push(Decl{ .k = .Check, .ct = ce, .line = t.line })?;
             return;
         }
@@ -175,6 +182,11 @@ struct Parser {
         if (t.tag == .ident && t.text == "align" && this->peek_at(1).tag == .lparen && this->peek_at(2).tag == .int_lit && this->peek_at(3).tag == .rparen && (this->peek_at(4).tag == .kw_struct || (this->peek_at(4).tag == .ident && this->peek_at(4).text == "packed"))) {
             this->at_align = (parse_int_radix(this->peek_at(2).text, 0) catch 0) as i64;
             this->pos += 4;
+            return this->parse_decl(out);
+        }
+        if (t.tag == .ident && t.text == "owned" && this->peek_at(1).tag == .kw_struct) {
+            _ = this->advance();
+            this->at_owned = true;
             return this->parse_decl(out);
         }
         if (t.tag == .ident && t.text == "packed" && (this->peek_at(1).tag == .kw_struct || this->peek_at(1).tag == .kw_union)) {
@@ -227,8 +239,9 @@ struct Parser {
                 }
                 _ = this->expect(.rbrace)?;
                 const auto sd = this->a.create<StructDecl>()?;
-                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union, .packed = this->at_packed, .align = this->at_align };
+                *sd = StructDecl{ .name = name, .type_params = tps, .constraints = cons, .fields = fields, .line = t.line, .name_off = nt.off, .is_union = is_union, .packed = this->at_packed, .owned = this->at_owned, .align = this->at_align };
                 this->at_packed = false;
+                this->at_owned = false;
                 this->at_align = 0;
                 d.k = .Struct;
                 d.s = sd;

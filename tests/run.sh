@@ -14,7 +14,7 @@ check showcase_tests $VIBE test examples/showcase/main.vibe $FLAGS
 check showcase_vec $VIBE test examples/showcase/vec.vibe $FLAGS
 check interop $VIBE run examples/interop/main.vibe examples/interop/mathlib.c examples/interop/engine.cpp $FLAGS
 check abi $VIBE run tests/abi/main.vibe tests/abi/lib.c $FLAGS
-for n in ints memory nan move borrow comptime; do check edge_$n $VIBE run tests/edge/$n.vibe $FLAGS; done
+for n in ints memory nan move borrow comptime mulcheck iterate threads flow flow2 alias_comptime narrow_div; do check edge_$n $VIBE run tests/edge/$n.vibe $FLAGS; done
 for f in tests/panics/*.vibe; do
   n=panic_$(basename $f .vibe)
   if out=$($VIBE run "$f" $FLAGS 2>&1); then fail=$((fail+1)); echo "FAIL $f (expected a panic)"
@@ -37,4 +37,5 @@ if [ $tok_bad -eq 0 ]; then pass=$((pass+1)); echo "ok   tokens match tests/toke
 if VIBE=$VIBE tests/baremetal.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if VIBE=$VIBE tests/project.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if VIBE=$VIBE tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if VIBE=$VIBE tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]

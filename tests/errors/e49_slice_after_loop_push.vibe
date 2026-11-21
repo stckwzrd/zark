@@ -1,0 +1,11 @@
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1) catch return;
+    auto s = l.slice();
+    for (auto x : s) {
+        l.push(x) catch return;
+        break;
+    }
+    println(s.len);
+}

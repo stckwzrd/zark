@@ -1,0 +1,13 @@
+struct Bag {
+    List<i64> items;
+    !void dup_all() {
+        for (auto x : this->items) {
+            this->items.push(x)?;
+        }
+    }
+}
+void main() {
+    auto b = Bag{ .items = List<i64>::init(c_allocator()) };
+    b.items.push(1) catch return;
+    b.dup_all() catch return;
+}

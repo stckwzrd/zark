@@ -1,0 +1,107 @@
+owned struct G { i64 id; void rel() move {} }
+G mk() { return G{ .id = 1 }; }
+enum Color { Red, Green }
+union U { i64 A; bool B; }
+
+void by_enum(Color c) {
+    auto g = mk();
+    match c {
+        .Red => g.rel();
+        .Green => g.rel();
+    }
+}
+
+void by_int(i64 n) {
+    auto g = mk();
+    match n {
+        1 => g.rel();
+        _ => g.rel();
+    }
+}
+
+void by_bool(bool b) {
+    auto g = mk();
+    match b {
+        true => g.rel();
+        false => g.rel();
+    }
+}
+
+void by_union(U u) {
+    auto g = mk();
+    match u {
+        .A(x) => { g.rel(); }
+        .B(y) => { g.rel(); }
+    }
+}
+
+i64 by_value(bool b) {
+    auto g = mk();
+    const auto v = match b {
+        true => { g.rel(); 1 }
+        false => { g.rel(); 2 }
+    };
+    return v;
+}
+
+i64 color_value(Color c) {
+    match c {
+        .Red => return 10;
+        .Green => return 20;
+    }
+}
+
+!void nested_loops() {
+    const auto a = c_allocator();
+    u8[] buf;
+    auto total = 0;
+    for (auto i : 0..2) {
+        for (auto j : 0..2) {
+            buf = a.alloc<u8>(8)?;
+            total += buf.len as i64;
+            a.free(buf);
+        }
+    }
+    auto l = List<i64>::init(a);
+    defer l.deinit();
+    l.push(1)?;
+    auto p = l.at(0);
+    for (auto i : 0..3) {
+        for (auto j : 0..2) {
+            p = l.at(0);
+            *p = j;
+            l.push(j)?;
+        }
+    }
+    println(total, l.len);
+}
+
+void drop(move i64* p) { }
+
+void reinit_in_both_arms() {
+    auto a = 1 as i64;
+    auto b = 2 as i64;
+    auto p = &a;
+    for (auto i : 0..3) {
+        if (i == 1) { p = &a; } else { p = &b; }
+        drop(p);
+    }
+}
+
+void and_rhs_consumes() {
+    auto g = mk();
+    auto c = true;
+    if (c && g.id == 1) { g.rel(); } else { g.rel(); }
+}
+
+!void main() {
+    by_enum(.Red);
+    by_int(1);
+    by_bool(true);
+    by_union(.A(1));
+    println(by_value(true), color_value(.Green));
+    nested_loops()?;
+    reinit_in_both_arms();
+    and_rhs_consumes();
+    println("flow2 ok");
+}

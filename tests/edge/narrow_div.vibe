@@ -1,0 +1,12 @@
+i8 d8(i8 a, i8 b) { return a / b; }
+i8 r8(i8 a, i8 b) { return a % b; }
+i16 d16(i16 a, i16 b) { return a / b; }
+i16 r16(i16 a, i16 b) { return a % b; }
+i32 d32(i32 a, i32 b) { return a / b; }
+i32 r32(i32 a, i32 b) { return a % b; }
+
+void main() {
+    println(d8(100, -1), r8(7, -1), d8(-9, -3), d8(-128, 1), r8(-128, 7));
+    println(d16(1000, -1), r16(7, -1), d16(-9, -3), d16(-32768, 1), r16(-32768, 7));
+    println(d32(100000, -1), r32(7, -1), d32(-9, -3), d32(-2147483647 - 1, 1), r32(-2147483647 - 1, 7));
+}

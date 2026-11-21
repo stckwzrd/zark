@@ -17,6 +17,7 @@ test "tcp echo" {
         }
         c.close();
     })?;
+    errdefer { l.close(); srv.join(); }
     auto c = net::connect_to("localhost", port)?;
     c.set_timeout(5000)?;
     c.write_all("hello\r\nworld\n")?;
@@ -71,6 +72,7 @@ test "http client against our server" {
                 res.text("no") catch {};
             }) catch {};
         })?;
+        errdefer { srv.stop(); t.join(); }
         u8[128] ub;
         auto r = http::get(a, bprint(ub[..], "http://127.0.0.1:{port}/hello?name=Ann%20B")?)?;
         assert(r.status == 200 && r.body == "hello Ann B" && str_starts_with(r.header("Content-Type"), "text/plain"));

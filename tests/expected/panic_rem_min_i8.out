@@ -1,0 +1,1 @@
+panic: integer overflow at tests/panics/rem_min_i8.vibe:5

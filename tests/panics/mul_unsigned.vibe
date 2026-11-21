@@ -1,0 +1,4 @@
+void main() {
+    u64 a = 4294967296;
+    println(a * a);
+}

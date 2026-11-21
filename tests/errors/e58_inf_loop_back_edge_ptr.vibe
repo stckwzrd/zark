@@ -1,0 +1,13 @@
+void drop(move i64* p) { }
+void main() {
+    auto a = 1 as i64;
+    auto p = &a;
+    auto n = 0;
+    while (true) {
+        if (n > 1) { break; }
+        n += 1;
+        p = &a;
+        drop(p);
+    }
+    println(*p);
+}

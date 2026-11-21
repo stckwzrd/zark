@@ -1,0 +1,6 @@
+i32 id(i32 x) { return x; }
+void main() {
+    const i32 m = id(-2147483647 - 1);
+    const i32 d = id(-1);
+    println(m / d);
+}

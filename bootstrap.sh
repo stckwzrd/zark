@@ -33,5 +33,6 @@ tests/no_magic_names.sh
 
 echo "== test suite with the self-hosted compiler"
 VIBE=build/stage2 tests/run.sh
-cp build/stage2 build/vibe
+cp build/stage2 build/vibe.new
+mv -f build/vibe.new build/vibe
 echo "== done: build/vibe is the self-hosted compiler"

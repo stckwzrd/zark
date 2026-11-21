@@ -1,0 +1,6 @@
+i16 id(i16 x) { return x; }
+void main() {
+    const i16 m = id(-32768);
+    const i16 d = id(-1);
+    println(m / d);
+}

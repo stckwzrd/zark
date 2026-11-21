@@ -1,0 +1,6 @@
+!void main() {
+    const auto a = c_allocator();
+    auto buf = a.alloc<u8>(10)?;
+    { defer a.free(buf); }
+    buf[1] = 2;
+}

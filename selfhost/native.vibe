@@ -1266,6 +1266,8 @@ struct Native {
         if (t.k == .I && sign && t.bits < 64 && t.bits > 1) {
             const auto sh = 64 - t.bits;
             bits = (bits << sh) >> sh;
+        } else if (t.k == .I && !sign && t.bits < 64 && t.bits > 0) {
+            bits = bits & (((1 as i64) << t.bits) - 1);
         }
         asm.mov_imm(reg, bits)?;
     }
