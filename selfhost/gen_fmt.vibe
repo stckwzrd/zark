@@ -228,12 +228,36 @@ bool is_agg_type(Type* t) { return t.k == .Strct || t.k == .Array || t.k == .Sli
     if (!is_first || first.ty == null) { v = this->gen_expr(e, null)?; }
     if (v.ty.k == .Void) { cur.append("void")?; return };
     if (v.ty.k == .Null) { cur.append("(nil)")?; return };
+    if (spec.len > 0 && !this->user_fmt(v.ty)) { this->check_spec(spec, e.line)?; }
     const auto thunk = this->fmt_thunk(v.ty)?;
     const auto slot = this->spill(v)?;
     auto tn = this->sb();
     sprint(&tn, "@vb.__ff{thunk}")?;
     pieces.push(FPiece{ .lit = cur.slice(), .ptr = slot.v, .thunk = tn.slice(), .spec = spec, .has = true })?;
     *cur = this->sb();
+}
+
+!void Gen::check_spec(str spec, i64 line) {
+    auto i = 0;
+    while (i < spec.len && str_find_byte("-+ 0#", spec[i]) >= 0) { i += 1; }
+    auto width = 0;
+    while (i < spec.len && spec[i] >= '0' && spec[i] <= '9' && width <= 4096) {
+        width = width * 10 + (spec[i] - '0') as i64;
+        i += 1;
+    }
+    auto prec = 0;
+    if (i < spec.len && spec[i] == '.') {
+        i += 1;
+        while (i < spec.len && spec[i] >= '0' && spec[i] <= '9' && prec <= 4096) {
+            prec = prec * 10 + (spec[i] - '0') as i64;
+            i += 1;
+        }
+    }
+    if (i < spec.len && ((spec[i] >= 'a' && spec[i] <= 'z') || (spec[i] >= 'A' && spec[i] <= 'Z'))) { i += 1; }
+    if (i == spec.len && width <= 4096 && prec <= 4096) { return; }
+    this->err(line);
+    eprintln("bad format '{spec}' after ':': a format is [flags][width][.precision][letter], like {{x:08X}} or {{pi:.3}}; to print a literal brace write {{{{ or }}}}");
+    return error.CompileFailed;
 }
 
 /// Returns the id of the thunk that formats values of type `t`, generating it on first use.
