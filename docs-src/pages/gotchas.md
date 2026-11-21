@@ -18,21 +18,19 @@ void main() {
 }
 ```
 
-`const u8 b = 300;` and `const u32 x = -1;` are compile errors. A value computed at run time still wraps silently (see below).
+`const u8 b = 300;` and `const u32 x = -1;` are compile errors. A value computed at run time that does not fit is an overflow panic (see below).
 
-### Integers overflow without a warning
+### Integer overflow is a panic
 
-```vibe run
+```vibe run exit
 void main() {
     const u8 a = 250;
     const auto b = a + 10;
     println(b);
-    const i32 i = 2147483647;
-    println(i + 1);
 }
 ```
 
-The result wraps around within the type. To catch it, build with `--check-overflow` (a panic with file and line) or compute in a wider type.
+In a safe build the program stops with `panic: integer overflow` and the file and line. If wrapping is what you want, write `+%`, `-%` or `*%`; otherwise compute in a wider type. `--release` removes the check and the result wraps around.
 
 ### Integer division by zero panics
 

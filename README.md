@@ -65,7 +65,7 @@ VIBE=build/vibe tests/run.sh              # test suite
 | `--release` | `-O2` and bounds checks removed |
 | `--fast-math` | `--fast` plus fast-math flags on float arithmetic (reassociation, like `-ffast-math`) |
 | `-g` | own backend: keep locals in memory and describe them for gdb (`print x`, `info locals`) |
-| `--check-overflow` | panics with file and line when `+`, `-` or `*` on integers overflows in your code (the prelude is not checked) |
+| `--check-overflow` | checks `+`, `-` and `*` for overflow even with `--release` (a safe build always checks your code; the prelude is not checked) |
 | `--fast` | `--release` plus `nsw` on signed arithmetic (signed overflow is undefined, as in C++) |
 | `-o out` | output binary |
 | `-- a b` | arguments for `vibe run` |
