@@ -198,6 +198,8 @@ Containers such as `List<T>` and `Map<V>` take the allocator in `init` and relea
 
 Ownership: a parameter written `move T x`, or a method written `R name(...) move { ... }` (which consumes `this`), takes the argument over. When the argument is a plain local variable or parameter, the compiler rejects any later use of that variable until it is assigned again. The state is merged over `if`, `match`, `catch` and loops (a variable consumed in a loop body must be reassigned or left through `break`/`return`). `defer` and `errdefer` bodies are checked where they run. The check follows variable names only: copies of a pointer and field paths are not tracked. `move` is contextual, not a keyword. The prelude marks `Allocator.free`, `Allocator.destroy` and the `deinit`/`close`/`join` methods.
 
+Borrows: a method written `R name(...) borrows { ... }` returns a pointer or slice into the receiver, and one written `invalidates` may move or free what earlier pointers refer to. When a local variable is initialized or assigned from a call to a `borrows` method of a local variable `c`, from `&c.f`, `&c[i]` or `c[a..b]` with `c` a pointer or slice, any later use of that variable after `c` was consumed or after an `invalidates` call on `c` is an error. A pointer or slice into a local array or struct value (`&x`, `&x.f`, `&a[i]`, `a[lo..hi]`) cannot be returned, and cannot be stored through a pointer parameter or into a global. The prelude marks `List.push/append/insert/reserve`, `Map.put/remove` as `invalidates` and `List.at/slice`, `Map.get_ptr` as `borrows`. Like `move`, both words are contextual.
+
 ## 8. C interop
 
 - `extern` declares a C function and `export` defines one.

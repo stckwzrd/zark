@@ -157,6 +157,15 @@ bool Gen::names_type(Expr* e) {
         }
         const auto rv = this->call_method(md, recv, args, explicit, expected, line)?;
         if (md.params.len > 0 && md.params.get(0).move) { this->move_mark(f.l, md.name, line)?; }
+        if (f.l.k == .Ident && (md.invalidates || md.borrows)) {
+            const auto rp = this->local_ptr(f.l.name);
+            if (rp.len > 0 && md.invalidates) { this->invalidate(rp, f.l.name, md.name, line)?; }
+            if (rp.len > 0 && md.borrows) {
+                this->bor_field = f;
+                this->bor_ptr = rp;
+                this->bor_name = f.l.name;
+            }
+        }
         return rv;
     }
     if (recv.ty.k == .Strct && !recv.ty.si.decl.is_union) {
