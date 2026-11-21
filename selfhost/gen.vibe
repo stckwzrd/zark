@@ -69,6 +69,15 @@ struct Gen {
     i64 rdepth;
     i64 cdepth;
     List<MoveRec> moved;
+    Map<Expr*> cts;
+    List<Expr*> ct_checks;
+    Map<CtVal*> ct_cache;
+    List<str> ct_extras;
+    str ct_key;
+    str ct_mode;
+    str ct_out;
+    str self_path;
+    i64 nct;
     bool reinit;
     Expr* bor_field;
     str bor_ptr;
@@ -745,6 +754,7 @@ struct Gen {
     }
 
     !void generate() {
+        if (this->ct_key.len > 0) { this->install_ct_main()?; } else { for (auto c : this->ct_checks) { _ = this->ct_eval(c)?; } }
         for (auto c : this->const_order) { if (c.mutable) { this->emit_global_var(c)?; } }
         FnInst* main_inst = null;
         auto test_insts = List<FnInst*>::init(this->a);
@@ -957,6 +967,10 @@ struct Gen {
     g.funcs_out = List<u8>::init(a);
     g.body = List<u8>::init(a);
     g.allocas = List<u8>::init(a);
+    g.cts = Map<Expr*>::init(a);
+    g.ct_checks = List<Expr*>::init(a);
+    g.ct_cache = Map<CtVal*>::init(a);
+    g.ct_extras = List<str>::init(a);
     g.scopes = List<Scope>::init(a);
     g.loops = List<Loop>::init(a);
     g.env = g.new_env()?;

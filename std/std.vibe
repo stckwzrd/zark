@@ -633,6 +633,15 @@ extern i32 mkdir(u8* path, u32 mode);
     if (data.len > 0 && fwrite(data.ptr, 1, data.len as u64, f) != data.len as u64) { return error.WriteFailed; }
 }
 
+template<T> void __ct_emit(str path, T v) {
+    const auto p = &v as *u8;
+    write_file(path, p[0..sizeof(T) as i64]) catch panic("cannot write the comptime result to {path}");
+}
+
+void __ct_emit_str(str path, str v) {
+    write_file(path, v) catch panic("cannot write the comptime result to {path}");
+}
+
 bool file_exists(str path) {
     u8[4096] pbuf;
     const auto p = to_cstr(pbuf[..], path) catch return false;

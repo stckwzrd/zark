@@ -1,0 +1,175 @@
+import "gen_move.vibe";
+
+struct CtVal { str name; Type* ty; str content; i64 mode; }
+
+bool Gen::ct_plain(Type* t) {
+    if (t.k == .Int || t.k == .Float || t.k == .Bool || t.k == .Enm) { return true; }
+    if (t.k == .Array) { return this->ct_plain(t.elem); }
+    if (t.k == .Strct) {
+        for (auto f : t.si.fields) { if (!this->ct_plain(f.ty)) { return false; } }
+        return true;
+    }
+    return false;
+}
+
+!Type* Gen::ct_type(Expr* e) {
+    const auto saved_body = this->body.len;
+    const auto saved_allocas = this->allocas.len;
+    const auto saved_ntmp = this->ntmp;
+    const auto saved_nlbl = this->nlbl;
+    const auto saved_label = this->cur_label;
+    const auto saved_term = this->terminated;
+    const auto saved_moved = this->move_copy(this->moved)?;
+    const auto saved_scopes = this->scopes;
+    const auto saved_env = this->env;
+    const auto saved_loops = this->loops;
+    defer {
+        this->body.len = saved_body;
+        this->allocas.len = saved_allocas;
+        this->ntmp = saved_ntmp;
+        this->nlbl = saved_nlbl;
+        this->cur_label = saved_label;
+        this->terminated = saved_term;
+        this->moved = saved_moved;
+        this->scopes = saved_scopes;
+        this->env = saved_env;
+        this->loops = saved_loops;
+    }
+    this->scopes = List<Scope>::init(this->a);
+    this->loops = List<Loop>::init(this->a);
+    this->push_scope()?;
+    this->env = this->new_env()?;
+    const auto v = this->gen_expr(e.l, null)?;
+    return v.ty;
+}
+
+!CtVal* Gen::ct_eval(Expr* e) {
+    const auto key = e.name;
+    if (this->ct_cache.has(key)) { return this->ct_cache.get(key)?; }
+    const auto ty = this->ct_type(e)?;
+    auto mode = 0;
+    auto mode_name = "plain";
+    if (ty.k == .Void) {
+        mode = 1;
+        mode_name = "void";
+    } else if (is_str(ty)) {
+        mode = 2;
+        mode_name = "str";
+    } else if (!this->ct_plain(ty)) {
+        this->err(e.line);
+        eprintln("a comptime value must be a number, bool, enum, str, or an array or struct of those; '{this->type_name(ty)?}' is not");
+        return error.CompileFailed;
+    }
+    this->nct += 1;
+    _ = mkdir(".vibe-cache", 493);
+    auto ob = this->sb();
+    sprint(&ob, ".vibe-cache/ct{this->nct}.out")?;
+    auto xb = this->sb();
+    sprint(&xb, ".vibe-cache/ct{this->nct}.exe")?;
+    auto args = List<str>::init(this->a);
+    args.append([this->self_path, "run", this->test_root])?;
+    args.append(this->ct_extras.slice())?;
+    args.append(["-o", xb.slice(), "--ct-key", key, "--ct-mode", mode_name, "--ct-out", ob.slice()])?;
+    const auto code = run(this->a, args.slice())?;
+    if (code != 0) {
+        this->err(e.line);
+        eprintln("the comptime expression failed (exit code {code}); it runs at compile time and may use functions and constants, but not variables");
+        return error.CompileFailed;
+    }
+    auto cv = this->a.create<CtVal>()?;
+    cv.ty = ty;
+    cv.mode = mode;
+    if (mode != 1) {
+        cv.content = read_file(this->a, ob.slice()) catch {
+            this->err(e.line);
+            eprintln("the comptime expression produced no result");
+            return error.CompileFailed;
+        };
+    }
+    if (mode == 0) {
+        const auto sz = this->size_of(ty)?;
+        if (cv.content.len as u64 != sz) {
+            this->err(e.line);
+            eprintln("the comptime result has {cv.content.len} bytes, expected {sz}");
+            return error.CompileFailed;
+        }
+        const auto al = max(this->align_of(ty)?, 8 as u64);
+        auto nb = this->sb();
+        sprint(&nb, "@ct.{this->nct}")?;
+        cv.name = nb.slice();
+        sprint(&this->globals_out, "{cv.name} = private unnamed_addr constant [{cv.content.len} x i8] c\"")?;
+        const auto w = &this->globals_out;
+        for (auto c : cv.content) { sprint(w, "\\{c:02X}")?; }
+        sprint(w, "\", align {al}\n")?;
+    }
+    this->ct_cache.put(key, cv)?;
+    return cv;
+}
+
+!Value Gen::gen_comptime(Expr* e, Type* expected) {
+    const auto cv = this->ct_eval(e)?;
+    if (cv.mode == 1) { return Value{ .ty = this->t_void, .v = "" }; }
+    if (cv.mode == 2) {
+        const auto s = this->a.create<Expr>()?;
+        s.k = .StrLit;
+        s.name = cv.content;
+        s.line = e.line;
+        s.off = e.off;
+        return this->gen_expr(s, expected);
+    }
+    return this->load(cv.ty, cv.name);
+}
+
+!Addr Gen::ct_addr(Expr* e) {
+    const auto cv = this->ct_eval(e)?;
+    if (cv.mode != 0) { return this->spill(this->gen_comptime(e, null)?); }
+    return Addr{ .ty = cv.ty, .v = cv.name, .imm = true };
+}
+
+!void Gen::install_ct_main() {
+    if (!this->cts.has(this->ct_key)) {
+        eprintln("error: comptime expression {this->ct_key} not found (comptime inside string interpolation is not supported)");
+        return error.CompileFailed;
+    }
+    const auto ce = this->cts.get(this->ct_key)?;
+    const auto st = this->a.create<Stmt>()?;
+    st.k = .ExprS;
+    st.line = ce.line;
+    st.off = ce.off;
+    if (this->ct_mode == "void") {
+        st.e = ce.l;
+    } else {
+        const auto call = this->a.create<Expr>()?;
+        call.k = .Call;
+        call.line = ce.line;
+        call.off = ce.off;
+        const auto callee = this->a.create<Expr>()?;
+        callee.k = .Ident;
+        callee.line = ce.line;
+        callee.off = ce.off;
+        callee.name = "__ct_emit";
+        if (this->ct_mode == "str") { callee.name = "__ct_emit_str"; }
+        const auto path = this->a.create<Expr>()?;
+        path.k = .StrLit;
+        path.line = ce.line;
+        path.off = ce.off;
+        path.name = this->ct_out;
+        call.l = callee;
+        call.args = List<Expr*>::init(this->a);
+        call.args.push(path)?;
+        call.args.push(ce.l)?;
+        st.e = call;
+    }
+    const auto body = this->a.create<Stmt>()?;
+    body.k = .Block;
+    body.line = ce.line;
+    body.off = ce.off;
+    body.stmts = List<Stmt*>::init(this->a);
+    body.stmts.push(st)?;
+    const auto f = this->a.create<FnDecl>()?;
+    *f = FnDecl{
+        .name = "main", .type_params = List<str>::init(this->a), .constraints = List<str>::init(this->a), .params = List<Param>::init(this->a),
+        .ret = null, .body = body, .line = ce.line, .file = this->test_root, .receiver_params = List<str>::init(this->a)
+    };
+    this->fns.put("main", f)?;
+}
