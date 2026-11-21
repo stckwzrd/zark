@@ -153,7 +153,7 @@
 <ul>
 <li>Add a <code>Triangle</code> shape: it only needs an <code>intersect</code> method.</li>
 <li>Add a <code>&quot;glass&quot;</code> material to the <code>union</code> and see which <code>match</code> the compiler asks you to extend.</li>
-<li>Build with <code>--check-overflow</code> and see that the checksum, which uses <code>*%</code>, keeps wrapping on purpose.</li>
+<li>Note that the checksum uses <code>*%</code>, so it wraps on purpose while ordinary <code>*</code> would panic on overflow.</li>
 </ul>
 
 <div class="pager"><a class="prev" href="tour.html"><small>Previous</small>Quick tour</a><a class="next" href="cpp-style.html"><small>Next</small>Vibe for C++ programmers</a></div>

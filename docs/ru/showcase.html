@@ -153,7 +153,7 @@
 <ul>
 <li>Добавьте фигуру <code>Triangle</code>: ей нужен только метод <code>intersect</code>.</li>
 <li>Добавьте в <code>union</code> материал <code>&quot;glass&quot;</code> и посмотрите, какие <code>match</code> компилятор попросит дополнить.</li>
-<li>Соберите с <code>--check-overflow</code> и убедитесь, что контрольная сумма с <code>*%</code> по-прежнему заворачивается намеренно.</li>
+<li>Обратите внимание: контрольная сумма использует <code>*%</code>, поэтому заворачивается намеренно, а обычное <code>*</code> при переполнении паниковало бы.</li>
 </ul>
 
 <div class="pager"><a class="prev" href="tour.html"><small>Назад</small>Быстрый тур</a><a class="next" href="cpp-style.html"><small>Дальше</small>Vibe для C++-программиста</a></div>

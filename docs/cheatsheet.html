@@ -419,7 +419,7 @@ r = 2</code></pre></div></div>
 <p><code>vibe test main.vibe</code>. See <a href="testing.html">testing</a>.</p>
 <h2 id="pitfalls-in-one-line"><a class="anchor" href="#pitfalls-in-one-line">#</a>Pitfalls in one line</h2>
 <ul>
-<li>A literal outside the range of its type is truncated silently, and integers overflow silently (unless you build with <code>--check-overflow</code>).</li>
+<li>A literal outside the range of its type is a compile error, and integer overflow is a panic in a safe build (use <code>+%</code>, <code>-%</code>, <code>*%</code> to wrap on purpose; <code>--release</code> removes the check).</li>
 <li>Integer division by zero crashes the program.</li>
 <li><code>catch</code> and <code>orelse</code> take everything to the right: use parentheses.</li>
 <li><code>{</code> in a string is an interpolation, a literal brace is <code>{{</code>.</li>

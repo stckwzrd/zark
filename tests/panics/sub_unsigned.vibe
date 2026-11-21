@@ -1,0 +1,4 @@
+void main() {
+    u64 n = 0;
+    println(n - 1);
+}
