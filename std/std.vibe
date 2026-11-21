@@ -524,7 +524,7 @@ struct Map<V> {
     }
 
     /// auto it = m.iter(); while (it.next()) { println(it.key(), it.value()); }
-    MapIter<V> iter() { return MapIter<V>{ .entries = this->entries, .i = -1 }; }
+    MapIter<V> iter() borrows { return MapIter<V>{ .entries = this->entries, .i = -1 }; }
 }
 
 struct MapIter<V> {
@@ -1957,7 +1957,7 @@ struct HashMap<K, V> {
     }
 
     /// auto it = m.iter(); while (it.next()) { println(it.key(), it.value()); }
-    HashIter<K, V> iter() { return HashIter<K, V>{ .entries = this->entries, .i = -1 }; }
+    HashIter<K, V> iter() borrows { return HashIter<K, V>{ .entries = this->entries, .i = -1 }; }
 
     /// the keys in a new list (in table order)
     !List<K> keys(Allocator a) {
@@ -1998,7 +1998,7 @@ struct HashSet<T> {
     bool remove(T v) { return this->m.remove(v); }
     i64 len() { return this->m.len; }
     void clear() { this->m.clear(); }
-    HashIter<T, bool> iter() { return this->m.iter(); }
+    HashIter<T, bool> iter() borrows { return this->m.iter(); }
     !List<T> items(Allocator a) { return this->m.keys(a); }
 }
 

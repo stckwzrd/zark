@@ -107,6 +107,7 @@ bool can_coerce(Type* from, Type* to) {
             if (this->has_var(n)) {
                 const auto v = this->lookup_var(n)?;
                 this->move_use(n, e.line)?;
+                this->mark_escaped(n, v.ty)?;
                 return this->load(v.ty, v.ptr);
             }
             const auto mx = this->member_expr(e)?;
@@ -1014,6 +1015,25 @@ str operator_name(Tag t) {
     const auto ty = this->llty(l.ty)?;
     const auto sg = l.ty.signed;
     auto c = this->tmp()?;
+    const auto lbad = this->new_label("ovf")?;
+    const auto lok = this->new_label("ovfok")?;
+    if (op == .star && l.ty.bits == 64) {
+        const auto lslow = this->new_label("ovfslow")?;
+        const auto fast = this->tmp()?;
+        if (sg) {
+            const auto a = this->tmp()?;
+            const auto b = this->tmp()?;
+            const auto ca = this->tmp()?;
+            const auto cb = this->tmp()?;
+            sprint(this->ins()?, "  {a} = add i64 {l.v}, 2147483648\n  {b} = add i64 {r.v}, 2147483648\n  {ca} = icmp ult i64 {a}, 4294967296\n  {cb} = icmp ult i64 {b}, 4294967296\n  {fast} = and i1 {ca}, {cb}\n")?;
+        } else {
+            const auto o = this->tmp()?;
+            sprint(this->ins()?, "  {o} = or i64 {l.v}, {r.v}\n  {fast} = icmp ult i64 {o}, 4294967296\n")?;
+        }
+        sprint(this->ins()?, "  br i1 {fast}, label %{lok}, label %{lslow}\n")?;
+        this->terminated = true;
+        this->label(lslow)?;
+    }
     if (op == .star && l.ty.bits < 64) {
         auto ext = "zext";
         if (sg) { ext = "sext"; }
@@ -1055,8 +1075,6 @@ str operator_name(Tag t) {
         }
         sprint(this->ins()?, "  {z} = and {ty} {x}, {y}\n  {c} = icmp slt {ty} {z}, 0\n")?;
     }
-    const auto lbad = this->new_label("ovf")?;
-    const auto lok = this->new_label("ovfok")?;
     sprint(this->ins()?, "  br i1 {c}, label %{lbad}, label %{lok}\n")?;
     this->terminated = true;
     this->label(lbad)?;

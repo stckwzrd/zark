@@ -59,10 +59,43 @@ str Gen::local_ptr(str name) {
     return error.CompileFailed;
 }
 
+!str Gen::place_key(Expr* e) {
+    if (e.k == .Ident) {
+        const auto p = this->local_ptr(e.name);
+        if (p.len > 0) { return p; }
+        const auto mx = this->member_expr(e)?;
+        if (mx != null) { return this->place_key(mx); }
+        return "";
+    }
+    if (e.k == .Field) {
+        const auto k = this->place_key(e.l)?;
+        if (k.len == 0) { return ""; }
+        auto b = this->sb();
+        sprint(&b, "{k}.{e.name}")?;
+        return b.slice();
+    }
+    return "";
+}
+
+str Gen::place_name(Expr* e) {
+    if (e.k == .Field) {
+        auto b = this->sb();
+        if (e.l.k == .Ident && e.l.name == "this") {
+            sprint(&b, "this->{e.name}") catch return e.name;
+        } else {
+            sprint(&b, "{this->place_name(e.l)}.{e.name}") catch return e.name;
+        }
+        return b.slice();
+    }
+    return e.name;
+}
+
 !void Gen::invalidate(str cptr, str cname, str by, i64 line) {
+    auto prefix = this->sb();
+    sprint(&prefix, "{cptr}.")?;
     auto add = List<MoveRec>::init(this->a);
     for (auto r : this->moved) {
-        if (r.kind == 2 && r.cont == cptr) {
+        if (r.kind == 2 && (r.cont == cptr || str_starts_with(r.cont, prefix.slice()))) {
             add.push(MoveRec{ .ptr = r.ptr, .by = by, .line = line, .kind = 3, .cname = cname })?;
         }
     }
@@ -223,6 +256,27 @@ bool Gen::declared_before(str ptr, i64 depth) {
     return false;
 }
 
+!str Gen::iter_borrow(Expr* seq, bool via_slice) {
+    if (seq.k == .Call && this->bor_field != null && seq.l == this->bor_field && this->bor_ptr.len > 0) {
+        const auto hp = this->tmp()?;
+        this->moved.push(MoveRec{ .ptr = hp, .line = seq.line, .kind = 2, .cont = this->bor_ptr, .cname = this->bor_name })?;
+        return hp;
+    }
+    if (seq.k == .Ident) {
+        const auto p = this->local_ptr(seq.name);
+        for (auto r : this->moved) { if (r.ptr == p && r.kind == 2) { return p; } }
+    }
+    if (via_slice) {
+        const auto k = this->place_key(seq)?;
+        if (k.len > 0) {
+            const auto hp = this->tmp()?;
+            this->moved.push(MoveRec{ .ptr = hp, .line = seq.line, .kind = 2, .cont = k, .cname = this->place_name(seq) })?;
+            return hp;
+        }
+    }
+    return "";
+}
+
 !Loop Gen::loop_new(str brk, str cont, i64 depth, str label, i64 md) {
     return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a) };
 }
@@ -231,6 +285,11 @@ bool Gen::declared_before(str ptr, i64 depth) {
     auto back = lp.conts;
     if (!this->terminated) { back = this->move_join(back, this->moved)?; }
     for (auto r : back) {
+        if (r.kind == 3 && lp.iter.len > 0 && r.ptr == lp.iter) {
+            this->err(r.line);
+            eprintln("'{r.cname}' is changed by '{r.by}' while this loop is still iterating over it; leave the loop right after the change (break or return) or iterate over a copy");
+            return error.CompileFailed;
+        }
         if (r.kind != 0 && r.kind != 3) { continue; }
         auto before = false;
         for (auto q : s0) { if (q.ptr == r.ptr && q.kind == r.kind) { before = true; } }
@@ -247,4 +306,44 @@ bool Gen::declared_before(str ptr, i64 depth) {
     auto post = this->move_join(s0, back)?;
     post = this->move_join(post, lp.brks)?;
     this->moved = post;
+}
+
+bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.decl.owned; }
+
+!void Gen::register_owned(str slot, str name, Type* ty, i64 line) {
+    if (!is_owned(ty)) { return; }
+    const auto sc = &this->scopes.items[this->scopes.len - 1];
+    sc.owned.push(OwnedVar{ .ptr = slot, .name = name, .tname = ty.si.decl.name, .line = line })?;
+}
+
+!void Gen::mark_escaped(str name, Type* ty) {
+    if (!is_owned(ty)) { return; }
+    const auto p = this->local_ptr(name);
+    if (p.len == 0) { return; }
+    for (auto r : this->moved) { if (r.ptr == p && r.kind == 4) { return; } }
+    this->moved.push(MoveRec{ .ptr = p, .by = "", .line = this->at_line, .kind = 4 })?;
+}
+
+!void Gen::check_dropped(Type* ty, i64 line) {
+    if (!is_owned(ty)) { return; }
+    this->err(line);
+    eprintln("a value of type '{ty.si.decl.name}' is dropped here; keep it in a variable and consume it (for example join it), or pass it to something that does");
+    return error.CompileFailed;
+}
+
+!void Gen::check_owned(i64 hi, i64 lo) {
+    if (this->terminated) { return; }
+    auto i = lo;
+    while (i <= hi) {
+        for (auto ov : this->scopes.items[i].owned) {
+            auto ok = this->move_find(ov.ptr) >= 0;
+            for (auto r : this->moved) { if (r.ptr == ov.ptr && r.kind == 4) { ok = true; } }
+            if (!ok) {
+                this->err(ov.line);
+                eprintln("'{ov.name}' holds a '{ov.tname}' that is not consumed before it goes out of scope; call a method that takes it over (for example join), pass it on, or write `defer {ov.name}.join();` right after creating it");
+                return error.CompileFailed;
+            }
+        }
+        i += 1;
+    }
 }

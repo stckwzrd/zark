@@ -45,11 +45,15 @@ struct MatchRes { Type* ty; str slot; }
             const auto slot = this->alloca(ty, s.name)?;
             if (has_val) { this->store(val, slot)?; } else { this->zero_fill(ty, slot)?; }
             this->declare_var(s.name, Var{ .ptr = slot, .ty = ty, .mutable = s.mutable }, s.line)?;
-            if (has_val) { this->set_origin(slot, s.name, s.e, s.line)?; }
+            if (has_val) {
+                this->set_origin(slot, s.name, s.e, s.line)?;
+                this->register_owned(slot, s.name, ty, s.line)?;
+            }
         }
         .Assign => {
             if (s.e2.k == .Ident && s.e2.name == "_") {
-                _ = this->gen_expr(s.e, null)?;
+                const auto dv = this->gen_expr(s.e, null)?;
+                this->check_dropped(dv.ty, s.line)?;
                 return;
             }
             this->reinit = s.op == .eq && s.e2.k == .Ident;
@@ -86,6 +90,7 @@ struct MatchRes { Type* ty; str slot; }
         }
         .ExprS => {
             const auto v = this->gen_expr(s.e, null)?;
+            this->check_dropped(v.ty, s.line)?;
             if (v.ty.k == .Errun) { this->err(s.line); eprintln("error union is ignored; handle it with '?' or 'catch'"); return error.CompileFailed };
         }
         .If => {
@@ -417,12 +422,15 @@ struct MatchRes { Type* ty; str slot; }
     const auto md = this->scopes.len;
     const auto s0 = this->move_copy(this->moved)?;
     this->push_scope()?;
+    this->bor_field = null;
     auto a = this->gen_addr(s.e)?;
+    auto via_slice = false;
     if (a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct)) {
         const auto p = this->load(a.ty, a.v)?;
         a = Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
     }
     if (a.ty.k == .Strct) {
+        via_slice = true;
         auto kb = this->sb();
         sprint(&kb, "{a.ty.si.decl.name}.slice")?;
         if (!this->methods.has(kb.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}' (no slice() method)"); return error.CompileFailed; }
@@ -477,7 +485,9 @@ struct MatchRes { Type* ty; str slot; }
         this->store(cur, islot)?;
         this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
     }
-    this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md)?)?;
+    auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md)?;
+    lp.iter = this->iter_borrow(s.e, via_slice)?;
+    this->loops.push(lp)?;
     this->gen_stmt(s.body)?;
     this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
     this->loops.len -= 1;

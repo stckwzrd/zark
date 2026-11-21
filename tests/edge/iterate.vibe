@@ -1,0 +1,39 @@
+struct Bag {
+    List<i64> items;
+    !void dup_all() {
+        const auto n = this->items.len;
+        for (auto i : 0..n) {
+            this->items.push(this->items.get(i))?;
+        }
+    }
+    !void find_and_add(i64 want) {
+        for (auto x : this->items) {
+            if (x == want) {
+                this->items.push(want * 2)?;
+                return;
+            }
+        }
+    }
+}
+void main() {
+    auto b = Bag{ .items = List<i64>::init(c_allocator()) };
+    defer b.items.deinit();
+    b.items.push(1) catch return;
+    b.items.push(2) catch return;
+    b.dup_all() catch return;
+    b.find_and_add(2) catch return;
+    println(b.items.slice());
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    for (auto i : 0..3) { l.push(i) catch return; }
+    auto copy = l.clone() catch return;
+    defer copy.deinit();
+    for (auto x : copy) { l.push(x) catch return; }
+    for (auto x : l) { println(x); }
+    auto m = Map<i64>::init(c_allocator());
+    defer m.deinit();
+    m.put("a", 1) catch return;
+    auto it = m.iter();
+    while (it.next()) { println(it.key(), it.value()); }
+    m.put("c", 3) catch return;
+}
