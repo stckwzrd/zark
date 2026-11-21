@@ -1,0 +1,7 @@
+template<T> i64 grow(T x) {
+    return grow(&x);
+}
+
+void main() {
+    println(grow(1));
+}

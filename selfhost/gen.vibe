@@ -65,6 +65,9 @@ struct Gen {
     bool ovf;
     bool wrapping;
     bool needs_llvm;
+    i64 rdepth;
+    i64 cdepth;
+    i64 sdepth;
 
     Map<FnDecl*> fns;
     Map<FnDecl*> methods;
@@ -641,6 +644,10 @@ struct Gen {
         }
         const auto key = name.slice();
         if (this->fn_insts.has(key)) { return this->fn_insts.get(key); }
+        if (key.len > 400) {
+            this->err(decl.line); eprintln("'{decl.name}' is instantiated recursively with ever larger types");
+            return error.CompileFailed;
+        }
 
         const auto saved_file = this->file;
         this->file = decl.file;
@@ -786,6 +793,7 @@ struct Gen {
         out.append(this->decls_out.slice())?;
         out.append("\n")?;
         out.append(this->funcs_out.slice())?;
+        if (this->safety) { out.append("\nattributes #0 = {{ null_pointer_is_valid }}\n")?; }
     }
 
     !void gen_test_main(List<FnInst*> insts) {
@@ -873,7 +881,7 @@ struct Gen {
             this->store(Value{ .ty = pt, .v = an.slice() }, slot)?;
             this->declare_var(p.name, Var{ .ptr = slot, .ty = pt, .mutable = p.mutable }, decl.line)?;
         }
-        hdr.append(") {{\n")?;
+        if (this->safety) { hdr.append(") #0 {{\n")?; } else { hdr.append(") {{\n")?; }
         for (auto [i, cap] : fi.caps) {
             const auto cp = this->tmp()?;
             sprint(this->ins()?, "  {cp} = getelementptr ptr, ptr %ctx, i64 {i}\n")?;

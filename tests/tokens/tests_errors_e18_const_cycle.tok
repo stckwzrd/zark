@@ -1,0 +1,24 @@
+1 .kw_const const
+1 .ident auto
+1 .ident A
+1 .eq =
+1 .ident B
+1 .semi ;
+2 .kw_const const
+2 .ident auto
+2 .ident B
+2 .eq =
+2 .ident A
+2 .semi ;
+4 .ident void
+4 .ident main
+4 .lparen (
+4 .rparen )
+4 .lbrace {
+5 .ident println
+5 .lparen (
+5 .ident A
+5 .rparen )
+5 .semi ;
+6 .rbrace }
+7 .eof 

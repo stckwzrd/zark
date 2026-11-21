@@ -180,6 +180,9 @@ bool Gen::satisfies(Type* t, str name) {
 }
 
 !Type* Gen::resolve_type(TypeExpr* te, Env env) {
+    this->rdepth += 1;
+    defer this->rdepth -= 1;
+    if (this->rdepth > 200) { this->err(0); eprintln("type '{te.name}' is nested too deeply or refers to itself (alias cycle?)"); return error.CompileFailed; }
     const auto t = this->resolve_type_core(te, env)?;
     if (!te.vol) { return t; }
     const auto v = this->a.create<Type>()?;
@@ -207,6 +210,7 @@ bool Gen::satisfies(Type* t, str name) {
             if (n < 0) { this->err(te.len.line); eprintln("negative array length"); return error.CompileFailed; }
             const auto t = this->mk_elem(.Array, this->resolve_type(te.elem, env)?)?;
             t.len = n as u64;
+            if (n > 0x100000000) { this->err(te.len.line); eprintln("array of {n} elements is too large"); return error.CompileFailed; }
             return t;
         }
         .Name => {
@@ -259,6 +263,10 @@ bool Gen::satisfies(Type* t, str name) {
     if (args.len > 0) { disp.append("]")?; }
     const auto key = name.slice();
     if (this->struct_insts.has(key)) { return this->struct_insts.get(key); }
+    if (key.len > 400) {
+        this->err(sd.line); eprintln("'{sd.name}' is instantiated recursively with ever larger types");
+        return error.CompileFailed;
+    }
     const auto inst = this->a.create<StructInst>()?;
     inst.decl = sd;
     inst.args = args;
@@ -335,6 +343,9 @@ bool Gen::satisfies(Type* t, str name) {
 }
 
 !i64 Gen::eval_const(Expr* e) {
+    this->cdepth += 1;
+    defer this->cdepth -= 1;
+    if (this->cdepth > 200) { this->err(e.line); eprintln("constant expression is nested too deeply or refers to itself"); return error.CompileFailed; }
     match e.k {
         .IntLit => return e.ival as i64;
         .Ident => {
@@ -387,6 +398,9 @@ bool Gen::satisfies(Type* t, str name) {
         .Array => return t.len * this->size_of(t.elem)?;
         .Strct => {
             if (t.si.decl.is_union) { return 8 + 8 * t.si.payload_words; }
+            this->sdepth += 1;
+            defer this->sdepth -= 1;
+            if (this->sdepth > 100) { this->err(t.si.decl.line); eprintln("struct '{t.si.decl.name}' contains itself"); return error.CompileFailed; }
             u64 off = 0;
             u64 maxa = 1;
             if (!t.si.decl.packed) { maxa = max(1 as u64, t.si.decl.align as u64); }
@@ -421,6 +435,9 @@ bool Gen::satisfies(Type* t, str name) {
         .Strct => {
             if (t.si.decl.is_union) { return 8; }
             if (t.si.decl.packed) { return 1; }
+            this->sdepth += 1;
+            defer this->sdepth -= 1;
+            if (this->sdepth > 100) { this->err(t.si.decl.line); eprintln("struct '{t.si.decl.name}' contains itself"); return error.CompileFailed; }
             u64 m = max(1 as u64, t.si.decl.align as u64);
             for (auto f : t.si.fields) { m = max(m, this->align_of(f.ty)?); }
             return m;
@@ -441,6 +458,9 @@ bool Gen::satisfies(Type* t, str name) {
         .Strct => {
             if (t.si.decl.is_union) { return 8; }
             if (t.si.decl.packed || t.si.explicit) { return 1; }
+            this->sdepth += 1;
+            defer this->sdepth -= 1;
+            if (this->sdepth > 100) { this->err(t.si.decl.line); eprintln("struct '{t.si.decl.name}' contains itself"); return error.CompileFailed; }
             u64 m = 1;
             for (auto f : t.si.fields) { m = max(m, this->ll_align(f.ty)?); }
             return m;

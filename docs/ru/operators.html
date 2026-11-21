@@ -55,7 +55,7 @@
     1 | void main() { println(&quot;a&quot; + &quot;b&quot;);
       |                           ^</code></pre></div></div>
 <p>Склейка делается интерполяцией и <a href="strings.html#сборка-строк">буфером</a>: <code>&quot;{a}{b}&quot;</code>.</p>
-<p>Деление целого на ноль аварийно завершает программу (см. <a href="types.html#переполнение">типы</a>), деление дробных на ноль даёт <code>inf</code> или <code>nan</code>.</p>
+<p>Деление целого на ноль даёт панику (см. <a href="types.html#переполнение">типы</a>), деление дробных на ноль даёт <code>inf</code> или <code>nan</code>.</p>
 <h2 id="сравнения"><a class="anchor" href="#сравнения">#</a>Сравнения</h2>
 <p><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> дают <code>bool</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -145,7 +145,7 @@ false true false</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span></div><pre><code>1 7 6 -6
 16 15
 -3 3</code></pre></div></div>
-<p>Сдвиг вправо для знаковых — арифметический (знак сохраняется), для беззнаковых — логический.</p>
+<p>Сдвиг вправо для знаковых — арифметический (знак сохраняется), для беззнаковых — логический. Счётчик сдвига обрезается по ширине типа, поэтому слишком большой счётчик никогда не даёт неопределённого поведения.</p>
 <blockquote class="callout note"><p><strong>Примечание.</strong> В отличие от C, побитовые <code>&amp;</code>, <code>|</code>, <code>^</code> привязаны <strong>сильнее</strong> сравнений. Выражение <code>x &amp; 1 == 0</code> читается как <code>(x &amp; 1) == 0</code>, скобки не нужны.</p>
 </blockquote>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>

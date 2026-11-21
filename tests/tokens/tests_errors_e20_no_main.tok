@@ -1,0 +1,6 @@
+1 .ident i64
+1 .ident total
+1 .eq =
+1 .int_lit 0
+1 .semi ;
+2 .eof 

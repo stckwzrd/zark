@@ -59,6 +59,16 @@ void __ovf(str file, i64 line) {
     exit(1);
 }
 
+void __divz(str file, i64 line) {
+    eprintln("panic: division by zero at {file}:{line}");
+    exit(1);
+}
+
+void __oobs(i64 lo, i64 hi, i64 n, str file, i64 line) {
+    eprintln("panic: slice [{lo}..{hi}] out of bounds (len {n}) at {file}:{line}");
+    exit(1);
+}
+
 void __oob(i64 i, i64 n, str file, i64 line) {
     eprintln("panic: index {i} out of bounds (len {n}) at {file}:{line}");
     exit(1);
@@ -75,11 +85,15 @@ struct Allocator {
 
     template<T> !T[] alloc(i64 n) {
         if (n == 0) { return (null as *T)[0..0]; }
+        if (this->alloc_fn == null) { return error.NoAllocator; }
+        if (n < 0 || (n as u64) > 0x4000000000000000 / max(sizeof(T), 1 as u64)) { return error.OutOfMemory; }
         const auto p = this->alloc_fn(this->ctx, (n as u64) * sizeof(T), alignof(T));
         if (p == null) { return error.OutOfMemory; }
         return (p as *T)[0..n];
     }
     template<T> !T[] grow(T[] old, i64 n) {
+        if (this->alloc_fn == null) { return error.NoAllocator; }
+        if (n < 0 || (n as u64) > 0x4000000000000000 / max(sizeof(T), 1 as u64)) { return error.OutOfMemory; }
         if (this->alloc_fn != __c_alloc || old.len == 0) {
             const auto fresh = this->alloc<T>(n)?;
             if (old.len > 0) { memcpy(fresh.ptr, old.ptr, (old.len as u64) * sizeof(T)); }
@@ -91,14 +105,14 @@ struct Allocator {
         return (p as *T)[0..n];
     }
     template<T> void free(T[] s) {
-        if (s.len > 0) { this->free_fn(this->ctx, s.ptr, (s.len as u64) * sizeof(T)); }
+        if (s.len > 0 && this->free_fn != null) { this->free_fn(this->ctx, s.ptr, (s.len as u64) * sizeof(T)); }
     }
     /// one zeroed T
     template<T> !T* create() {
         const auto s = this->alloc<T>(1)?;
         return s.ptr;
     }
-    template<T> void destroy(T* p) { this->free_fn(this->ctx, p, sizeof(T)); }
+    template<T> void destroy(T* p) { if (this->free_fn != null) { this->free_fn(this->ctx, p, sizeof(T)); } }
     /// copy a string into memory owned by this allocator
     !str dup(str s) {
         const auto d = this->alloc<u8>(s.len)?;
@@ -247,15 +261,19 @@ str str_trim(str s) {
     auto neg = false;
     if (t[0] == '-') { neg = true; i = 1; }
     if (i >= t.len) { return error.InvalidNumber; }
-    auto v = 0;
+    u64 limit = 9223372036854775807;
+    if (neg) { limit = 9223372036854775808; }
+    u64 v = 0;
     while (i < t.len) {
         const auto c = t[i];
         if (c < '0' || c > '9') { return error.InvalidNumber; }
-        v = v * 10 + (c - '0') as i64;
+        const auto d = (c - '0') as u64;
+        if (v > (limit - d) / 10) { return error.InvalidNumber; }
+        v = v * 10 + d;
         i += 1;
     }
-    if (neg) { return -v; }
-    return v;
+    if (neg) { return (0 -% v) as i64; }
+    return v as i64;
 }
 
 /// read one line from stdin into `buf` (without the newline)
@@ -297,11 +315,17 @@ struct List<T> {
     }
 
     !void append(T[] xs) {
-        this->reserve(this->len + xs.len)?;
-        for (auto x : xs) {
-            this->items[this->len] = x;
-            this->len += 1;
-        }
+        const auto n = xs.len;
+        if (n == 0) { return; }
+        auto src = xs;
+        const auto base = this->items.ptr as u64;
+        const auto sp = xs.ptr as u64;
+        const auto inside = this->items.len > 0 && sp >= base && sp < base + (this->items.len as u64) * sizeof(T);
+        const auto off = (sp - base) / max(sizeof(T), 1 as u64);
+        this->reserve(this->len + n)?;
+        if (inside) { src = this->items[off as i64..off as i64 + n]; }
+        for (auto i : 0..n) { this->items[this->len + i] = src[i]; }
+        this->len += n;
     }
 
     !T pop() {
@@ -688,6 +712,7 @@ struct Arena {
 void* __arena_alloc(void* ctx, u64 n, u64 align) {
     const auto ar = ctx as *Arena;
     const auto hdr = sizeof(__ChunkHdr);
+    if (n > 0x4000000000000000 || align > 4096) { return null; }
     if (ar.head != null) {
         const auto base = (ar.head as u64) + hdr;
         const auto at = (base + ar.used + align - 1) / align * align;
@@ -745,6 +770,7 @@ i64 str_find_byte(str s, u8 c) {
         i64 d = 99;
         if (is_digit(c)) { d = (c - '0') as i64; } else if (c >= 'a' && c <= 'z') { d = (c - 'a') as i64 + 10; } else if (c >= 'A' && c <= 'Z') { d = (c - 'A') as i64 + 10; }
         if (d >= r) { return error.InvalidNumber; }
+        if (v > (0xFFFFFFFFFFFFFFFF - (d as u64)) / (r as u64)) { return error.InvalidNumber; }
         v = v * (r as u64) + (d as u64);
     }
     return v;
@@ -753,11 +779,13 @@ i64 str_find_byte(str s, u8 c) {
 extern f64 strtod(u8* s, u8**end);
 
 !f64 parse_float(str s) {
+    const auto t = str_trim(s);
+    if (t.len == 0) { return error.InvalidNumber; }
     u8[128] buf;
-    const auto p = to_cstr(buf[..], s)?;
+    const auto p = to_cstr(buf[..], t)?;
     u8* end = null;
     const auto v = strtod(p, &end);
-    if ((end as u64) - (p as u64) != s.len as u64) { return error.InvalidNumber; }
+    if ((end as u64) - (p as u64) != t.len as u64) { return error.InvalidNumber; }
     return v;
 }
 
@@ -1090,6 +1118,7 @@ struct FmtSpec {
 
 !void __fmt_float(Writer* w, f64 v, str spec) {
     if (spec.len == 1 && spec[0] == 1) { return __fmt_raw(w, bits_f64(v)); }
+    if (v != v) { return w.write("nan"); }
     u8[48] f;
     u8[512] out;
     auto n = 0;
