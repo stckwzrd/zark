@@ -42,7 +42,7 @@ println("a" + "b");
 
 Joining is done with interpolation and a [buffer](strings.md#building-strings): `"{a}{b}"`.
 
-Integer division by zero crashes the program (see [types](types.md#overflow)); floating-point division by zero gives `inf` or `nan`.
+Integer division by zero panics (see [types](types.md#overflow)); floating-point division by zero gives `inf` or `nan`.
 
 ## Comparisons
 
@@ -139,7 +139,7 @@ void main() {
 }
 ```
 
-A right shift is arithmetic for signed types (the sign is kept) and logical for unsigned ones.
+A right shift is arithmetic for signed types (the sign is kept) and logical for unsigned ones. The shift count is masked to the type width, so a count that is too large never gives undefined behavior.
 
 > **Note:** unlike C, the bitwise `&`, `|`, `^` bind **tighter** than comparisons. The expression `x & 1 == 0` reads as `(x & 1) == 0`, and no parentheses are needed.
 

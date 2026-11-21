@@ -1,0 +1,2 @@
+i64 id(i64 x) { return x; }
+void main() { auto a = [1, 2, 3]; println(a[id(1)..id(9)].len); }

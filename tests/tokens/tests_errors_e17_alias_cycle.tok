@@ -1,0 +1,27 @@
+1 .kw_type type
+1 .ident A
+1 .eq =
+1 .ident B
+1 .semi ;
+2 .kw_type type
+2 .ident B
+2 .eq =
+2 .ident A
+2 .semi ;
+4 .ident void
+4 .ident main
+4 .lparen (
+4 .rparen )
+4 .lbrace {
+5 .ident A
+5 .ident x
+5 .eq =
+5 .int_lit 0
+5 .semi ;
+6 .ident println
+6 .lparen (
+6 .ident x
+6 .rparen )
+6 .semi ;
+7 .rbrace }
+8 .eof 

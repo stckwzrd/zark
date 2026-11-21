@@ -34,7 +34,7 @@ void main() {
 
 The result wraps around within the type. To catch it, build with `--check-overflow` (a panic with file and line) or compute in a wider type.
 
-### Integer division by zero crashes the program
+### Integer division by zero panics
 
 ```vibe run exit
 void main() {
@@ -44,7 +44,7 @@ void main() {
 }
 ```
 
-This is a hardware exception, not an `error`. `vibe run` shows `error: error.Signaled`. Check the divisor before dividing.
+It is a panic, not an `error`: it cannot be caught with `catch`, and the message has the file and line. Check the divisor before dividing. In `--release` the check is removed.
 
 ### `/` on integers drops the fraction
 
@@ -318,7 +318,7 @@ Everything handed out before `reset` must not be used.
 
 ### A `List` without `init` does not work
 
-A zero `List` has no allocator, and `push` on it will crash. Always call `List<T>::init(a)`.
+A zero `List` has no allocator, and `push` on it returns `error.NoAllocator`. Always call `List<T>::init(a)`.
 
 ### A pointer to a `List` element is invalid after `push`
 
