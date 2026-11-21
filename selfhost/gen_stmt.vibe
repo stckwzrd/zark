@@ -75,8 +75,8 @@ struct MatchRes { Type* ty; str slot; }
                 this->store_to(v, addr)?;
                 if (plain_local) {
                     const auto tp = this->local_ptr(s.e2.name);
-                    this->note_event(tp, true);
                     this->set_origin(tp, s.e2.name, s.e, s.line)?;
+                    this->note_reinit(tp)?;
                 }
             } else {
                 const auto cur = this->load(addr.ty, addr.v)?;
@@ -113,7 +113,6 @@ struct MatchRes { Type* ty; str slot; }
             this->terminated = true;
             auto jn = this->join_begin()?;
             this->label(lt)?;
-            this->cond_depth += 1;
             this->gen_stmt(s.body)?;
             this->join_end(&jn)?;
             if (!this->terminated) { this->br(lend)?; }
@@ -124,7 +123,6 @@ struct MatchRes { Type* ty; str slot; }
                 this->join_end(&jn)?;
                 if (!this->terminated) { this->br(lend)?; }
             }
-            this->cond_depth -= 1;
             this->join_finish(&jn, s.els == null)?;
             this->label(lend)?;
             if (!jn.any) {
@@ -145,9 +143,7 @@ struct MatchRes { Type* ty; str slot; }
             sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
             this->terminated = true;
             this->label(lb)?;
-            this->cond_depth += 1;
             this->gen_stmt(s.body)?;
-            this->cond_depth -= 1;
             const auto lp2 = this->loops.get(this->loops.len - 1);
             this->loop_end(lp2, s0)?;
             this->loops.len -= 1;
@@ -193,9 +189,7 @@ struct MatchRes { Type* ty; str slot; }
             this->store(cur, slot)?;
             this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
             this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?)?;
-            this->cond_depth += 1;
             this->gen_stmt(s.body)?;
-            this->cond_depth -= 1;
             this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
             this->loops.len -= 1;
             this->pop_scope()?;
@@ -219,7 +213,7 @@ struct MatchRes { Type* ty; str slot; }
             }
             const auto lp = this->loops.get(li);
             if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false, true)?; }
-            if (s.k == .Brk) { this->loop_break(li)?; } else { this->loops.items[li].conts = this->move_join(lp.conts, this->moved)?; }
+            this->loop_edge(li, s.k == .Brk)?;
             if (s.k == .Brk) { this->br(lp.brk)? } else { this->br(lp.cont)?; }
         }
         .Defer => {
@@ -261,15 +255,13 @@ struct MatchRes { Type* ty; str slot; }
         this->label(lbody)?;
         this->join_arm(&jn)?;
         this->push_scope()?;
-        this->cond_depth += 1;
         this->gen_arm(arm.body, res)?;
-        this->cond_depth -= 1;
         this->pop_scope()?;
         this->join_end(&jn)?;
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
-    this->join_finish(&jn, !wild)?;
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
     this->end_match(lend, res)?;
     if (!jn.any) {
         sprint(this->ins()?, "  unreachable\n")?;
@@ -328,8 +320,8 @@ struct MatchRes { Type* ty; str slot; }
     this->store(v, res.slot)?;
 }
 
-!void Gen::check_exhaustive(Value v, List<MatchArm> arms, i64 line) {
-    for (auto arm : arms) { if (arm.pats.len == 0) { return; } }
+str Gen::missing_variant(Value v, List<MatchArm> arms) {
+    for (auto arm : arms) { if (arm.pats.len == 0) { return ""; } }
     if (v.ty.k == .Bool) {
         auto seen_true = false;
         auto seen_false = false;
@@ -339,14 +331,14 @@ struct MatchRes { Type* ty; str slot; }
                 if (pat.k == .BoolLit && !pat.bval) { seen_false = true; }
             }
         }
-        if (seen_true && seen_false) { return; }
+        if (seen_true && seen_false) { return ""; }
     }
     auto names = List<str>::init(this->a);
     for (auto arm : arms) {
         for (auto pat : arm.pats) {
             auto head = pat;
             if (pat.k == .Call) { head = pat.l };
-            names.push(head.name)?;
+            names.push(head.name) catch {};
         }
     }
     auto all = List<str>::init(this->a);
@@ -355,15 +347,28 @@ struct MatchRes { Type* ty; str slot; }
     } else if (is_union(v.ty)) {
         all = this->field_names(v.ty.si);
     } else {
-        this->err(line); eprintln("a match expression on '{this->type_name(v.ty)?}' needs a '_' arm");
-        return error.CompileFailed;
+        return "?";
     }
     for (auto name : all) {
-        if (!contains_str(names, name)) {
-            this->err(line); eprintln("match is not exhaustive: missing '.{name}' (add the arm or a '_' arm)");
-            return error.CompileFailed;
-        }
+        if (!contains_str(names, name)) { return name; }
     }
+    return "";
+}
+
+bool Gen::match_covers(Value v, List<MatchArm> arms) {
+    return this->missing_variant(v, arms).len == 0;
+}
+
+!void Gen::check_exhaustive(Value v, List<MatchArm> arms, i64 line) {
+    const auto m = this->missing_variant(v, arms);
+    if (m.len == 0) { return; }
+    this->err(line);
+    if (m == "?") {
+        eprintln("a match expression on '{this->type_name(v.ty)?}' needs a '_' arm");
+    } else {
+        eprintln("match is not exhaustive: missing '.{m}' (add the arm or a '_' arm)");
+    }
+    return error.CompileFailed;
 }
 
 !Value Gen::gen_match_expr(Expr* e, Type* expected) {
@@ -439,15 +444,13 @@ struct MatchRes { Type* ty; str slot; }
         if (bind.bind.len > 0) {
             this->declare_var(bind.bind, Var{ .ptr = pp, .ty = v.ty.si.fields.get(bind.idx).ty, .mutable = false }, arm.body.line)?;
         }
-        this->cond_depth += 1;
         this->gen_arm(arm.body, res)?;
-        this->cond_depth -= 1;
         this->pop_scope()?;
         this->join_end(&jn)?;
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
-    this->join_finish(&jn, !wild)?;
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
     this->end_match(lend, res)?;
     if (!jn.any) {
         sprint(this->ins()?, "  unreachable\n")?;
@@ -525,9 +528,7 @@ struct MatchRes { Type* ty; str slot; }
     auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?;
     lp.iter = this->iter_borrow(s.e, via_slice)?;
     this->loops.push(lp)?;
-    this->cond_depth += 1;
     this->gen_stmt(s.body)?;
-    this->cond_depth -= 1;
     this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
     this->loops.len -= 1;
     this->pop_scope()?;

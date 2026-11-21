@@ -1,0 +1,8 @@
+owned struct G { i64 id; void rel() move {} }
+G mk() { return G{ .id = 1 }; }
+bool take(G g) { g.rel(); return true; }
+void main() {
+    auto g = mk();
+    auto c = false;
+    if (c && take(g)) { }
+}
