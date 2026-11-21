@@ -269,8 +269,12 @@ ok   a deadline in the past is expired
 <td>a comment that says &quot;must be 16 bytes&quot;</td>
 </tr>
 <tr>
-<td>a <code>join</code> right next to each <code>spawn</code></td>
-<td>a thread that outlives the variables it captured</td>
+<td><code>defer t.join()</code> or <code>errdefer t.join()</code> right after each <code>spawn</code></td>
+<td>a join only at the very end, so that a <code>?</code> can leave the thread running (the compiler refuses)</td>
+</tr>
+<tr>
+<td>collect the changes, apply them after the loop</td>
+<td><code>list.push(...)</code> inside <code>for (auto x : list)</code> (the compiler refuses)</td>
 </tr>
 </tbody></table></div>
 <h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>

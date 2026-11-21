@@ -20,7 +20,7 @@ extern i32 pthread_cond_signal(Cond* c);
 extern i32 pthread_cond_broadcast(Cond* c);
 extern i32 sched_yield();
 
-struct Thread {
+owned struct Thread {
     u64 id;
     bool joined;
 
@@ -33,7 +33,7 @@ struct Thread {
     }
 
     /// lets the thread run on its own; it cannot be joined afterwards
-    void detach() {
+    void detach() move {
         _ = pthread_detach(this->id);
         this->joined = true;
     }

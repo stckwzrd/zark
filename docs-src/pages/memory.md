@@ -379,6 +379,21 @@ void main() {
 }
 ```
 
+Changing a container while a loop walks over it is the same mistake in another costume: the loop keeps reading the old buffer. The compiler follows `for` loops too, and `this->items` counts as much as a local variable:
+
+```vibe error
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    for (auto i : 0..3) { l.push(i) catch return; }
+    for (auto x : l) {
+        l.push(x * 10) catch return;
+    }
+}
+```
+
+Collect what you want to add and add it after the loop, or leave the loop right after the change (`break` or `return`); both are accepted.
+
 Your own types can use the same words after the parameter list: `T* at(i64 i) borrows { ... }` and `!void push(T v) invalidates { ... }`. As with `move`, the check follows variable names: a pointer stored in a struct field or copied through a function call is not tracked.
 
 ## What the compiler does not check

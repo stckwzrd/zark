@@ -201,7 +201,7 @@ str Gen::escaped_local(Expr* e) {
     }
     if (root.len == 0) { return; }
     this->err(line);
-    eprintln("returning a pointer or slice into local '{root}', which dies when the function returns; allocate it with an Allocator or take a pointer from the caller");
+    eprintln("returning something that points into local '{root}' (a pointer, a slice, or a closure that captured it), which dies when the function returns; allocate it with an Allocator or take a pointer from the caller");
     return error.CompileFailed;
 }
 
@@ -345,5 +345,21 @@ bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.dec
             }
         }
         i += 1;
+    }
+}
+
+!void Gen::taint_owned(str slot, Expr* init, i64 line) {
+    auto e = init;
+    while (e.k == .Try || e.k == .Catch || e.k == .Orelse) { e = e.l; }
+    if (e.k != .Call) { return; }
+    for (auto x : e.args) {
+        if (x.k == .Closure) {
+            for (auto cn : x.func.captures) {
+                if (this->local_ptr(cn).len > 0) { this->moved.push(MoveRec{ .ptr = slot, .by = cn, .line = line, .kind = 1 })?; }
+            }
+        } else {
+            const auto o = this->origin_of(x)?;
+            if (o.kind == 1) { this->moved.push(MoveRec{ .ptr = slot, .by = o.name, .line = line, .kind = 1 })?; }
+        }
     }
 }

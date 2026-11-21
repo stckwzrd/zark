@@ -146,7 +146,7 @@ i64* make() {
 void main() { println(*make()); }
 ```
 
-`returning a pointer or slice into local`: the local dies when the function returns. Return the value, let the caller pass in the storage, or allocate with an allocator.
+`returning something that points into local`: the local dies when the function returns. Return the value, let the caller pass in the storage, or allocate with an allocator.
 
 ## What a panic tells you
 

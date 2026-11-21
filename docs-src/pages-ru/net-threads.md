@@ -18,7 +18,6 @@ import "std/thread" as thread;
             for (auto k : 0..1000) { hits.add(1); }
         })?;
     }
-    for (auto t : ts) { _ = t; }
     for (auto i : 0..4) { ts[i].join(); }
     println(hits.load());
 
@@ -29,6 +28,42 @@ import "std/thread" as thread;
 ```
 
 `spawn` запускает замыкание в новом потоке. Замыкание хранит указатели на захваченные переменные, поэтому **дожидайтесь (`join`) каждого потока до того, как эти переменные выйдут из области видимости**. `spawn_fn(f, arg)` запускает обычную `fn(void*)`.
+
+Компилятор проверяет ту часть этого правила, которую видит. `Thread` в переменной должен быть присоединён (`join`), отсоединён или передан дальше на **каждом** пути выхода из функции, включая путь, по которому идёт неудавшийся `?`. Поток, брошенный на месте, отклоняется, как и возврат потока, чьё замыкание захватило локальную переменную функции:
+
+```vibe error
+import "std/thread" as thread;
+
+!void work() { }
+
+!void main() {
+    auto hits = thread::AtomicI64{};
+    auto t = thread::spawn([&hits]() -> void { hits.add(1); })?;
+    work()?;
+    t.join();
+}
+```
+
+Если `work()` вернёт ошибку, `main` завершится, пока поток ещё использует `hits`. Исправление такое же, как для памяти: поставьте очистку рядом с созданием. `defer` срабатывает при любом выходе, `errdefer` — только при неудачных, так что на нормальном пути можно присоединить поток там, где удобно:
+
+```vibe run
+import "std/thread" as thread;
+
+!void work() { }
+
+!void main() {
+    auto hits = thread::AtomicI64{};
+    auto t = thread::spawn([&hits]() -> void { hits.add(1); })?;
+    errdefer t.join();
+    work()?;
+    t.join();
+    println(hits.load());
+}
+```
+
+Когда рабочий поток ждёт работу (канал, сервер), его `join` на пути ошибки ждал бы вечно, поэтому сначала остановите его. Положите остановку и `join` в один блок `defer` или `errdefer` в таком порядке или используйте блок, чтобы время жизни потоков совпало со временем жизни блока, как в примере с каналом выше.
+
+Чего компилятор не видит: потоки в списке или массиве (присоединяйте их в цикле, как выше), гонки данных и порядок `join`. См. [модель безопасности](safety.md).
 
 | Тип | Что это |
 |---|---|
@@ -48,15 +83,17 @@ import "std/thread" as thread;
     const auto jobs = thread::Channel<i64>::create(c_allocator(), 16)?;
     defer jobs.destroy();
     auto total = thread::AtomicI64{};
-    auto worker = thread::spawn([&jobs, &total]() -> void {
-        while (true) {
-            const auto n = jobs.recv() catch { break; };   // error.Closed, когда очередь пуста и закрыта
-            total.add(n * n);
-        }
-    })?;
-    for (auto i : 1..11) { jobs.send(i)?; }
-    jobs.close();
-    worker.join();
+    {
+        auto worker = thread::spawn([&jobs, &total]() -> void {
+            while (true) {
+                const auto n = jobs.recv() catch { break; };   // error.Closed, когда очередь пуста и закрыта
+                total.add(n * n);
+            }
+        })?;
+        defer worker.join();
+        defer jobs.close();
+        for (auto i : 1..11) { jobs.send(i)?; }
+    }
     println(total.load());
 }
 ```
@@ -78,6 +115,7 @@ import "std/thread" as thread;
         c.print("hello, {name}!\n") catch {};
         c.close();
     })?;
+    errdefer { l.close(); server.join(); }
 
     auto c = net::connect_to("localhost", port)?;
     c.write_all("Vibe\n")?;
@@ -141,6 +179,7 @@ import "std/thread" as thread;
             res.text("not found") catch {};
         }) catch {};
     })?;
+    errdefer { srv.stop(); t.join(); }
 
     u8[128] url;
     auto r = http::get(c_allocator(), bprint(url[..], "http://127.0.0.1:{port}/hello?name=web")?)?;

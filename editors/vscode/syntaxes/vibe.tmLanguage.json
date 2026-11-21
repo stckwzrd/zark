@@ -71,6 +71,9 @@
       "patterns": [
         { "name": "keyword.control.vibe", "match": "\\b(if|else|while|for|return|break|continue|match|defer|errdefer|catch|orelse|is)\\b" },
         { "name": "keyword.operator.word.vibe", "match": "\\b(as|sizeof|alignof)\\b" },
+        { "name": "keyword.operator.word.vibe", "match": "\\bcomptime\\b" },
+        { "name": "storage.modifier.vibe", "match": "\\bowned(?=\\s+struct\\b)" },
+        { "name": "storage.modifier.vibe", "match": "\\bmove(?=\\s+[A-Za-z_])|\\b(move|borrows|invalidates)(?=\\s*\\{|\\s+(move|borrows|invalidates)\\b)" },
         { "name": "storage.type.vibe", "match": "\\b(fn|auto|const|static|template|struct|enum|union|type)\\b" },
         { "name": "storage.modifier.vibe", "match": "\\b(extern|export|volatile|packed)\\b" },
         { "name": "keyword.control.import.vibe", "match": "\\bimport\\b" },
