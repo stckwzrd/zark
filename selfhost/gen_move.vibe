@@ -1,6 +1,7 @@
 import "sema_iface.vibe";
 
 struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; }
+struct Origin { i64 kind; str name; str cptr; }
 
 !List<MoveRec> Gen::move_copy(List<MoveRec> src) {
     auto out = List<MoveRec>::init(this->a);
@@ -12,14 +13,14 @@ struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; }
     auto out = this->move_copy(x)?;
     for (auto r : y) {
         auto found = false;
-        for (auto q : out) { if (q.ptr == r.ptr) { found = true; } }
+        for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind) { found = true; } }
         if (!found) { out.push(r)?; }
     }
     return out;
 }
 
 i64 Gen::move_find(str ptr) {
-    for (auto [i, r] : this->moved) { if (r.ptr == ptr) { return i; } }
+    for (auto [i, r] : this->moved) { if (r.ptr == ptr && (r.kind == 0 || r.kind == 3)) { return i; } }
     return -1;
 }
 
@@ -36,6 +37,12 @@ str Gen::local_ptr(str name) {
     return "";
 }
 
+!Type* Gen::local_type(str name) {
+    if (this->local_ptr(name).len == 0) { return null; }
+    const auto v = this->lookup_var(name)?;
+    return v.ty;
+}
+
 !void Gen::move_use(str name, i64 line) {
     if (this->reinit || this->moved.len == 0) { return; }
     const auto p = this->local_ptr(name);
@@ -44,16 +51,33 @@ str Gen::local_ptr(str name) {
     if (i < 0) { return; }
     const auto r = this->moved.get(i);
     this->err(line);
-    eprintln("'{name}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+    if (r.kind == 3) {
+        eprintln("'{name}' points into '{r.cname}', and '{r.by}' on line {r.line} may have moved or freed that memory; take the pointer again after it");
+    } else {
+        eprintln("'{name}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+    }
     return error.CompileFailed;
+}
+
+!void Gen::invalidate(str cptr, str cname, str by, i64 line) {
+    auto add = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) {
+        if (r.kind == 2 && r.cont == cptr) {
+            add.push(MoveRec{ .ptr = r.ptr, .by = by, .line = line, .kind = 3, .cname = cname })?;
+        }
+    }
+    for (auto r : add) {
+        if (this->move_find(r.ptr) < 0) { this->moved.push(r)?; }
+    }
 }
 
 !void Gen::move_mark(Expr* x, str by, i64 line) {
     if (x.k != .Ident) { return; }
     const auto p = this->local_ptr(x.name);
     if (p.len == 0) { return; }
+    this->invalidate(p, x.name, by, line)?;
     if (this->move_find(p) >= 0) { return; }
-    this->moved.push(MoveRec{ .ptr = p, .by = by, .line = line })?;
+    this->moved.push(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 0 })?;
 }
 
 !void Gen::move_args(FnDecl* decl, List<Expr*> args, i64 off, i64 line) {
@@ -65,10 +89,107 @@ str Gen::local_ptr(str name) {
 
 void Gen::move_clear(str name) {
     const auto p = this->local_ptr(name);
-    const auto i = this->move_find(p);
-    if (i < 0) { return; }
-    this->moved.items[i] = this->moved.items[this->moved.len - 1];
-    this->moved.len -= 1;
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) { if (r.ptr != p) { out.push(r) catch {}; } }
+    this->moved = out;
+}
+
+!Origin Gen::origin_of(Expr* e) {
+    auto none = Origin{ .kind = 0, .name = "", .cptr = "" };
+    if (e == null) { return none; }
+    if (e.k == .Cast) { return this->origin_of(e.l); }
+    if (e.k == .StructLit) {
+        for (auto f : e.fields) {
+            const auto o = this->origin_of(f.value)?;
+            if (o.kind == 1) { return o; }
+        }
+        return none;
+    }
+    if (e.k == .Call && e.l.k == .Field && this->bor_field == e.l && this->bor_ptr.len > 0) {
+        return Origin{ .kind = 2, .name = this->bor_name, .cptr = this->bor_ptr };
+    }
+    auto base = e;
+    auto indirect_ok = false;
+    if (e.k == .Unary && e.op == .amp) { base = e.l; indirect_ok = true; }
+    if (e.k == .Slice) { base = e; }
+    if (e.k == .Ident) { return none; }
+    if (!indirect_ok && e.k != .Slice) { return none; }
+    auto root = base;
+    auto direct = base.k == .Ident;
+    if (base.k == .Field || base.k == .Index || base.k == .Slice) { root = base.l; }
+    if (root.k != .Ident) { return none; }
+    const auto p = this->local_ptr(root.name);
+    if (p.len == 0) { return none; }
+    if (root.name == "this") { return none; }
+    const auto ty = this->local_type(root.name)?;
+    if (ty == null) { return none; }
+    if (direct) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
+    if (ty.k == .Array || (ty.k == .Strct && base.k == .Field)) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
+    if (ty.k == .Ptr || ty.k == .Slice) { return Origin{ .kind = 2, .name = root.name, .cptr = p }; }
+    return none;
+}
+
+!void Gen::set_origin(str slot, str name, Expr* init, i64 line) {
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) { if (r.ptr != slot) { out.push(r)?; } }
+    this->moved = out;
+    if (init == null) { return; }
+    if (init.k == .Ident) {
+        const auto src = this->local_ptr(init.name);
+        for (auto r : this->moved) {
+            if (r.ptr == src && (r.kind == 1 || r.kind == 2)) {
+                this->moved.push(MoveRec{ .ptr = slot, .by = r.by, .line = r.line, .kind = r.kind, .cont = r.cont, .cname = r.cname })?;
+                return;
+            }
+        }
+        return;
+    }
+    const auto o = this->origin_of(init)?;
+    if (o.kind == 1) { this->moved.push(MoveRec{ .ptr = slot, .by = o.name, .line = line, .kind = 1 })?; }
+    if (o.kind == 2) { this->moved.push(MoveRec{ .ptr = slot, .by = "", .line = line, .kind = 2, .cont = o.cptr, .cname = o.name })?; }
+}
+
+str Gen::escaped_local(Expr* e) {
+    if (e.k == .Ident) {
+        const auto p = this->local_ptr(e.name);
+        for (auto r : this->moved) { if (r.ptr == p && r.kind == 1 && p.len > 0) { return r.by; } }
+        return "";
+    }
+    const auto o = this->origin_of(e) catch { return ""; };
+    if (o.kind == 1) { return o.name; }
+    return "";
+}
+
+!void Gen::check_return_escape(Expr* re, i64 line) {
+    auto root = this->escaped_local(re);
+    if (root.len == 0 && re.k == .Ident && this->cur.ret.k == .Slice) {
+        const auto ty = this->local_type(re.name)?;
+        if (ty != null && ty.k == .Array) { root = re.name; }
+    }
+    if (root.len == 0) { return; }
+    this->err(line);
+    eprintln("returning a pointer or slice into local '{root}', which dies when the function returns; allocate it with an Allocator or take a pointer from the caller");
+    return error.CompileFailed;
+}
+
+!void Gen::check_store_escape(Expr* target, Expr* rhs, i64 line) {
+    const auto root = this->escaped_local(rhs);
+    if (root.len == 0) { return; }
+    auto base = target;
+    while (base.k == .Field || base.k == .Index || base.k == .Unary) { base = base.l; }
+    if (base.k != .Ident) { return; }
+    const auto p = this->local_ptr(base.name);
+    auto outlives = false;
+    if (p.len == 0) {
+        outlives = this->globals.has(base.name);
+    } else if (this->scopes.items[0].vars.has(base.name)) {
+        const auto ty = this->local_type(base.name)?;
+        outlives = ty != null && (ty.k == .Ptr || ty.k == .Slice);
+    }
+    if (!outlives) { return; }
+    this->err(line);
+    eprintln("the address of local '{root}' is stored in '{base.name}', which outlives this function");
+    return error.CompileFailed;
 }
 
 !Join Gen::join_begin() {
@@ -110,11 +231,16 @@ bool Gen::declared_before(str ptr, i64 depth) {
     auto back = lp.conts;
     if (!this->terminated) { back = this->move_join(back, this->moved)?; }
     for (auto r : back) {
+        if (r.kind != 0 && r.kind != 3) { continue; }
         auto before = false;
-        for (auto q : s0) { if (q.ptr == r.ptr) { before = true; } }
+        for (auto q : s0) { if (q.ptr == r.ptr && q.kind == r.kind) { before = true; } }
         if (!before && this->declared_before(r.ptr, lp.md)) {
             this->err(r.line);
-            eprintln("a variable is consumed by '{r.by}' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return");
+            if (r.kind == 3) {
+                eprintln("'{r.cname}' is changed by '{r.by}' inside a loop while a pointer into it is kept for the next iteration; take the pointer again inside the loop");
+            } else {
+                eprintln("a variable is consumed by '{r.by}' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return");
+            }
             return error.CompileFailed;
         }
     }

@@ -300,7 +300,7 @@ struct List<T> {
         this->len = 0;
     }
 
-    !void reserve(i64 n) {
+    !void reserve(i64 n) invalidates {
         if (n <= this->items.len) { return; }
         auto cap = this->items.len * 2;
         if (cap < 8) { cap = 8; }
@@ -308,13 +308,13 @@ struct List<T> {
         this->items = this->a.grow<T>(this->items, cap)?;
     }
 
-    !void push(T v) {
+    !void push(T v) invalidates {
         this->reserve(this->len + 1)?;
         this->items[this->len] = v;
         this->len += 1;
     }
 
-    !void append(T[] xs) {
+    !void append(T[] xs) invalidates {
         const auto n = xs.len;
         if (n == 0) { return; }
         auto src = xs;
@@ -341,7 +341,7 @@ struct List<T> {
 
     T get(i64 i) { return this->slice()[i]; }
     void set(i64 i, T v) { this->slice()[i] = v; }
-    T[] slice() { return this->items[0..this->len]; }
+    T[] slice() borrows { return this->items[0..this->len]; }
     bool is_empty() { return this->len == 0; }
     void clear() { this->len = 0; }
 
@@ -363,7 +363,7 @@ struct List<T> {
     void sort() { sort(this->slice()); }
 
     /// a pointer to element i (valid until the next push or insert)
-    T* at(i64 i) { return &this->slice()[i]; }
+    T* at(i64 i) borrows { return &this->slice()[i]; }
 
     /// index of the first element equal to v, or -1
     i64 index_of(T v) {
@@ -372,7 +372,7 @@ struct List<T> {
     }
 
     /// inserts v before position i (0 <= i <= len), shifting the rest
-    !void insert(i64 i, T v) {
+    !void insert(i64 i, T v) invalidates {
         if (i < 0 || i > this->len) { return error.OutOfRange; }
         this->reserve(this->len + 1)?;
         auto j = this->len;
@@ -470,7 +470,7 @@ struct Map<V> {
         this->a.free(old);
     }
 
-    !void put(str key, V value) {
+    !void put(str key, V value) invalidates {
         if ((this->len + 1) * 4 > this->entries.len * 3) { this->__grow()?; }
         this->__insert(key, value);
     }
@@ -488,7 +488,7 @@ struct Map<V> {
     }
 
     /// a pointer to the value for in-place changes, or null
-    V* get_ptr(str key) {
+    V* get_ptr(str key) borrows {
         if (this->entries.len == 0) { return null; }
         const auto e = &this->entries[this->__find(key)];
         if (!e.used) { return null; }
@@ -498,7 +498,7 @@ struct Map<V> {
     V get_or(str key, V d) { return this->get(key) catch d; }
 
     /// removes the key; false when it was not there
-    bool remove(str key) {
+    bool remove(str key) invalidates {
         if (this->entries.len == 0) { return false; }
         const auto cap = this->entries.len;
         auto i = this->__find(key);
@@ -1890,7 +1890,7 @@ struct HashMap<K, V> {
     }
 
     /// inserts or replaces
-    !void put(K key, V value) {
+    !void put(K key, V value) invalidates {
         if ((this->len + 1) * 4 > this->entries.len * 3) { this->__grow()?; }
         const auto h = hash_of(key);
         const auto e = &this->entries[this->__slot(key, h)];
@@ -1912,7 +1912,7 @@ struct HashMap<K, V> {
     }
 
     /// a pointer to the stored value for in-place changes, or null; valid until the next put
-    V* get_ptr(K key) {
+    V* get_ptr(K key) borrows {
         if (this->len == 0) { return null; }
         const auto e = &this->entries[this->__slot(key, hash_of(key))];
         if (!e.used) { return null; }
@@ -1922,7 +1922,7 @@ struct HashMap<K, V> {
     bool has(K key) { return this->get_ptr(key) != null; }
 
     /// removes the key; false when it was not there
-    bool remove(K key) {
+    bool remove(K key) invalidates {
         if (this->len == 0) { return false; }
         const auto cap = this->entries.len;
         auto i = this->__slot(key, hash_of(key));
