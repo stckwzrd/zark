@@ -155,7 +155,9 @@ bool Gen::names_type(Expr* e) {
             eprintln("'{f.name}' is not const, so a const method cannot call it");
             return error.CompileFailed;
         }
-        return this->call_method(md, recv, args, explicit, expected, line);
+        const auto rv = this->call_method(md, recv, args, explicit, expected, line)?;
+        if (md.params.len > 0 && md.params.get(0).move) { this->move_mark(f.l, md.name, line)?; }
+        return rv;
     }
     if (recv.ty.k == .Strct && !recv.ty.si.decl.is_union) {
         const auto idx = field_index(recv.ty.si, f.name);
@@ -321,6 +323,7 @@ bool Gen::names_type(Expr* e) {
     for (auto tp : tps) { targs.push(env.get(tp)?)?; }
     this->check_constraints(decl.name, tps, decl.constraints, targs, line)?;
     const auto fi = this->inst_fn(decl, env, targs)?;
+    this->move_args(decl, args, off, line)?;
 
     auto argtxt = this->sb();
     auto cmodes = List<i64>::init(this->a);

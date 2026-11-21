@@ -1,6 +1,7 @@
 // Statements: let/assign/if/loops/defer/match/return.
 
 import "sema_iface.vibe";
+import "gen_move.vibe";
 
 struct UPat { i64 idx; str bind; }
 struct MatchRes { Type* ty; str slot; }
@@ -49,11 +50,14 @@ struct MatchRes { Type* ty; str slot; }
                 _ = this->gen_expr(s.e, null)?;
                 return;
             }
+            this->reinit = s.op == .eq && s.e2.k == .Ident;
             const auto addr = this->gen_addr(s.e2)?;
+            this->reinit = false;
             if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
             if (s.op == .eq) {
                 const auto v = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
                 this->store_to(v, addr)?;
+                if (s.e2.k == .Ident) { this->move_clear(s.e2.name); }
             } else {
                 const auto cur = this->load(addr.ty, addr.v)?;
                 const auto rhs = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
@@ -86,32 +90,42 @@ struct MatchRes { Type* ty; str slot; }
             if (s.els != null) { target = le; }
             sprint(this->ins()?, "  br i1 {c.v}, label %{lt}, label %{target}\n")?;
             this->terminated = true;
+            auto jn = this->join_begin()?;
             this->label(lt)?;
             this->gen_stmt(s.body)?;
+            this->join_end(&jn)?;
             if (!this->terminated) { this->br(lend)?; }
             if (s.els != null) {
                 this->label(le)?;
+                this->join_arm(&jn)?;
                 this->gen_stmt(s.els)?;
+                this->join_end(&jn)?;
                 if (!this->terminated) { this->br(lend)?; }
             }
+            this->join_finish(&jn, s.els == null)?;
             this->label(lend)?;
         }
         .While => {
             const auto lc = this->new_label("wcond")?;
             const auto lb = this->new_label("wbody")?;
             const auto le = this->new_label("wend")?;
+            const auto md = this->scopes.len;
+            const auto s0 = this->move_copy(this->moved)?;
             this->label(lc)?;
             const auto c = this->gen_cond(s.e)?;
             sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
             this->terminated = true;
             this->label(lb)?;
-            this->loops.push(Loop{ .brk = le, .cont = lc, .depth = this->scopes.len, .label = s.label })?;
+            this->loops.push(this->loop_new(le, lc, this->scopes.len, s.label, md)?)?;
             this->gen_stmt(s.body)?;
+            this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
             this->loops.len -= 1;
             if (!this->terminated) { this->br(lc)?; }
             this->label(le)?;
         }
         .ForRange => {
+            const auto md = this->scopes.len;
+            const auto s0 = this->move_copy(this->moved)?;
             this->push_scope()?;
             auto lo = Value{ .ty = null, .v = "" };
             auto hi = Value{ .ty = null, .v = "" };
@@ -143,8 +157,9 @@ struct MatchRes { Type* ty; str slot; }
             const auto slot = this->alloca(lo.ty, s.name)?;
             this->store(cur, slot)?;
             this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
-            this->loops.push(Loop{ .brk = le, .cont = lstep, .depth = this->scopes.len, .label = s.label })?;
+            this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md)?)?;
             this->gen_stmt(s.body)?;
+            this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
             this->loops.len -= 1;
             this->pop_scope()?;
             this->label(lstep)?;
@@ -167,6 +182,7 @@ struct MatchRes { Type* ty; str slot; }
             }
             const auto lp = this->loops.get(li);
             if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false)?; }
+            if (s.k == .Brk) { this->loops.items[li].brks = this->move_join(lp.brks, this->moved)?; } else { this->loops.items[li].conts = this->move_join(lp.conts, this->moved)?; }
             if (s.k == .Brk) { this->br(lp.brk)? } else { this->br(lp.cont)?; }
         }
         .Defer => {
@@ -186,10 +202,13 @@ struct MatchRes { Type* ty; str slot; }
         return;
     }
     const auto lend = this->new_label("mend")?;
+    auto jn = this->join_begin()?;
+    auto wild = false;
     for (auto arm : arms) {
         const auto lbody = this->new_label("arm")?;
         const auto lnext = this->new_label("next")?;
         if (arm.pats.len == 0) {
+            wild = true;
             this->br(lbody)?;
         } else {
             for (auto [pi, pat] : arm.pats) {
@@ -203,12 +222,15 @@ struct MatchRes { Type* ty; str slot; }
             }
         }
         this->label(lbody)?;
+        this->join_arm(&jn)?;
         this->push_scope()?;
         this->gen_arm(arm.body, res)?;
         this->pop_scope()?;
+        this->join_end(&jn)?;
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
+    this->join_finish(&jn, !wild)?;
     this->end_match(lend, res)?;
 }
 
@@ -343,11 +365,14 @@ struct MatchRes { Type* ty; str slot; }
     const auto tag = this->load(this->t_i32, tp)?;
     const auto pp = this->gep_field(v.ty, slot, 1)?;
     const auto lend = this->new_label("mend")?;
+    auto jn = this->join_begin()?;
+    auto wild = false;
     for (auto arm : arms) {
         const auto lbody = this->new_label("arm")?;
         const auto lnext = this->new_label("next")?;
         auto bind = UPat{ .idx = -1, .bind = "" };
         if (arm.pats.len == 0) {
+            wild = true;
             this->br(lbody)?;
         } else {
             for (auto [pi, pat] : arm.pats) {
@@ -366,19 +391,24 @@ struct MatchRes { Type* ty; str slot; }
             }
         }
         this->label(lbody)?;
+        this->join_arm(&jn)?;
         this->push_scope()?;
         if (bind.bind.len > 0) {
             this->declare_var(bind.bind, Var{ .ptr = pp, .ty = v.ty.si.fields.get(bind.idx).ty, .mutable = false }, arm.body.line)?;
         }
         this->gen_arm(arm.body, res)?;
         this->pop_scope()?;
+        this->join_end(&jn)?;
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
+    this->join_finish(&jn, !wild)?;
     this->end_match(lend, res)?;
 }
 
 !void Gen::gen_for_each(Stmt* s) {
+    const auto md = this->scopes.len;
+    const auto s0 = this->move_copy(this->moved)?;
     this->push_scope()?;
     auto a = this->gen_addr(s.e)?;
     if (a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct)) {
@@ -440,8 +470,9 @@ struct MatchRes { Type* ty; str slot; }
         this->store(cur, islot)?;
         this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
     }
-    this->loops.push(Loop{ .brk = le, .cont = lstep, .depth = this->scopes.len, .label = s.label })?;
+    this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md)?)?;
     this->gen_stmt(s.body)?;
+    this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
     this->loops.len -= 1;
     this->pop_scope()?;
     this->label(lstep)?;
