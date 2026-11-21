@@ -151,7 +151,13 @@ struct Parser {
         const auto t = this->peek();
         auto d = Decl{ .k = .Import, .line = t.line };
         if (t.tag == .ident && t.text == "comptime") {
-            const auto ce = this->parse_expr()?;
+            _ = this->advance();
+            const auto ce = this->ex(.Comptime, t)?;
+            auto kb = List<u8>::init(this->a);
+            sprint(&kb, "{this->file}:{t.off}")?;
+            ce.name = kb.slice();
+            ce.l = this->parse_expr()?;
+            this->cts.push(ce)?;
             out.push(Decl{ .k = .Check, .ct = ce, .line = t.line })?;
             return;
         }

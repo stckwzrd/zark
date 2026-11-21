@@ -34,7 +34,8 @@ Every problem ends in exactly one of three ways.
 | Number literal outside its type (`u8 x = 300`) | compile error |
 | Assigning to a `const` | compile error |
 | Dropping an `!T` result | compile error |
-| Non-exhaustive `match` | compile error |
+| A `match` that produces a value and misses a variant | compile error |
+| A forgotten variant in a `match` statement | nothing happens (statements may skip variants) |
 | A struct that contains itself, an alias cycle, an infinitely growing generic | compile error |
 | Using a variable after `free`, `destroy`, `deinit`, `close` or `join` | compile error |
 | Freeing the same variable twice | compile error |

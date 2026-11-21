@@ -103,16 +103,20 @@
 <th>Time</th>
 </tr>
 </thead><tbody><tr>
-<td>vibe, own backend</td>
-<td>about 95 ms</td>
+<td>vibe, own backend, safe mode (bounds, division and overflow checks)</td>
+<td>about 200 ms</td>
+</tr>
+<tr>
+<td>vibe, own backend, <code>--no-safety</code></td>
+<td>about 135 ms</td>
 </tr>
 <tr>
 <td>clang -O0</td>
-<td>about 220 ms</td>
+<td>about 315 ms</td>
 </tr>
 <tr>
 <td>gcc -O0</td>
-<td>about 670 ms</td>
+<td>about 710 ms</td>
 </tr>
 </tbody></table></div>
 <p>And the speed of the result (recursive <code>fib(38)</code> and a sieve of 50 million):</p>
@@ -123,21 +127,31 @@
 </tr>
 </thead><tbody><tr>
 <td>C (<code>clang -O2</code>)</td>
-<td>97 ms</td>
-<td>369 ms</td>
+<td>90 ms</td>
+<td>560 ms</td>
 </tr>
 <tr>
-<td>Vibe <code>--release</code></td>
-<td>95 ms</td>
-<td>345 ms</td>
+<td>Vibe <code>--release</code> (no checks)</td>
+<td>100 ms</td>
+<td>575 ms</td>
 </tr>
 <tr>
-<td>Vibe, own backend</td>
-<td>about 290 ms</td>
-<td>about 820 ms</td>
+<td>Vibe <code>-O</code> (all checks on)</td>
+<td>170 ms</td>
+<td>540 ms</td>
+</tr>
+<tr>
+<td>C (<code>clang -O0</code>)</td>
+<td>250 ms</td>
+<td>780 ms</td>
+</tr>
+<tr>
+<td>Vibe, own backend (safe mode)</td>
+<td>about 360 ms</td>
+<td>about 1210 ms</td>
 </tr>
 </tbody></table></div>
-<p>So <code>--release</code> does not lose to C, and the debug build wins in compile speed.</p>
+<p>So <code>--release</code> does not lose to C, <code>-O</code> keeps every check for a small price, and the default build wins in compile speed. The checks cost most in the own backend, which does not optimize them away.</p>
 <h2 id="self-hosting-and-the-fixed-point"><a class="anchor" href="#self-hosting-and-the-fixed-point">#</a>Self-hosting and the fixed point</h2>
 <p>The compiler builds itself. To start from zero, the repository holds a <strong>seed</strong>: the LLVM IR of the compiler itself (<code>bootstrap/seed.ll.gz</code>). <code>clang</code> turns it into the first working compiler.</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>seed (clang)  →  stage1 (Vibe, built from the seed)</span></span>

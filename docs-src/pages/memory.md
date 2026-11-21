@@ -243,14 +243,16 @@ void count_free(void* ctx, void* p, u64 size) {
 
 A pointer to a local variable must not be returned:
 
-```vibe
+```vibe error
 i64* bad() {
     auto x = 5;
     return &x;
 }
+
+void main() { println(*bad()); }
 ```
 
-Such code compiles, but after `bad` exits the stack is overwritten, and the pointer "dangles". The compiler does **not** check this. The same goes for a slice of a local array and for a closure (see [closures](functions.md#closures)).
+After `bad` exits the stack is overwritten and the pointer would "dangle", so the compiler refuses the code. The same goes for a slice of a local array and for a thread whose closure captured a local (see [pointers that outlive their memory](#pointers-that-outlive-their-memory)). A closure that you return by hand is still your responsibility (see [closures](functions.md#closures)).
 
 The rule: data that outlives a function must live in memory owned by the caller (a slice parameter, a pointer, an allocator).
 

@@ -1,10 +1,14 @@
 import "sema_iface.vibe";
 
-struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; }
+struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; List<List<MoveRec>> arms; }
 struct Origin { i64 kind; str name; str cptr; }
 
 !void Gen::add_rec(MoveRec r) {
-    if (this->moved.len >= 128) { return; }
+    if (this->moved.len >= 512) {
+        this->err(this->at_line);
+        eprintln("this function tracks more than 512 moved, borrowed or owned variables at once; split it into smaller functions");
+        return error.CompileFailed;
+    }
     if (this->shared) {
         this->moved = this->move_copy(this->moved)?;
         this->shared = false;
@@ -54,7 +58,14 @@ bool Gen::live_ptr(str ptr, str except) {
     for (auto r : y) {
         auto found = false;
         for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind) { found = true; } }
-        if (!found && out.len < 128) { out.push(r)?; }
+        if (!found) {
+            if (out.len >= 512) {
+                this->err(this->at_line);
+                eprintln("this function tracks more than 512 moved, borrowed or owned variables at once; split it into smaller functions");
+                return error.CompileFailed;
+            }
+            out.push(r)?;
+        }
     }
     return out;
 }
@@ -83,10 +94,19 @@ str Gen::local_ptr(str name) {
     return v.ty;
 }
 
+void Gen::note_event(str ptr, bool is_reinit) {
+    if (this->loops.len == 0) { return; }
+    const auto lp = &this->loops.items[this->loops.len - 1];
+    for (auto e : lp.evs) { if (e.ptr == ptr) { return; } }
+    lp.evs.push(LoopEv{ .ptr = ptr, .first_reinit = is_reinit && this->cond_depth == lp.base }) catch {};
+}
+
 !void Gen::move_use(str name, i64 line) {
-    if (this->reinit || this->moved.len == 0) { return; }
+    if (this->reinit) { return; }
     const auto p = this->local_ptr(name);
     if (p.len == 0) { return; }
+    this->note_event(p, false);
+    if (this->moved.len == 0) { return; }
     const auto i = this->move_find(p);
     if (i < 0) { return; }
     const auto r = this->moved.get(i);
@@ -151,6 +171,8 @@ str Gen::place_name(Expr* e) {
     this->invalidate(p, x.name, by, line)?;
     if (this->move_find(p) >= 0) { return; }
     this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 0 })?;
+    const auto ty = this->local_type(x.name)?;
+    if (ty != null && is_owned(ty)) { this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 4 })?; }
 }
 
 !void Gen::move_args(FnDecl* decl, List<Expr*> args, i64 off, i64 line) {
@@ -158,13 +180,6 @@ str Gen::place_name(Expr* e) {
         const auto pi = i + off;
         if (pi < decl.params.len && decl.params.get(pi).move) { this->move_mark(x, decl.name, line)?; }
     }
-}
-
-void Gen::move_clear(str name) {
-    const auto p = this->local_ptr(name);
-    auto out = List<MoveRec>::init(this->a);
-    for (auto r : this->moved) { if (r.ptr != p) { out.push(r) catch {}; } }
-    this->restore_state(out);
 }
 
 !Origin Gen::origin_of(Expr* e) {
@@ -266,7 +281,7 @@ str Gen::escaped_local(Expr* e) {
 }
 
 !Join Gen::join_begin() {
-    return Join{ .s0 = this->snap(), .acc = List<MoveRec>::init(this->a), .any = false };
+    return Join{ .s0 = this->snap(), .acc = List<MoveRec>::init(this->a), .any = false, .arms = List<List<MoveRec>>::init(this->a) };
 }
 
 !void Gen::join_arm(Join* j) {
@@ -276,15 +291,42 @@ str Gen::escaped_local(Expr* e) {
 !void Gen::join_end(Join* j) {
     if (this->terminated) { return; }
     j.acc = this->move_join(j.acc, this->moved)?;
+    j.arms.push(this->snap())?;
     j.any = true;
+}
+
+bool state_has(List<MoveRec> st, str ptr, i64 kind) {
+    for (auto r : st) { if (r.ptr == ptr && r.kind == kind) { return true; } }
+    return false;
+}
+
+!List<MoveRec> Gen::filter_must(List<MoveRec> x, List<MoveRec> allowed) {
+    auto drop = false;
+    for (auto r : x) { if (r.kind == 4 && !state_has(allowed, r.ptr, 4)) { drop = true; } }
+    if (!drop) { return x; }
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : x) { if (r.kind != 4 || state_has(allowed, r.ptr, 4)) { out.push(r)?; } }
+    return out;
 }
 
 !void Gen::join_finish(Join* j, bool fallthrough) {
     if (fallthrough) {
         j.acc = this->move_join(j.acc, j.s0)?;
+        j.arms.push(j.s0)?;
         j.any = true;
     }
-    if (j.any) { this->restore_state(j.acc); } else { this->restore_state(j.s0); }
+    if (!j.any) {
+        this->restore_state(j.s0);
+        return;
+    }
+    auto out = List<MoveRec>::init(this->a);
+    auto changed = false;
+    for (auto r : j.acc) {
+        auto keep = true;
+        if (r.kind == 4) { for (auto arm : j.arms) { if (!state_has(arm, r.ptr, 4)) { keep = false; } } }
+        if (keep) { out.push(r)?; } else { changed = true; }
+    }
+    if (changed) { this->restore_state(out); } else { this->restore_state(j.acc); }
 }
 
 bool Gen::declared_before(str ptr, i64 depth) {
@@ -317,8 +359,19 @@ bool Gen::declared_before(str ptr, i64 depth) {
     return "";
 }
 
-!Loop Gen::loop_new(str brk, str cont, i64 depth, str label, i64 md) {
-    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a) };
+!Loop Gen::loop_new(str brk, str cont, i64 depth, str label, i64 md, bool infinite) {
+    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .base = this->cond_depth + 1, .infinite = infinite, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a), .bmust = List<MoveRec>::init(this->a), .evs = List<LoopEv>::init(this->a) };
+}
+
+!void Gen::loop_break(i64 li) {
+    const auto lp = &this->loops.items[li];
+    lp.brks = this->move_join(lp.brks, this->moved)?;
+    auto must = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) {
+        if (r.kind == 4 && (lp.nbrk == 0 || state_has(lp.bmust, r.ptr, 4))) { must.push(r)?; }
+    }
+    lp.bmust = must;
+    lp.nbrk += 1;
 }
 
 !void Gen::loop_end(Loop lp, List<MoveRec> s0) {
@@ -331,20 +384,37 @@ bool Gen::declared_before(str ptr, i64 depth) {
             return error.CompileFailed;
         }
         if (r.kind != 0 && r.kind != 3) { continue; }
-        auto before = false;
-        for (auto q : s0) { if (q.ptr == r.ptr && q.kind == r.kind) { before = true; } }
-        if (!before && this->declared_before(r.ptr, lp.md)) {
-            this->err(r.line);
-            if (r.kind == 3) {
-                eprintln("'{r.cname}' is changed by '{r.by}' inside a loop while a pointer into it is kept for the next iteration; take the pointer again inside the loop");
-            } else {
-                eprintln("a variable is consumed by '{r.by}' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return");
-            }
-            return error.CompileFailed;
+        if (state_has(s0, r.ptr, r.kind) || !this->declared_before(r.ptr, lp.md)) { continue; }
+        auto used_first = false;
+        for (auto ev : lp.evs) { if (ev.ptr == r.ptr && !ev.first_reinit) { used_first = true; } }
+        if (!used_first) { continue; }
+        this->err(r.line);
+        if (r.kind == 3) {
+            eprintln("'{r.cname}' is changed by '{r.by}' inside a loop while a pointer into it is kept for the next iteration; take the pointer again inside the loop");
+        } else {
+            eprintln("a variable is consumed by '{r.by}' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return");
+        }
+        return error.CompileFailed;
+    }
+    if (this->loops.len >= 2) {
+        const auto outer = &this->loops.items[this->loops.len - 2];
+        for (auto ev : lp.evs) {
+            auto seen = false;
+            for (auto o : outer.evs) { if (o.ptr == ev.ptr) { seen = true; } }
+            if (!seen) { outer.evs.push(LoopEv{ .ptr = ev.ptr, .first_reinit = false })?; }
         }
     }
-    auto post = this->move_join(s0, back)?;
-    post = this->move_join(post, lp.brks)?;
+    auto post = lp.brks;
+    if (!lp.infinite) {
+        post = this->move_join(s0, back)?;
+        post = this->move_join(post, lp.brks)?;
+        post = this->filter_must(post, s0)?;
+    } else {
+        auto only = List<MoveRec>::init(this->a);
+        for (auto r : lp.brks) { if (r.kind != 4) { only.push(r)?; } }
+        for (auto r : lp.bmust) { only.push(r)?; }
+        post = only;
+    }
     auto live = List<MoveRec>::init(this->a);
     for (auto r : post) { if (this->live_ptr(r.ptr, lp.iter)) { live.push(r)?; } }
     this->restore_state(live);
@@ -373,16 +443,43 @@ bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.dec
     return error.CompileFailed;
 }
 
+!void Gen::check_overwrite(str name, i64 line) {
+    const auto ty = this->local_type(name)?;
+    if (ty == null || !is_owned(ty)) { return; }
+    const auto p = this->local_ptr(name);
+    auto registered = false;
+    for (auto sc : this->scopes) { for (auto ov : sc.owned) { if (ov.ptr == p) { registered = true; } } }
+    if (!registered || state_has(this->moved, p, 4)) { return; }
+    this->err(line);
+    eprintln("'{name}' still holds a '{ty.si.decl.name}' that has not been consumed, and this assignment would lose it; consume it first");
+    return error.CompileFailed;
+}
+
+str Gen::consumer_of(str tname) {
+    auto found = "";
+    for (auto e : this->methods.entries) {
+        if (!e.used) { continue; }
+        const auto f = e.value;
+        if (f.receiver == tname && f.params.len > 0 && f.params.get(0).move) {
+            if (found.len == 0 || f.name == "join") { found = f.name; }
+        }
+    }
+    return found;
+}
+
 !void Gen::check_owned(i64 hi, i64 lo) {
     if (this->terminated) { return; }
     auto i = lo;
     while (i <= hi) {
         for (auto ov : this->scopes.items[i].owned) {
-            auto ok = this->move_find(ov.ptr) >= 0;
-            for (auto r : this->moved) { if (r.ptr == ov.ptr && r.kind == 4) { ok = true; } }
-            if (!ok) {
+            if (!state_has(this->moved, ov.ptr, 4)) {
                 this->err(ov.line);
-                eprintln("'{ov.name}' holds a '{ov.tname}' that is not consumed before it goes out of scope; call a method that takes it over (for example join), pass it on, or write `defer {ov.name}.join();` right after creating it");
+                const auto cons = this->consumer_of(ov.tname);
+                if (cons.len > 0) {
+                    eprintln("'{ov.name}' holds a '{ov.tname}' that is not consumed on every path out of its scope; call {ov.name}.{cons}(), pass it on, or write `defer {ov.name}.{cons}();` right after creating it");
+                } else {
+                    eprintln("'{ov.name}' holds a '{ov.tname}' that is not consumed on every path out of its scope; call a method declared `move` on it, or pass it on");
+                }
                 return error.CompileFailed;
             }
         }

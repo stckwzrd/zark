@@ -4,9 +4,10 @@
 
 | 10k-line program → executable | time |
 |---|---|
-| **vibe** (native backend) | **~95 ms** |
-| clang -O0 | ~220 ms |
-| gcc -O0 | ~670 ms |
+| **vibe** (native backend, safe mode) | **~200 ms** |
+| vibe, `--no-safety` | ~135 ms |
+| clang -O0 | ~315 ms |
+| gcc -O0 | ~710 ms |
 
 (`bench/compile_speed.sh`; the same program is generated in both languages.)
 
@@ -180,12 +181,15 @@ The full language description is in [SPEC.md](SPEC.md).
 
 ## Performance
 
-`examples/bench.vibe` (recursive fib(38) + a sieve up to 50M), clang 18, `--release`:
+`examples/bench.vibe` (recursive fib(38) + a sieve up to 50M), clang 18, on one machine:
 
 | | fib(38) | sieve 50M |
 |---|---|---|
-| C (`clang -O2`) | 97 ms | 369 ms |
-| Vibe (`--release`) | 95 ms | 345 ms |
+| C (`clang -O2`) | 90 ms | 560 ms |
+| Vibe (`--release`, no checks) | 100 ms | 575 ms |
+| Vibe (`-O`, all safety checks on) | 170 ms | 540 ms |
+| C (`clang -O0`) | 250 ms | 780 ms |
+| Vibe, own backend (safe mode) | 360 ms | 1210 ms |
 
 The full build of the example, compilation plus linking, takes about 80 ms.
 

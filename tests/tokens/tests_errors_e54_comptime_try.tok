@@ -1,0 +1,23 @@
+1 .bang !
+1 .ident i64
+1 .ident parse
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .kw_return return
+1 .int_lit 5
+1 .semi ;
+1 .rbrace }
+2 .ident comptime
+2 .ident parse
+2 .lparen (
+2 .rparen )
+2 .question ?
+2 .semi ;
+3 .ident void
+3 .ident main
+3 .lparen (
+3 .rparen )
+3 .lbrace {
+3 .rbrace }
+4 .eof 

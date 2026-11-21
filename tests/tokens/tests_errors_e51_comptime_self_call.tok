@@ -1,0 +1,26 @@
+1 .ident i64
+1 .ident f
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .kw_return return
+1 .ident comptime
+1 .ident f
+1 .lparen (
+1 .rparen )
+1 .semi ;
+1 .rbrace }
+2 .ident void
+2 .ident main
+2 .lparen (
+2 .rparen )
+2 .lbrace {
+2 .ident println
+2 .lparen (
+2 .ident f
+2 .lparen (
+2 .rparen )
+2 .rparen )
+2 .semi ;
+2 .rbrace }
+3 .eof 

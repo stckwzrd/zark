@@ -59,18 +59,24 @@ struct MatchRes { Type* ty; str slot; }
                 this->check_dropped(dv.ty, s.line)?;
                 return;
             }
-            this->reinit = s.op == .eq && s.e2.k == .Ident;
-            const auto addr = this->gen_addr(s.e2)?;
+            const auto plain_local = s.op == .eq && s.e2.k == .Ident && this->local_ptr(s.e2.name).len > 0;
+            this->reinit = plain_local;
+            const auto addr = this->gen_addr(s.e2) catch |e| {
+                this->reinit = false;
+                return e;
+            };
             this->reinit = false;
             if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
             if (s.op == .eq) {
                 this->bor_field = null;
                 const auto v = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
                 this->check_store_escape(s.e2, s.e, s.line)?;
+                if (plain_local) { this->check_overwrite(s.e2.name, s.line)?; }
                 this->store_to(v, addr)?;
-                if (s.e2.k == .Ident) {
+                if (plain_local) {
                     const auto tp = this->local_ptr(s.e2.name);
-                    if (tp.len > 0) { this->set_origin(tp, s.e2.name, s.e, s.line)?; }
+                    this->note_event(tp, true);
+                    this->set_origin(tp, s.e2.name, s.e, s.line)?;
                 }
             } else {
                 const auto cur = this->load(addr.ty, addr.v)?;
@@ -107,6 +113,7 @@ struct MatchRes { Type* ty; str slot; }
             this->terminated = true;
             auto jn = this->join_begin()?;
             this->label(lt)?;
+            this->cond_depth += 1;
             this->gen_stmt(s.body)?;
             this->join_end(&jn)?;
             if (!this->terminated) { this->br(lend)?; }
@@ -117,8 +124,13 @@ struct MatchRes { Type* ty; str slot; }
                 this->join_end(&jn)?;
                 if (!this->terminated) { this->br(lend)?; }
             }
+            this->cond_depth -= 1;
             this->join_finish(&jn, s.els == null)?;
             this->label(lend)?;
+            if (!jn.any) {
+                sprint(this->ins()?, "  unreachable\n")?;
+                this->terminated = true;
+            }
         }
         .While => {
             const auto lc = this->new_label("wcond")?;
@@ -126,17 +138,25 @@ struct MatchRes { Type* ty; str slot; }
             const auto le = this->new_label("wend")?;
             const auto md = this->scopes.len;
             const auto s0 = this->snap();
+            const auto infinite = s.e.k == .BoolLit && s.e.bval;
+            this->loops.push(this->loop_new(le, lc, this->scopes.len, s.label, md, infinite)?)?;
             this->label(lc)?;
             const auto c = this->gen_cond(s.e)?;
             sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
             this->terminated = true;
             this->label(lb)?;
-            this->loops.push(this->loop_new(le, lc, this->scopes.len, s.label, md)?)?;
+            this->cond_depth += 1;
             this->gen_stmt(s.body)?;
-            this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
+            this->cond_depth -= 1;
+            const auto lp2 = this->loops.get(this->loops.len - 1);
+            this->loop_end(lp2, s0)?;
             this->loops.len -= 1;
             if (!this->terminated) { this->br(lc)?; }
             this->label(le)?;
+            if (infinite && lp2.nbrk == 0) {
+                sprint(this->ins()?, "  unreachable\n")?;
+                this->terminated = true;
+            }
         }
         .ForRange => {
             const auto md = this->scopes.len;
@@ -172,8 +192,10 @@ struct MatchRes { Type* ty; str slot; }
             const auto slot = this->alloca(lo.ty, s.name)?;
             this->store(cur, slot)?;
             this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
-            this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md)?)?;
+            this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?)?;
+            this->cond_depth += 1;
             this->gen_stmt(s.body)?;
+            this->cond_depth -= 1;
             this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
             this->loops.len -= 1;
             this->pop_scope()?;
@@ -196,8 +218,8 @@ struct MatchRes { Type* ty; str slot; }
                 if (li < 0) { this->err(s.line); eprintln("no loop labeled '{s.label}'"); return error.CompileFailed; }
             }
             const auto lp = this->loops.get(li);
-            if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false)?; }
-            if (s.k == .Brk) { this->loops.items[li].brks = this->move_join(lp.brks, this->moved)?; } else { this->loops.items[li].conts = this->move_join(lp.conts, this->moved)?; }
+            if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false, true)?; }
+            if (s.k == .Brk) { this->loop_break(li)?; } else { this->loops.items[li].conts = this->move_join(lp.conts, this->moved)?; }
             if (s.k == .Brk) { this->br(lp.brk)? } else { this->br(lp.cont)?; }
         }
         .Defer => {
@@ -239,7 +261,9 @@ struct MatchRes { Type* ty; str slot; }
         this->label(lbody)?;
         this->join_arm(&jn)?;
         this->push_scope()?;
+        this->cond_depth += 1;
         this->gen_arm(arm.body, res)?;
+        this->cond_depth -= 1;
         this->pop_scope()?;
         this->join_end(&jn)?;
         if (!this->terminated) { this->br(lend)?; }
@@ -247,6 +271,10 @@ struct MatchRes { Type* ty; str slot; }
     }
     this->join_finish(&jn, !wild)?;
     this->end_match(lend, res)?;
+    if (!jn.any) {
+        sprint(this->ins()?, "  unreachable\n")?;
+        this->terminated = true;
+    }
 }
 
 !void Gen::end_match(str lend, MatchRes* res) {
@@ -411,7 +439,9 @@ struct MatchRes { Type* ty; str slot; }
         if (bind.bind.len > 0) {
             this->declare_var(bind.bind, Var{ .ptr = pp, .ty = v.ty.si.fields.get(bind.idx).ty, .mutable = false }, arm.body.line)?;
         }
+        this->cond_depth += 1;
         this->gen_arm(arm.body, res)?;
+        this->cond_depth -= 1;
         this->pop_scope()?;
         this->join_end(&jn)?;
         if (!this->terminated) { this->br(lend)?; }
@@ -419,6 +449,10 @@ struct MatchRes { Type* ty; str slot; }
     }
     this->join_finish(&jn, !wild)?;
     this->end_match(lend, res)?;
+    if (!jn.any) {
+        sprint(this->ins()?, "  unreachable\n")?;
+        this->terminated = true;
+    }
 }
 
 !void Gen::gen_for_each(Stmt* s) {
@@ -488,10 +522,12 @@ struct MatchRes { Type* ty; str slot; }
         this->store(cur, islot)?;
         this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
     }
-    auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md)?;
+    auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?;
     lp.iter = this->iter_borrow(s.e, via_slice)?;
     this->loops.push(lp)?;
+    this->cond_depth += 1;
     this->gen_stmt(s.body)?;
+    this->cond_depth -= 1;
     this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
     this->loops.len -= 1;
     this->pop_scope()?;
@@ -506,15 +542,19 @@ struct MatchRes { Type* ty; str slot; }
 }
 
 !void Gen::gen_return(i64 line, Expr* re) {
+    if (this->cur == null) { this->err(line); eprintln("'return' cannot be used here: this code is not inside a function"); return error.CompileFailed; }
     const auto rt = this->cur.ret;
     auto is_err = false;
+    auto maybe_err = false;
     auto has_val = false;
     auto val = Value{ .ty = null, .v = "" };
     if (re != null) { this->check_return_escape(re, line)?; }
     if (re != null) {
         if (rt.k == .Void) { this->err(line); eprintln("function returns void but a value was returned"); return error.CompileFailed };
         is_err = re.k == .ErrorVal;
-        val = this->coerce(this->gen_expr(re, rt)?, rt, line)?;
+        const auto raw = this->gen_expr(re, rt)?;
+        maybe_err = raw.ty.k == .Errun || raw.ty.k == .ErrVal;
+        val = this->coerce(raw, rt, line)?;
         has_val = true;
     } else if (rt.k == .Errun && rt.elem.k == .Void) {
         val = Value{ .ty = rt, .v = "zeroinitializer" };
@@ -523,7 +563,7 @@ struct MatchRes { Type* ty; str slot; }
         this->err(line); eprintln("missing return value");
         return error.CompileFailed;
     }
-    if (!is_err && rt.k == .Errun && has_val && this->has_err_defers()) {
+    if (!is_err && maybe_err && rt.k == .Errun && has_val && this->has_err_defers()) {
         const auto tag = this->extract(val, 0, this->t_i32)?;
         const auto c = this->tmp()?;
         sprint(this->ins()?, "  {c} = icmp ne i32 {tag.v}, 0\n")?;
@@ -532,16 +572,16 @@ struct MatchRes { Type* ty; str slot; }
         sprint(this->ins()?, "  br i1 {c}, label %{le}, label %{lo}\n")?;
         this->terminated = true;
         this->label(le)?;
-        this->run_defers(this->scopes.len - 1, 0, true)?;
+        this->run_defers(this->scopes.len - 1, 0, true, false)?;
         sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?;
         this->terminated = true;
         this->label(lo)?;
-        this->run_defers(this->scopes.len - 1, 0, false)?;
+        this->run_defers(this->scopes.len - 1, 0, false, false)?;
         sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?;
         this->terminated = true;
         return;
     }
-    this->run_defers(this->scopes.len - 1, 0, is_err)?;
+    this->run_defers(this->scopes.len - 1, 0, is_err, false)?;
     if (has_val) { sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?; } else { sprint(this->ins()?, "  ret void\n")?; }
     this->terminated = true;
 }

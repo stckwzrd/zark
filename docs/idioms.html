@@ -179,7 +179,7 @@ nobody</code></pre></div></div>
 more than half
 done, empty
 disk full</code></pre></div></div>
-<p>When you add a variant, every <code>match</code> without a <code>_</code> arm stops compiling until you handle it. That is the compiler working as a checklist. Avoid <code>_ =&gt;</code> arms in a <code>match</code> over your own types: they hide exactly this help.</p>
+<p>When you add a variant, every <code>match</code> that produces a value and has no <code>_</code> arm stops compiling until you handle it. That is the compiler working as a checklist, so prefer this form to a <code>match</code> statement when a forgotten case would be a bug (a statement may skip variants without a word). Avoid <code>_ =&gt;</code> arms in a <code>match</code> over your own types: they hide exactly this help.</p>
 <h2 id="let-the-zero-value-be-useful"><a class="anchor" href="#let-the-zero-value-be-useful">#</a>Let the zero value be useful</h2>
 <p>A struct literal sets what you name and zeroes the rest, and variables start as zero. Design a type so that the all-zero value is a valid, empty one, and you need no constructor and no flag for &quot;initialized&quot;:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Stats</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
@@ -249,7 +249,7 @@ ok   a deadline in the past is expired
 <td><code>catch 0</code> to make a warning disappear</td>
 </tr>
 <tr>
-<td><code>match</code> without <code>_</code> on your own unions</td>
+<td>a <code>match</code> that produces a value, without <code>_</code>, on your own unions</td>
 <td>a catch-all arm that hides new variants</td>
 </tr>
 <tr>

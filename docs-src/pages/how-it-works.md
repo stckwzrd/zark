@@ -59,19 +59,22 @@ A comparison for a program of 10 thousand lines, from source to executable (the 
 
 | Builder | Time |
 |---|---|
-| vibe, own backend | about 95 ms |
-| clang -O0 | about 220 ms |
-| gcc -O0 | about 670 ms |
+| vibe, own backend, safe mode (bounds, division and overflow checks) | about 200 ms |
+| vibe, own backend, `--no-safety` | about 135 ms |
+| clang -O0 | about 315 ms |
+| gcc -O0 | about 710 ms |
 
 And the speed of the result (recursive `fib(38)` and a sieve of 50 million):
 
 | | fib(38) | sieve 50M |
 |---|---|---|
-| C (`clang -O2`) | 97 ms | 369 ms |
-| Vibe `--release` | 95 ms | 345 ms |
-| Vibe, own backend | about 290 ms | about 820 ms |
+| C (`clang -O2`) | 90 ms | 560 ms |
+| Vibe `--release` (no checks) | 100 ms | 575 ms |
+| Vibe `-O` (all checks on) | 170 ms | 540 ms |
+| C (`clang -O0`) | 250 ms | 780 ms |
+| Vibe, own backend (safe mode) | about 360 ms | about 1210 ms |
 
-So `--release` does not lose to C, and the debug build wins in compile speed.
+So `--release` does not lose to C, `-O` keeps every check for a small price, and the default build wins in compile speed. The checks cost most in the own backend, which does not optimize them away.
 
 ## Self-hosting and the fixed point
 
