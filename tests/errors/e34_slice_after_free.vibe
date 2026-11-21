@@ -1,0 +1,7 @@
+void main() {
+    const auto a = c_allocator();
+    auto buf = a.alloc<u8>(16) catch return;
+    auto view = buf[0..4];
+    a.free(buf);
+    println(view.len);
+}

@@ -322,7 +322,7 @@ A zero `List` has no allocator, and `push` on it returns `error.NoAllocator`. Al
 
 ### A pointer to a `List` element is invalid after `push`
 
-The buffer may move. Take the pointer when you have finished adding.
+The buffer may move. The compiler rejects using the pointer after `push` when it was taken with `at` or `slice` into a local variable (see [memory](memory.md#pointers-that-outlive-their-memory)); a pointer kept in a struct field is not checked, so take it when you have finished adding.
 
 ### `Map`: keys are not copied, the order is undefined
 

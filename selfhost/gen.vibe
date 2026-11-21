@@ -40,7 +40,7 @@ struct Addr { Type* ty; str v; bool imm; }
 struct Var { str ptr; Type* ty; bool mutable; }
 struct Defer { Stmt* stmt; bool is_err; }
 struct Scope { Map<Var> vars; List<Defer> defers; }
-struct MoveRec { str ptr; str by; i64 line; }
+struct MoveRec { str ptr; str by; i64 line; i64 kind; str cont; str cname; }
 struct Loop { str brk; str cont; i64 depth; str label; i64 md; List<MoveRec> brks; List<MoveRec> conts; }
 
 type Env = Map<Type*>*;
@@ -70,6 +70,9 @@ struct Gen {
     i64 cdepth;
     List<MoveRec> moved;
     bool reinit;
+    Expr* bor_field;
+    str bor_ptr;
+    str bor_name;
     i64 sdepth;
 
     Map<FnDecl*> fns;

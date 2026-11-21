@@ -1,0 +1,20 @@
+struct S { i64 a; i64* p; }
+i64 main2() { auto s = S{ .a = 3 }; auto v = &s.a; auto w = v; return *w; }
+i64* ok(i64* in) { auto q = &in[0]; return q; }
+u8[] ok2(u8[] in) { auto v = in[1..]; return v; }
+void first() { println(main2()); i64 z = 5; println(*ok(&z)); println(ok2("abc").len); }
+
+void second() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1) catch return;
+    auto p = l.at(0);
+    *p = 10;
+    l.push(2) catch return;
+    p = l.at(1);
+    *p = 20;
+    auto s = l.slice();
+    println(s[0], s[1], l.len);
+}
+
+void main() { first(); second(); }
