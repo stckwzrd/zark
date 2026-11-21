@@ -1,0 +1,36 @@
+i64 fib(i64 n) { if (n < 2) { return n; } return fib(n - 1) + fib(n - 2); }
+
+u32[256] make_crc() {
+    u32[256] t;
+    for (auto i : 0..256) {
+        u32 c = i as u32;
+        for (auto k : 0..8) {
+            if (c & 1 == 1) { c = 0xEDB88320 ^ (c >> 1); } else { c = c >> 1; }
+        }
+        t[i] = c;
+    }
+    return t;
+}
+
+struct Cfg { i64 a; f64 b; bool c; }
+Cfg make_cfg() { return Cfg{ .a = 7, .b = 2.5, .c = true }; }
+str greeting() { return "hello from comptime"; }
+
+u32 crc(str s) {
+    u32 c = 0xFFFFFFFF;
+    for (auto b : s) { c = CRC[((c ^ b as u32) & 0xFF) as i64] ^ (c >> 8); }
+    return ~c;
+}
+
+const auto CRC = comptime make_crc();
+comptime assert(sizeof(Cfg) == 24);
+const auto F20 = comptime fib(20);
+
+void main() {
+    println(crc("123456789"));
+    println(F20, comptime fib(10));
+    println(CRC[1], CRC[255]);
+    const auto c = comptime make_cfg();
+    println(c.a, c.b, c.c);
+    println(comptime greeting());
+}

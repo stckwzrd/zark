@@ -1,0 +1,26 @@
+1 .ident i64
+1 .star *
+1 .ident f
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .kw_return return
+1 .kw_null null
+1 .semi ;
+1 .rbrace }
+2 .ident void
+2 .ident main
+2 .lparen (
+2 .rparen )
+2 .lbrace {
+3 .kw_const const
+3 .ident auto
+3 .ident x
+3 .eq =
+3 .ident comptime
+3 .ident f
+3 .lparen (
+3 .rparen )
+3 .semi ;
+4 .rbrace }
+5 .eof 

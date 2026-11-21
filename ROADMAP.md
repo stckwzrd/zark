@@ -28,7 +28,7 @@ Today the frontend prints LLVM IR text and the native backend parses it back, wh
 Done: closures with explicit captures, `T: Ord` constraints (checked at the call, not inside the generic body), `match` as an expression, `?T` and `orelse`, modules (`import "x.vibe" as x`). Labeled `break`/`continue` are done.
 - **Closures with an explicit context:** `fn[ctx](x: i64) i64`, lowered to a {fn, ctx} pair, with no hidden allocation (the context lives where the caller says).
 - **Interfaces as generic constraints:** `fn sort[T: Ord](s: []T)`, checked when the generic is declared instead of when it is instantiated, which gives clearer errors.
-- **Real `comptime`:** run Vibe at compile time with an interpreter over our IR, for lookup tables, reflection over struct fields and code generation.
+- **More `comptime`:** reflection over struct fields and generated declarations (basic `comptime` expressions and static assertions are done).
 - **Modules / namespaces:** `import "net.vibe" as net`, then `net.connect(...)`.
 - **SIMD types**: done through LLVM (`f32x4`, `i32x8`, ...). Missing: vector instructions in the own backend, comparisons and masks, shuffles.
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
