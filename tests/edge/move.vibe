@@ -1,0 +1,32 @@
+void drop(move i64* p) { }
+
+struct Buf {
+    i64 n;
+    void close() move { }
+}
+
+!i64 work(Allocator a, bool c) {
+    auto p = a.create<i64>()?;
+    errdefer a.free(p);
+    if (c) { drop(p); return 1; }
+    auto q = a.create<i64>()?;
+    drop(q);
+    q = a.create<i64>()?;
+    *q = 5;
+    drop(q);
+    if (c) { drop(p); p = a.create<i64>()?; } else { drop(p); p = a.create<i64>()?; }
+    *p = 2;
+    drop(p);
+    return 0;
+}
+
+void main() {
+    auto b = Buf{ .n = 1 };
+    b.close();
+    b = Buf{ .n = 2 };
+    println(b.n);
+    for (auto i : 0..3) {
+        auto x = 1 as i64;
+        drop(&x);
+    }
+}

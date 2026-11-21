@@ -266,16 +266,73 @@ void main() {
 }
 ```
 
+## Use after free is a compile error
+
+A parameter can be marked `move`: the function takes the value over, and the caller must not use that variable again. The standard library marks `free`, `destroy` and every `deinit`/`close`, so the most common memory bugs stop at compile time.
+
+```vibe error
+void main() {
+    const auto a = c_allocator();
+    auto p = a.create<i64>() catch return;
+    *p = 7;
+    a.destroy(p);
+    println(*p);
+}
+```
+
+The same applies to a double `free`, including the one hidden behind a `defer`, and to using a `List` after `deinit()`:
+
+```vibe error
+void main() {
+    const auto a = c_allocator();
+    auto buf = a.alloc<u8>(16) catch return;
+    defer a.free(buf);
+    a.free(buf);
+}
+```
+
+Assigning a new value brings the variable back to life. Branches are followed: a variable consumed on one path of an `if` cannot be used afterwards, and a variable consumed inside a loop must be reassigned or left with `break`/`return`.
+
+```vibe run
+void main() {
+    const auto a = c_allocator();
+    auto buf = a.alloc<u8>(16) catch return;
+    a.free(buf);
+    buf = a.alloc<u8>(32) catch return;
+    println(buf.len);
+    a.free(buf);
+}
+```
+
+You can use `move` in your own code. On a parameter it goes before the type; on a method, after the parameter list:
+
+```vibe run
+struct Conn {
+    i64 fd;
+    void close() move { println("closed {this->fd}"); }
+}
+
+void finish(move Conn* c) { c->close(); }
+
+void main() {
+    auto c = Conn{ .fd = 7 };
+    finish(&c);
+}
+```
+
+The check follows names, not memory. It sees `a.free(buf)` followed by `buf`, but it does not see `auto copy = buf; a.free(buf); use(copy)`, and it does not track fields (`this->items`). For those cases use the `DebugAllocator`, which stops the program at the exact access.
+
 ## What the compiler does not check
 
 | Problem | What happens |
 |---|---|
-| Use after `free` | undefined behavior |
-| Double `free` | undefined behavior |
+| Use of a variable after `free`, `destroy`, `deinit` | **checked**: a compile error |
+| Use through a copy of the pointer or through a field | not checked (use `DebugAllocator`) |
+| Double `free` of one variable | **checked**: a compile error |
 | A leak (forgot `free`/`deinit`) | silent; the memory is released when the process exits |
 | Going out of bounds of a slice or array | **checked**: a panic with file and line |
 | Going out of bounds through a pointer | not checked |
-| Division by zero | an abnormal exit |
+| Division by zero | **checked**: a panic with file and line |
 
 The discipline is simple: write `defer` right after allocating, pass the allocator down, and create an arena if you do not want to count individual `free`s.
 

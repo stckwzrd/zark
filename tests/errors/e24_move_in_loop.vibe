@@ -1,0 +1,6 @@
+void drop(move i64* p) { }
+void main() {
+    auto a = 1 as i64;
+    auto p = &a;
+    for (auto i : 0..3) { drop(p); }
+}

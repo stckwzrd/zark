@@ -29,7 +29,7 @@ struct DirList {
     List<Entry> entries;
     Allocator a;
 
-    void deinit() {
+    void deinit() move {
         for (auto e : this->entries) { this->a.free(e.name); }
         this->entries.deinit();
     }
@@ -41,7 +41,7 @@ struct Paths {
     List<str> items;
     Allocator a;
 
-    void deinit() {
+    void deinit() move {
         for (auto s : this->items) { this->a.free(s); }
         this->items.deinit();
     }
