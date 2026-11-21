@@ -252,6 +252,7 @@ void restore_stack() {
     auto fastmath = false;
     auto ovf = false;
     auto debug = false;
+    auto ct_opts = List<str>::init(a);
     auto i = 0;
     while (i < argv.len) {
         const auto x = argv.get(i);
@@ -285,6 +286,9 @@ void restore_stack() {
             safety = false;
         } else if (x == "--time") {
             timing = true;
+        } else if (x == "--ct-key" || x == "--ct-mode" || x == "--ct-out") {
+            i += 1;
+            if (i < argv.len) { ct_opts.push(x)?; ct_opts.push(argv.get(i))?; }
         } else if (x == "--no-safety") {
             safety = false;
         } else if (x == "-o") {
@@ -313,6 +317,15 @@ void restore_stack() {
     g.fast = fast;
     g.fastmath = fastmath;
     g.ovf = ovf;
+    g.self_path = osm::exe_path(a)?;
+    g.ct_extras = extras;
+    for (auto j : 0..ct_opts.len / 2) {
+        const auto k = ct_opts.get(j * 2);
+        const auto v = ct_opts.get(j * 2 + 1);
+        if (k == "--ct-key") { g.ct_key = v; }
+        if (k == "--ct-mode") { g.ct_mode = v; }
+        if (k == "--ct-out") { g.ct_out = v; }
+    }
     auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = Map<str>::init(a) };
     diag_prelude = PRELUDE;
     g.test_mode = is_test;

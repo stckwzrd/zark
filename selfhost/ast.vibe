@@ -20,7 +20,7 @@ struct TypeExpr {
 enum EK {
     IntLit, FloatLit, BoolLit, StrLit, Interp, NullLit, Ident, EnumLit, ErrorVal,
     Binary, Unary, Call, Field, Index, Slice, StructLit, ArrayLit, Cast, Try, Catch,
-    Sizeof, Alignof, Is, Match, Orelse, Closure, Pre,
+    Sizeof, Alignof, Is, Match, Orelse, Closure, Pre, Comptime,
 }
 
 struct FieldInit { str name; Expr* value; i64 off; }
@@ -134,7 +134,7 @@ struct ConstDecl {
     i64 align;
 }
 
-enum DK { Func, Struct, Enum, Const, Import, Alias }
+enum DK { Func, Struct, Enum, Const, Import, Alias, Check }
 
 struct Decl {
     DK k;
@@ -142,6 +142,7 @@ struct Decl {
     StructDecl* s;
     EnumDecl* en;
     ConstDecl* c;
+    Expr* ct;               // Check: the comptime expression
     str path;               // Import path / Alias name
     str alias;              // Import `as` name
     i64 name_off;           // Alias / import alias name

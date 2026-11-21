@@ -1,6 +1,7 @@
 // Expressions, addresses, operators, coercions.
 
 import "gen_stmt.vibe";
+import "gen_ct.vibe";
 
 bool is_literal(Expr* e) {
     if (e.k == .IntLit || e.k == .FloatLit || e.k == .NullLit || e.k == .EnumLit) { return true };
@@ -100,6 +101,7 @@ bool can_coerce(Type* from, Type* to) {
             return error.CompileFailed;
         }
         .Pre => return this->pre_vals.get(e.ival as i64),
+        .Comptime => return this->gen_comptime(e, expected),
         .Ident => {
             const auto n = e.name;
             if (this->has_var(n)) {
@@ -621,6 +623,11 @@ bool has_defaults(Type* t) {
 }
 
 !Addr Gen::gen_addr(Expr* e) {
+    if (e.k == .Comptime) { return this->ct_addr(e); }
+    if (e.k == .Ident && !this->has_var(e.name) && this->consts.has(e.name)) {
+        const auto c = this->consts.get(e.name)?;
+        if (c.value != null && c.value.k == .Comptime && !c.mutable) { return this->ct_addr(c.value); }
+    }
     if (e.k == .Ident && this->has_var(e.name)) {
         const auto v = this->lookup_var(e.name)?;
         this->move_use(e.name, e.line)?;

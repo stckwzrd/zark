@@ -1,0 +1,4 @@
+void main() {
+    auto n = 5;
+    println(comptime n + 1);
+}
