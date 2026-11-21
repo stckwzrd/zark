@@ -1,0 +1,127 @@
+---
+title: The safety model
+order: 20.5
+section: Memory and data
+description: Exactly what Vibe checks at compile time, what it checks while running, what it leaves to you, and how to cover the rest with tools
+---
+
+Vibe is a systems language, so it cannot promise what a garbage-collected language promises. It makes a narrower, honest promise: **a mistake is stopped as early as the compiler can see it, and otherwise it is stopped loudly, with a file and a line, instead of corrupting memory in silence.** This page lists every case, so you know what you can lean on.
+
+## Build modes
+
+| Mode | How | Checks | Use it for |
+|---|---|---|---|
+| safe | `vibe run`, `vibe build` | everything below | development, tests, most programs |
+| safe and optimized | `-O` | the same checks, optimized by LLVM | production when you want the checks to stay |
+| unchecked | `--release` | bounds, division, overflow and null checks removed | a program that you have already run through the safe modes |
+| bare metal | `--freestanding` | no runtime helpers, so no checks | kernels and drivers |
+
+Compile-time checks (types, ownership, escapes) are the same in all modes. The difference is only what is checked while the program runs.
+
+## The three outcomes
+
+Every problem ends in exactly one of three ways.
+
+1. **A compile error.** The program is not built. This is the best outcome.
+2. **A panic.** The program stops at once with a message, a file and a line (`panic: index 3 out of bounds (len 3) at main.vibe:4`). A panic means a bug in the program, and it cannot be caught.
+3. **An error value.** A function returns `!T` and the caller decides. This is for things that can go wrong in a correct program: no file, bad input, no memory.
+
+## What is stopped, and when
+
+| Mistake | What happens |
+|---|---|
+| Wrong type, lossy conversion, missing `as` | compile error |
+| Number literal outside its type (`u8 x = 300`) | compile error |
+| Assigning to a `const` | compile error |
+| Dropping an `!T` result | compile error |
+| Non-exhaustive `match` | compile error |
+| A struct that contains itself, an alias cycle, an infinitely growing generic | compile error |
+| Using a variable after `free`, `destroy`, `deinit`, `close` or `join` | compile error |
+| Freeing the same variable twice | compile error |
+| Returning or storing a pointer or slice into a local | compile error |
+| Using a pointer or slice into a `List` or `Map` after it changed | compile error |
+| `comptime` assertion that is false | compile error |
+| Index or slice out of bounds | panic |
+| Integer division or remainder by zero, or `MIN / -1` | panic |
+| Integer overflow in `+`, `-`, `*` | panic |
+| Out of memory, bad input, a missing file | error value |
+| A `List` that was never given an allocator | error value (`error.NoAllocator`) |
+| A float that does not fit an integer (`1e30 as i32`) | saturates to the nearest limit, `nan` becomes 0 |
+| A shift by too many bits | the count is masked to the width of the type |
+| Reading a variable that was never assigned | not possible: variables start as zero |
+| Dereferencing `null`, or running out of stack by endless recursion | the program stops with a clear message and a backtrace |
+
+Nothing in the list is undefined behavior in the safe mode. The same program gives the same result with the native backend, with `--llvm` and with `-O`, and a test in the repository keeps it that way.
+
+## Ownership and borrowing without a borrow checker
+
+Vibe does not have lifetimes or a borrow checker as Rust has. It has something smaller that you can learn in ten minutes, and that catches the mistakes that happen in practice. It follows **variables** inside **one function**:
+
+- A parameter or method marked `move` takes the value over. The standard library marks `free`, `destroy`, every `deinit`, `join`, and the `close` of sockets and streams. After the call, the variable is dead until you assign it again.
+- A method marked `borrows` returns a pointer or slice into the object (`List.at`, `List.slice`, `Map.get_ptr`). A method marked `invalidates` may move the memory (`push`, `put`, `insert`). If you call an `invalidates` method, every pointer or slice you took from that object earlier is dead.
+- A pointer or slice to a local array or struct cannot leave the function: not by `return` and not by being stored through a pointer parameter or into a global.
+
+The state is followed through `if`, `match`, `catch`, loops, `defer` and `errdefer`. The checker is deliberately conservative where it would otherwise reject valid programs, so it says nothing about what it cannot see. Four things it does not see:
+
+- **Copies.** `auto q = p; a.destroy(p); use(q)` is not caught.
+- **Fields.** `this->items` is not tracked; only plain variables are.
+- **Other functions.** A function that frees what you passed to it, without being marked `move`, is invisible.
+- **Threads.** Data races are not checked.
+
+You can mark your own functions with the same words, and the check then covers them too. See [memory](memory.md#use-after-free-is-a-compile-error).
+
+## Closing the gap with tools
+
+What the compiler cannot prove, a tool can catch while you test.
+
+**`DebugAllocator`** gives every block its own pages and makes a freed block inaccessible. A use after free, even through a copy of the pointer, stops at the exact access with the block's number, and `deinit()` lists everything that was never freed.
+
+```vibe run exit
+void touch(i64* p) { *p = 1; }
+
+!void main() {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    auto p = a.create<i64>()?;
+    const auto copy = p;
+    a.destroy(p);
+    touch(copy);
+}
+```
+
+```vibe run exit
+!void main() {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    _ = a.create<i64>()?;
+    _ = a.alloc<u8>(100)?;
+    dbg.deinit()?;
+}
+```
+
+Run your tests with a `DebugAllocator` as the allocator. Because functions receive the allocator as a parameter, no code needs to change to do it.
+
+**`vibe test`** runs every `test` block. **`-g`** adds line and variable information for `gdb`. **A crash handler** prints the signal, the reason (null pointer, stack overflow, use after free) and a backtrace, and `VIBE_CRASH_HANDLER=0` turns it off to get a core file. See [tooling](tooling.md).
+
+## Threads
+
+Closures capture variables by pointer. A thread that outlives the variables it uses reads freed stack. The rules:
+
+1. Join every thread before the variables its closure uses go out of scope.
+2. Protect shared data with a `Mutex`, or use `AtomicI64`, or pass values through a `Channel`.
+3. Do not copy a `Mutex`, `Cond`, `WaitGroup` or `Channel` once it is in use. Share it by pointer.
+
+The compiler does not check these rules. Write the `join` next to the `spawn`, the way you write `defer` next to an allocation, and test with several threads.
+
+## A checklist before you ship
+
+- [ ] All tests pass in the safe mode, with a `DebugAllocator` in the memory tests.
+- [ ] `vibe build -O` passes the same tests.
+- [ ] Every `+%`, `-%` and `*%` in the code is there for a reason (a hash, a counter).
+- [ ] Every `comptime assert` that guards a file format or a layout is still there.
+- [ ] Only then, if you need the speed, build with `--release` and run the tests again.
+
+## What next
+
+- The error messages in detail: [debugging](debugging.md).
+- How to write code the checks like: [idioms](idioms.md).

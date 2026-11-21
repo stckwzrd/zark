@@ -25,6 +25,8 @@ This is the complete guide. Every example on these pages was compiled and run by
 
 <div class="cards">
 <a href="getting-started.html"><b>Installation and the first program</b><span>Build the compiler, run Hello World, learn the commands and flags.</span></a>
+<a href="learn.html"><b>Learn Vibe</b><span>A twelve-lesson course with exercises and solutions: from the first program to a finished tool.</span></a>
+<a href="safety.html"><b>The safety model</b><span>Exactly what is checked at compile time, what at run time, and what is left to you.</span></a>
 <a href="showcase.html"><b>Showcase</b><span>A multithreaded ray tracer: interfaces, SIMD, JSON, threads, unions and tests in one program.</span></a>
 <a href="tour.html"><b>Quick tour</b><span>The whole language on one page: about twenty small programs.</span></a>
 <a href="types.html"><b>Types</b><span>Numbers, pointers, slices, strings, arrays and the conversion rules.</span></a>
@@ -39,7 +41,7 @@ This is the complete guide. Every example on these pages was compiled and run by
 - **Language**: every feature on its own, with all the details and error messages.
 - **Memory and data**: allocators, slices, `List` and `Map`.
 - **Interop and tools**: calling C, tests, formatting, the language server.
-- **Reference**: the standard library, recipes, pitfalls, how the compiler works and a cheat sheet.
+- **Reference**: the standard library, recipes, debugging, pitfalls, how the compiler works and a cheat sheet.
 
 The search box opens with the `/` key. You can read the pages in any order; the links between them lead to where a rule is explained in more detail.
 
