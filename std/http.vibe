@@ -191,7 +191,7 @@ struct Stream {
         }
     }
 
-    void close() {
+    void close() move {
         if (this->ssl != null) {
             _ = ssl_api.shutdown(this->ssl);
             ssl_api.free(this->ssl);
@@ -348,7 +348,7 @@ struct Reply {
 
     str header(str name) { return find_header(this->headers.slice(), name); }
     bool ok() const { return this->status >= 200 && this->status < 300; }
-    void deinit() { this->mem.deinit(); }
+    void deinit() move { this->mem.deinit(); }
 }
 
 !Reply get(Allocator a, str url) { return send(a, Request{ .url = url }); }

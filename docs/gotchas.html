@@ -195,7 +195,7 @@ error: error.Signaled</code></pre></div></div>
 <p><code>i64[K] a;</code> needs a compile-time constant.</p>
 <h2 id="memory"><a class="anchor" href="#memory">#</a>Memory</h2>
 <h3 id="only-going-out-of-bounds-of-a-slice-and-an-array-is-checked"><a class="anchor" href="#only-going-out-of-bounds-of-a-slice-and-an-array-is-checked">#</a>Only going out of bounds of a slice and an array is checked</h3>
-<p>Going out through a pointer, use-after-free, a double <code>free</code> and leaks are not detected. Of the dangling pointers to the stack, only a direct <code>return &amp;local;</code> (and <code>&amp;local.field</code>, <code>&amp;local_array[i]</code>) is caught.</p>
+<p>Going out through a pointer and leaks are not detected. Use after <code>free</code> and a double <code>free</code> of the same variable are compile errors (see <a href="memory.html#use-after-free-is-a-compile-error">memory</a>), but not when they go through a copy of the pointer or a field. Of the dangling pointers to the stack, only a direct <code>return &amp;local;</code> (and <code>&amp;local.field</code>, <code>&amp;local_array[i]</code>) is caught.</p>
 <h3 id="fixedbuf-reset-invalidates-what-was-handed-out"><a class="anchor" href="#fixedbuf-reset-invalidates-what-was-handed-out">#</a><code>FixedBuf.reset()</code> invalidates what was handed out</h3>
 <p>Everything handed out before <code>reset</code> must not be used.</p>
 <h3 id="an-arena-does-not-free-one-by-one"><a class="anchor" href="#an-arena-does-not-free-one-by-one">#</a>An arena does not free one by one</h3>

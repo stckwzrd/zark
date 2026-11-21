@@ -32,7 +32,7 @@ struct Parser {
         return Self{ .prog = prog, .about = about, .opts = List<Opt>::init(a), .positional = List<str>::init(a), .a = a };
     }
 
-    void deinit() {
+    void deinit() move {
         this->opts.deinit();
         this->positional.deinit();
     }

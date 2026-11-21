@@ -78,7 +78,7 @@ struct Stmt {
     List<MatchArm> arms;   // Match
 }
 
-struct Param { str name; TypeExpr* ty; i64 off; bool mutable; }
+struct Param { str name; TypeExpr* ty; i64 off; bool mutable; bool move; }
 
 struct FnDecl {
     str name;

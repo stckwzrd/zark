@@ -1,0 +1,7 @@
+void main() {
+    const auto a = c_allocator();
+    auto p = a.create<i64>() catch return;
+    *p = 7;
+    a.destroy(p);
+    println(*p);
+}

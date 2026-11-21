@@ -104,6 +104,7 @@ bool can_coerce(Type* from, Type* to) {
             const auto n = e.name;
             if (this->has_var(n)) {
                 const auto v = this->lookup_var(n)?;
+                this->move_use(n, e.line)?;
                 return this->load(v.ty, v.ptr);
             }
             const auto mx = this->member_expr(e)?;
@@ -451,6 +452,7 @@ bool has_defaults(Type* t) {
         for (auto [i, cn] : fd.captures) {
             if (!this->has_var(cn)) { this->err(e.line); eprintln("captured variable '{cn}' is not defined{this->hint(cn, this->var_names())}"); return error.CompileFailed; }
             const auto v = this->lookup_var(cn)?;
+            this->move_use(cn, e.line)?;
             caps.push(CapInfo{ .name = cn, .ty = v.ty, .mutable = v.mutable })?;
             const auto slot = this->tmp()?;
             sprint(this->ins()?, "  {slot} = getelementptr [{fd.captures.len} x ptr], ptr {ctx}, i64 0, i64 {i}\n")?;
@@ -548,6 +550,7 @@ bool has_defaults(Type* t) {
     const auto ok_lbl = this->cur_label;
     this->br(lend)?;
     this->label(lerr)?;
+    const auto pre_moved = this->move_copy(this->moved)?;
     this->push_scope()?;
     if (e.has_name && e.k == .Catch) {
         const auto slot = this->alloca(this->t_errval, e.name)?;
@@ -575,6 +578,7 @@ bool has_defaults(Type* t) {
     }
     this->pop_scope()?;
     const auto err_reaches = !this->terminated;
+    if (err_reaches) { this->moved = this->move_join(pre_moved, this->moved)?; } else { this->moved = pre_moved; }
     const auto err_lbl = this->cur_label;
     if (err_reaches && vt.k != .Void && !has_errv) { this->err(e.line); eprintln("catch block must produce a value or leave (return/break/panic)"); return error.CompileFailed; }
     if (err_reaches) { this->br(lend)?; }
@@ -619,6 +623,7 @@ bool has_defaults(Type* t) {
 !Addr Gen::gen_addr(Expr* e) {
     if (e.k == .Ident && this->has_var(e.name)) {
         const auto v = this->lookup_var(e.name)?;
+        this->move_use(e.name, e.line)?;
         return Addr{ .ty = v.ty, .v = v.ptr, .imm = !v.mutable };
     }
     if (e.k == .Ident) {

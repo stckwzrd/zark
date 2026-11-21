@@ -25,7 +25,7 @@ struct Thread {
     bool joined;
 
     /// waits for the thread to finish
-    void join() {
+    void join() move {
         if (!this->joined) {
             _ = pthread_join(this->id, null);
             this->joined = true;
@@ -161,7 +161,7 @@ struct Channel<T> {
     }
 
     /// frees the channel; no thread may use it any more
-    void destroy() {
+    void destroy() move {
         const auto a = this->a;
         a.free(this->buf);
         a.destroy(this);

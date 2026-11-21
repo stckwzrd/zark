@@ -306,7 +306,7 @@ An ordinary function cannot be passed where a closure is expected, and the other
 
 ### Only going out of bounds of a slice and an array is checked
 
-Going out through a pointer, use-after-free, a double `free` and leaks are not detected. Of the dangling pointers to the stack, only a direct `return &local;` (and `&local.field`, `&local_array[i]`) is caught.
+Going out through a pointer and leaks are not detected. Use after `free` and a double `free` of the same variable are compile errors (see [memory](memory.md#use-after-free-is-a-compile-error)), but not when they go through a copy of the pointer or a field. Of the dangling pointers to the stack, only a direct `return &local;` (and `&local.field`, `&local_array[i]`) is caught.
 
 ### `FixedBuf.reset()` invalidates what was handed out
 

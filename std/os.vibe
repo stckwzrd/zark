@@ -25,7 +25,7 @@ struct Output {
     str err;
     Allocator a;
 
-    void deinit() {
+    void deinit() move {
         this->a.free(this->out);
         this->a.free(this->err);
     }

@@ -186,12 +186,17 @@ TypeExpr* Parser::try_type() {
             break;
         }
         const auto is_const = this->eat(.kw_const);
+        auto is_move = false;
+        if (this->at(.ident) && this->peek().text == "move" && this->peek_at(1).tag == .ident) {
+            _ = this->advance();
+            is_move = true;
+        }
         const auto saved = this->arrow_only;
         this->arrow_only = true;
         const auto ty = this->parse_type()?;
         this->arrow_only = saved;
         const auto pt = this->expect(.ident)?;
-        params.push(Param{ .name = pt.text, .ty = ty, .off = pt.off, .mutable = !is_const })?;
+        params.push(Param{ .name = pt.text, .ty = ty, .off = pt.off, .mutable = !is_const, .move = is_move })?;
         if (!this->eat(.comma)) { break; }
     }
     _ = this->expect(.rparen)?;
@@ -246,8 +251,13 @@ bool Parser::lambda_ahead() {
     auto variadic = false;
     auto this_ty = "";
     if (receiver.len > 0 && !is_static) { this_ty = receiver; }
-    const auto params = this->parse_params_new(nt.line, &variadic, this_ty, recv_params)?;
+    auto params = this->parse_params_new(nt.line, &variadic, this_ty, recv_params)?;
     const auto is_const = this->eat(.kw_const);
+    if (this->at(.ident) && this->peek().text == "move" && this->peek_at(1).tag == .lbrace) {
+        _ = this->advance();
+        if (this_ty.len == 0) { this->fail("only a method can consume 'this'")?; }
+        params.items[0].move = true;
+    }
     auto ret = ret_te;
     if (ret != null && ret.k == .Name && ret.name == "void" && ret.args.len == 0) { ret = null; }
     const auto is_extern = flags == 1;
