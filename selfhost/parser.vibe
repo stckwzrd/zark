@@ -19,6 +19,7 @@ struct Parser {
     bool no_struct;
     List<str> aliases;
     bool quiet;
+    i64 depth;
     bool no_post;
     bool arrow_only;
     List<i64> splits;
@@ -324,6 +325,9 @@ struct Parser {
 
     // ---------------------------------------------------------------- statements
     !Stmt* parse_block() {
+        this->depth += 1;
+        defer this->depth -= 1;
+        if (this->depth > 300) { this->fail("code is nested too deeply (limit 300 levels)")?; }
         const auto lb = this->expect(.lbrace)?;
         const auto b = this->st(.Block, lb)?;
         const auto saved = this->no_struct;
@@ -527,6 +531,9 @@ struct Parser {
     }
 
     !Expr* parse_prefix() {
+        this->depth += 1;
+        defer this->depth -= 1;
+        if (this->depth > 300) { this->fail("expression is nested too deeply (limit 300 levels)")?; }
         const auto t = this->peek();
         match t.tag {
             .minus, .bang, .tilde, .amp, .star => {

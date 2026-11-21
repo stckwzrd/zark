@@ -1,0 +1,15 @@
+i64 id(i64 x) { return x; }
+f64 fid(f64 x) { return x; }
+
+void main() {
+    println(id(1) << id(63), id(1) << id(64), id(1) << id(65), id(-8) >> id(70), id(1) << id(-1));
+    u8 a = 1;
+    println(a << id(7), a << id(8), (a as u32) << id(31));
+    println(fid(1e20) as i64, fid(-1e20) as i64, (fid(0.0) / fid(0.0)) as i64, fid(300.7) as u8, fid(-5.5) as u8, fid(2.5) as i32);
+    println(fid(1e19) as u64, fid(2e19) as u64, fid(-1.0) as u64, fid(255.9) as u8, fid(1e10) as i32, fid(-1e10) as i32);
+    println(fid(1.0) / fid(0.0), fid(-1.0) / fid(0.0), fid(0.0) / fid(0.0));
+    println(parse_int("9223372036854775807") catch 0, parse_int("-9223372036854775808") catch 0, parse_int("9223372036854775808") catch -1, parse_int("-9223372036854775809") catch -2, parse_int("99999999999999999999") catch -3);
+    println(parse_int_radix("ffffffffffffffff", 16) catch 0, parse_int_radix("10000000000000000", 16) catch 7);
+    println(parse_float("") catch -1.0, parse_float("  2.5 ") catch -2.0, parse_float("x") catch -3.0);
+    println(id(9223372036854775807) +% 1, id(0) -% 1, id(4611686018427387904) *% 4);
+}

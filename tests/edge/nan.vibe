@@ -1,0 +1,5 @@
+f64 fid(f64 x) { return x; }
+void main() {
+    const auto n = fid(0.0) / fid(0.0);
+    println(n, -n, n != n, fid(1.0) / fid(0.0));
+}

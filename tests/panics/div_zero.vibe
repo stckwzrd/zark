@@ -1,0 +1,2 @@
+i64 id(i64 x) { return x; }
+void main() { println(10 / id(0)); }

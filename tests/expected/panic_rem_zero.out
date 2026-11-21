@@ -1,0 +1,1 @@
+panic: division by zero at tests/panics/rem_zero.vibe:2

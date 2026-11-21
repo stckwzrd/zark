@@ -55,7 +55,7 @@
     1 | void main() { println(&quot;a&quot; + &quot;b&quot;);
       |                           ^</code></pre></div></div>
 <p>Joining is done with interpolation and a <a href="strings.html#building-strings">buffer</a>: <code>&quot;{a}{b}&quot;</code>.</p>
-<p>Integer division by zero crashes the program (see <a href="types.html#overflow">types</a>); floating-point division by zero gives <code>inf</code> or <code>nan</code>.</p>
+<p>Integer division by zero panics (see <a href="types.html#overflow">types</a>); floating-point division by zero gives <code>inf</code> or <code>nan</code>.</p>
 <h2 id="comparisons"><a class="anchor" href="#comparisons">#</a>Comparisons</h2>
 <p><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> give <code>bool</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -145,7 +145,7 @@ false true false</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span></div><pre><code>1 7 6 -6
 16 15
 -3 3</code></pre></div></div>
-<p>A right shift is arithmetic for signed types (the sign is kept) and logical for unsigned ones.</p>
+<p>A right shift is arithmetic for signed types (the sign is kept) and logical for unsigned ones. The shift count is masked to the type width, so a count that is too large never gives undefined behavior.</p>
 <blockquote class="callout note"><p><strong>Note:</strong> unlike C, the bitwise <code>&amp;</code>, <code>|</code>, <code>^</code> bind <strong>tighter</strong> than comparisons. The expression <code>x &amp; 1 == 0</code> reads as <code>(x &amp; 1) == 0</code>, and no parentheses are needed.</p>
 </blockquote>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>

@@ -94,7 +94,7 @@ void main() {
 }
 ```
 
-Integer division by zero crashes the program (a processor signal): `vibe run` shows `error: error.Signaled`. Check the divisor yourself.
+Integer division and remainder by zero stop the program with `panic: division by zero` and the file and line. So does `MIN / -1` (for example `i64` minimum divided by `-1`), which does not fit the type. In a `--release` build these checks are gone: division by zero is then undefined, and `MIN / -1` wraps. Shift counts are masked to the type width: `1 as u8 << 9` is `1 << 1`.
 
 ### Implicit widening
 
@@ -443,7 +443,7 @@ Everything else is done explicitly, with `as`:
 |---|---|---|
 | integer → integer | `300 as u8` (from a variable) | the high bits are dropped |
 | integer → float | `n as f64` | the nearest value |
-| float → integer | `3.99 as i64` | the fractional part is dropped: 3 |
+| float → integer | `3.99 as i64` | the fractional part is dropped: 3; a value out of range gives the nearest limit of the type (saturates) and `nan` gives 0 |
 | float → float | `x as f32` | with rounding |
 | pointer → pointer | `p as *u8` | the same address |
 | pointer ↔ integer | `p as i64` | the address as a number |
