@@ -30,7 +30,7 @@ The script runs the whole chain and checks the result:
 1. builds the first compiler from the seed with `clang`, and with it `stage1` from the sources in `selfhost/`;
 2. builds `stage2`, a compiler built by the previous one, and `stage3`, once more; checks that `stage2` and `stage3` are byte-for-byte identical (the fixed point);
 3. builds the chain without LLVM, `native1`, `native2`, `native3`, and checks that `native2 == native3`;
-4. runs the tests (33 of them) with the new compiler;
+4. runs the whole test suite with the new compiler;
 5. copies the result to `build/vibe`.
 
 It takes about a minute. At the end you will see the line `== done: build/vibe is the self-hosted compiler`.

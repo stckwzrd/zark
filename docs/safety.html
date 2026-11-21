@@ -179,7 +179,7 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">destroy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p);</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
-fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f05b2cfbff8)
+fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f61851d4ff8)
 backtrace:
   #0 0x1ced in .vibe-cache/main
   #1 0x13bf in .vibe-cache/main
@@ -199,8 +199,8 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7fdd59b22ff8
-leak: block #2, 100 bytes at 0x7fdd59b20f9c
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>leak: block #2, 100 bytes at 0x7f6eb627ef9c
+leak: block #1, 8 bytes at 0x7f6eb6280ff8
 DebugAllocator: 2 block(s) leaked, 108 bytes (set trap_id to a block number to stop in gdb where it is allocated)
 error: MemoryLeak</code></pre></div></div>
 <p>Run your tests with a <code>DebugAllocator</code> as the allocator. Because functions receive the allocator as a parameter, no code needs to change to do it.</p>
