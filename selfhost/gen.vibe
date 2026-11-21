@@ -39,6 +39,8 @@ struct Value { Type* ty; str v; }
 struct Addr { Type* ty; str v; bool imm; }
 struct Var { str ptr; Type* ty; bool mutable; }
 struct Defer { Stmt* stmt; bool is_err; }
+struct ColdIn { str pred; List<str> vals; }
+struct Cold { str helper; str label; i64 nlead; List<ColdIn> ins; }
 struct OwnedVar { str ptr; str name; str tname; i64 line; }
 struct Scope { Map<Var> vars; List<Defer> defers; List<OwnedVar> owned; }
 struct MoveRec { str ptr; str by; i64 line; i64 kind; str cont; str cname; }
@@ -70,6 +72,8 @@ struct Gen {
     i64 rdepth;
     i64 cdepth;
     List<MoveRec> moved;
+    bool shared;
+    List<Cold> colds;
     Map<Expr*> cts;
     List<Expr*> ct_checks;
     Map<CtVal*> ct_cache;
@@ -587,13 +591,20 @@ struct Gen {
     !void pop_scope() {
         const auto idx = this->scopes.len - 1;
         if (!this->terminated) { this->run_defers(idx, idx, false)?; }
+        this->prune_scope(idx);
         this->scopes.len -= 1;
     }
 
     /// run defers of scopes[hi] down to scopes[lo], innermost first
     !void run_defers(i64 hi, i64 lo, bool is_err) {
-        const auto saved_moved = this->move_copy(this->moved)?;
-        defer this->moved = saved_moved;
+        auto any = false;
+        for (auto k : lo..hi + 1) { if (this->scopes.items[k].defers.len > 0) { any = true; } }
+        if (!any) {
+            this->check_owned(hi, lo)?;
+            return;
+        }
+        const auto saved_moved = this->snap();
+        defer this->restore_state(saved_moved);
         auto i = hi + 1;
         while (i > lo) {
             i -= 1;
@@ -878,6 +889,7 @@ struct Gen {
         this->scopes = List<Scope>::init(this->a);
         this->loops = List<Loop>::init(this->a);
         this->moved = List<MoveRec>::init(this->a);
+        this->colds = List<Cold>::init(this->a);
         this->ntmp = 0;
         this->nlbl = 0;
         this->terminated = false;
@@ -935,6 +947,7 @@ struct Gen {
         if (this->dbg) { sprint(w, "  ;@F {decl.file}\n  ;@L {decl.line}\n")?; }
         w.append(this->allocas.slice())?;
         w.append(this->body.slice())?;
+        this->emit_colds(w)?;
         w.append("}\n\n")?;
     }
 }
