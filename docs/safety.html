@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The safety model · Vibe</title>
+<meta name="description" content="Exactly what Vibe checks at compile time, what it checks while running, what it leaves to you, and how to cover the rest with tools">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="">
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/safety.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
+<div class="layout">
+<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="learn.html">Learn Vibe: a path from zero to a program</a><a href="tour.html">Quick tour</a><a href="showcase.html">Showcase: a multithreaded ray tracer</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a><a href="comptime.html">Compile-time evaluation</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="safety.html" class="current">The safety model</a><a href="idioms.html">Writing idiomatic Vibe</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a><a href="projects.html">Projects and dependencies</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="std-modules.html">Standard modules</a><a href="net-threads.html">Networking and threads</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="debugging.html">Debugging and reading errors</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
+<main><article>
+<h1>The safety model</h1>
+<p>Vibe is a systems language, so it cannot promise what a garbage-collected language promises. It makes a narrower, honest promise: <strong>a mistake is stopped as early as the compiler can see it, and otherwise it is stopped loudly, with a file and a line, instead of corrupting memory in silence.</strong> This page lists every case, so you know what you can lean on.</p>
+<h2 id="build-modes"><a class="anchor" href="#build-modes">#</a>Build modes</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>Mode</th>
+<th>How</th>
+<th>Checks</th>
+<th>Use it for</th>
+</tr>
+</thead><tbody><tr>
+<td>safe</td>
+<td><code>vibe run</code>, <code>vibe build</code></td>
+<td>everything below</td>
+<td>development, tests, most programs</td>
+</tr>
+<tr>
+<td>safe and optimized</td>
+<td><code>-O</code></td>
+<td>the same checks, optimized by LLVM</td>
+<td>production when you want the checks to stay</td>
+</tr>
+<tr>
+<td>unchecked</td>
+<td><code>--release</code></td>
+<td>bounds, division, overflow and null checks removed</td>
+<td>a program that you have already run through the safe modes</td>
+</tr>
+<tr>
+<td>bare metal</td>
+<td><code>--freestanding</code></td>
+<td>no runtime helpers, so no checks</td>
+<td>kernels and drivers</td>
+</tr>
+</tbody></table></div>
+<p>Compile-time checks (types, ownership, escapes) are the same in all modes. The difference is only what is checked while the program runs.</p>
+<h2 id="the-three-outcomes"><a class="anchor" href="#the-three-outcomes">#</a>The three outcomes</h2>
+<p>Every problem ends in exactly one of three ways.</p>
+<ol>
+<li><strong>A compile error.</strong> The program is not built. This is the best outcome.</li>
+<li><strong>A panic.</strong> The program stops at once with a message, a file and a line (<code>panic: index 3 out of bounds (len 3) at main.vibe:4</code>). A panic means a bug in the program, and it cannot be caught.</li>
+<li><strong>An error value.</strong> A function returns <code>!T</code> and the caller decides. This is for things that can go wrong in a correct program: no file, bad input, no memory.</li>
+</ol>
+<h2 id="what-is-stopped-and-when"><a class="anchor" href="#what-is-stopped-and-when">#</a>What is stopped, and when</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>Mistake</th>
+<th>What happens</th>
+</tr>
+</thead><tbody><tr>
+<td>Wrong type, lossy conversion, missing <code>as</code></td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Number literal outside its type (<code>u8 x = 300</code>)</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Assigning to a <code>const</code></td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Dropping an <code>!T</code> result</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Non-exhaustive <code>match</code></td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>A struct that contains itself, an alias cycle, an infinitely growing generic</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Using a variable after <code>free</code>, <code>destroy</code>, <code>deinit</code>, <code>close</code> or <code>join</code></td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Freeing the same variable twice</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Returning or storing a pointer or slice into a local</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Using a pointer or slice into a <code>List</code> or <code>Map</code> after it changed</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td><code>comptime</code> assertion that is false</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Index or slice out of bounds</td>
+<td>panic</td>
+</tr>
+<tr>
+<td>Integer division or remainder by zero, or <code>MIN / -1</code></td>
+<td>panic</td>
+</tr>
+<tr>
+<td>Integer overflow in <code>+</code>, <code>-</code>, <code>*</code></td>
+<td>panic</td>
+</tr>
+<tr>
+<td>Out of memory, bad input, a missing file</td>
+<td>error value</td>
+</tr>
+<tr>
+<td>A <code>List</code> that was never given an allocator</td>
+<td>error value (<code>error.NoAllocator</code>)</td>
+</tr>
+<tr>
+<td>A float that does not fit an integer (<code>1e30 as i32</code>)</td>
+<td>saturates to the nearest limit, <code>nan</code> becomes 0</td>
+</tr>
+<tr>
+<td>A shift by too many bits</td>
+<td>the count is masked to the width of the type</td>
+</tr>
+<tr>
+<td>Reading a variable that was never assigned</td>
+<td>not possible: variables start as zero</td>
+</tr>
+<tr>
+<td>Dereferencing <code>null</code>, or running out of stack by endless recursion</td>
+<td>the program stops with a clear message and a backtrace</td>
+</tr>
+</tbody></table></div>
+<p>Nothing in the list is undefined behavior in the safe mode. The same program gives the same result with the native backend, with <code>--llvm</code> and with <code>-O</code>, and a test in the repository keeps it that way.</p>
+<h2 id="ownership-and-borrowing-without-a-borrow-checker"><a class="anchor" href="#ownership-and-borrowing-without-a-borrow-checker">#</a>Ownership and borrowing without a borrow checker</h2>
+<p>Vibe does not have lifetimes or a borrow checker as Rust has. It has something smaller that you can learn in ten minutes, and that catches the mistakes that happen in practice. It follows <strong>variables</strong> inside <strong>one function</strong>:</p>
+<ul>
+<li>A parameter or method marked <code>move</code> takes the value over. The standard library marks <code>free</code>, <code>destroy</code>, every <code>deinit</code>, <code>join</code>, and the <code>close</code> of sockets and streams. After the call, the variable is dead until you assign it again.</li>
+<li>A method marked <code>borrows</code> returns a pointer or slice into the object (<code>List.at</code>, <code>List.slice</code>, <code>Map.get_ptr</code>). A method marked <code>invalidates</code> may move the memory (<code>push</code>, <code>put</code>, <code>insert</code>). If you call an <code>invalidates</code> method, every pointer or slice you took from that object earlier is dead.</li>
+<li>A pointer or slice to a local array or struct cannot leave the function: not by <code>return</code> and not by being stored through a pointer parameter or into a global.</li>
+</ul>
+<p>The state is followed through <code>if</code>, <code>match</code>, <code>catch</code>, loops, <code>defer</code> and <code>errdefer</code>. The checker is deliberately conservative where it would otherwise reject valid programs, so it says nothing about what it cannot see. Four things it does not see:</p>
+<ul>
+<li><strong>Copies.</strong> <code>auto q = p; a.destroy(p); use(q)</code> is not caught.</li>
+<li><strong>Fields.</strong> <code>this-&gt;items</code> is not tracked; only plain variables are.</li>
+<li><strong>Other functions.</strong> A function that frees what you passed to it, without being marked <code>move</code>, is invisible.</li>
+<li><strong>Threads.</strong> Data races are not checked.</li>
+</ul>
+<p>You can mark your own functions with the same words, and the check then covers them too. See <a href="memory.html#use-after-free-is-a-compile-error">memory</a>.</p>
+<h2 id="closing-the-gap-with-tools"><a class="anchor" href="#closing-the-gap-with-tools">#</a>Closing the gap with tools</h2>
+<p>What the compiler cannot prove, a tool can catch while you test.</p>
+<p><strong><code>DebugAllocator</code></strong> gives every block its own pages and makes a freed block inaccessible. A use after free, even through a copy of the pointer, stops at the exact access with the block&#39;s number, and <code>deinit()</code> lists everything that was never freed.</p>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">p </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
+<span class="line"></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dbg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> DebugAllocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> copy </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> p;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">destroy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p);</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
+fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f3e8db34ff8)
+backtrace:
+  #0 0x1ced in .vibe-cache/main
+  #1 0x13bf in .vibe-cache/main
+  #2 0x1066b in .vibe-cache/main
+  #3 0x27781 in /usr/lib/libc.so.6
+  #4 0x278b9 in /usr/lib/libc.so.6
+  #5 0x11b5 in .vibe-cache/main
+where (addr2line):
+vb.touch at main.vibe:1
+vb.main at main.vibe:9
+main at ??:?
+_start at ??:?
+error: error.Signaled</code></pre></div></div>
+<div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dbg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> DebugAllocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">::</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">init</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7faf54dd3ff8
+leak: block #2, 100 bytes at 0x7faf54dd1f9c
+DebugAllocator: 2 block(s) leaked, 108 bytes (set trap_id to a block number to stop in gdb where it is allocated)
+error: MemoryLeak</code></pre></div></div>
+<p>Run your tests with a <code>DebugAllocator</code> as the allocator. Because functions receive the allocator as a parameter, no code needs to change to do it.</p>
+<p><strong><code>vibe test</code></strong> runs every <code>test</code> block. <strong><code>-g</code></strong> adds line and variable information for <code>gdb</code>. <strong>A crash handler</strong> prints the signal, the reason (null pointer, stack overflow, use after free) and a backtrace, and <code>VIBE_CRASH_HANDLER=0</code> turns it off to get a core file. See <a href="tooling.html">tooling</a>.</p>
+<h2 id="threads"><a class="anchor" href="#threads">#</a>Threads</h2>
+<p>Closures capture variables by pointer. A thread that outlives the variables it uses reads freed stack. The rules:</p>
+<ol>
+<li>Join every thread before the variables its closure uses go out of scope.</li>
+<li>Protect shared data with a <code>Mutex</code>, or use <code>AtomicI64</code>, or pass values through a <code>Channel</code>.</li>
+<li>Do not copy a <code>Mutex</code>, <code>Cond</code>, <code>WaitGroup</code> or <code>Channel</code> once it is in use. Share it by pointer.</li>
+</ol>
+<p>The compiler does not check these rules. Write the <code>join</code> next to the <code>spawn</code>, the way you write <code>defer</code> next to an allocation, and test with several threads.</p>
+<h2 id="a-checklist-before-you-ship"><a class="anchor" href="#a-checklist-before-you-ship">#</a>A checklist before you ship</h2>
+<ul>
+<li><input disabled="" type="checkbox"> All tests pass in the safe mode, with a <code>DebugAllocator</code> in the memory tests.</li>
+<li><input disabled="" type="checkbox"> <code>vibe build -O</code> passes the same tests.</li>
+<li><input disabled="" type="checkbox"> Every <code>+%</code>, <code>-%</code> and <code>*%</code> in the code is there for a reason (a hash, a counter).</li>
+<li><input disabled="" type="checkbox"> Every <code>comptime assert</code> that guards a file format or a layout is still there.</li>
+<li><input disabled="" type="checkbox"> Only then, if you need the speed, build with <code>--release</code> and run the tests again.</li>
+</ul>
+<h2 id="what-next"><a class="anchor" href="#what-next">#</a>What next</h2>
+<ul>
+<li>The error messages in detail: <a href="debugging.html">debugging</a>.</li>
+<li>How to write code the checks like: <a href="idioms.html">idioms</a>.</li>
+</ul>
+
+<div class="pager"><a class="prev" href="memory.html"><small>Previous</small>Memory and allocators</a><a class="next" href="idioms.html"><small>Next</small>Writing idiomatic Vibe</a></div>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#build-modes">Build modes</a><a class="l2" href="#the-three-outcomes">The three outcomes</a><a class="l2" href="#what-is-stopped-and-when">What is stopped, and when</a><a class="l2" href="#ownership-and-borrowing-without-a-borrow-checker">Ownership and borrowing without a borrow checker</a><a class="l2" href="#closing-the-gap-with-tools">Closing the gap with tools</a><a class="l2" href="#threads">Threads</a><a class="l2" href="#a-checklist-before-you-ship">A checklist before you ship</a><a class="l2" href="#what-next">What next</a></aside></main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

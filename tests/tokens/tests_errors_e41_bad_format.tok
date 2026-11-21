@@ -1,0 +1,12 @@
+1 .ident void
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+2 .ident println
+2 .lparen (
+2 .str_lit {"a": 1, "b": 2}
+2 .rparen )
+2 .semi ;
+3 .rbrace }
+4 .eof 
