@@ -84,6 +84,8 @@ struct Loader {
         auto toks = tokenize(this->a, src, path)?;
         auto p = new_parser(this->a, toks.slice(), path);
         const auto decls = p.parse_file()?;
+        for (auto c : p.cts) { this->g.cts.put(c.name, c)?; }
+        for (auto d : decls) { if (d.k == .Check) { this->g.ct_checks.push(d.ct)?; } }
         const auto dir = dir_of(path);
         auto renames = List<str>::init(this->a);
         for (auto d : decls) {

@@ -25,6 +25,7 @@ struct Parser {
     List<i64> splits;
     bool at_packed;
     i64 at_align;
+    List<Expr*> cts;
 
     Token peek() { return this->toks[this->pos] };
     Token peek_at(i64 n) {
@@ -83,7 +84,7 @@ struct Parser {
             this->skip_semis();
             return;
         }
-        if (d.k == .Import || d.k == .Alias || d.k == .Const || (d.k == .Func && d.f.body == null)) { this->fail("expected ';'")?; }
+        if (d.k == .Import || d.k == .Alias || d.k == .Const || d.k == .Check || (d.k == .Func && d.f.body == null)) { this->fail("expected ';'")?; }
     }
 
     // ---------------------------------------------------------------- node helpers
@@ -148,6 +149,11 @@ struct Parser {
     !void parse_decl(List<Decl>*out) {
         const auto t = this->peek();
         auto d = Decl{ .k = .Import, .line = t.line };
+        if (t.tag == .ident && t.text == "comptime") {
+            const auto ce = this->parse_expr()?;
+            out.push(Decl{ .k = .Check, .ct = ce, .line = t.line })?;
+            return;
+        }
         if (t.tag == .ident && t.text == "test" && this->peek_at(1).tag == .str_lit) {
             _ = this->advance();
             const auto name = this->advance().text;
@@ -535,6 +541,16 @@ struct Parser {
         defer this->depth -= 1;
         if (this->depth > 300) { this->fail("expression is nested too deeply (limit 300 levels)")?; }
         const auto t = this->peek();
+        if (t.tag == .ident && t.text == "comptime") {
+            _ = this->advance();
+            const auto c = this->ex(.Comptime, t)?;
+            auto kb = List<u8>::init(this->a);
+            sprint(&kb, "{this->file}:{t.off}")?;
+            c.name = kb.slice();
+            c.l = this->parse_prefix()?;
+            this->cts.push(c)?;
+            return c;
+        }
         match t.tag {
             .minus, .bang, .tilde, .amp, .star => {
                 _ = this->advance();
@@ -921,7 +937,7 @@ struct Parser {
 }
 
 Parser new_parser(Allocator a, Token[] toks, str file) {
-    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .arrow_only = false, .splits = List<i64>::init(a) };
+    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a) };
 }
 
 i64 prec(Tag t) {

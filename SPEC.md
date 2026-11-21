@@ -200,6 +200,10 @@ Ownership: a parameter written `move T x`, or a method written `R name(...) move
 
 Borrows: a method written `R name(...) borrows { ... }` returns a pointer or slice into the receiver, and one written `invalidates` may move or free what earlier pointers refer to. When a local variable is initialized or assigned from a call to a `borrows` method of a local variable `c`, from `&c.f`, `&c[i]` or `c[a..b]` with `c` a pointer or slice, any later use of that variable after `c` was consumed or after an `invalidates` call on `c` is an error. A pointer or slice into a local array or struct value (`&x`, `&x.f`, `&a[i]`, `a[lo..hi]`) cannot be returned, and cannot be stored through a pointer parameter or into a global. The prelude marks `List.push/append/insert/reserve`, `Map.put/remove` as `invalidates` and `List.at/slice`, `Map.get_ptr` as `borrows`. Like `move`, both words are contextual.
 
+## 7a. Compile-time evaluation
+
+`comptime EXPR` (a prefix operator, binding like unary `-`) evaluates `EXPR` while compiling and uses the result as a constant. The compiler builds the program with a generated `main` that runs `EXPR` (all functions, constants and the prelude are available; local variables and type parameters are not), runs it, and reads the bytes back. The type must be plain data: integers, floats, `bool`, enums, `str`, and arrays or structs of those; a `void` expression is run for its effects. A result of an array or struct type lives in read-only data and is indexed in place. A top-level `comptime EXPR;` runs before code generation, so `comptime assert(sizeof(T) == 16);` is a static assertion. Each distinct expression is run once per compilation, in a child compilation of the same program. `comptime` inside a string interpolation is not supported. The prelude helpers `__ct_emit` and `__ct_emit_str` carry the result.
+
 ## 8. C interop
 
 - `extern` declares a C function and `export` defines one.
