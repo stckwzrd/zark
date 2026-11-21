@@ -253,10 +253,16 @@ bool Parser::lambda_ahead() {
     if (receiver.len > 0 && !is_static) { this_ty = receiver; }
     auto params = this->parse_params_new(nt.line, &variadic, this_ty, recv_params)?;
     const auto is_const = this->eat(.kw_const);
-    if (this->at(.ident) && this->peek().text == "move" && this->peek_at(1).tag == .lbrace) {
+    auto invalidates = false;
+    auto borrows = false;
+    while (this->at(.ident) && (this->peek_at(1).tag == .lbrace || this->peek_at(1).tag == .ident)) {
+        const auto w = this->peek().text;
+        if (w != "move" && w != "invalidates" && w != "borrows") { break; }
         _ = this->advance();
-        if (this_ty.len == 0) { this->fail("only a method can consume 'this'")?; }
-        params.items[0].move = true;
+        if (this_ty.len == 0) { this->fail("only a method can use move, invalidates or borrows")?; }
+        if (w == "move") { params.items[0].move = true; }
+        if (w == "invalidates") { invalidates = true; }
+        if (w == "borrows") { borrows = true; }
     }
     auto ret = ret_te;
     if (ret != null && ret.k == .Name && ret.name == "void" && ret.args.len == 0) { ret = null; }
@@ -270,6 +276,8 @@ bool Parser::lambda_ahead() {
         .is_extern = is_extern, .is_export = is_export, .variadic = variadic, .line = nt.line,
         .file = this->file, .receiver = receiver, .receiver_params = recv_params, .name_off = nt.off, .receiver_off = recv_off, .is_const = is_const
     };
+    f.invalidates = invalidates;
+    f.borrows = borrows;
     if (body != null) { f.end_off = body.end_off; }
     return f;
 }

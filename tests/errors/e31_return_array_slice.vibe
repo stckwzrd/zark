@@ -1,0 +1,2 @@
+u8[] f() { u8[16] buf; return buf[0..4]; }
+void main() { println(f().len); }

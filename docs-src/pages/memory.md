@@ -322,12 +322,73 @@ void main() {
 
 The check follows names, not memory. It sees `a.free(buf)` followed by `buf`, but it does not see `auto copy = buf; a.free(buf); use(copy)`, and it does not track fields (`this->items`). For those cases use the `DebugAllocator`, which stops the program at the exact access.
 
+## Pointers that outlive their memory
+
+The compiler follows where a pointer or a slice comes from. A pointer into a local variable cannot leave the function, neither through `return` nor by being stored in a parameter:
+
+```vibe error
+i64* first_of() {
+    i64[4] a;
+    auto p = &a[1];
+    return p;
+}
+
+void main() { println(*first_of()); }
+```
+
+```vibe error
+struct Slot { i64* p; }
+
+void put(Slot* out) {
+    i64 x = 1;
+    out->p = &x;
+}
+
+void main() {
+    Slot s;
+    put(&s);
+}
+```
+
+A pointer or slice into a container is valid until the container changes. The methods that can move the memory (`push`, `append`, `insert`, `reserve`, `Map.put`, `remove`) are marked `invalidates`, and the methods that hand out a pointer into it (`at`, `slice`, `get_ptr`) are marked `borrows`. Using such a pointer after an invalidating call is an error, and so is using a slice after `free` of the buffer it came from:
+
+```vibe error
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1) catch return;
+    auto p = l.at(0);
+    l.push(2) catch return;
+    println(*p);
+}
+```
+
+Take the pointer again after the change and everything is fine:
+
+```vibe run
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1) catch return;
+    auto p = l.at(0);
+    *p = 10;
+    l.push(2) catch return;
+    p = l.at(1);
+    *p = 20;
+    println(l.get(0), l.get(1));
+}
+```
+
+Your own types can use the same words after the parameter list: `T* at(i64 i) borrows { ... }` and `!void push(T v) invalidates { ... }`. As with `move`, the check follows variable names: a pointer stored in a struct field or copied through a function call is not tracked.
+
 ## What the compiler does not check
 
 | Problem | What happens |
 |---|---|
 | Use of a variable after `free`, `destroy`, `deinit` | **checked**: a compile error |
 | Use through a copy of the pointer or through a field | not checked (use `DebugAllocator`) |
+| A pointer into a local escaping the function | **checked**: a compile error |
+| A pointer into a `List`/`Map` used after `push`/`put` | **checked**: a compile error |
 | Double `free` of one variable | **checked**: a compile error |
 | A leak (forgot `free`/`deinit`) | silent; the memory is released when the process exits |
 | Going out of bounds of a slice or array | **checked**: a panic with file and line |

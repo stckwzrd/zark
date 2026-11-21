@@ -1,0 +1,3 @@
+struct S { i64* p; }
+void put(S* out) { i64 x = 1; out->p = &x; }
+void main() { S s; put(&s); }

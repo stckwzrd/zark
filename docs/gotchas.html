@@ -203,7 +203,7 @@ error: error.Signaled</code></pre></div></div>
 <h3 id="a-list-without-init-does-not-work"><a class="anchor" href="#a-list-without-init-does-not-work">#</a>A <code>List</code> without <code>init</code> does not work</h3>
 <p>A zero <code>List</code> has no allocator, and <code>push</code> on it returns <code>error.NoAllocator</code>. Always call <code>List&lt;T&gt;::init(a)</code>.</p>
 <h3 id="a-pointer-to-a-list-element-is-invalid-after-push"><a class="anchor" href="#a-pointer-to-a-list-element-is-invalid-after-push">#</a>A pointer to a <code>List</code> element is invalid after <code>push</code></h3>
-<p>The buffer may move. Take the pointer when you have finished adding.</p>
+<p>The buffer may move. The compiler rejects using the pointer after <code>push</code> when it was taken with <code>at</code> or <code>slice</code> into a local variable (see <a href="memory.html#pointers-that-outlive-their-memory">memory</a>); a pointer kept in a struct field is not checked, so take it when you have finished adding.</p>
 <h3 id="map-keys-are-not-copied-the-order-is-undefined"><a class="anchor" href="#map-keys-are-not-copied-the-order-is-undefined">#</a><code>Map</code>: keys are not copied, the order is undefined</h3>
 <p>If a key is built in a temporary buffer, use <code>a.dup(key)</code>.</p>
 <h3 id="sizeof-takes-a-type"><a class="anchor" href="#sizeof-takes-a-type">#</a><code>sizeof</code> takes a type</h3>

@@ -102,6 +102,8 @@ struct FnDecl {
     i64 end_off;
     i64 receiver_off;
     bool is_const;
+    bool invalidates;
+    bool borrows;
     str link_name;          // extern: the C symbol when `name` got a module prefix ("" = name)
 }
 
