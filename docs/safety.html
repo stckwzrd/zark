@@ -100,6 +100,14 @@
 <td>compile error</td>
 </tr>
 <tr>
+<td>Changing a <code>List</code> or <code>Map</code> inside a loop that iterates over it (and goes on to the next round)</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>A <code>Thread</code> that is not joined on every path, dropped, or returned together with a local it captured</td>
+<td>compile error</td>
+</tr>
+<tr>
 <td><code>comptime</code> assertion that is false</td>
 <td>compile error</td>
 </tr>
@@ -147,13 +155,15 @@
 <li>A parameter or method marked <code>move</code> takes the value over. The standard library marks <code>free</code>, <code>destroy</code>, every <code>deinit</code>, <code>join</code>, and the <code>close</code> of sockets and streams. After the call, the variable is dead until you assign it again.</li>
 <li>A method marked <code>borrows</code> returns a pointer or slice into the object (<code>List.at</code>, <code>List.slice</code>, <code>Map.get_ptr</code>). A method marked <code>invalidates</code> may move the memory (<code>push</code>, <code>put</code>, <code>insert</code>). If you call an <code>invalidates</code> method, every pointer or slice you took from that object earlier is dead.</li>
 <li>A pointer or slice to a local array or struct cannot leave the function: not by <code>return</code> and not by being stored through a pointer parameter or into a global.</li>
+<li>A loop that iterates over a container (<code>for (auto x : list)</code>, <code>list.slice()</code>, <code>this-&gt;items</code>) cannot call an <code>invalidates</code> method on it and then go on to the next round. Leave with <code>break</code> or <code>return</code> right after the change, or iterate over a copy.</li>
+<li>A struct declared <code>owned</code> (in the standard library, <code>Thread</code>) must be consumed in every scope it lives in: joined, detached, passed on, or returned. This includes the exits taken by <code>?</code>, so write <code>defer t.join();</code> or <code>errdefer t.join();</code> right after creating it. Dropping such a value on the spot is refused.</li>
 </ul>
 <p>The state is followed through <code>if</code>, <code>match</code>, <code>catch</code>, loops, <code>defer</code> and <code>errdefer</code>. The checker is deliberately conservative where it would otherwise reject valid programs, so it says nothing about what it cannot see. Four things it does not see:</p>
 <ul>
 <li><strong>Copies.</strong> <code>auto q = p; a.destroy(p); use(q)</code> is not caught.</li>
-<li><strong>Fields.</strong> <code>this-&gt;items</code> is not tracked; only plain variables are.</li>
+<li><strong>Fields for <code>move</code>.</strong> <code>a.free(this-&gt;data)</code> does not mark the field as freed. (Borrows and <code>invalidates</code> do follow field paths such as <code>this-&gt;items</code>.)</li>
 <li><strong>Other functions.</strong> A function that frees what you passed to it, without being marked <code>move</code>, is invisible.</li>
-<li><strong>Threads.</strong> Data races are not checked.</li>
+<li><strong>Data races.</strong> Nothing checks that two threads do not touch the same memory.</li>
 </ul>
 <p>You can mark your own functions with the same words, and the check then covers them too. See <a href="memory.html#use-after-free-is-a-compile-error">memory</a>.</p>
 <h2 id="closing-the-gap-with-tools"><a class="anchor" href="#closing-the-gap-with-tools">#</a>Closing the gap with tools</h2>
@@ -169,7 +179,7 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">destroy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p);</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>
-fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f3e8db34ff8)
+fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f05b2cfbff8)
 backtrace:
   #0 0x1ced in .vibe-cache/main
   #1 0x13bf in .vibe-cache/main
@@ -189,8 +199,8 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7faf54dd3ff8
-leak: block #2, 100 bytes at 0x7faf54dd1f9c
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Output</span><span class="exit">exit code 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7fdd59b22ff8
+leak: block #2, 100 bytes at 0x7fdd59b20f9c
 DebugAllocator: 2 block(s) leaked, 108 bytes (set trap_id to a block number to stop in gdb where it is allocated)
 error: MemoryLeak</code></pre></div></div>
 <p>Run your tests with a <code>DebugAllocator</code> as the allocator. Because functions receive the allocator as a parameter, no code needs to change to do it.</p>
@@ -202,7 +212,7 @@ error: MemoryLeak</code></pre></div></div>
 <li>Protect shared data with a <code>Mutex</code>, or use <code>AtomicI64</code>, or pass values through a <code>Channel</code>.</li>
 <li>Do not copy a <code>Mutex</code>, <code>Cond</code>, <code>WaitGroup</code> or <code>Channel</code> once it is in use. Share it by pointer.</li>
 </ol>
-<p>The compiler does not check these rules. Write the <code>join</code> next to the <code>spawn</code>, the way you write <code>defer</code> next to an allocation, and test with several threads.</p>
+<p>The compiler enforces the first rule for a <code>Thread</code> held in a variable: it must be joined on every path, including the failing ones (see <a href="net-threads.html">threads</a>). It does not see threads kept in a list or array, data races, or the order of joins. Write the <code>join</code> next to the <code>spawn</code>, the way you write <code>defer</code> next to an allocation, and test with several threads.</p>
 <h2 id="a-checklist-before-you-ship"><a class="anchor" href="#a-checklist-before-you-ship">#</a>A checklist before you ship</h2>
 <ul>
 <li><input disabled="" type="checkbox"> All tests pass in the safe mode, with a <code>DebugAllocator</code> in the memory tests.</li>

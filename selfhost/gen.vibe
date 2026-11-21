@@ -901,7 +901,6 @@ struct Gen {
             sprint(&an, "%a.{i}")?;
             this->store(Value{ .ty = pt, .v = an.slice() }, slot)?;
             this->declare_var(p.name, Var{ .ptr = slot, .ty = pt, .mutable = p.mutable }, decl.line)?;
-            this->register_owned(slot, p.name, pt, decl.line)?;
         }
         if (this->safety) { hdr.append(") #0 {{\n")?; } else { hdr.append(") {{\n")?; }
         for (auto [i, cap] : fi.caps) {

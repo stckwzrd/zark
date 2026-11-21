@@ -280,7 +280,8 @@ test "a deadline in the past is expired" {
 | one arena per unit of work | a global allocator that nothing owns |
 | `+%` for hashes | `+` where you expect a wrap (it panics on purpose) |
 | `comptime assert(sizeof(T) == N)` for layouts | a comment that says "must be 16 bytes" |
-| a `join` right next to each `spawn` | a thread that outlives the variables it captured |
+| `defer t.join()` or `errdefer t.join()` right after each `spawn` | a join only at the very end, so that a `?` can leave the thread running (the compiler refuses) |
+| collect the changes, apply them after the loop | `list.push(...)` inside `for (auto x : list)` (the compiler refuses) |
 
 ## What next
 

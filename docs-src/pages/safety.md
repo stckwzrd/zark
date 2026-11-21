@@ -40,6 +40,8 @@ Every problem ends in exactly one of three ways.
 | Freeing the same variable twice | compile error |
 | Returning or storing a pointer or slice into a local | compile error |
 | Using a pointer or slice into a `List` or `Map` after it changed | compile error |
+| Changing a `List` or `Map` inside a loop that iterates over it (and goes on to the next round) | compile error |
+| A `Thread` that is not joined on every path, dropped, or returned together with a local it captured | compile error |
 | `comptime` assertion that is false | compile error |
 | Index or slice out of bounds | panic |
 | Integer division or remainder by zero, or `MIN / -1` | panic |
@@ -60,13 +62,15 @@ Vibe does not have lifetimes or a borrow checker as Rust has. It has something s
 - A parameter or method marked `move` takes the value over. The standard library marks `free`, `destroy`, every `deinit`, `join`, and the `close` of sockets and streams. After the call, the variable is dead until you assign it again.
 - A method marked `borrows` returns a pointer or slice into the object (`List.at`, `List.slice`, `Map.get_ptr`). A method marked `invalidates` may move the memory (`push`, `put`, `insert`). If you call an `invalidates` method, every pointer or slice you took from that object earlier is dead.
 - A pointer or slice to a local array or struct cannot leave the function: not by `return` and not by being stored through a pointer parameter or into a global.
+- A loop that iterates over a container (`for (auto x : list)`, `list.slice()`, `this->items`) cannot call an `invalidates` method on it and then go on to the next round. Leave with `break` or `return` right after the change, or iterate over a copy.
+- A struct declared `owned` (in the standard library, `Thread`) must be consumed in every scope it lives in: joined, detached, passed on, or returned. This includes the exits taken by `?`, so write `defer t.join();` or `errdefer t.join();` right after creating it. Dropping such a value on the spot is refused.
 
 The state is followed through `if`, `match`, `catch`, loops, `defer` and `errdefer`. The checker is deliberately conservative where it would otherwise reject valid programs, so it says nothing about what it cannot see. Four things it does not see:
 
 - **Copies.** `auto q = p; a.destroy(p); use(q)` is not caught.
-- **Fields.** `this->items` is not tracked; only plain variables are.
+- **Fields for `move`.** `a.free(this->data)` does not mark the field as freed. (Borrows and `invalidates` do follow field paths such as `this->items`.)
 - **Other functions.** A function that frees what you passed to it, without being marked `move`, is invisible.
-- **Threads.** Data races are not checked.
+- **Data races.** Nothing checks that two threads do not touch the same memory.
 
 You can mark your own functions with the same words, and the check then covers them too. See [memory](memory.md#use-after-free-is-a-compile-error).
 
@@ -111,7 +115,7 @@ Closures capture variables by pointer. A thread that outlives the variables it u
 2. Protect shared data with a `Mutex`, or use `AtomicI64`, or pass values through a `Channel`.
 3. Do not copy a `Mutex`, `Cond`, `WaitGroup` or `Channel` once it is in use. Share it by pointer.
 
-The compiler does not check these rules. Write the `join` next to the `spawn`, the way you write `defer` next to an allocation, and test with several threads.
+The compiler enforces the first rule for a `Thread` held in a variable: it must be joined on every path, including the failing ones (see [threads](net-threads.md)). It does not see threads kept in a list or array, data races, or the order of joins. Write the `join` next to the `spawn`, the way you write `defer` next to an allocation, and test with several threads.
 
 ## A checklist before you ship
 

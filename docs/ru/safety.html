@@ -100,6 +100,14 @@
 <td>ошибка компиляции</td>
 </tr>
 <tr>
+<td>Изменение <code>List</code> или <code>Map</code> внутри цикла, который по нему итерирует (и идёт на следующий круг)</td>
+<td>ошибка компиляции</td>
+</tr>
+<tr>
+<td><code>Thread</code>, не присоединённый на каждом пути, брошенный или возвращённый вместе с захваченной локальной переменной</td>
+<td>ошибка компиляции</td>
+</tr>
+<tr>
 <td>Ложное утверждение <code>comptime assert</code></td>
 <td>ошибка компиляции</td>
 </tr>
@@ -147,13 +155,15 @@
 <li>Параметр или метод с пометкой <code>move</code> забирает значение. В стандартной библиотеке <code>move</code> стоит на <code>free</code>, <code>destroy</code>, каждом <code>deinit</code>, <code>join</code> и на <code>close</code> сокетов и потоков. После вызова переменная мертва, пока вы не присвоите ей значение заново.</li>
 <li>Метод с пометкой <code>borrows</code> возвращает указатель или срез внутрь объекта (<code>List.at</code>, <code>List.slice</code>, <code>Map.get_ptr</code>). Метод с пометкой <code>invalidates</code> может сдвинуть память (<code>push</code>, <code>put</code>, <code>insert</code>). Если вызвать метод <code>invalidates</code>, все указатели и срезы, взятые из этого объекта раньше, становятся мёртвыми.</li>
 <li>Указатель или срез на локальный массив или структуру не может покинуть функцию: ни через <code>return</code>, ни сохранением через параметр-указатель или в глобальную переменную.</li>
+<li>Цикл, который итерирует по контейнеру (<code>for (auto x : list)</code>, <code>list.slice()</code>, <code>this-&gt;items</code>), не может вызвать у него метод <code>invalidates</code> и пойти на следующий круг. Выходите через <code>break</code> или <code>return</code> сразу после изменения или итерируйте по копии.</li>
+<li>Структура, объявленная <code>owned</code> (в стандартной библиотеке это <code>Thread</code>), должна быть использована в каждой области, где она живёт: присоединена, отсоединена, передана дальше или возвращена. Это включает выходы через <code>?</code>, поэтому пишите <code>defer t.join();</code> или <code>errdefer t.join();</code> сразу после создания. Бросить такое значение на месте нельзя.</li>
 </ul>
 <p>Состояние отслеживается через <code>if</code>, <code>match</code>, <code>catch</code>, циклы, <code>defer</code> и <code>errdefer</code>. Проверка нарочно консервативна там, где иначе отвергала бы корректные программы, поэтому о том, чего она не видит, она молчит. Четыре вещи она не видит:</p>
 <ul>
 <li><strong>Копии.</strong> <code>auto q = p; a.destroy(p); use(q)</code> не ловится.</li>
-<li><strong>Поля.</strong> <code>this-&gt;items</code> не отслеживается, только простые переменные.</li>
+<li><strong>Поля для <code>move</code>.</strong> <code>a.free(this-&gt;data)</code> не помечает поле освобождённым. (Заимствования и <code>invalidates</code> пути полей вроде <code>this-&gt;items</code> учитывают.)</li>
 <li><strong>Другие функции.</strong> Функция, которая освобождает переданное ей без пометки <code>move</code>, невидима.</li>
-<li><strong>Потоки.</strong> Гонки данных не проверяются.</li>
+<li><strong>Гонки данных.</strong> Ничто не проверяет, что два потока не трогают одну память.</li>
 </ul>
 <p>Свои функции можно пометить теми же словами, и проверка распространится и на них. См. <a href="memory.html#использование-после-free-ошибка-компиляции">память</a>.</p>
 <h2 id="закрываем-пробел-инструментами"><a class="anchor" href="#закрываем-пробел-инструментами">#</a>Закрываем пробел инструментами</h2>
@@ -169,7 +179,7 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">destroy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p);</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>
-fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f3e8db34ff8)
+fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f05b2cfbff8)
 backtrace:
   #0 0x1ced in .vibe-cache/main
   #1 0x13bf in .vibe-cache/main
@@ -189,8 +199,8 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7faf54dd3ff8
-leak: block #2, 100 bytes at 0x7faf54dd1f9c
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7fdd59b22ff8
+leak: block #2, 100 bytes at 0x7fdd59b20f9c
 DebugAllocator: 2 block(s) leaked, 108 bytes (set trap_id to a block number to stop in gdb where it is allocated)
 error: MemoryLeak</code></pre></div></div>
 <p>Запускайте тесты с <code>DebugAllocator</code> в роли аллокатора. Поскольку функции получают аллокатор параметром, менять код для этого не нужно.</p>
@@ -202,7 +212,7 @@ error: MemoryLeak</code></pre></div></div>
 <li>Защищайте общие данные через <code>Mutex</code>, используйте <code>AtomicI64</code> или передавайте значения через <code>Channel</code>.</li>
 <li>Не копируйте <code>Mutex</code>, <code>Cond</code>, <code>WaitGroup</code> или <code>Channel</code>, когда они уже в работе. Делитесь ими через указатель.</li>
 </ol>
-<p>Компилятор эти правила не проверяет. Пишите <code>join</code> рядом со <code>spawn</code>, как пишете <code>defer</code> рядом с выделением, и тестируйте с несколькими потоками.</p>
+<p>Первое правило компилятор проверяет для <code>Thread</code> в переменной: он должен быть присоединён на каждом пути, включая неудачные (см. <a href="net-threads.html">потоки</a>). Потоки в списке или массиве, гонки данных и порядок <code>join</code> он не видит. Пишите <code>join</code> рядом со <code>spawn</code>, как пишете <code>defer</code> рядом с выделением, и тестируйте с несколькими потоками.</p>
 <h2 id="чек-лист-перед-выпуском"><a class="anchor" href="#чек-лист-перед-выпуском">#</a>Чек-лист перед выпуском</h2>
 <ul>
 <li><input disabled="" type="checkbox"> Все тесты проходят в безопасном режиме, а в тестах памяти стоит <code>DebugAllocator</code>.</li>

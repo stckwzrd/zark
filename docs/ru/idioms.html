@@ -269,8 +269,12 @@ ok   a deadline in the past is expired
 <td>комментарий «должно быть 16 байт»</td>
 </tr>
 <tr>
-<td><code>join</code> прямо рядом с каждым <code>spawn</code></td>
-<td>поток, переживший захваченные переменные</td>
+<td><code>defer t.join()</code> или <code>errdefer t.join()</code> сразу после каждого <code>spawn</code></td>
+<td><code>join</code> только в самом конце, так что <code>?</code> может оставить поток работать (компилятор откажет)</td>
+</tr>
+<tr>
+<td>собрать изменения и применить после цикла</td>
+<td><code>list.push(...)</code> внутри <code>for (auto x : list)</code> (компилятор откажет)</td>
 </tr>
 </tbody></table></div>
 <h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>

@@ -47,7 +47,10 @@ struct MatchRes { Type* ty; str slot; }
             this->declare_var(s.name, Var{ .ptr = slot, .ty = ty, .mutable = s.mutable }, s.line)?;
             if (has_val) {
                 this->set_origin(slot, s.name, s.e, s.line)?;
-                this->register_owned(slot, s.name, ty, s.line)?;
+                if (s.e.k != .StructLit) {
+                    this->register_owned(slot, s.name, ty, s.line)?;
+                    if (is_owned(ty)) { this->taint_owned(slot, s.e, s.line)?; }
+                }
             }
         }
         .Assign => {
