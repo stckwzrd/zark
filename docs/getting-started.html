@@ -45,7 +45,7 @@
 <li>builds the first compiler from the seed with <code>clang</code>, and with it <code>stage1</code> from the sources in <code>selfhost/</code>;</li>
 <li>builds <code>stage2</code>, a compiler built by the previous one, and <code>stage3</code>, once more; checks that <code>stage2</code> and <code>stage3</code> are byte-for-byte identical (the fixed point);</li>
 <li>builds the chain without LLVM, <code>native1</code>, <code>native2</code>, <code>native3</code>, and checks that <code>native2 == native3</code>;</li>
-<li>runs the tests (33 of them) with the new compiler;</li>
+<li>runs the whole test suite with the new compiler;</li>
 <li>copies the result to <code>build/vibe</code>.</li>
 </ol>
 <p>It takes about a minute. At the end you will see the line <code>== done: build/vibe is the self-hosted compiler</code>.</p>

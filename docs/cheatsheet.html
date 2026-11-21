@@ -142,7 +142,11 @@
 </tr>
 </thead><tbody><tr>
 <td>arithmetic</td>
-<td><code>+ - * / %</code>, <code>-x</code></td>
+<td><code>+ - * / %</code>, <code>-x</code> (overflow and division by zero panic)</td>
+</tr>
+<tr>
+<td>wrapping</td>
+<td><code>+% -% *%</code> (never panic)</td>
 </tr>
 <tr>
 <td>comparison</td>
@@ -362,6 +366,22 @@ r = 2</code></pre></div></div>
 <td>pattern</td>
 <td><code>auto x = a.alloc&lt;T&gt;(n)?;</code> and right away <code>defer a.free(x)</code></td>
 </tr>
+<tr>
+<td>ownership</td>
+<td><code>void deinit() move { ... }</code>, <code>void f(move T* p)</code>: the variable is dead after the call</td>
+</tr>
+<tr>
+<td>borrows</td>
+<td><code>T* at(i64 i) borrows { ... }</code>, <code>!void push(T v) invalidates { ... }</code></td>
+</tr>
+<tr>
+<td>resource type</td>
+<td><code>owned struct Thread { ... }</code>: must be joined or handed on in every scope</td>
+</tr>
+<tr>
+<td>compile time</td>
+<td><code>comptime f(3)</code>, <code>const auto T = comptime make_table();</code>, <code>comptime assert(sizeof(S) == 16);</code></td>
+</tr>
 </tbody></table></div>
 <p>See <a href="memory.html">memory</a>.</p>
 <h2 id="collections"><a class="anchor" href="#collections">#</a>Collections</h2>
@@ -420,10 +440,10 @@ r = 2</code></pre></div></div>
 <h2 id="pitfalls-in-one-line"><a class="anchor" href="#pitfalls-in-one-line">#</a>Pitfalls in one line</h2>
 <ul>
 <li>A literal outside the range of its type is a compile error, and integer overflow is a panic in a safe build (use <code>+%</code>, <code>-%</code>, <code>*%</code> to wrap on purpose; <code>--release</code> removes the check).</li>
-<li>Integer division by zero crashes the program.</li>
+<li>Integer division by zero is a panic (in <code>--release</code> it is not checked).</li>
 <li><code>catch</code> and <code>orelse</code> take everything to the right: use parentheses.</li>
 <li><code>{</code> in a string is an interpolation, a literal brace is <code>{{</code>.</li>
-<li>A closure must not be returned, and functions without a <code>return</code> on all paths compile.</li>
+<li>A closure must not outlive the variables it captures; a function without a <code>return</code> on every path does not compile.</li>
 <li>The prelude names (<code>min</code>, <code>max</code>, <code>abs</code>, <code>sort</code>, <code>run</code>, <code>env</code>) are taken.</li>
 </ul>
 <p>The full list: <a href="gotchas.html">pitfalls and FAQ</a>.</p>

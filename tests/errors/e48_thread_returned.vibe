@@ -1,0 +1,10 @@
+import "std/thread" as thread;
+!thread::Thread start(i64 n) {
+    auto total = thread::AtomicI64{};
+    const auto t = thread::spawn([&total, n]() -> void { total.add(n); })?;
+    return t;
+}
+void main() {
+    auto t = start(3) catch return;
+    t.join();
+}

@@ -137,7 +137,7 @@ $ vibe run oob.vibe --release
 
 (`oob.vibe` reads `a[5]` of an array of three elements.) Keep debug builds with the checks, and turn on `--release` for finished programs when you are sure the indexes are correct.
 
-For development use the default mode: it builds the compiler itself (about 12 thousand lines of Vibe) in about a tenth of a second, not counting the link.
+For development use the default mode: it builds the compiler itself (about 15 thousand lines of Vibe) in about a third of a second, not counting the link.
 
 ## Intermediate representations
 

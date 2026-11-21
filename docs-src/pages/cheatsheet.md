@@ -77,7 +77,8 @@ A variable is mutable, `const` makes it immutable, `auto` infers the type, and w
 
 | | |
 |---|---|
-| arithmetic | `+ - * / %`, `-x` |
+| arithmetic | `+ - * / %`, `-x` (overflow and division by zero panic) |
+| wrapping | `+% -% *%` (never panic) |
 | comparison | `== != < <= > >=` |
 | logic | `&& \|\| !` (lazy, `bool` only) |
 | bits | `& \| ^ ~ << >>` |
@@ -212,6 +213,10 @@ See [errors and optional values](errors-and-optionals.md).
 | allocate | `a.alloc<T>(n)?`, `a.create<T>()?`, `a.dup(s)?` |
 | free | `a.free(s)`, `a.destroy(p)`, `arena.deinit()` |
 | pattern | `auto x = a.alloc<T>(n)?;` and right away `defer a.free(x)` |
+| ownership | `void deinit() move { ... }`, `void f(move T* p)`: the variable is dead after the call |
+| borrows | `T* at(i64 i) borrows { ... }`, `!void push(T v) invalidates { ... }` |
+| resource type | `owned struct Thread { ... }`: must be joined or handed on in every scope |
+| compile time | `comptime f(3)`, `const auto T = comptime make_table();`, `comptime assert(sizeof(S) == 16);` |
 
 See [memory](memory.md).
 
@@ -270,10 +275,10 @@ test "arithmetic" {
 ## Pitfalls in one line
 
 - A literal outside the range of its type is a compile error, and integer overflow is a panic in a safe build (use `+%`, `-%`, `*%` to wrap on purpose; `--release` removes the check).
-- Integer division by zero crashes the program.
+- Integer division by zero is a panic (in `--release` it is not checked).
 - `catch` and `orelse` take everything to the right: use parentheses.
 - `{` in a string is an interpolation, a literal brace is `{{`.
-- A closure must not be returned, and functions without a `return` on all paths compile.
+- A closure must not outlive the variables it captures; a function without a `return` on every path does not compile.
 - The prelude names (`min`, `max`, `abs`, `sort`, `run`, `env`) are taken.
 
 The full list: [pitfalls and FAQ](gotchas.md).

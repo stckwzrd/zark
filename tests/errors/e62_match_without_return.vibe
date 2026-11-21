@@ -1,0 +1,12 @@
+i64 f(i64 n) {
+    match n {
+        1 => return 10;
+        2 => return 20;
+    }
+}
+i64 other() { return 77; }
+void main() {
+    println(f(1));
+    println(f(3));
+    println(other());
+}

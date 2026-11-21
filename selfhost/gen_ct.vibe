@@ -19,10 +19,11 @@ bool Gen::ct_plain(Type* t) {
     const auto saved_nlbl = this->nlbl;
     const auto saved_label = this->cur_label;
     const auto saved_term = this->terminated;
-    const auto saved_moved = this->move_copy(this->moved)?;
+    const auto saved_moved = this->snap();
     const auto saved_scopes = this->scopes;
     const auto saved_env = this->env;
     const auto saved_loops = this->loops;
+    const auto saved_colds = this->colds_copy()?;
     defer {
         this->body.len = saved_body;
         this->allocas.len = saved_allocas;
@@ -30,10 +31,11 @@ bool Gen::ct_plain(Type* t) {
         this->nlbl = saved_nlbl;
         this->cur_label = saved_label;
         this->terminated = saved_term;
-        this->moved = saved_moved;
+        this->restore_state(saved_moved);
         this->scopes = saved_scopes;
         this->env = saved_env;
         this->loops = saved_loops;
+        this->colds = saved_colds;
     }
     this->scopes = List<Scope>::init(this->a);
     this->loops = List<Loop>::init(this->a);
@@ -43,9 +45,50 @@ bool Gen::ct_plain(Type* t) {
     return v.ty;
 }
 
+extern i32 unlink(u8* path);
+extern i32 getpid();
+
+void ct_remove(str path) {
+    u8[4096] pb;
+    const auto p = to_cstr(pb[..], path) catch { return; };
+    _ = unlink(p);
+}
+
+bool Gen::ct_in_chain(str key) {
+    auto start = 0;
+    const auto ch = this->ct_chain;
+    for (auto i : 0..ch.len + 1) {
+        if (i == ch.len || ch[i] == '|') {
+            if (ch[start..i] == key) { return true; }
+            start = i + 1;
+        }
+    }
+    return false;
+}
+
+!str Gen::ct_child_chain() {
+    auto b = this->sb();
+    b.append(this->ct_chain)?;
+    if (this->ct_key.len > 0) {
+        if (b.len > 0) { b.append("|")?; }
+        b.append(this->ct_key)?;
+    }
+    return b.slice();
+}
+
 !CtVal* Gen::ct_eval(Expr* e) {
     const auto key = e.name;
     if (this->ct_cache.has(key)) { return this->ct_cache.get(key)?; }
+    if (key.len == 0 || key == this->ct_key || this->ct_in_chain(key)) {
+        this->err(e.line);
+        eprintln("this comptime expression needs its own value, directly or through another comptime expression, so it cannot be evaluated");
+        return error.CompileFailed;
+    }
+    if (this->ct_chain.len > 0 && str_count(this->ct_chain, "|") >= 16) {
+        this->err(e.line);
+        eprintln("comptime expressions are nested more than 16 levels deep");
+        return error.CompileFailed;
+    }
     const auto ty = this->ct_type(e)?;
     auto mode = 0;
     auto mode_name = "plain";
@@ -61,30 +104,43 @@ bool Gen::ct_plain(Type* t) {
         return error.CompileFailed;
     }
     this->nct += 1;
-    _ = mkdir(".vibe-cache", 493);
-    auto ob = this->sb();
-    sprint(&ob, ".vibe-cache/ct{this->nct}.out")?;
-    auto xb = this->sb();
-    sprint(&xb, ".vibe-cache/ct{this->nct}.exe")?;
-    auto args = List<str>::init(this->a);
-    args.append([this->self_path, "run", this->test_root])?;
-    args.append(this->ct_extras.slice())?;
-    args.append(["-o", xb.slice(), "--ct-key", key, "--ct-mode", mode_name, "--ct-out", ob.slice()])?;
-    const auto code = run(this->a, args.slice())?;
-    if (code != 0) {
-        this->err(e.line);
-        eprintln("the comptime expression failed (exit code {code}); it runs at compile time and may use functions and constants, but not variables");
-        return error.CompileFailed;
-    }
     auto cv = this->a.create<CtVal>()?;
     cv.ty = ty;
     cv.mode = mode;
-    if (mode != 1) {
-        cv.content = read_file(this->a, ob.slice()) catch {
+    if (this->self_path.len == 0) {
+        if (mode == 0) {
+            const auto zsz = this->size_of(ty)?;
+            auto zb = this->sb();
+            for (auto _k : 0..(zsz as i64)) { zb.push(0)?; }
+            cv.content = zb.slice();
+        }
+    } else {
+        _ = mkdir(".vibe-cache", 493);
+        auto ob = this->sb();
+        sprint(&ob, ".vibe-cache/ct{getpid()}-{this->nct}.out")?;
+        auto xb = this->sb();
+        sprint(&xb, ".vibe-cache/ct{getpid()}-{this->nct}.exe")?;
+        ct_remove(ob.slice());
+        auto args = List<str>::init(this->a);
+        args.append([this->self_path, "run", this->test_root])?;
+        args.append(this->ct_extras.slice())?;
+        args.append(["-o", xb.slice(), "--ct-key", key, "--ct-mode", mode_name, "--ct-out", ob.slice(), "--ct-chain", this->ct_child_chain()?])?;
+        const auto code = run(this->a, args.slice())?;
+        ct_remove(xb.slice());
+        if (code != 0) {
+            ct_remove(ob.slice());
             this->err(e.line);
-            eprintln("the comptime expression produced no result");
+            eprintln("the comptime expression failed (exit code {code}); it runs at compile time and may use functions and constants, but not variables");
             return error.CompileFailed;
-        };
+        }
+        if (mode != 1) {
+            cv.content = read_file(this->a, ob.slice()) catch {
+                this->err(e.line);
+                eprintln("the comptime expression produced no result");
+                return error.CompileFailed;
+            };
+            ct_remove(ob.slice());
+        }
     }
     if (mode == 0) {
         const auto sz = this->size_of(ty)?;
@@ -104,6 +160,15 @@ bool Gen::ct_plain(Type* t) {
     }
     this->ct_cache.put(key, cv)?;
     return cv;
+}
+
+!void Gen::ct_check(Expr* c) {
+    const auto cv = this->ct_eval(c)?;
+    if (cv.mode != 1) {
+        this->err(c.line);
+        eprintln("a top-level comptime must be a statement that returns nothing, like `comptime assert(...);`; this one produces a value (did you forget `assert`?)");
+        return error.CompileFailed;
+    }
 }
 
 !Value Gen::gen_comptime(Expr* e, Type* expected) {

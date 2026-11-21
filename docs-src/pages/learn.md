@@ -193,7 +193,24 @@ void main() {
 }
 ```
 
-If you remove the `.Pop` arm, the compiler tells you that the match is not exhaustive. That is the point: when you add a new variant to the union, every place that has to know about it stops compiling until you handle it.
+A `match` statement may skip variants: nothing happens for them. A `match` that produces a value has to cover every variant, and the compiler names the one that is missing. That is the point of choosing this form when a forgotten case would be a bug: when you add a variant to the union, every such place stops compiling until you handle it.
+
+```vibe error
+union Shape {
+    f64 Circle;
+    i64 Square;
+    Empty;
+}
+
+f64 area(Shape s) {
+    return match s {
+        .Circle(r) => 3.14 * r * r,
+        .Square(w) => w as f64,
+    }
+}
+
+void main() { println(area(.Empty)); }
+```
 
 **Exercise.** Add a `Dup` command that duplicates the top of the stack, and use it in the program.
 

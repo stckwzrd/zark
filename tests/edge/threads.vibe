@@ -1,0 +1,22 @@
+import "std/thread" as thread;
+!void work() { }
+!void main() {
+    auto total = thread::AtomicI64{};
+    auto t = thread::spawn([&total]() -> void { total.add(1); })?;
+    defer t.join();
+    work()?;
+    auto ts = List<thread::Thread>::init(c_allocator());
+    defer ts.deinit();
+    for (auto i : 0..3) {
+        const auto th = thread::spawn([&total]() -> void { total.add(10); })?;
+        ts.push(th)?;
+    }
+    for (auto i : 0..ts.len) { ts.items[i].join(); }
+    auto d = thread::spawn([]() -> void { })?;
+    d.detach();
+    auto u = thread::spawn([&total]() -> void { total.add(100); })?;
+    errdefer u.join();
+    work()?;
+    u.join();
+    println(total.load());
+}

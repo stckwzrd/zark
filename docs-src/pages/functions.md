@@ -142,7 +142,16 @@ void main() {
 }
 ```
 
-> **Gotcha:** the compiler does not check that a function with a result returns a value on **all** paths. If control reaches the end of the body without a `return`, the result is undefined. Always end such a function with a `return`.
+A function with a result must return a value on **every** path, otherwise it does not compile:
+
+```vibe error
+i64 sign(i64 x) {
+    if (x < 0) { return -1; }
+    if (x > 0) { return 1; }
+}
+
+void main() { println(sign(5)); }
+```
 
 ### Several results
 

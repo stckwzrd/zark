@@ -1,0 +1,5 @@
+void main() {
+    const i64 m = -9223372036854775807 - 1;
+    i64 k = -1;
+    println(m * k);
+}

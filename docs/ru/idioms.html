@@ -28,7 +28,7 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        return</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Buffer</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.a</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a, </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.data</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> data };</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() move {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">move</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        this</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">free</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">this</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">data);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"></span>
@@ -38,7 +38,7 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">        this</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">used </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    str </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">text</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() borrows {</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    str </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">text</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">borrows</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">        return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> this</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">data[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">..</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">this</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">used];</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
@@ -179,7 +179,7 @@ nobody</code></pre></div></div>
 more than half
 done, empty
 disk full</code></pre></div></div>
-<p>Когда вы добавляете вариант, каждый <code>match</code> без ветки <code>_</code> перестаёт компилироваться, пока вы его не обработаете. Так компилятор работает как чек-лист. Избегайте веток <code>_ =&gt;</code> в <code>match</code> по своим типам: они прячут именно эту помощь.</p>
+<p>Когда вы добавляете вариант, каждый <code>match</code>, который даёт значение и не имеет ветки <code>_</code>, перестаёт компилироваться, пока вы его не обработаете. Так компилятор работает как чек-лист, поэтому предпочитайте эту форму оператору <code>match</code>, когда забытый случай был бы багом (оператор может молча пропускать варианты). Избегайте веток <code>_ =&gt;</code> в <code>match</code> по своим типам: они прячут именно эту помощь.</p>
 <h2 id="пусть-нулевое-значение-будет-полезным"><a class="anchor" href="#пусть-нулевое-значение-будет-полезным">#</a>Пусть нулевое значение будет полезным</h2>
 <p>Литерал структуры задаёт названное и обнуляет остальное, а переменные начинаются с нуля. Проектируйте тип так, чтобы полностью нулевое значение было корректным пустым, и тогда не нужны ни конструктор, ни флаг «инициализировано»:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Stats</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
@@ -249,7 +249,7 @@ ok   a deadline in the past is expired
 <td><code>catch 0</code>, чтобы предупреждение исчезло</td>
 </tr>
 <tr>
-<td><code>match</code> без <code>_</code> по своим union</td>
+<td><code>match</code>, дающий значение, без <code>_</code> по своим union</td>
 <td>универсальная ветка, скрывающая новые варианты</td>
 </tr>
 <tr>
@@ -269,8 +269,12 @@ ok   a deadline in the past is expired
 <td>комментарий «должно быть 16 байт»</td>
 </tr>
 <tr>
-<td><code>join</code> прямо рядом с каждым <code>spawn</code></td>
-<td>поток, переживший захваченные переменные</td>
+<td><code>defer t.join()</code> или <code>errdefer t.join()</code> сразу после каждого <code>spawn</code></td>
+<td><code>join</code> только в самом конце, так что <code>?</code> может оставить поток работать (компилятор откажет)</td>
+</tr>
+<tr>
+<td>собрать изменения и применить после цикла</td>
+<td><code>list.push(...)</code> внутри <code>for (auto x : list)</code> (компилятор откажет)</td>
 </tr>
 </tbody></table></div>
 <h2 id="что-дальше"><a class="anchor" href="#что-дальше">#</a>Что дальше</h2>

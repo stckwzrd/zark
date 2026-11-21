@@ -1,0 +1,6 @@
+i8 id(i8 x) { return x; }
+void main() {
+    const i8 m = id(-128);
+    const i8 d = id(-1);
+    println(m % d);
+}

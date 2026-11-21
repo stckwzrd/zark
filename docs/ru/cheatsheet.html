@@ -142,7 +142,11 @@
 </tr>
 </thead><tbody><tr>
 <td>арифметика</td>
-<td><code>+ - * / %</code>, <code>-x</code></td>
+<td><code>+ - * / %</code>, <code>-x</code> (переполнение и деление на ноль паникуют)</td>
+</tr>
+<tr>
+<td>заворачивание</td>
+<td><code>+% -% *%</code> (никогда не паникуют)</td>
 </tr>
 <tr>
 <td>сравнение</td>
@@ -362,6 +366,22 @@ r = 2</code></pre></div></div>
 <td>шаблон</td>
 <td><code>auto x = a.alloc&lt;T&gt;(n)?;</code> и сразу <code>defer a.free(x)</code></td>
 </tr>
+<tr>
+<td>владение</td>
+<td><code>void deinit() move { ... }</code>, <code>void f(move T* p)</code>: после вызова переменная мертва</td>
+</tr>
+<tr>
+<td>заимствование</td>
+<td><code>T* at(i64 i) borrows { ... }</code>, <code>!void push(T v) invalidates { ... }</code></td>
+</tr>
+<tr>
+<td>тип-ресурс</td>
+<td><code>owned struct Thread { ... }</code>: в каждой области его нужно присоединить или передать дальше</td>
+</tr>
+<tr>
+<td>при компиляции</td>
+<td><code>comptime f(3)</code>, <code>const auto T = comptime make_table();</code>, <code>comptime assert(sizeof(S) == 16);</code></td>
+</tr>
 </tbody></table></div>
 <p>См. <a href="memory.html">память</a>.</p>
 <h2 id="коллекции"><a class="anchor" href="#коллекции">#</a>Коллекции</h2>
@@ -420,10 +440,10 @@ r = 2</code></pre></div></div>
 <h2 id="ловушки-одной-строкой"><a class="anchor" href="#ловушки-одной-строкой">#</a>Ловушки одной строкой</h2>
 <ul>
 <li>Литерал вне диапазона типа — ошибка компиляции, а переполнение целых в безопасной сборке — паника (для намеренного заворачивания пишите <code>+%</code>, <code>-%</code>, <code>*%</code>; <code>--release</code> убирает проверку).</li>
-<li>Деление целого на ноль роняет программу.</li>
+<li>Деление целого на ноль — паника (в <code>--release</code> не проверяется).</li>
 <li><code>catch</code> и <code>orelse</code> забирают всё правее: ставьте скобки.</li>
 <li><code>{</code> в строке — интерполяция, литеральная скобка — <code>{{</code>.</li>
-<li>Замыкание нельзя возвращать, функции без <code>return</code> на всех путях компилируются.</li>
+<li>Замыкание не должно пережить захваченные переменные; функция без <code>return</code> на каждом пути не компилируется.</li>
 <li>Имена прелюдии (<code>min</code>, <code>max</code>, <code>abs</code>, <code>sort</code>, <code>run</code>, <code>env</code>) заняты.</li>
 </ul>
 <p>Полный список: <a href="gotchas.html">ловушки и FAQ</a>.</p>

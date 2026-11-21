@@ -2,7 +2,7 @@ import random, subprocess, sys, os, tempfile
 
 TYPES = ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"]
 BITS = {"i8": 8, "i16": 16, "i32": 32, "i64": 64, "u8": 8, "u16": 16, "u32": 32, "u64": 64}
-OPS = ["+", "-", "*", "&", "|", "^"]
+OPS = ["+%", "-%", "*%", "&", "|", "^"]
 
 
 def expr(r, vars, depth):
@@ -48,9 +48,9 @@ def program(seed):
         if r.random() < 0.2:
             c, tc = expr(r, vars, 2)
             tgt2 = r.choice(vars)
-            lines.append(f"    if ({tgt2[0]} > ({c} as {tgt2[1]})) {{ {tgt2[0]} = {tgt2[0]} - 1 as {tgt2[1]}; }}")
+            lines.append(f"    if ({tgt2[0]} > ({c} as {tgt2[1]})) {{ {tgt2[0]} = {tgt2[0]} -% 1 as {tgt2[1]}; }}")
         if r.random() < 0.15:
-            lines.append(f"    for (auto k : 0..{r.randint(1, 5)}) {{ {tgt[0]} = ({tgt[0]} * 3 + k as {tgt[1]}) as {tgt[1]}; }}")
+            lines.append(f"    for (auto k : 0..{r.randint(1, 5)}) {{ {tgt[0]} = ({tgt[0]} *% 3 +% k as {tgt[1]}) as {tgt[1]}; }}")
     body = "\n".join(lines)
     prints = "\n".join(f"    println({v[0]});" for v in vars)
     helpers = "\n".join(f"{t} pick_{t}({t} a, {t} b) {{ if (a < b) {{ return a; }} return b; }}" for t in TYPES)

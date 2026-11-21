@@ -1,0 +1,12 @@
+owned struct G { i64 id; void rel() move {} }
+G mk() { return G{ .id = 1 }; }
+void main() {
+    auto g = mk();
+    g.rel();
+    auto n = 0;
+    while (n < 3) {
+        n += 1;
+        g = mk();
+        if (n == 2) { break; }
+    }
+}

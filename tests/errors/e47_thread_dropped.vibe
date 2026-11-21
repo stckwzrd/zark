@@ -1,0 +1,5 @@
+import "std/thread" as thread;
+void main() {
+    auto total = thread::AtomicI64{};
+    thread::spawn([&total]() -> void { total.add(1); }) catch return;
+}
