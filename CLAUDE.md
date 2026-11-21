@@ -55,7 +55,7 @@ The language is written C++-style: type-first declarations, `auto`/`const`, `tem
 
 ## Status and next steps (details in ROADMAP.md)
 - Compile time for 10k lines: see `bench/compile_speed.sh`; the default (safe) build does bounds, division and overflow checks, which roughly double the IR of arithmetic-heavy code.
-- Weak spot: code from the native backend runs about 3x slower than gcc -O0.
+- Weak spot: code from the native backend (safe mode, all checks) runs about 1.5x slower than clang -O0 and 4x slower than -O2; `-O` keeps the checks and is close to C.
 - Planned order:
   1. Register allocation (linear scan) + SSA without allocas + peephole.
   2. In-memory IR instead of text (removes print + parse).

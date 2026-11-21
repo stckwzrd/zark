@@ -187,6 +187,7 @@ bool can_coerce(Type* from, Type* to) {
             if (lt != null) { ex = this->mk_elem(.Errun, lt)?; }
             const auto v = this->gen_expr(e.l, ex)?;
             if (v.ty.k != .Errun) { this->err(e.line); eprintln("'?' needs an error union, got '{this->type_name(v.ty)?}'"); return error.CompileFailed };
+            if (this->cur == null) { this->err(e.line); eprintln("'?' cannot be used here: this code is not inside a function"); return error.CompileFailed; }
             const auto rt = this->cur.ret;
             if (rt.k != .Errun) { this->err(e.line); eprintln("'?' used in a function that does not return an error union (make it return !T)"); return error.CompileFailed };
             const auto tag = this->extract(v, 0, this->t_i32)?;
@@ -198,7 +199,7 @@ bool can_coerce(Type* from, Type* to) {
             this->terminated = true;
             this->label(lerr)?;
             const auto rv = this->insert(rt, "zeroinitializer", tag, 0)?;
-            this->run_defers(this->scopes.len - 1, 0, true)?;
+            this->run_defers(this->scopes.len - 1, 0, true, false)?;
             sprint(this->ins()?, "  ret {this->llty(rt)?} {rv}\n")?;
             this->terminated = true;
             this->label(lok)?;
@@ -554,6 +555,7 @@ bool has_defaults(Type* t) {
     this->br(lend)?;
     this->label(lerr)?;
     const auto pre_moved = this->snap();
+    this->cond_depth += 1;
     this->push_scope()?;
     if (e.has_name && e.k == .Catch) {
         const auto slot = this->alloca(this->t_errval, e.name)?;
@@ -580,8 +582,9 @@ bool has_defaults(Type* t) {
         this->gen_stmt(h)?;
     }
     this->pop_scope()?;
+    this->cond_depth -= 1;
     const auto err_reaches = !this->terminated;
-    if (err_reaches) { this->restore_state(this->move_join(pre_moved, this->moved)?); } else { this->restore_state(pre_moved); }
+    if (err_reaches) { this->restore_state(this->filter_must(this->move_join(pre_moved, this->moved)?, pre_moved)?); } else { this->restore_state(pre_moved); }
     const auto err_lbl = this->cur_label;
     if (err_reaches && vt.k != .Void && !has_errv) { this->err(e.line); eprintln("catch block must produce a value or leave (return/break/panic)"); return error.CompileFailed; }
     if (err_reaches) { this->br(lend)?; }
@@ -1129,7 +1132,7 @@ bool is_vec(Type* t) { return t.k == .Array && t.vec; }
     if (!this->fns.has(helper)) { this->err(line); eprintln("runtime helper {helper} missing (prelude)"); return error.CompileFailed; }
     const auto fi = this->inst_fn(this->fns.get(helper)?, this->new_env()?, this->no_types())?;
     auto ci = -1;
-    for (auto [i, c] : this->colds) { if (c.helper == fi.llname && c.nlead == lead.len) { ci = i; } }
+    for (auto [i, c] : this->colds) { if (c.helper == fi.llname && c.nlead == lead.len && c.ins.len < 64) { ci = i; } }
     if (ci < 0) {
         const auto lb = this->new_label("cold")?;
         this->colds.push(Cold{ .helper = fi.llname, .label = lb, .nlead = lead.len, .ins = List<ColdIn>::init(this->a) })?;

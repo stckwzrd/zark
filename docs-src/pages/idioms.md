@@ -206,7 +206,7 @@ void main() {
 }
 ```
 
-When you add a variant, every `match` without a `_` arm stops compiling until you handle it. That is the compiler working as a checklist. Avoid `_ =>` arms in a `match` over your own types: they hide exactly this help.
+When you add a variant, every `match` that produces a value and has no `_` arm stops compiling until you handle it. That is the compiler working as a checklist, so prefer this form to a `match` statement when a forgotten case would be a bug (a statement may skip variants without a word). Avoid `_ =>` arms in a `match` over your own types: they hide exactly this help.
 
 ## Let the zero value be useful
 
@@ -275,7 +275,7 @@ test "a deadline in the past is expired" {
 | `defer a.free(x)` on the line after the allocation | free at the end of the function by hand |
 | take `str` and `T[]` | take `List<T>*` when you only read |
 | `?` to pass errors up | `catch 0` to make a warning disappear |
-| `match` without `_` on your own unions | a catch-all arm that hides new variants |
+| a `match` that produces a value, without `_`, on your own unions | a catch-all arm that hides new variants |
 | get a pointer into a list late and drop it early | keep `list.at(i)` across a `push` (the compiler refuses) |
 | one arena per unit of work | a global allocator that nothing owns |
 | `+%` for hashes | `+` where you expect a wrap (it panics on purpose) |

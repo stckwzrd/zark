@@ -1,0 +1,2 @@
+i64 f() { return comptime f(); }
+void main() { println(f()); }

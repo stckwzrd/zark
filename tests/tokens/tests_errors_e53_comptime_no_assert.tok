@@ -1,0 +1,15 @@
+1 .ident void
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+1 .rbrace }
+2 .ident comptime
+2 .kw_sizeof sizeof
+2 .lparen (
+2 .ident i64
+2 .rparen )
+2 .eqeq ==
+2 .int_lit 8
+2 .semi ;
+3 .eof 

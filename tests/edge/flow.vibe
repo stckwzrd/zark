@@ -1,0 +1,71 @@
+owned struct G { i64 id; void rel() move {} }
+G mk() { return G{ .id = 1 }; }
+
+i64 f3() { return 3; }
+comptime assert(f3() / f3() == 1);
+
+!void errdefer_after_consume(Allocator a) {
+    auto buf = a.alloc<u8>(10)?;
+    errdefer a.free(buf);
+    a.free(buf);
+    return;
+}
+
+void both_arms_leave(bool c) {
+    auto g = mk();
+    if (c) { g.rel(); return; } else { g.rel(); return; }
+}
+
+void server_loop(bool c) {
+    auto g = mk();
+    while (true) {
+        if (c) { g.rel(); return; }
+    }
+}
+
+void infinite_with_break() {
+    auto g = mk();
+    while (true) {
+        g.rel();
+        break;
+    }
+}
+
+!void borrow_not_used_in_loop() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1)?;
+    const auto s = l.slice();
+    println(s.len);
+    for (auto i : 0..3) { l.push(i)?; }
+    println(l.len);
+}
+
+!void reassigned_first_in_loop() {
+    const auto a = c_allocator();
+    u8[] buf;
+    for (auto i : 0..3) {
+        buf = a.alloc<u8>(10)?;
+        a.free(buf);
+    }
+    auto l = List<i64>::init(a);
+    defer l.deinit();
+    l.push(1)?;
+    auto p = l.at(0);
+    for (auto i : 0..3) {
+        p = l.at(0);
+        *p = i;
+        l.push(i)?;
+    }
+    println(l.len);
+}
+
+!void main() {
+    errdefer_after_consume(c_allocator())?;
+    both_arms_leave(true);
+    server_loop(true);
+    infinite_with_break();
+    borrow_not_used_in_loop()?;
+    reassigned_first_in_loop()?;
+    println("flow ok");
+}

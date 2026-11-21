@@ -286,7 +286,7 @@ void restore_stack() {
             safety = false;
         } else if (x == "--time") {
             timing = true;
-        } else if (x == "--ct-key" || x == "--ct-mode" || x == "--ct-out") {
+        } else if (x == "--ct-key" || x == "--ct-mode" || x == "--ct-out" || x == "--ct-chain") {
             i += 1;
             if (i < argv.len) { ct_opts.push(x)?; ct_opts.push(argv.get(i))?; }
         } else if (x == "--no-safety") {
@@ -326,6 +326,7 @@ void restore_stack() {
         if (k == "--ct-key") { g.ct_key = v; }
         if (k == "--ct-mode") { g.ct_mode = v; }
         if (k == "--ct-out") { g.ct_out = v; }
+        if (k == "--ct-chain") { g.ct_chain = v; }
     }
     auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = Map<str>::init(a) };
     diag_prelude = PRELUDE;
@@ -339,8 +340,9 @@ void restore_stack() {
         g.flush_diag();
         return 1;
     };
-    g.generate() catch {
+    g.generate() catch |e| {
         g.flush_diag();
+        if (e != error.CompileFailed) { eprintln("error: internal compiler error: {e}"); }
         return 1;
     };
     if (!g.fns.has("main") && !is_test && !is_ir && !freestanding) {

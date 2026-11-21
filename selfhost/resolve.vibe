@@ -215,6 +215,7 @@ struct Resolver {
                 r.rtype(d.ty)?;
                 d.path = r.rename(d.path)?;
             }
+            .Check => r.rexpr(d.ct)?;
         }
     }
 }

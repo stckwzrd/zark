@@ -58,8 +58,17 @@ def program(t, op, cs):
 
 
 def expected(t, op, a, b):
-    r = {"+": a + b, "-": a - b, "*": a * b}[op]
     lo, hi = rng(t)
+    if op in ("/", "%"):
+        if b == 0:
+            return "division by zero"
+        if lo < 0 and a == lo and b == -1:
+            return None
+        q = abs(a) // abs(b)
+        if (a < 0) != (b < 0):
+            q = -q
+        return str(q if op == "/" else a - b * q)
+    r = {"+": a + b, "-": a - b, "*": a * b}[op]
     return str(r) if lo <= r <= hi else None
 
 
@@ -77,7 +86,7 @@ def main():
     for t in only:
         pl = pool(t)
         pairs = cases(list(itertools.product(pl, pl)))
-        for op in ("+", "-", "*"):
+        for op in ("+", "-", "*", "/", "%"):
             src = os.path.join(d, f"o_{t}.vibe")
             open(src, "w").write(program(t, op, pairs))
             for name, flags in (("native", []), ("llvm", ["--llvm"]), ("O2", ["-O"])):
@@ -93,6 +102,8 @@ def main():
                     total += 1
                     if want is None:
                         ok = p.returncode != 0 and "integer overflow" in p.stderr + p.stdout
+                    elif want == "division by zero":
+                        ok = p.returncode != 0 and want in p.stderr + p.stdout
                     else:
                         ok = p.returncode == 0 and p.stdout.strip() == want
                     if not ok:

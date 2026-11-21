@@ -179,7 +179,7 @@ nobody</code></pre></div></div>
 more than half
 done, empty
 disk full</code></pre></div></div>
-<p>Когда вы добавляете вариант, каждый <code>match</code> без ветки <code>_</code> перестаёт компилироваться, пока вы его не обработаете. Так компилятор работает как чек-лист. Избегайте веток <code>_ =&gt;</code> в <code>match</code> по своим типам: они прячут именно эту помощь.</p>
+<p>Когда вы добавляете вариант, каждый <code>match</code>, который даёт значение и не имеет ветки <code>_</code>, перестаёт компилироваться, пока вы его не обработаете. Так компилятор работает как чек-лист, поэтому предпочитайте эту форму оператору <code>match</code>, когда забытый случай был бы багом (оператор может молча пропускать варианты). Избегайте веток <code>_ =&gt;</code> в <code>match</code> по своим типам: они прячут именно эту помощь.</p>
 <h2 id="пусть-нулевое-значение-будет-полезным"><a class="anchor" href="#пусть-нулевое-значение-будет-полезным">#</a>Пусть нулевое значение будет полезным</h2>
 <p>Литерал структуры задаёт названное и обнуляет остальное, а переменные начинаются с нуля. Проектируйте тип так, чтобы полностью нулевое значение было корректным пустым, и тогда не нужны ни конструктор, ни флаг «инициализировано»:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Stats</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> {</span></span>
@@ -249,7 +249,7 @@ ok   a deadline in the past is expired
 <td><code>catch 0</code>, чтобы предупреждение исчезло</td>
 </tr>
 <tr>
-<td><code>match</code> без <code>_</code> по своим union</td>
+<td><code>match</code>, дающий значение, без <code>_</code> по своим union</td>
 <td>универсальная ветка, скрывающая новые варианты</td>
 </tr>
 <tr>

@@ -44,7 +44,8 @@ struct Cold { str helper; str label; i64 nlead; List<ColdIn> ins; }
 struct OwnedVar { str ptr; str name; str tname; i64 line; }
 struct Scope { Map<Var> vars; List<Defer> defers; List<OwnedVar> owned; }
 struct MoveRec { str ptr; str by; i64 line; i64 kind; str cont; str cname; }
-struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; List<MoveRec> brks; List<MoveRec> conts; }
+struct LoopEv { str ptr; bool first_reinit; }
+struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; i64 base; bool infinite; i64 nbrk; List<MoveRec> brks; List<MoveRec> conts; List<MoveRec> bmust; List<LoopEv> evs; }
 
 type Env = Map<Type*>*;
 
@@ -73,12 +74,14 @@ struct Gen {
     i64 cdepth;
     List<MoveRec> moved;
     bool shared;
+    i64 cond_depth;
     List<Cold> colds;
     Map<Expr*> cts;
     List<Expr*> ct_checks;
     Map<CtVal*> ct_cache;
     List<str> ct_extras;
     str ct_key;
+    str ct_chain;
     str ct_mode;
     str ct_out;
     str self_path;
@@ -590,13 +593,13 @@ struct Gen {
 
     !void pop_scope() {
         const auto idx = this->scopes.len - 1;
-        if (!this->terminated) { this->run_defers(idx, idx, false)?; }
+        if (!this->terminated) { this->run_defers(idx, idx, false, true)?; }
         this->prune_scope(idx);
         this->scopes.len -= 1;
     }
 
     /// run defers of scopes[hi] down to scopes[lo], innermost first
-    !void run_defers(i64 hi, i64 lo, bool is_err) {
+    !void run_defers(i64 hi, i64 lo, bool is_err, bool keep) {
         auto any = false;
         for (auto k : lo..hi + 1) { if (this->scopes.items[k].defers.len > 0) { any = true; } }
         if (!any) {
@@ -604,7 +607,6 @@ struct Gen {
             return;
         }
         const auto saved_moved = this->snap();
-        defer this->restore_state(saved_moved);
         auto i = hi + 1;
         while (i > lo) {
             i -= 1;
@@ -619,6 +621,7 @@ struct Gen {
             }
         }
         this->check_owned(hi, lo)?;
+        if (!keep) { this->restore_state(saved_moved); }
     }
 
     bool has_err_defers() {
@@ -767,7 +770,7 @@ struct Gen {
     }
 
     !void generate() {
-        if (this->ct_key.len > 0) { this->install_ct_main()?; } else { for (auto c : this->ct_checks) { _ = this->ct_eval(c)?; } }
+        if (this->ct_key.len > 0) { this->install_ct_main()?; } else { for (auto c : this->ct_checks) { this->ct_check(c)?; } }
         for (auto c : this->const_order) { if (c.mutable) { this->emit_global_var(c)?; } }
         FnInst* main_inst = null;
         auto test_insts = List<FnInst*>::init(this->a);
@@ -890,6 +893,9 @@ struct Gen {
         this->loops = List<Loop>::init(this->a);
         this->moved = List<MoveRec>::init(this->a);
         this->colds = List<Cold>::init(this->a);
+        this->reinit = false;
+        this->shared = false;
+        this->cond_depth = 0;
         this->ntmp = 0;
         this->nlbl = 0;
         this->terminated = false;
@@ -924,7 +930,7 @@ struct Gen {
 
         this->gen_stmt(decl.body)?;
         if (!this->terminated) {
-            this->run_defers(this->scopes.len - 1, 0, false)?;
+            this->run_defers(this->scopes.len - 1, 0, false, false)?;
             if (fi.ret.k == .Void) {
                 sprint(this->ins()?, "  ret void\n")?;
             } else if (fi.ret.k == .Errun && fi.ret.elem.k == .Void) {
@@ -983,6 +989,8 @@ struct Gen {
     g.body = List<u8>::init(a);
     g.allocas = List<u8>::init(a);
     g.cts = Map<Expr*>::init(a);
+    g.moved = List<MoveRec>::init(a);
+    g.colds = List<Cold>::init(a);
     g.ct_checks = List<Expr*>::init(a);
     g.ct_cache = Map<CtVal*>::init(a);
     g.ct_extras = List<str>::init(a);
