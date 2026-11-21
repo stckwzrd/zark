@@ -1,0 +1,4 @@
+void main() {
+    i32 x = 2147483647;
+    println(x + 1);
+}

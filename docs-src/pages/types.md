@@ -67,22 +67,31 @@ void main() {
 
 ### Overflow
 
-Integer arithmetic wraps around within the type, without a panic, like unsigned arithmetic in C:
+In a normal (safe) build, `+`, `-` and `*` on integers stop the program with `panic: integer overflow` and the file and line when the result does not fit the type:
+
+```vibe run exit
+void main() {
+    const u8 u = 255;
+    println(u + 1);
+}
+```
+
+When wrapping is what you want (hashes, counters, checksums), say so with `+%`, `-%` and `*%`: they never panic, in any build:
 
 ```vibe run
 void main() {
     const u8 u = 255;
-    println(u + 1);
+    println(u +% 1);
     const i8 i = 127;
-    println(i + 1);
+    println(i +% 1);
     const u32 z = 0;
-    println(z - 1);
+    println(z -% 1);
 }
 ```
 
-> **Gotcha:** overflow is not detected by default. Compile with `--check-overflow` to make `+`, `-` and `*` stop the program with a file and line, or compare in advance, or use a wider type.
+With `--release` (and `--fast`, `--freestanding`) the checks are removed and plain `+` wraps around within the type, as in C for unsigned numbers. The standard library is compiled without the checks.
 
-When wrapping is what you want (hashes, counters, checksums), say so with `+%`, `-%` and `*%`: they always wrap, even under `--check-overflow`, and never trigger the "signed overflow is undefined" assumption of `--fast`.
+A typical use is a hash. These operators also never get the "signed overflow is undefined" assumption of `--fast`:
 
 ```vibe run
 void main() {

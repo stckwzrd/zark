@@ -311,6 +311,7 @@ void restore_stack() {
         return 1;
     }
 
+    if (safety) { ovf = true; }
     const auto t0 = now_ns();
     const auto g = new_gen(a, safety)?;
     g.freestanding = freestanding;

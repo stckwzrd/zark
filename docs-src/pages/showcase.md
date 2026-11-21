@@ -172,4 +172,4 @@ checksum 51dbcc6aeca2d7a1
 
 - Add a `Triangle` shape: it only needs an `intersect` method.
 - Add a `"glass"` material to the `union` and see which `match` the compiler asks you to extend.
-- Build with `--check-overflow` and see that the checksum, which uses `*%`, keeps wrapping on purpose.
+- Note that the checksum uses `*%`, so it wraps on purpose while ordinary `*` would panic on overflow.

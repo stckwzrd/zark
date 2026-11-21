@@ -269,7 +269,7 @@ test "arithmetic" {
 
 ## Pitfalls in one line
 
-- A literal outside the range of its type is truncated silently, and integers overflow silently (unless you build with `--check-overflow`).
+- A literal outside the range of its type is a compile error, and integer overflow is a panic in a safe build (use `+%`, `-%`, `*%` to wrap on purpose; `--release` removes the check).
 - Integer division by zero crashes the program.
 - `catch` and `orelse` take everything to the right: use parentheses.
 - `{` in a string is an interpolation, a literal brace is `{{`.
