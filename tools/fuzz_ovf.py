@@ -29,10 +29,27 @@ def lit(t, v):
     return f"{v} as {t}"
 
 
-def program(t, op, pairs):
+def cases(pairs):
+    out = []
+    for a, b in pairs:
+        out.append((a, b, "vv"))
+        if b >= 0:
+            out.append((a, b, "vl"))
+        if a >= 0:
+            out.append((a, b, "lv"))
+    return out
+
+
+def program(t, op, cs):
     arms = []
-    for k, (a, b) in enumerate(pairs):
-        arms.append(f"    if (k == {k}) {{ println(id_{t}({lit(t, a)}) {op} id_{t}({lit(t, b)})); return; }}")
+    for k, (a, b, form) in enumerate(cs):
+        if form == "vv":
+            e = f"id_{t}({lit(t, a)}) {op} id_{t}({lit(t, b)})"
+        elif form == "vl":
+            e = f"id_{t}({lit(t, a)}) {op} {b}"
+        else:
+            e = f"{a} {op} id_{t}({lit(t, b)})"
+        arms.append(f"    if (k == {k}) {{ println({e}); return; }}")
     return (
         f"{t} id_{t}({t} x) {{ return x; }}\n"
         "void pick(i64 k) {\n" + "\n".join(arms) + "\n}\n"
@@ -59,7 +76,7 @@ def main():
     d = tempfile.mkdtemp()
     for t in only:
         pl = pool(t)
-        pairs = list(itertools.product(pl, pl))
+        pairs = cases(list(itertools.product(pl, pl)))
         for op in ("+", "-", "*"):
             src = os.path.join(d, f"o_{t}.vibe")
             open(src, "w").write(program(t, op, pairs))
@@ -70,7 +87,7 @@ def main():
                     print(f"{t} {op} {name}: build failed: {out[:300]}")
                     bad += 1
                     continue
-                for k, (a, b) in enumerate(pairs):
+                for k, (a, b, form) in enumerate(pairs):
                     want = expected(t, op, a, b)
                     p = subprocess.run([exe, str(k)], capture_output=True, text=True, timeout=30)
                     total += 1
@@ -80,7 +97,7 @@ def main():
                         ok = p.returncode == 0 and p.stdout.strip() == want
                     if not ok:
                         bad += 1
-                        print(f"{t} {a} {op} {b} [{name}]: expected {want or 'overflow panic'}, got exit {p.returncode} {(p.stdout + p.stderr)[:120]!r}")
+                        print(f"{t} {a} {op} {b} ({form}) [{name}]: expected {want or 'overflow panic'}, got exit {p.returncode} {(p.stdout + p.stderr)[:120]!r}")
     print(f"done: {total} cases, {bad} problems")
     sys.exit(1 if bad else 0)
 

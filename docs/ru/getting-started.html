@@ -45,7 +45,7 @@
 <li>собирает из семени первый компилятор через <code>clang</code>, а им — <code>stage1</code> из исходников <code>selfhost/</code>;</li>
 <li>строит <code>stage2</code> — компилятор, собранный предыдущим, и <code>stage3</code> — ещё раз; проверяет, что <code>stage2</code> и <code>stage3</code> побайтно совпадают (неподвижная точка);</li>
 <li>строит цепочку без LLVM: <code>native1</code>, <code>native2</code>, <code>native3</code> и проверяет, что <code>native2 == native3</code>;</li>
-<li>прогоняет тесты (21 штука) собственным компилятором;</li>
+<li>прогоняет весь набор тестов собственным компилятором;</li>
 <li>копирует результат в <code>build/vibe</code>.</li>
 </ol>
 <p>Занимает около минуты. В конце вы увидите строку <code>== done: build/vibe is the self-hosted compiler</code>.</p>
