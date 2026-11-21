@@ -25,7 +25,7 @@ function esc(s) {
 }
 
 function slug(s) {
-  return s.toLowerCase().replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, "").replace(/[^a-z0-9а-я]+/g, "-").replace(/^-+|-+$/g, "")
+  return s.toLowerCase().replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, "").replace(/[^a-z0-9а-яё]+/g, "-").replace(/^-+|-+$/g, "")
 }
 
 function frontMatter(text) {
