@@ -2,10 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi; }
 
 echo "== seed: bootstrap/seed.ll.gz -> stage1 (clang)"
 gzip -dc bootstrap/seed.ll.gz > build/seed.ll
-clang -O1 -Wno-override-module build/seed.ll -o build/seed -lm
+clang -O1 -Wno-override-module build/seed.ll std/rt.c -o build/seed -lm -lpthread -ldl
 
 echo "== stage1: compiler built from the seed"
 build/seed build selfhost/main.vibe --release -o build/stage1
@@ -16,18 +17,22 @@ build/stage2 build selfhost/main.vibe --release -o build/stage3
 
 build/stage2 ir selfhost/main.vibe > build/stage2.ll
 build/stage3 ir selfhost/main.vibe > build/stage3.ll
-if cmp -s build/stage2.ll build/stage3.ll && cmp -s build/stage2 build/stage3; then
-  echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines of IR, sha256 $(sha256sum build/stage2 | cut -c1-16))"
-else
-  echo "!! stage2 and stage3 differ"; exit 1
+if ! cmp -s build/stage2.ll build/stage3.ll; then
+  echo "!! stage2 and stage3 emit different IR"; exit 1
 fi
+if [ "$(uname -s)" = "Linux" ] && ! cmp -s build/stage2 build/stage3; then
+  echo "!! stage2 and stage3 binaries differ"; exit 1
+fi
+echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines of IR, sha256 $(sha build/stage2 | cut -c1-16))"
 
-echo "== native backend: compiler built without LLVM, then by itself"
-build/stage2 build selfhost/main.vibe --native -o build/native1
-build/native1 build selfhost/main.vibe --native -o build/native2
-build/native2 build selfhost/main.vibe --native -o build/native3
-if cmp -s build/native2 build/native3; then echo "== native fixed point reached: native2 == native3"; else echo "!! native2 and native3 differ"; exit 1; fi
-VIBE=build/native2 tests/run.sh | tail -1
+if [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ]; then
+  echo "== native backend: compiler built without LLVM, then by itself"
+  build/stage2 build selfhost/main.vibe --native -o build/native1
+  build/native1 build selfhost/main.vibe --native -o build/native2
+  build/native2 build selfhost/main.vibe --native -o build/native3
+  if cmp -s build/native2 build/native3; then echo "== native fixed point reached: native2 == native3"; else echo "!! native2 and native3 differ"; exit 1; fi
+  VIBE=build/native2 tests/run.sh | grep -v '^ok'
+fi
 
 tests/no_magic_names.sh
 

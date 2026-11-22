@@ -11,20 +11,20 @@ extern Tm* localtime_r(i64* t, Tm* out);
 /// seconds since 1970-01-01 UTC
 i64 unix() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
-    _ = clock_gettime(0, &ts);
+    _ = vrt_clock_gettime(0, &ts);
     return ts.sec;
 }
 
 i64 unix_ms() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
-    _ = clock_gettime(0, &ts);
+    _ = vrt_clock_gettime(0, &ts);
     return ts.sec * 1000 + ts.nsec / 1000000;
 }
 
 /// a monotonic clock in nanoseconds, for measuring intervals
 i64 mono_ns() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
-    _ = clock_gettime(1, &ts);
+    _ = vrt_clock_gettime(1, &ts);
     return ts.sec * 1000000000 + ts.nsec;
 }
 
@@ -137,7 +137,7 @@ DateTime local(i64 t) { return from_unix(t, local_offset(t)); }
 
 DateTime now_utc() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
-    _ = clock_gettime(0, &ts);
+    _ = vrt_clock_gettime(0, &ts);
     auto dt = utc(ts.sec);
     dt.nsec = ts.nsec;
     return dt;
@@ -145,7 +145,7 @@ DateTime now_utc() {
 
 DateTime now_local() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
-    _ = clock_gettime(0, &ts);
+    _ = vrt_clock_gettime(0, &ts);
     auto dt = local(ts.sec);
     dt.nsec = ts.nsec;
     return dt;

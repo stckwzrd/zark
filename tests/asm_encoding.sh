@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")/.."
+[ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ] || { echo "ok   asm encoding (skipped, needs x86-64 Linux)"; exit 0; }
 VIBE=${VIBE:-./build/vibe}
 command -v objdump >/dev/null || { echo "ok   asm encoding (skipped, no objdump)"; exit 0; }
 tmp=$(mktemp -d)

@@ -43,7 +43,7 @@ struct Point {
 
 ## Quick start
 
-Requirements: clang (tested with clang 18).
+Requirements: clang (tested with clang 18). Builds on Linux (glibc and musl, x86-64 and arm64), macOS and Windows through WSL2: see [INSTALL.md](INSTALL.md) ([по-русски](INSTALL.ru.md)).
 
 ```sh
 ./bootstrap.sh                            # seed -> self-hosted build/vibe (+ tests)
@@ -59,7 +59,7 @@ VIBE=build/vibe tests/run.sh              # test suite
 
 | Flag | Meaning |
 |---|---|
-| (default) | own x86-64 backend: fastest builds |
+| (default) | own x86-64 backend: fastest builds (x86-64 Linux; other systems use LLVM) |
 | `--llvm` | LLVM backend without optimizations |
 | `--time` | print frontend/backend/link times |
 | `-O` | LLVM `-O2`, bounds checks stay on |
