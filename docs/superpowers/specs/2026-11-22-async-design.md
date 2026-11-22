@@ -7,7 +7,7 @@ Vibe gets cooperative concurrency as a base layer of the language, the way Rust 
 ## Goals
 
 - `async` functions and `await`, compiled by the compiler into a state machine whose size is known at compile time. The caller decides where the state lives (stack, parent state, arena, heap).
-- A scheduler and an I/O reactor shipped with the compiler (`std/async` plus a small C part in `std/rt.c`): single-threaded executor first, then a multi-threaded one on `std/thread`.
+- A scheduler and an I/O reactor shipped with the compiler (`std/async` plus a small C part in `std/rt.c`): a single-threaded executor in this project.
 - The same behavior on the native and the LLVM backend, and on Linux and macOS (epoll and kqueue). The lowering produces ordinary IR, so neither backend gets new instructions.
 - Misuse is a compile error where the existing ownership checks can see it: awaiting a future twice, moving a future after it was started, an `await` in a position the lowering cannot handle.
 
@@ -61,14 +61,14 @@ The compiler learns the names `async`/`await` (keywords), `Poll` and `Context` (
 ### Scheduler and reactor
 
 - `std/rt.c`: `vrt_poller_*` over epoll (Linux) and kqueue (macOS): create, add/modify/remove fd with read/write interest, wait with timeout, wake from another thread.
-- `std/async`: `Executor` (run queue, timer heap, reactor), `block_on(future)`, `spawn(future)` returning a `JoinHandle<T>`, `Waker` stored in `Context`, `sleep(ms)`, async `TcpListener`/`TcpStream`. Tasks live in memory from an `Allocator` given to the executor. Second step: a multi-threaded executor with one run queue per worker and stealing, built on `std/thread` (`Mutex`, `Cond`, `AtomicI64` exist).
+- `std/async`: `Executor` (run queue, timer heap, reactor), `block_on(future)`, `spawn(future)` returning a `JoinHandle<T>`, `Waker` stored in `Context`, `sleep(ms)`, async `TcpListener`/`TcpStream`. Tasks live in memory from an `Allocator` given to the executor. A multi-threaded executor on `std/thread` is a later project.
 
 ## Build order and milestones
 
 1. Runtime without compiler help: `Poll`, `Context`, `Waker`, `Executor`, reactor, `sleep`, a hand-written future for a socket read, tests, a small echo server. This fixes the protocol.
 2. Compiler: `async`/`await` lowering with the position rule, frames, generics, methods, `?`. Tests in `tests/edge` (golden output), `tests/errors` (rejected uses), both backends, determinism of the fixed points.
 3. Ownership rules: consumed futures, no move after start, borrows held across `await` (reuse the iteration/borrow records).
-4. Multi-threaded executor and a first library layer (`join`, `select`, channel, async http on top of `std/http` pieces).
+Scope (decided by the owner): this project stops after step 3 with a single-threaded executor, a timer and a TCP socket to prove the base. The multi-threaded executor (which needs a rule for what may move between threads) and the library layer (`join`, `select`, channels, async http) are separate later projects.
 
 Each step ends green: both fixed points, `tests/run.sh`, CI on all systems. New syntax goes through the two-step seed rule from CLAUDE.md (teach the compiler first, update the seed, only then use it in `selfhost/`; the compiler itself does not need to use `async`).
 
