@@ -8,7 +8,7 @@ if command -v apt-get >/dev/null 2>&1; then
 elif command -v dnf >/dev/null 2>&1; then
     $sudo dnf install -y clang binutils diffutils gzip make bash git python3 glibc-devel
 elif command -v pacman >/dev/null 2>&1; then
-    $sudo pacman -Syu --needed --noconfirm clang binutils diffutils gzip make bash git python3 glibc linux-api-headers
+    $sudo pacman -Syu --needed --noconfirm clang binutils diffutils gzip make bash git python glibc linux-api-headers
 elif command -v apk >/dev/null 2>&1; then
     $sudo apk add --no-cache clang gcc binutils musl-dev diffutils gzip make bash git python3
 elif command -v zypper >/dev/null 2>&1; then

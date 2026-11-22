@@ -23,12 +23,14 @@ else
   echo "!! stage2 and stage3 differ"; exit 1
 fi
 
-echo "== native backend: compiler built without LLVM, then by itself"
-build/stage2 build selfhost/main.vibe --native -o build/native1
-build/native1 build selfhost/main.vibe --native -o build/native2
-build/native2 build selfhost/main.vibe --native -o build/native3
-if cmp -s build/native2 build/native3; then echo "== native fixed point reached: native2 == native3"; else echo "!! native2 and native3 differ"; exit 1; fi
-VIBE=build/native2 tests/run.sh | tail -1
+if [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ]; then
+  echo "== native backend: compiler built without LLVM, then by itself"
+  build/stage2 build selfhost/main.vibe --native -o build/native1
+  build/native1 build selfhost/main.vibe --native -o build/native2
+  build/native2 build selfhost/main.vibe --native -o build/native3
+  if cmp -s build/native2 build/native3; then echo "== native fixed point reached: native2 == native3"; else echo "!! native2 and native3 differ"; exit 1; fi
+  VIBE=build/native2 tests/run.sh | grep -v '^ok'
+fi
 
 tests/no_magic_names.sh
 
