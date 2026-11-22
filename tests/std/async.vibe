@@ -9,6 +9,7 @@ extern i32 vrt_poller_wake(i64 p);
 extern void vrt_poller_free(i64 p);
 extern i32 pipe(i32* fds);
 extern i64 write(i32 fd, void* buf, u64 n);
+extern i64 read(i32 fd, void* buf, u64 n);
 
 void bump(void* data) {
     auto n = data as *i64;
@@ -157,4 +158,49 @@ test "ten thousand tasks" {
         for (auto h : hs.slice()) { assert(h.take() == 42); }
     }
     dbg.deinit()?;
+}
+
+struct Never {
+    Poll<bool> poll(Context* cx) { return .Pending; }
+}
+
+test "sleep waits in the poller" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto s = async::Sleep::after(&ex, 20);
+    const auto start = time::mono_ns();
+    assert(ex.block_on<async::Sleep, bool>(&s)?);
+    assert(time::mono_ns() - start >= 15000000);
+    assert(time::mono_ns() - start < 1000000000);
+}
+
+test "readable completes through the reactor" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] fds;
+    assert(pipe(&fds[0]) == 0);
+    const auto wfd = fds[1];
+    auto t = thread::spawn([wfd]() -> void {
+        time::sleep_ms(20);
+        u8 b = 7;
+        _ = write(wfd, &b as *void, 1);
+    })?;
+    defer t.join();
+    auto r = async::Readable::on(&ex, fds[0]);
+    const auto start = time::mono_ns();
+    assert(ex.block_on<async::Readable, bool>(&r)?);
+    assert(time::mono_ns() - start >= 15000000);
+    assert(time::mono_ns() - start < 1000000000);
+    u8 got = 0;
+    assert(read(fds[0], &got as *void, 1) == 1);
+    assert(got == 7);
+}
+
+test "a future that never wakes is a deadlock" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto n = Never{};
+    bool dead = false;
+    _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
+    assert(dead);
 }
