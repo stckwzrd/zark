@@ -47,6 +47,8 @@ struct Reg {
     Waker ww;
     Task* rt;
     Task* wt;
+    u64 rgen;
+    u64 wgen;
 }
 
 void task_wake(void* data) {
@@ -254,13 +256,14 @@ owned struct Executor {
         this->a.free<u8>((t as *u8)[0..t.size as i64]);
     }
 
-    !void arm(i32 fd, bool write, Waker w) {
+    !u64 arm(i32 fd, bool write, Waker w) {
         while (this->regs.len <= fd as i64) { this->regs.push(Reg{})?; }
         auto g = &this->regs.items[fd as i64];
         auto t = this->current;
         if (write) {
             g.ww = w;
-            if (g.w && g.wt == t) { return; }
+            g.wgen += 1;
+            if (g.w && g.wt == t && !g.wready) { return g.wgen; }
             if (g.w && g.wt != null) { g.wt.io -= 1; }
             if (!g.w) { this->io += 1; }
             g.w = true;
@@ -268,7 +271,8 @@ owned struct Executor {
             g.wt = t;
         } else {
             g.rw = w;
-            if (g.r && g.rt == t) { return; }
+            g.rgen += 1;
+            if (g.r && g.rt == t && !g.rready) { return g.rgen; }
             if (g.r && g.rt != null) { g.rt.io -= 1; }
             if (!g.r) { this->io += 1; }
             g.r = true;
@@ -280,6 +284,8 @@ owned struct Executor {
             this->disarm(fd, write);
             return error.SystemCall;
         }
+        if (write) { return g.wgen; }
+        return g.rgen;
     }
 
     void disarm(i32 fd, bool write) {
@@ -315,6 +321,7 @@ owned struct Executor {
             g.wready = true;
             g.ww.wake();
         }
+        _ = vrt_poller_set(this->poller, fd, (g.r && !g.rready) as i32, (g.w && !g.wready) as i32, fd as u64);
     }
 
     void drop_io(Task* t) {
@@ -401,13 +408,14 @@ struct Io {
     i32 fd;
     bool write;
     bool armed;
+    u64 gen;
 
     Poll<bool> poll(Context* cx) {
         if (this->armed && this->ex.take_ready(this->fd, this->write)) {
             this->armed = false;
             return .Ready(true);
         }
-        this->ex.arm(this->fd, this->write, cx.waker) catch {
+        this->gen = this->ex.arm(this->fd, this->write, cx.waker) catch {
             this->armed = false;
             return .Ready(false);
         };
@@ -417,8 +425,10 @@ struct Io {
 
     void cancel() {
         if (!this->armed) { return; }
-        this->ex.disarm(this->fd, this->write);
         this->armed = false;
+        const auto g = this->ex.regs.get(this->fd as i64);
+        if (this->write && g.wgen != this->gen || !this->write && g.rgen != this->gen) { return; }
+        this->ex.disarm(this->fd, this->write);
     }
 }
 
