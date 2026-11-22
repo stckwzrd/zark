@@ -1,0 +1,1253 @@
+import "lexer.zk";
+import "cbuild.zk";
+import "std/fs" as fs;
+import "std/os" as os;
+import "std/path" as path;
+
+enum CTK { Ident, Num, Str, Chr, Punct, Eof }
+
+struct CTok { CTK k; str text; bool rel; }
+
+struct CDef { i64 at; str name; str body; bool func_like; bool undef; bool rel; }
+
+struct CLex {
+    List<CTok> toks;
+    List<CDef> defs;
+    List<str> deps;
+    str header;
+}
+
+bool cb_ident_char(u8 c) { return is_alnum(c) || c == '_' || c == '$'; }
+
+i64 cb_punct_len(str s) {
+    if (str_starts_with(s, "...") || str_starts_with(s, "<<=") || str_starts_with(s, ">>=")) { return 3; }
+    if (s.len >= 2) {
+        for (auto p : ["<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "->", "++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "##"]) {
+            if (s[0..2] == p) { return 2; }
+        }
+    }
+    return 1;
+}
+
+!str cb_unquote(Allocator a, str s) {
+    auto b = List<u8>::init(a);
+    auto i = 0;
+    while (i < s.len) {
+        if (s[i] == '\\' && i + 1 < s.len) { i += 1; }
+        b.push(s[i])?;
+        i += 1;
+    }
+    return b.slice();
+}
+
+struct CLexer {
+    Allocator a;
+    str src;
+    str stub;
+    i64 i;
+    bool rel;
+    bool in_stub;
+    Map<bool> seen;
+    CLex out;
+
+    !void marker(str line) {
+        auto j = 0;
+        while (j < line.len && is_digit(line[j])) { j += 1; }
+        while (j < line.len && line[j] == ' ') { j += 1; }
+        if (j >= line.len || line[j] != '"') { return; }
+        const auto start = j + 1;
+        j = start;
+        while (j < line.len && line[j] != '"') {
+            if (line[j] == '\\') { j += 1; }
+            j += 1;
+        }
+        j = min(j, line.len);
+        const auto file = cb_unquote(this->a, line[start..j])?;
+        auto sys = false;
+        auto it = str_fields(line[min(j + 1, line.len)..]);
+        while (it.next()) { if (it.part == "3") { sys = true; } }
+        const auto was_stub = this->in_stub;
+        this->in_stub = file == this->stub;
+        if (this->in_stub || (file.len > 0 && file[0] == '<')) {
+            this->rel = false;
+            return;
+        }
+        if (this->out.header.len == 0 && was_stub) { this->out.header = file; }
+        if (!this->seen.has(file)) {
+            this->seen.put(file, true)?;
+            this->out.deps.push(file)?;
+        }
+        this->rel = file == this->out.header || !sys || path::dir(file) == path::dir(this->out.header);
+    }
+
+    !void define(str rest, bool undef) {
+        auto j = 0;
+        while (j < rest.len && cb_ident_char(rest[j])) { j += 1; }
+        const auto func_like = !undef && j < rest.len && rest[j] == '(';
+        this->out.defs.push(CDef{ .at = this->out.toks.len, .name = rest[0..j], .body = str_trim(rest[j..]), .func_like = func_like, .undef = undef, .rel = this->rel })?;
+    }
+
+    !void directive(str line) {
+        const auto s = str_trim_start(line);
+        if (s.len > 0 && is_digit(s[0])) {
+            this->marker(s)?;
+        } else if (str_starts_with(s, "define ")) {
+            this->define(str_trim_start(s[7..]), false)?;
+        } else if (str_starts_with(s, "undef ")) {
+            this->define(str_trim_start(s[6..]), true)?;
+        }
+    }
+
+    !void run() {
+        const auto src = this->src;
+        auto bol = true;
+        while (this->i < src.len) {
+            const auto c = src[this->i];
+            if (c == '\n') {
+                bol = true;
+                this->i += 1;
+                continue;
+            }
+            if (c == ' ' || c == '\t' || c == '\r' || c == 11 || c == 12) {
+                this->i += 1;
+                continue;
+            }
+            if (c == '#' && bol) {
+                auto e = this->i;
+                while (e < src.len && src[e] != '\n') { e += 1; }
+                this->directive(src[this->i + 1..e])?;
+                this->i = e;
+                continue;
+            }
+            bol = false;
+            const auto st = this->i;
+            CTK k = .Punct;
+            if (is_alpha(c) || c == '_' || c == '$') {
+                while (this->i < src.len && cb_ident_char(src[this->i])) { this->i += 1; }
+                k = .Ident;
+            } else if (is_digit(c) || (c == '.' && this->i + 1 < src.len && is_digit(src[this->i + 1]))) {
+                while (this->i < src.len) {
+                    const auto d = src[this->i];
+                    auto p = c;
+                    if (this->i > st) { p = src[this->i - 1]; }
+                    if ((d == '+' || d == '-') && (p == 'e' || p == 'E' || p == 'p' || p == 'P')) {
+                        this->i += 1;
+                        continue;
+                    }
+                    if (!cb_ident_char(d) && d != '.') { break; }
+                    this->i += 1;
+                }
+                k = .Num;
+            } else if (c == '"' || c == '\'') {
+                this->i += 1;
+                while (this->i < src.len && src[this->i] != c && src[this->i] != '\n') {
+                    if (src[this->i] == '\\') { this->i += 1; }
+                    this->i += 1;
+                }
+                this->i = min(this->i + 1, src.len);
+                k = .Str;
+                if (c == '\'') { k = .Chr; }
+            } else {
+                this->i += cb_punct_len(src[this->i..]);
+            }
+            this->out.toks.push(CTok{ .k = k, .text = src[st..this->i], .rel = this->rel })?;
+        }
+        this->out.toks.push(CTok{ .k = .Eof, .text = "" })?;
+    }
+}
+
+enum CK { Int, Float, Bool, Void, Ptr, Array, Func, Named, Bad }
+
+struct CField { str name; CType* ty; }
+
+struct CType {
+    CK k;
+    i64 width;
+    bool signed;
+    CType* elem;
+    i64 n;
+    List<CField> params;
+    bool varargs;
+    str name;
+    i64 tag;
+    CDecl* rec;
+}
+
+enum CDK { Func, Struct, Typedef, Macro, Var, Skip }
+
+struct CDecl {
+    CDK k;
+    str name;
+    CType* ty;
+    List<CField> fields;
+    List<CDecl*> subs;
+    bool rel;
+    bool complete;
+    bool is_union;
+    bool bitfields;
+    bool layout_attr;
+    bool is_extern;
+    bool is_static;
+    bool is_inline;
+    bool has_body;
+    bool asm_label;
+    bool func_like;
+    bool undef;
+    str body;
+    str reason;
+}
+
+struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; }
+
+bool cb_is_qualifier(str w) {
+    for (auto q : ["const", "volatile", "restrict", "__restrict", "__restrict__", "__const", "__volatile", "__volatile__", "__extension__", "_Nullable", "_Nonnull", "_Null_unspecified", "_Nullable_result", "__nullable", "__nonnull", "__null_unspecified", "__unaligned", "__ptr32", "__ptr64", "__w64", "__cdecl", "__stdcall", "__fastcall"]) {
+        if (w == q) { return true; }
+    }
+    return false;
+}
+
+bool cb_is_spec_word(str w) {
+    for (auto q : ["void", "char", "short", "int", "long", "float", "double", "signed", "__signed", "__signed__", "unsigned", "_Bool", "bool", "_Complex", "__complex__", "struct", "union", "enum", "typedef", "extern", "static", "inline", "__inline", "__inline__", "register", "auto", "_Atomic", "__int128", "__builtin_va_list", "typeof", "__typeof__", "__typeof"]) {
+        if (w == q) { return true; }
+    }
+    return cb_is_qualifier(w);
+}
+
+bool cb_is_odd_float(str w) {
+    for (auto q : ["_Float16", "_Float32", "_Float64", "_Float128", "_Float32x", "_Float64x", "__float128", "__fp16", "__bf16", "__ibm128", "_Decimal32", "_Decimal64", "_Decimal128"]) {
+        if (w == q) { return true; }
+    }
+    return false;
+}
+
+i64 cb_prec(str op) {
+    if (op == "*" || op == "/" || op == "%") { return 10; }
+    if (op == "+" || op == "-") { return 9; }
+    if (op == "<<" || op == ">>") { return 8; }
+    if (op == "&") { return 5; }
+    if (op == "^") { return 4; }
+    if (op == "|") { return 3; }
+    return 0;
+}
+
+!i64 cb_binop(str op, i64 l, i64 r) {
+    if (op == "*") { return l *% r; }
+    if (op == "+") { return l +% r; }
+    if (op == "-") { return l -% r; }
+    if (op == "&") { return l & r; }
+    if (op == "^") { return l ^ r; }
+    if (op == "|") { return l | r; }
+    if (op == "/" || op == "%") {
+        if (r == 0) { return error.ParseFailed; }
+        if (r == -1) {
+            if (op == "/") { return 0 -% l; }
+            return 0;
+        }
+        if (op == "/") { return l / r; }
+        return l % r;
+    }
+    if (r < 0 || r > 63) { return error.ParseFailed; }
+    if (op == "<<") { return ((l as u64) << (r as u64)) as i64; }
+    return l >> r;
+}
+
+!i64 cb_int(str text) {
+    auto s = text;
+    while (s.len > 0 && (s[s.len - 1] == 'u' || s[s.len - 1] == 'U' || s[s.len - 1] == 'l' || s[s.len - 1] == 'L')) { s = s[0..s.len - 1]; }
+    if (s.len == 0) { return error.ParseFailed; }
+    u64 v = 0;
+    if (s.len > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        v = parse_int_radix(s[2..], 16)?;
+    } else if (s.len > 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) {
+        v = parse_int_radix(s[2..], 2)?;
+    } else if (s.len > 1 && s[0] == '0') {
+        v = parse_int_radix(s[1..], 8)?;
+    } else {
+        v = parse_int_radix(s, 10)?;
+    }
+    if (v > 0x7fffffffffffffff) { return error.ParseFailed; }
+    return v as i64;
+}
+
+struct CParser {
+    Allocator a;
+    CTok[] toks;
+    i64 pos;
+    List<CDef> defs;
+    i64 di;
+    Map<CType*> typedefs;
+    Map<bool> tags;
+    List<CDecl*> decls;
+    bool attr_layout;
+    bool asm_label;
+
+    CTok peek() { return this->toks[this->pos]; }
+    CTok peek_at(i64 n) { return this->toks[min(this->pos + n, this->toks.len - 1)]; }
+    bool at(str s) { return this->toks[this->pos].text == s; }
+    bool at_eof() { return this->toks[this->pos].k == .Eof; }
+    CTok next() {
+        const auto t = this->toks[this->pos];
+        if (this->pos < this->toks.len - 1) { this->pos += 1; }
+        return t;
+    }
+    bool eat(str s) {
+        if (!this->at(s)) { return false; }
+        this->pos += 1;
+        return true;
+    }
+    !void expect(str s) {
+        if (!this->eat(s)) { return error.ParseFailed; }
+    }
+
+    void skip_group() {
+        auto depth = 0;
+        while (!this->at_eof()) {
+            const auto t = this->next().text;
+            if (t == "(" || t == "[" || t == "{{") { depth += 1; }
+            if (t == ")" || t == "]" || t == "}") {
+                depth -= 1;
+                if (depth <= 0) { return; }
+            }
+        }
+    }
+
+    void skip_until_comma() {
+        while (!this->at_eof() && !this->at(",") && !this->at(";")) {
+            if (this->at("(") || this->at("[") || this->at("{{")) { this->skip_group(); } else { _ = this->next(); }
+        }
+    }
+
+    !CType* mk(CK k) {
+        const auto t = this->a.create<CType>()?;
+        t.k = k;
+        return t;
+    }
+    !CType* bad(str why) {
+        const auto t = this->mk(.Bad)?;
+        t.name = why;
+        return t;
+    }
+    !CType* ptr(CType* e) {
+        const auto t = this->mk(.Ptr)?;
+        t.elem = e;
+        return t;
+    }
+    !CType* int_ty(i64 width, bool signed) {
+        const auto t = this->mk(.Int)?;
+        t.width = width;
+        t.signed = signed;
+        return t;
+    }
+    !CDecl* decl(CDK k, str name, bool rel) {
+        const auto d = this->a.create<CDecl>()?;
+        d.k = k;
+        d.name = name;
+        d.rel = rel;
+        d.fields = List<CField>::init(this->a);
+        d.subs = List<CDecl*>::init(this->a);
+        return d;
+    }
+
+    void skip_noise() {
+        while (true) {
+            const auto t = this->peek().text;
+            if (t == "__attribute__" || t == "__attribute" || t == "__declspec" || t == "_Alignas" || t == "alignas" || t == "__asm__" || t == "__asm" || t == "asm") {
+                _ = this->next();
+                if (!this->at("(")) { continue; }
+                const auto from = this->pos;
+                this->skip_group();
+                if (t == "_Alignas" || t == "alignas") { this->attr_layout = true; }
+                if (t == "__asm__" || t == "__asm" || t == "asm") { this->asm_label = true; }
+                for (auto k : from..this->pos) {
+                    const auto w = this->toks[k].text;
+                    if (w == "packed" || w == "__packed__" || w == "aligned" || w == "__aligned__") { this->attr_layout = true; }
+                }
+                continue;
+            }
+            if (!cb_is_qualifier(t)) { return; }
+            _ = this->next();
+        }
+    }
+
+    !CSpecs specs() {
+        auto s = CSpecs{ .ty = null };
+        auto nlong = 0;
+        auto nshort = 0;
+        auto nsigned = 0;
+        auto nunsigned = 0;
+        auto base = "";
+        auto complex = false;
+        CType* named = null;
+        auto why = "";
+        auto any = false;
+        while (true) {
+            this->skip_noise();
+            const auto t = this->peek();
+            if (t.k != .Ident) { break; }
+            const auto w = t.text;
+            if (w == "typedef") {
+                s.is_typedef = true;
+            } else if (w == "extern") {
+                s.is_extern = true;
+            } else if (w == "static") {
+                s.is_static = true;
+            } else if (w == "inline" || w == "__inline" || w == "__inline__" || w == "__forceinline") {
+                s.is_inline = true;
+            } else if (w == "_Thread_local" || w == "__thread" || w == "thread_local" || w == "register" || w == "auto" || w == "_Noreturn" || w == "constexpr") {
+            } else if (w == "long") {
+                nlong += 1;
+            } else if (w == "short") {
+                nshort += 1;
+            } else if (w == "signed" || w == "__signed" || w == "__signed__") {
+                nsigned += 1;
+            } else if (w == "unsigned") {
+                nunsigned += 1;
+            } else if (w == "void" || w == "char" || w == "int" || w == "float" || w == "double" || w == "_Bool" || w == "bool") {
+                base = w;
+            } else if (w == "_Complex" || w == "__complex__") {
+                complex = true;
+            } else if (w == "_Atomic" || w == "typeof" || w == "__typeof__" || w == "__typeof" || w == "typeof_unqual") {
+                why = w;
+                if (w != "_Atomic") { why = "typeof"; }
+                _ = this->next();
+                if (this->at("(")) { this->skip_group(); }
+                any = true;
+                continue;
+            } else if (w == "__int128" || w == "__int128_t" || w == "__uint128_t") {
+                why = "__int128";
+            } else if (cb_is_odd_float(w)) {
+                why = w;
+            } else if (w == "__builtin_va_list") {
+                why = "va_list";
+            } else if (w == "struct" || w == "union") {
+                _ = this->next();
+                named = this->record(w == "union")?;
+                any = true;
+                continue;
+            } else if (w == "enum") {
+                _ = this->next();
+                named = this->enum_spec()?;
+                any = true;
+                continue;
+            } else if (named == null && base.len == 0 && nlong + nshort + nsigned + nunsigned == 0 && !complex && why.len == 0 && this->typedefs.has(w)) {
+                named = this->mk(.Named)?;
+                named.name = w;
+            } else {
+                break;
+            }
+            _ = this->next();
+            any = true;
+        }
+        if (!any) { return error.ParseFailed; }
+        if (why.len > 0) {
+            s.ty = this->bad(why)?;
+        } else if (named != null) {
+            s.ty = named;
+        } else if (complex) {
+            s.ty = this->bad("_Complex")?;
+        } else if (base == "void") {
+            s.ty = this->mk(.Void)?;
+        } else if (base == "_Bool" || base == "bool") {
+            s.ty = this->mk(.Bool)?;
+        } else if (base == "float") {
+            s.ty = this->mk(.Float)?;
+            s.ty.width = 32;
+        } else if (base == "double") {
+            if (nlong > 0) {
+                s.ty = this->bad("long double")?;
+            } else {
+                s.ty = this->mk(.Float)?;
+                s.ty.width = 64;
+            }
+        } else if (base == "char") {
+            s.ty = this->int_ty(8, nsigned > 0)?;
+        } else if (nshort > 0) {
+            s.ty = this->int_ty(16, nunsigned == 0)?;
+        } else if (nlong > 0) {
+            s.ty = this->int_ty(64, nunsigned == 0)?;
+        } else {
+            s.ty = this->int_ty(32, nunsigned == 0)?;
+        }
+        return s;
+    }
+
+    !CType* record(bool is_union) {
+        const auto saved = this->attr_layout;
+        this->attr_layout = false;
+        this->skip_noise();
+        const auto rel = this->peek().rel;
+        auto tag = "";
+        if (this->peek().k == .Ident) { tag = this->next().text; }
+        this->skip_noise();
+        const auto t = this->mk(.Named)?;
+        t.name = tag;
+        t.tag = 1;
+        if (is_union) { t.tag = 2; }
+        if (!this->at("{{")) {
+            this->attr_layout = saved;
+            if (tag.len == 0) { return error.ParseFailed; }
+            if (!this->tags.has(tag)) {
+                this->tags.put(tag, true)?;
+                const auto d = this->decl(.Struct, tag, rel)?;
+                d.is_union = is_union;
+                this->decls.push(d)?;
+            }
+            return t;
+        }
+        const auto d = this->decl(.Struct, tag, rel)?;
+        d.complete = true;
+        d.is_union = is_union;
+        if (tag.len > 0) { this->tags.put(tag, true)?; }
+        _ = this->next();
+        while (!this->at("}")) {
+            if (this->at_eof()) { return error.ParseFailed; }
+            this->field(d)?;
+        }
+        _ = this->next();
+        this->skip_noise();
+        d.layout_attr = this->attr_layout;
+        this->attr_layout = saved;
+        if (tag.len > 0) {
+            this->decls.push(d)?;
+        } else {
+            t.rec = d;
+        }
+        return t;
+    }
+
+    !void field(CDecl* d) {
+        this->skip_noise();
+        if (this->eat(";")) { return; }
+        if (this->at("_Static_assert") || this->at("static_assert")) {
+            _ = this->next();
+            this->skip_group();
+            _ = this->eat(";");
+            return;
+        }
+        const auto s = this->specs()?;
+        if (s.ty.rec != null) {
+            d.subs.push(s.ty.rec)?;
+            if (this->eat(";")) {
+                const auto n = d.subs.len - 1;
+                auto b = List<u8>::init(this->a);
+                sprint(&b, "__anon{n}")?;
+                d.fields.push(CField{ .name = b.slice(), .ty = s.ty })?;
+                return;
+            }
+        }
+        if (this->eat(";")) { return; }
+        while (true) {
+            const auto f = this->declarator(s.ty)?;
+            if (this->eat(":")) {
+                d.bitfields = true;
+                this->skip_until_comma();
+            }
+            this->skip_noise();
+            d.fields.push(f)?;
+            if (!this->eat(",")) { break; }
+        }
+        this->expect(";")?;
+    }
+
+    !CType* enum_spec() {
+        this->skip_noise();
+        auto tag = "";
+        if (this->peek().k == .Ident) { tag = this->next().text; }
+        this->skip_noise();
+        if (this->eat(":")) { _ = this->specs()?; }
+        if (this->at("{{")) { this->skip_group(); }
+        this->skip_noise();
+        if (tag.len == 0) { return this->int_ty(32, true); }
+        const auto t = this->mk(.Named)?;
+        t.name = tag;
+        t.tag = 3;
+        return t;
+    }
+
+    bool grouped() {
+        const auto n = this->peek_at(1);
+        if (n.text == "*" || n.text == "^" || n.text == "(") { return true; }
+        if (n.k != .Ident) { return false; }
+        if (n.text == "__attribute__" || n.text == "__attribute") { return true; }
+        return !this->typedefs.has(n.text) && !cb_is_spec_word(n.text);
+    }
+
+    !CField declarator(CType* base) {
+        this->skip_noise();
+        auto t = base;
+        while (this->at("*") || this->at("^")) {
+            if (this->next().text == "^") {
+                t = this->bad("block pointer")?;
+            } else {
+                t = this->ptr(t)?;
+            }
+            this->skip_noise();
+        }
+        if (this->at("(") && this->grouped()) {
+            const auto inner = this->pos + 1;
+            this->skip_group();
+            const auto outer = this->suffixes(t)?;
+            const auto end = this->pos;
+            this->pos = inner;
+            const auto f = this->declarator(outer)?;
+            this->expect(")")?;
+            this->pos = end;
+            this->skip_noise();
+            return f;
+        }
+        auto name = "";
+        if (this->peek().k == .Ident) { name = this->next().text; }
+        this->skip_noise();
+        t = this->suffixes(t)?;
+        this->skip_noise();
+        return CField{ .name = name, .ty = t };
+    }
+
+    !CType* suffixes(CType* t) {
+        if (this->eat("[")) {
+            while (this->at("static") || cb_is_qualifier(this->peek().text)) { _ = this->next(); }
+            i64 n = -1;
+            if (this->at("]")) {
+                _ = this->next();
+            } else {
+                const auto start = this->pos;
+                n = this->cexpr(1) catch -2;
+                if (n < 0 || !this->at("]")) {
+                    n = -2;
+                    this->pos = start - 1;
+                    this->skip_group();
+                } else {
+                    _ = this->next();
+                }
+            }
+            const auto r = this->mk(.Array)?;
+            r.n = n;
+            r.elem = this->suffixes(t)?;
+            return r;
+        }
+        if (this->at("(")) {
+            const auto f = this->params()?;
+            f.elem = this->suffixes(t)?;
+            return f;
+        }
+        return t;
+    }
+
+    !CType* params() {
+        this->expect("(")?;
+        const auto f = this->mk(.Func)?;
+        f.params = List<CField>::init(this->a);
+        if (this->eat(")")) { return f; }
+        if (this->at("void") && this->peek_at(1).text == ")") {
+            _ = this->next();
+            _ = this->next();
+            return f;
+        }
+        while (true) {
+            if (this->eat("...")) {
+                f.varargs = true;
+                break;
+            }
+            const auto s = this->specs()?;
+            auto p = this->declarator(s.ty)?;
+            if (p.ty.k == .Array) {
+                p.ty = this->ptr(p.ty.elem)?;
+            } else if (p.ty.k == .Func) {
+                p.ty = this->ptr(p.ty)?;
+            }
+            f.params.push(p)?;
+            if (!this->eat(",")) { break; }
+        }
+        this->expect(")")?;
+        return f;
+    }
+
+    !i64 cexpr(i64 lo) {
+        auto l = this->cunary()?;
+        while (true) {
+            const auto op = this->peek().text;
+            const auto p = cb_prec(op);
+            if (p == 0 || p < lo) { return l; }
+            _ = this->next();
+            const auto r = this->cexpr(p + 1)?;
+            l = cb_binop(op, l, r)?;
+        }
+        return l;
+    }
+
+    !i64 cunary() {
+        const auto t = this->next();
+        if (t.text == "(") {
+            const auto v = this->cexpr(1)?;
+            this->expect(")")?;
+            return v;
+        }
+        if (t.text == "-") { return 0 -% this->cunary()?; }
+        if (t.text == "+") { return this->cunary(); }
+        if (t.text == "~") { return ~this->cunary()?; }
+        if (t.k == .Num) { return cb_int(t.text); }
+        return error.ParseFailed;
+    }
+
+    CType* resolve(CType* t) {
+        auto x = t;
+        while (x.k == .Named && x.tag == 0) {
+            const auto n = this->typedefs.get_or(x.name, null);
+            if (n == null) { return x; }
+            x = n;
+        }
+        return x;
+    }
+
+    !void typedef_decl(CField f, CType* base, bool rel) {
+        this->typedefs.put(f.name, f.ty)?;
+        if (base.rec != null && base.rec.name.len == 0 && f.ty == base) {
+            base.rec.name = f.name;
+            base.rec.rel = rel;
+            this->decls.push(base.rec)?;
+            return;
+        }
+        const auto d = this->decl(.Typedef, f.name, rel)?;
+        d.ty = f.ty;
+        this->decls.push(d)?;
+    }
+
+    !void top() {
+        const auto rel = this->peek().rel;
+        const auto s = this->specs()?;
+        if (this->eat(";")) { return; }
+        while (true) {
+            this->asm_label = false;
+            const auto f = this->declarator(s.ty)?;
+            if (f.name.len == 0) { return error.ParseFailed; }
+            if (s.is_typedef) {
+                this->typedef_decl(f, s.ty, rel)?;
+            } else {
+                const auto rt = this->resolve(f.ty);
+                if (rt.k == .Func) {
+                    const auto d = this->decl(.Func, f.name, rel)?;
+                    d.ty = rt;
+                    d.is_static = s.is_static;
+                    d.is_inline = s.is_inline;
+                    d.is_extern = s.is_extern;
+                    d.asm_label = this->asm_label;
+                    this->decls.push(d)?;
+                    if (this->at("{{")) {
+                        d.has_body = true;
+                        this->skip_group();
+                        return;
+                    }
+                } else {
+                    const auto d = this->decl(.Var, f.name, rel)?;
+                    d.is_extern = s.is_extern;
+                    d.is_static = s.is_static;
+                    this->decls.push(d)?;
+                    if (this->eat("=")) { this->skip_until_comma(); }
+                }
+            }
+            if (!this->eat(",")) { break; }
+        }
+        this->expect(";")?;
+    }
+
+    void recover() {
+        auto prev = "";
+        while (!this->at_eof()) {
+            const auto t = this->peek().text;
+            if (t == ";") {
+                _ = this->next();
+                return;
+            }
+            if (t == "{{") {
+                const auto body = prev == ")" || prev == "";
+                this->skip_group();
+                if (body) { return; }
+                prev = "}";
+            } else if (t == "(") {
+                this->skip_group();
+                prev = ")";
+            } else if (t == "[") {
+                this->skip_group();
+                prev = "]";
+            } else {
+                prev = this->next().text;
+            }
+        }
+    }
+
+    str guess(i64 start) {
+        auto name = "?";
+        auto i = start;
+        while (i < this->pos) {
+            const auto t = this->toks[i];
+            if (t.text == "(" || t.text == ";" || t.text == "=" || t.text == "[" || t.text == "{{") { break; }
+            if (t.k == .Ident) { name = t.text; }
+            i += 1;
+        }
+        return name;
+    }
+
+    !void flush(i64 upto) {
+        while (this->di < this->defs.len && this->defs.get(this->di).at <= upto) {
+            const auto m = this->defs.get(this->di);
+            const auto d = this->decl(.Macro, m.name, m.rel)?;
+            d.func_like = m.func_like;
+            d.undef = m.undef;
+            d.body = m.body;
+            this->decls.push(d)?;
+            this->di += 1;
+        }
+    }
+
+    !void parse_all() {
+        while (true) {
+            this->flush(this->pos)?;
+            if (this->at_eof()) { break; }
+            if (this->eat(";")) { continue; }
+            if (this->at("_Static_assert") || this->at("static_assert")) {
+                _ = this->next();
+                this->skip_group();
+                _ = this->eat(";");
+                continue;
+            }
+            const auto start = this->pos;
+            this->top() catch |e| {
+                if (e != error.ParseFailed) { return e; }
+                this->pos = start;
+                this->recover();
+                if (this->toks[start].rel) {
+                    const auto d = this->decl(.Skip, this->guess(start), true)?;
+                    d.reason = "cannot parse";
+                    this->decls.push(d)?;
+                }
+            };
+        }
+        this->flush(this->toks.len)?;
+    }
+}
+
+str cb_known(str name) {
+    match name {
+        "size_t" => return "usize";
+        "int8_t" => return "i8";
+        "int16_t" => return "i16";
+        "int32_t" => return "i32";
+        "int64_t" => return "i64";
+        "uint8_t" => return "u8";
+        "uint16_t" => return "u16";
+        "uint32_t" => return "u32";
+        "uint64_t" => return "u64";
+    }
+    return "";
+}
+
+struct CEmit {
+    Allocator a;
+    List<u8> out;
+    List<str> warnings;
+    Map<bool> bad;
+    Map<bool> relabeled;
+    Map<bool> warned;
+    Map<i64> done;
+    Map<bool> typed;
+    Map<bool> defined;
+    Map<CType*> typedefs;
+    Map<CDecl*> records;
+    str why;
+    str cur;
+
+    void fail(str why) {
+        if (this->why.len == 0) { this->why = why; }
+    }
+    !void uses(str name) {
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "uses skipped {name}")?;
+        this->fail(b.slice());
+    }
+    !void warn(str name, str why) {
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "skipped {name}: {why}")?;
+        if (this->warned.has(b.slice())) { return; }
+        this->warned.put(b.slice(), true)?;
+        this->warnings.push(b.slice())?;
+    }
+    !void skip(str name, str why) {
+        this->warn(name, why)?;
+        this->bad.put(name, true)?;
+    }
+    !void esc(List<u8>* b, str name) {
+        if (keyword(name) == .ident) {
+            sprint(b, "{name}")?;
+        } else {
+            sprint(b, "{name}_")?;
+        }
+    }
+    !bool claim(str name, i64 kind) {
+        const auto k = this->done.get_or(name, 0);
+        if (k == kind) { return false; }
+        if (k != 0) {
+            this->warn(name, "name clash")?;
+            return false;
+        }
+        return true;
+    }
+    !bool line(str name, i64 kind, str text) {
+        if (this->why.len > 0) {
+            if (kind == 3) {
+                this->warn(name, this->why)?;
+            } else {
+                this->skip(name, this->why)?;
+            }
+            return false;
+        }
+        this->done.put(name, kind)?;
+        sprint(&this->out, "{text}\n")?;
+        return true;
+    }
+
+    CType* expand(CType* t) {
+        auto x = t;
+        while (x.k == .Named && x.tag == 0 && cb_known(x.name).len == 0 && !this->typed.has(x.name)) {
+            const auto n = this->typedefs.get_or(x.name, null);
+            if (n == null) { return x; }
+            x = n;
+        }
+        return x;
+    }
+
+    i64 align(CType* t) {
+        match t.k {
+            .Int, .Float => { return t.width / 8; }
+            .Ptr, .Func => { return 8; }
+            .Array => { return this->align(t.elem); }
+            .Named => {
+                if (t.rec != null) { return this->rec_align(t.rec); }
+                if (t.tag == 3) { return 4; }
+                if (t.tag == 0) {
+                    const auto x = this->typedefs.get_or(t.name, null);
+                    if (x != null) { return this->align(x); }
+                    return 8;
+                }
+                const auto r = this->records.get_or(t.name, null);
+                if (r != null) { return this->rec_align(r); }
+            }
+        }
+        return 1;
+    }
+    i64 rec_align(CDecl* d) {
+        auto al = 1;
+        for (auto f : d.fields.slice()) {
+            if (!(f.ty.k == .Array && f.ty.n == -1)) { al = max(al, this->align(f.ty)); }
+        }
+        return al;
+    }
+
+    !void ty(List<u8>* b, CType* t) {
+        match t.k {
+            .Int => {
+                if (t.signed) { sprint(b, "i{t.width}")?; } else { sprint(b, "u{t.width}")?; }
+            }
+            .Float => { sprint(b, "f{t.width}")?; }
+            .Bool => { sprint(b, "bool")?; }
+            .Void => { sprint(b, "void")?; }
+            .Bad => {
+                this->fail(t.name);
+                sprint(b, "?")?;
+            }
+            .Ptr => { this->ptr_ty(b, t)?; }
+            .Array => { this->array_ty(b, t)?; }
+            .Func => { this->fn_ty(b, t)?; }
+            .Named => { this->named_ty(b, t)?; }
+        }
+    }
+
+    !void ptr_ty(List<u8>* b, CType* t) {
+        if (t.elem.k == .Func) {
+            this->fn_ty(b, t.elem)?;
+            return;
+        }
+        auto inner = List<u8>::init(this->a);
+        this->ty(&inner, t.elem)?;
+        const auto s = inner.slice();
+        if (str_starts_with(s, "fn(") || str_starts_with(s, "*")) {
+            sprint(b, "*{s}")?;
+        } else {
+            sprint(b, "{s}*")?;
+        }
+    }
+
+    !void array_ty(List<u8>* b, CType* t) {
+        auto dims = List<i64>::init(this->a);
+        auto x = t;
+        while (true) {
+            x = this->expand(x);
+            if (x.k != .Array) { break; }
+            dims.push(x.n)?;
+            x = x.elem;
+        }
+        auto inner = List<u8>::init(this->a);
+        this->ty(&inner, x)?;
+        const auto s = inner.slice();
+        if (str_starts_with(s, "fn(") || str_starts_with(s, "*")) { this->fail("array of function pointers"); }
+        sprint(b, "{s}")?;
+        for (auto n : dims.slice()) {
+            if (n == -2) { this->fail("array size"); }
+            if (n == -1) { this->fail("incomplete array"); }
+            sprint(b, "[{n}]")?;
+        }
+    }
+
+    !void fn_ty(List<u8>* b, CType* f) {
+        if (f.varargs) { this->fail("variadic function pointer"); }
+        sprint(b, "fn(")?;
+        for (auto [i, p] : f.params.slice()) {
+            if (i > 0) { sprint(b, ", ")?; }
+            this->ty(b, p.ty)?;
+        }
+        sprint(b, ") -> ")?;
+        this->ty(b, f.elem)?;
+    }
+
+    !void named_ty(List<u8>* b, CType* t) {
+        if (t.rec != null) {
+            if (t.rec.name.len == 0) { this->fail("anonymous record"); }
+            if (this->bad.has(t.rec.name) && t.rec.name != this->cur) { this->uses(t.rec.name)?; }
+            this->esc(b, t.rec.name)?;
+            return;
+        }
+        if (t.tag == 3) {
+            sprint(b, "i32")?;
+            return;
+        }
+        if (t.tag != 0) {
+            if (this->bad.has(t.name) && t.name != this->cur) { this->uses(t.name)?; }
+            this->esc(b, t.name)?;
+            return;
+        }
+        const auto wk = cb_known(t.name);
+        if (wk.len > 0) {
+            sprint(b, "{wk}")?;
+            return;
+        }
+        if (this->typed.has(t.name)) {
+            this->esc(b, t.name)?;
+            return;
+        }
+        if (this->bad.has(t.name)) { this->uses(t.name)?; }
+        const auto x = this->typedefs.get_or(t.name, null);
+        if (x == null) {
+            this->fail("unknown type");
+            return;
+        }
+        this->ty(b, x)?;
+    }
+
+    !void func(CDecl* d) {
+        if (d.is_static && d.is_inline) { return this->warn(d.name, "static inline function"); }
+        if (d.is_static) { return this->warn(d.name, "static function"); }
+        if (d.is_inline && d.has_body) { return this->warn(d.name, "inline function"); }
+        if (d.asm_label) { this->relabeled.put(d.name, true)?; }
+        if (this->relabeled.has(d.name)) { return this->warn(d.name, "asm label"); }
+        if (!this->claim(d.name, 3)?) { return; }
+        const auto f = d.ty;
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "extern ")?;
+        this->ty(&b, f.elem)?;
+        sprint(&b, " ")?;
+        this->esc(&b, d.name)?;
+        sprint(&b, "(")?;
+        for (auto [i, p] : f.params.slice()) {
+            if (i > 0) { sprint(&b, ", ")?; }
+            this->ty(&b, p.ty)?;
+            if (p.name.len == 0) {
+                sprint(&b, " a{i}")?;
+            } else {
+                sprint(&b, " ")?;
+                this->esc(&b, p.name)?;
+            }
+        }
+        if (f.varargs) {
+            if (f.params.len > 0) { sprint(&b, ", ")?; }
+            sprint(&b, "...")?;
+        }
+        sprint(&b, ");")?;
+        _ = this->line(d.name, 3, b.slice())?;
+    }
+
+    !void typedef_out(CDecl* d) {
+        const auto t = d.ty;
+        if (cb_known(d.name).len > 0) { return; }
+        if (t.k == .Named && (t.tag == 1 || t.tag == 2) && t.name == d.name) { return; }
+        if (t.k == .Named && t.rec != null && t.rec.name == d.name) { return; }
+        if (this->expand(t).k == .Func) { return; }
+        if (!this->claim(d.name, 2)?) { return; }
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "type ")?;
+        this->esc(&b, d.name)?;
+        sprint(&b, " = ")?;
+        this->ty(&b, t)?;
+        sprint(&b, ";")?;
+        if (this->line(d.name, 2, b.slice())?) { this->typed.put(d.name, true)?; }
+    }
+
+    !void record(CDecl* d) {
+        if (!d.complete) {
+            if (this->defined.has(d.name) || this->bad.has(d.name)) { return; }
+            if (!this->claim(d.name, 1)?) { return; }
+            auto e = List<u8>::init(this->a);
+            sprint(&e, "struct ")?;
+            this->esc(&e, d.name)?;
+            sprint(&e, " {{ }}")?;
+            _ = this->line(d.name, 1, e.slice())?;
+            return;
+        }
+        if (!this->claim(d.name, 1)?) { return; }
+        if (d.is_union) { return this->skip(d.name, "union"); }
+        if (d.bitfields) { return this->skip(d.name, "bitfields"); }
+        if (d.layout_attr) { return this->skip(d.name, "packed or aligned attribute"); }
+        const auto saved = this->cur;
+        defer this->cur = saved;
+        this->cur = d.name;
+        for (auto [i, s] : d.subs.slice()) {
+            auto nb = List<u8>::init(this->a);
+            sprint(&nb, "{d.name}__anon{i}")?;
+            s.name = nb.slice();
+            this->why = "";
+            this->record(s)?;
+        }
+        this->why = "";
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "struct ")?;
+        this->esc(&b, d.name)?;
+        sprint(&b, " {{ ")?;
+        for (auto f : d.fields.slice()) {
+            if (f.ty.k == .Array && f.ty.n == -1) {
+                if (this->align(f.ty.elem) > this->rec_align(d)) { return this->skip(d.name, "flexible array member"); }
+                auto fb = List<u8>::init(this->a);
+                sprint(&fb, "{d.name}.{f.name}")?;
+                this->warn(fb.slice(), "flexible array member")?;
+                continue;
+            }
+            this->ty(&b, f.ty)?;
+            sprint(&b, " ")?;
+            this->esc(&b, f.name)?;
+            sprint(&b, "; ")?;
+        }
+        sprint(&b, "}")?;
+        _ = this->line(d.name, 1, b.slice())?;
+    }
+
+    !void decl(CDecl* d) {
+        if (!d.rel) { return; }
+        this->why = "";
+        match d.k {
+            .Macro => {
+                if (d.func_like) { this->warn(d.name, "function-like macro")?; }
+            }
+            .Var => {
+                if (d.is_extern) { this->warn(d.name, "extern variable")?; } else { this->warn(d.name, "variable")?; }
+            }
+            .Skip => { this->warn(d.name, d.reason)?; }
+            .Func => { this->func(d)?; }
+            .Typedef => { this->typedef_out(d)?; }
+            .Struct => { this->record(d)?; }
+        }
+    }
+
+    !void run(List<CDecl*> decls) {
+        for (auto d : decls.slice()) {
+            if (d.k == .Struct && d.complete && d.name.len > 0) {
+                this->defined.put(d.name, true)?;
+                this->records.put(d.name, d)?;
+            }
+        }
+        for (auto pass : 0..2) {
+            this->out = List<u8>::init(this->a);
+            this->warnings = List<str>::init(this->a);
+            this->done = Map<i64>::init(this->a);
+            this->warned = Map<bool>::init(this->a);
+            this->typed = Map<bool>::init(this->a);
+            for (auto d : decls.slice()) { this->decl(d)?; }
+        }
+    }
+}
+
+struct CBind {
+    str zk;
+    str inline_c;
+    List<str> deps;
+    List<str> warnings;
+}
+
+!CBind cbind_header(Allocator a, str header, str from_dir, List<str> flags) {
+    const auto dir = ".zark-cache/cbind";
+    fs::make_dirs(dir)?;
+    auto sb = List<u8>::init(a);
+    sprint(&sb, "{dir}/stub-{os::pid()}.c")?;
+    const auto stub = sb.slice();
+    auto body = List<u8>::init(a);
+    sprint(&body, "#include \"{header}\"\n")?;
+    write_file(stub, body.slice())?;
+    auto argv = List<str>::init(a);
+    argv.append(["clang", "-E", "-dD", "-iquote", from_dir])?;
+    argv.append(flags.slice())?;
+    argv.append(["-x", "c", stub])?;
+    const auto r = os::exec(a, argv.slice()) catch |e| {
+        drop(stub);
+        eprintln("error: cannot run clang: {e}");
+        return error.CompileFailed;
+    };
+    drop(stub);
+    if (r.code != 0) {
+        eprint(r.err);
+        return error.CompileFailed;
+    }
+    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a) } };
+    lx.run()?;
+    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .decls = List<CDecl*>::init(a) };
+    p.parse_all()?;
+    auto e = CEmit{ .a = a, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a) };
+    e.run(p.decls)?;
+    return CBind{ .zk = e.out.slice(), .inline_c = "", .deps = lx.out.deps, .warnings = e.warnings };
+}
+
+!i32 cbind_main(Allocator a) {
+    auto header = "";
+    auto out_path = "";
+    auto flags = List<str>::init(a);
+    auto i = 2;
+    while (i < arg_count()) {
+        const auto x = arg(i);
+        if (x == "-o" && i + 1 < arg_count()) {
+            i += 1;
+            out_path = arg(i);
+        } else if ((x == "-include" || x == "-isystem") && i + 1 < arg_count()) {
+            flags.push(x)?;
+            i += 1;
+            flags.push(arg(i))?;
+        } else if (is_compile_flag(x)) {
+            flags.push(x)?;
+        } else if (header.len == 0) {
+            header = x;
+        } else {
+            eprintln("error: unexpected argument '{x}'");
+            return 1;
+        }
+        i += 1;
+    }
+    if (header.len == 0) {
+        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk]");
+        return 1;
+    }
+    const auto b = cbind_header(a, header, ".", flags) catch |e| {
+        if (e != error.CompileFailed) { eprintln("error: cannot bind {header}: {e}"); }
+        return 1;
+    };
+    for (auto w : b.warnings.slice()) { eprintln("{w}"); }
+    if (out_path.len > 0) {
+        write_file(out_path, b.zk)?;
+    } else {
+        print(b.zk);
+    }
+    return 0;
+}
