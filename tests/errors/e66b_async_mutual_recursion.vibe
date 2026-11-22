@@ -1,0 +1,18 @@
+import "std/async" as async;
+
+async i64 a(i64 n) {
+    if (n <= 0) { return 0; }
+    return await b(n - 1);
+}
+
+async i64 b(i64 n) {
+    return await a(n);
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto t = a(3);
+    i64 r = ex.block_on(&t)?;
+    println(r);
+}

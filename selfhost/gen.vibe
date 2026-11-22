@@ -695,6 +695,10 @@ struct Gen {
             const auto old = this->fn_insts.get(key)?;
             if (old.busy) {
                 this->err(this->at_line);
+                if (this->cur != null && this->cur.decl != decl) {
+                    eprintln("recursive async functions: '{this->cur.decl.name}' calls '{decl.name}', which is already being built, so a frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame");
+                    return error.CompileFailed;
+                }
                 eprintln("async function '{decl.name}' calls itself, so its frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame");
                 return error.CompileFailed;
             }

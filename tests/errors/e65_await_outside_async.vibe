@@ -1,0 +1,12 @@
+import "std/async" as async;
+
+async i64 g() { return 3; }
+
+i64 plain() {
+    auto x = await g();
+    return x;
+}
+
+!void main() {
+    println(plain());
+}
