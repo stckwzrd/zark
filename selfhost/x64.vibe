@@ -365,6 +365,26 @@ struct ObjFile {
         this->syms.push(Sym{ .name = name, .sec = sec, .value = value, .size = size, .global = global, .func = func })?;
     }
 
+    /// appends the code, line rows, debug functions and symbols of another object (one compiled function)
+    !void absorb(ObjFile* o) {
+        const auto base = this->text.code.len;
+        this->text.code.append(o.text.code.slice())?;
+        for (auto r : o.text.relocs) {
+            this->text.relocs.push(Reloc{ .off = r.off + base, .sym = r.sym, .kind = r.kind, .addend = r.addend })?;
+        }
+        for (auto w : o.rows) {
+            auto file = w.file;
+            if (file > 0) { file = this->file_index(o.files.get(file - 1))?; }
+            this->rows.push(LineRow{ .off = w.off + base, .line = w.line, .file = file })?;
+        }
+        for (auto f : o.funcs) {
+            this->funcs.push(DbgFunc{ .name = f.name, .start = f.start + base, .end = f.end + base, .vars = f.vars })?;
+        }
+        for (auto s : o.syms) {
+            this->define(s.name, s.sec, s.value + base, s.size, s.global, s.func)?;
+        }
+    }
+
     !i64 emit_desc(List<u8>*info, Map<i64>* memo, str d) {
         if (memo.has(d)) { return memo.get(d)?; }
         i64 at = 0;

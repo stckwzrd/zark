@@ -71,6 +71,8 @@ VIBE=build/vibe tests/run.sh              # test suite
 | `-o out` | output binary |
 | `-- a b` | arguments for `vibe run` |
 
+The native backend compiles functions on several threads (up to 8, one per CPU). `VIBE_JOBS=1` forces one thread, `VIBE_JOBS=N` sets the count; the output is the same byte for byte.
+
 ## Editor support
 
 `vibe lsp` is a language server over stdio, built on the compiler frontend: compiler errors as you type (also in unsaved buffers), hover, completion (members, modules, enum variants, struct literal fields, types), signature help, go to definition (also into imported files), references and rename across the workspace, outline, workspace symbols, highlights, format, and quick fixes for "did you mean". Any LSP client can use it.
