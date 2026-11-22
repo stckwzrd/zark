@@ -103,13 +103,17 @@ extern i32 getrlimit(i32 resource, RLimit* lim);
 extern i32 setrlimit(i32 resource, RLimit* lim);
 extern i32 execv(u8* path, u8** argv);
 extern i32 setenv(u8* name, u8* value, i32 overwrite);
+extern i64 vrt_exe_path(u8* buf, u64 n);
+extern i32 vrt_native();
+extern i32 vrt_os();
 
 void grow_stack() {
     if (getenv("VIBE_STACK") != null) { return; }
     RLimit lim;
     if (getrlimit(3, &lim) != 0) { return; }
-    const u64 want = 1073741824;
-    if (lim.cur >= want || lim.max < want) { return; }
+    u64 want = 1073741824;
+    if (lim.max < want) { want = lim.max; }
+    if (lim.cur >= want) { return; }
     u8[32] orig;
     auto ob = FixedBuf::init(orig[..]);
     auto sb = List<u8>::init(ob.allocator());
@@ -118,7 +122,11 @@ void grow_stack() {
     lim.cur = want;
     if (setrlimit(3, &lim) != 0) { return; }
     setenv("VIBE_STACK", sb.items.ptr, 1);
-    execv("/proc/self/exe", __argv);
+    u8[4096] exe;
+    const auto n = vrt_exe_path(&exe[0], 4095);
+    if (n <= 0) { return; }
+    exe[n] = 0;
+    execv(&exe[0], __argv);
 }
 
 void restore_stack() {
@@ -129,6 +137,33 @@ void restore_stack() {
     if (getrlimit(3, &lim) != 0) { return; }
     lim.cur = n as u64;
     _ = setrlimit(3, &lim);
+}
+
+!str rt_object(Allocator a, str cache, bool freestanding) {
+    u64 h = 7;
+    for (auto i : 0..RT_C.len) { h = (h * 31 + (RT_C[i] as u64)) % 1000000007; }
+    auto kind = "host";
+    if (freestanding) { kind = "free"; }
+    auto ob = List<u8>::init(a);
+    sprint(&ob, "{cache}/vrt-{h}-{RT_C.len}-{vrt_os()}{vrt_native()}-{kind}.o")?;
+    if (file_exists(ob.slice())) { return ob.slice(); }
+    auto cb = List<u8>::init(a);
+    sprint(&cb, "{cache}/vrt.{getpid()}.c")?;
+    auto tb = List<u8>::init(a);
+    sprint(&tb, "{cache}/vrt.{getpid()}.o")?;
+    write_file(cb.slice(), RT_C)?;
+    auto args = List<str>::init(a);
+    args.append(["clang", "-O1", "-c", cb.slice(), "-o", tb.slice()])?;
+    if (freestanding) { args.append(["-ffreestanding", "-DVRT_FREESTANDING"])?; }
+    const auto code = run(a, args.slice())?;
+    _ = run(a, ["rm", "-f", cb.slice()])?;
+    if (code != 0) {
+        _ = run(a, ["rm", "-f", tb.slice()])?;
+        return error.CompileFailed;
+    }
+    const auto mv = run(a, ["mv", "-f", tb.slice(), ob.slice()])?;
+    if (mv != 0) { return error.CompileFailed; }
+    return ob.slice();
 }
 
 !i32 compile(Allocator a) {
@@ -361,7 +396,12 @@ void restore_stack() {
     const auto cache = ".vibe-cache";
     _ = mkdir(".vibe-cache", 493);
     const auto stem = stem_of(src_file);
-    const auto use_native = force_native || (!opt && !force_llvm && !g.needs_llvm);
+    const auto can_native = vrt_native() != 0;
+    if (force_native && !can_native) {
+        eprintln("error: the native backend only supports x86-64 Linux, use --llvm");
+        return 1;
+    }
+    const auto use_native = can_native && (force_native || (!opt && !force_llvm && !g.needs_llvm));
     auto llb = List<u8>::init(a);
     if (use_native) { sprint(&llb, "{cache}/{stem}.o")?; } else { sprint(&llb, "{cache}/{stem}.ll")?; }
     const auto ll_path = llb.slice();
@@ -407,6 +447,8 @@ void restore_stack() {
         objs.push(ob.slice())?;
     }
 
+    objs.push(rt_object(a, cache, freestanding)?)?;
+
     auto link = List<str>::init(a);
     if (needs_cxx) { link.push("clang++")?; } else { link.push("clang")?; }
     if (freestanding) { link.append(["-nostdlib", "-static", "-ffreestanding"])?; }
@@ -417,7 +459,7 @@ void restore_stack() {
     }
     link.append(objs.slice())?;
     link.append(["-o", exe])?;
-    if (!freestanding) { link.push("-lm")?; }
+    if (!freestanding) { link.append(["-lm", "-lpthread", "-ldl"])?; }
     const auto lc = run(a, link.slice())?;
     if (lc != 0) {
         eprintln("error: link failed (input kept at {ll_path})");
