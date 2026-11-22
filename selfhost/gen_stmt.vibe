@@ -478,6 +478,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     this->bor_field = null;
     auto a = this->gen_addr(s.e)?;
     auto via_slice = false;
+    auto slice_by = "";
     if (a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct)) {
         const auto p = this->load(a.ty, a.v)?;
         a = Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
@@ -488,6 +489,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         sprint(&kb, "{a.ty.si.decl.name}.slice")?;
         if (!this->methods.has(kb.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}' (no slice() method)"); return error.CompileFailed; }
         const auto md = this->methods.get(kb.slice())?;
+        if (md.borrows) { slice_by = "slice"; }
         const auto sv = this->call_method(md, a, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
         const auto slot = this->alloca(sv.ty, "it")?;
         this->store(sv, slot)?;
@@ -547,7 +549,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
     }
     auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?;
-    lp.iter = this->iter_borrow(s.e, via_slice)?;
+    lp.iter = this->iter_borrow(s.e, via_slice, slice_by)?;
     this->loops.push(lp)?;
     this->gen_stmt(s.body)?;
     this->loop_end(this->loops.get(this->loops.len - 1), s0)?;

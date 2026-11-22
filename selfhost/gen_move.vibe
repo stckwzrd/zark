@@ -379,7 +379,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
     return false;
 }
 
-!str Gen::iter_borrow(Expr* seq, bool via_slice) {
+!str Gen::iter_borrow(Expr* seq, bool via_slice, str slice_by) {
     if (seq.k == .Call && this->bor_field != null && seq.l == this->bor_field && this->bor_ptr.len > 0) {
         const auto hp = this->tmp()?;
         this->add_rec(MoveRec{ .ptr = hp, .by = seq.l.name, .line = seq.line, .kind = 2, .cont = this->bor_ptr, .cname = this->bor_name })?;
@@ -393,7 +393,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
         const auto k = this->place_key(seq)?;
         if (k.len > 0) {
             const auto hp = this->tmp()?;
-            this->add_rec(MoveRec{ .ptr = hp, .by = "slice", .line = seq.line, .kind = 2, .cont = k, .cname = this->place_name(seq) })?;
+            this->add_rec(MoveRec{ .ptr = hp, .by = slice_by, .line = seq.line, .kind = 2, .cont = k, .cname = this->place_name(seq) })?;
             return hp;
         }
     }

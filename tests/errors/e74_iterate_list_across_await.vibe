@@ -1,0 +1,32 @@
+import "std/async" as async;
+
+struct Yield1 {
+    bool done;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->done) { return .Ready(true); }
+        this->done = true;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+async i64 body() {
+    auto l = List<i64>::init(c_allocator());
+    defer l.deinit();
+    l.push(1) catch return -1;
+    auto n = 0;
+    for (auto x : l) {
+        await Yield1{};
+        n += x;
+    }
+    return n;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto t = body();
+    i64 r = ex.block_on(&t)?;
+    println(r);
+}
