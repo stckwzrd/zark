@@ -1,0 +1,24 @@
+void bump(void* data) {
+    auto n = data as *i64;
+    *n += 1;
+}
+
+test "poll values" {
+    const auto r = Poll<i64>::Ready(3);
+    match (r) {
+        .Ready(v) => assert(v == 3);
+        .Pending => assert(false);
+    }
+    const Poll<i64> p = .Pending;
+    match (p) {
+        .Ready(_) => assert(false);
+        .Pending => assert(true);
+    }
+}
+
+test "waker calls its function" {
+    i64 count = 0;
+    auto w = Waker{ .data = &count as *void, .wake_fn = bump };
+    w.wake();
+    assert(count == 1);
+}

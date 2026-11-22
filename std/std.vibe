@@ -578,6 +578,26 @@ union Option<T> {
     }
 }
 
+// ================================================================ async protocol
+
+union Poll<T> {
+    T Ready;
+    Pending;
+}
+
+struct Waker {
+    void* data;
+    fn(void*) wake_fn;
+
+    void wake() {
+        if (this->wake_fn != null) { this->wake_fn(this->data); }
+    }
+}
+
+struct Context {
+    Waker waker;
+}
+
 // ================================================================ C strings
 
 /// copy `s` into `buf` and NUL-terminate it (no allocation)
