@@ -1,0 +1,13 @@
+import "std/async" as async;
+
+async i64 one() { return 1; }
+
+!void main() {
+    auto dbg = DebugAllocator::init();
+    auto ex = async::Executor::init(dbg.allocator())?;
+    defer ex.deinit();
+    auto h = ex.spawn(one())?;
+    auto h2 = h;
+    println(ex.block_on(&h)?);
+    println(ex.block_on(&h2)?);
+}

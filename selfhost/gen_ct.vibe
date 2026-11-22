@@ -24,7 +24,13 @@ bool Gen::ct_plain(Type* t) {
     const auto saved_env = this->env;
     const auto saved_loops = this->loops;
     const auto saved_colds = this->colds_copy()?;
+    auto saved_slots = 0;
+    if (this->af != null) { saved_slots = this->af.slots.len; }
     defer {
+        if (this->af != null) {
+            this->af.slots.len = saved_slots;
+            this->af.frame.si.fields.len = saved_slots;
+        }
         this->body.len = saved_body;
         this->allocas.len = saved_allocas;
         this->ntmp = saved_ntmp;

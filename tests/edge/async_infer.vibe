@@ -1,0 +1,43 @@
+import "std/async" as async;
+
+async i64 add(i64 a, i64 b) { return a + b; }
+
+async i64 chain() {
+    auto x = await add(1, 2);
+    auto h = await add(x, 10);
+    return x * h;
+}
+
+async void nothing() {}
+
+struct Countdown {
+    i64 n;
+
+    Poll<i64> poll(Context* cx) {
+        if (this->n == 0) { return .Ready(42); }
+        this->n -= 1;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto f = chain();
+    auto r = ex.block_on(&f)?;
+    println(r);
+    auto c = Countdown{ .n = 3 };
+    auto rc = ex.block_on(&c)?;
+    println(rc);
+    auto h = ex.spawn(chain())?;
+    auto hc = ex.spawn(Countdown{ .n = 2 })?;
+    auto hn = ex.spawn(nothing())?;
+    auto rh = ex.block_on(&h)?;
+    println(rh);
+    println(ex.block_on(&hc)?);
+    println(ex.block_on(&hn)?);
+    async::JoinHandle<i64> ha = ex.spawn(add(4, 5))?;
+    i64 ra = ex.block_on(&ha)?;
+    println(ra);
+}

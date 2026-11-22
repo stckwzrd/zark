@@ -1,0 +1,19 @@
+import "std/async" as async;
+
+async i64 work() { return 3; }
+
+async !i64 body(async::Executor* ex) {
+    auto f = work();
+    async::JoinHandle<i64> h = ex.spawn(f)?;
+    auto a = await f;
+    auto b = await h;
+    return a + b;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto t = body(&ex);
+    i64 r = ex.block_on(&t)?;
+    println(r);
+}

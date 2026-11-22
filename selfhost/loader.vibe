@@ -16,6 +16,7 @@ const auto STD_OS = embed("../std/os.vibe");
 const auto STD_NET = embed("../std/net.vibe");
 const auto STD_HTTP = embed("../std/http.vibe");
 const auto STD_THREAD = embed("../std/thread.vibe");
+const auto STD_ASYNC = embed("../std/async.vibe");
 
 /// the embedded source of "<std>/name.vibe"
 !str std_source(str path) {
@@ -29,6 +30,7 @@ const auto STD_THREAD = embed("../std/thread.vibe");
         "<std>/net.vibe" => return STD_NET;
         "<std>/http.vibe" => return STD_HTTP;
         "<std>/thread.vibe" => return STD_THREAD;
+        "<std>/async.vibe" => return STD_ASYNC;
     }
     return error.NotFound;
 }
@@ -131,7 +133,7 @@ struct Loader {
         }
         if (is_std_path(path)) {
             const auto ssrc = std_source(path) catch {
-                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread)");
+                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread, async)");
                 return error.CompileFailed;
             };
             if (diag_files.a.alloc_fn == null) { diag_files = Map<str>::init(c_allocator()); }

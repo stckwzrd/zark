@@ -1,0 +1,63 @@
+import "std/async" as async;
+
+async !i64 serve(async::TcpStream s) {
+    u8[64] buf;
+    i64 total = 0;
+    while (true) {
+        auto n = await s.read(buf[0..])?;
+        if (n == 0) { break; }
+        auto w = await s.write(buf[0..n])?;
+        total += w;
+    }
+    s.close();
+    return total;
+}
+
+async !i64 server(async::Executor* ex, async::TcpListener* l, i64 count) {
+    async::JoinHandle<!i64>[8] hs;
+    for (auto i : 0..count) {
+        auto s = await l.accept()?;
+        hs[i] = ex.spawn(serve(s))?;
+    }
+    i64 sum = 0;
+    for (auto i : 0..count) {
+        auto h = hs[i];
+        auto r = await h;
+        sum += r?;
+    }
+    return sum;
+}
+
+async !str client(async::Executor* ex, i64 port, str msg, u8[] buf) {
+    auto s = async::TcpStream::connect(ex, "127.0.0.1", port)?;
+    auto w = await s.write(msg)?;
+    i64 got = 0;
+    while (got < w) {
+        auto n = await s.read(buf[got..])?;
+        if (n == 0) { break; }
+        got += n;
+    }
+    s.close();
+    return buf[0..got];
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto l = async::TcpListener::bind(&ex, "127.0.0.1", 0)?;
+    defer l.close();
+    const auto port = l.port();
+    auto sh = ex.spawn(server(&ex, &l, 3))?;
+    u8[64] b1;
+    u8[64] b2;
+    u8[64] b3;
+    auto c1 = ex.spawn(client(&ex, port, "one\n", b1[0..]))?;
+    auto c2 = ex.spawn(client(&ex, port, "two two\n", b2[0..]))?;
+    auto c3 = ex.spawn(client(&ex, port, "three three three\n", b3[0..]))?;
+    auto r1 = ex.block_on(&c1)??;
+    auto r2 = ex.block_on(&c2)??;
+    auto r3 = ex.block_on(&c3)??;
+    auto total = ex.block_on(&sh)??;
+    print("{r1}{r2}{r3}");
+    println("total {total}");
+}

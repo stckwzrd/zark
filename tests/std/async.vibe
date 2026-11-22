@@ -1,0 +1,765 @@
+import "std/thread" as thread;
+import "std/time" as time;
+import "std/async" as async;
+
+extern i64 vrt_poller_new();
+extern i32 vrt_poller_set(i64 p, i32 fd, i32 readable, i32 writable, u64 token);
+extern i32 vrt_poller_wait(i64 p, u64* tokens, i32* events, i32 max, i64 timeout_ms);
+extern i32 vrt_poller_wake(i64 p);
+extern void vrt_poller_free(i64 p);
+extern i32 pipe(i32* fds);
+extern i64 write(i32 fd, void* buf, u64 n);
+extern i64 read(i32 fd, void* buf, u64 n);
+
+void bump(void* data) {
+    auto n = data as *i64;
+    *n += 1;
+}
+
+test "poll values" {
+    const auto r = Poll<i64>::Ready(3);
+    match (r) {
+        .Ready(v) => assert(v == 3);
+        .Pending => assert(false);
+    }
+    const Poll<i64> p = .Pending;
+    match (p) {
+        .Ready(_) => assert(false);
+        .Pending => assert(true);
+    }
+}
+
+test "waker calls its function" {
+    i64 count = 0;
+    auto w = Waker{ .data = &count as *void, .wake_fn = bump };
+    w.wake();
+    assert(count == 1);
+}
+
+test "poller reports a readable pipe" {
+    const auto p = vrt_poller_new();
+    assert(p > 0);
+    i32[2] fds;
+    assert(pipe(&fds[0]) == 0);
+    assert(vrt_poller_set(p, fds[0], 1, 0, 7) == 0);
+    u64[4] tokens;
+    i32[4] events;
+    assert(vrt_poller_wait(p, &tokens[0], &events[0], 4, 0) == 0);
+    u8 b = 1;
+    assert(write(fds[1], &b as *void, 1) == 1);
+    assert(vrt_poller_wait(p, &tokens[0], &events[0], 4, 0) == 1);
+    assert(tokens[0] == 7);
+    assert((events[0] & 1) != 0);
+    assert(vrt_poller_set(p, fds[0], 0, 0, 7) == 0);
+    assert(vrt_poller_wait(p, &tokens[0], &events[0], 4, 0) == 0);
+    assert(vrt_poller_set(p, 999, 1, 0, 1) < 0);
+    assert(vrt_poller_wait(p, &tokens[0], &events[0], 0, 0) == 0);
+    vrt_poller_free(p);
+}
+
+test "wake interrupts wait" {
+    const auto p = vrt_poller_new();
+    assert(p > 0);
+    auto t = thread::spawn([p]() -> void {
+        time::sleep_ms(20);
+        vrt_poller_wake(p);
+    })?;
+    u64[4] tokens;
+    i32[4] events;
+    const auto start = time::mono_ns();
+    assert(vrt_poller_wait(p, &tokens[0], &events[0], 4, 5000) == 0);
+    assert(time::mono_ns() - start < 1000000000);
+    t.join();
+    vrt_poller_free(p);
+}
+
+struct Countdown {
+    i64 n;
+
+    Poll<i64> poll(Context* cx) {
+        if (this->n == 0) { return .Ready(42); }
+        this->n -= 1;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+struct SleepPush {
+    async::Sleep s;
+    i64 v;
+    List<i64>* out;
+
+    Poll<bool> poll(Context* cx) {
+        match (this->s.poll(cx)) {
+            .Ready(_) => {
+                this->out.push(this->v) catch {};
+                return .Ready(true);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+struct AllDone<T> {
+    List<async::JoinHandle<T>>* hs;
+
+    Poll<bool> poll(Context* cx) {
+        for (auto h : this->hs.slice()) {
+            if (!h.done()) {
+                cx.waker.wake();
+                return .Pending;
+            }
+        }
+        return .Ready(true);
+    }
+}
+
+test "block_on drives a hand-written future" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto f = Countdown{ .n = 5 };
+    const auto v = ex.block_on<Countdown, i64>(&f)?;
+    assert(v == 42);
+}
+
+test "sleep orders tasks by deadline" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto out = List<i64>::init(c_allocator());
+    auto hs = List<async::JoinHandle<bool>>::init(c_allocator());
+    for (auto ms : [30, 10, 20]) {
+        const auto t = SleepPush{ .s = async::Sleep::after(&ex, ms), .v = ms, .out = &out };
+        hs.push(ex.spawn<SleepPush, bool>(t)?)?;
+    }
+    auto all = AllDone<bool>{ .hs = &hs };
+    assert(ex.block_on<AllDone<bool>, bool>(&all)?);
+    assert(out.len == 3);
+    assert(out.get(0) == 10);
+    assert(out.get(1) == 20);
+    assert(out.get(2) == 30);
+    hs.deinit();
+    out.deinit();
+}
+
+test "ten thousand tasks" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        auto hs = List<async::JoinHandle<i64>>::init(a);
+        defer hs.deinit();
+        for (auto i : 0..10000) {
+            hs.push(ex.spawn<Countdown, i64>(Countdown{ .n = 3 })?)?;
+        }
+        auto all = AllDone<i64>{ .hs = &hs };
+        assert(ex.block_on<AllDone<i64>, bool>(&all)?);
+        for (auto h : hs.slice()) { assert(h.take() == 42); }
+    }
+    dbg.deinit()?;
+}
+
+struct Never {
+    Poll<bool> poll(Context* cx) { return .Pending; }
+}
+
+test "sleep waits in the poller" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto s = async::Sleep::after(&ex, 20);
+    const auto start = time::mono_ns();
+    assert(ex.block_on<async::Sleep, bool>(&s)?);
+    assert(time::mono_ns() - start >= 15000000);
+    assert(time::mono_ns() - start < 1000000000);
+}
+
+test "readable completes through the reactor" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] fds;
+    assert(pipe(&fds[0]) == 0);
+    const auto wfd = fds[1];
+    auto t = thread::spawn([wfd]() -> void {
+        time::sleep_ms(20);
+        u8 b = 7;
+        _ = write(wfd, &b as *void, 1);
+    })?;
+    defer t.join();
+    auto r = async::Readable::on(&ex, fds[0]);
+    const auto start = time::mono_ns();
+    assert(ex.block_on<async::Readable, bool>(&r)?);
+    assert(time::mono_ns() - start >= 15000000);
+    assert(time::mono_ns() - start < 1000000000);
+    u8 got = 0;
+    assert(read(fds[0], &got as *void, 1) == 1);
+    assert(got == 7);
+}
+
+test "a future that never wakes is a deadlock" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto n = Never{};
+    bool dead = false;
+    _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
+    assert(dead);
+}
+
+extern i32 socketpair(i32 domain, i32 kind, i32 protocol, i32* fds);
+extern i32 close(i32 fd);
+extern i32 vrt_set_nonblocking(i32 fd);
+
+type Count = !i64;
+
+struct Spin {
+    async::Executor* ex;
+    async::Sleep s;
+    async::Readable r;
+    i32 fd;
+
+    Poll<i64> poll(Context* cx) {
+        if (!this->r.io.armed) {
+            this->r = async::Readable::on(this->ex, this->fd);
+            _ = this->r.poll(cx);
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(1);
+            .Pending => {}
+        }
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+struct Wave {
+    async::Executor* ex;
+    List<async::JoinHandle<i64>>* hs;
+    i64 sum;
+    i64 until;
+
+    Poll<bool> poll(Context* cx) {
+        if (time::mono_ns() > this->until) { return .Ready(false); }
+        auto i = 0;
+        while (i < this->hs.len) {
+            auto h = this->hs.get(i);
+            if (h.done()) {
+                this->sum += h.take();
+                _ = this->hs.swap_remove(i) catch h;
+            } else {
+                i += 1;
+            }
+        }
+        if (this->hs.len == 0 && this->ex.tasks.len == 0) { return .Ready(true); }
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+test "finished tasks free their memory" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        i32[100] fds;
+        for (auto i : 0..50) { assert(pipe(&fds[2 * i]) == 0); }
+        auto hs = List<async::JoinHandle<i64>>::init(a);
+        defer hs.deinit();
+        i64 base = 0;
+        u64 base_bytes = 0;
+        for (auto wave : 0..20) {
+            for (auto i : 0..50) {
+                auto h = ex.spawn<Spin, i64>(Spin{ .ex = &ex, .s = async::Sleep::after(&ex, 5), .fd = fds[2 * i] })?;
+                if (i % 2 == 0) { hs.push(h)?; } else { h.detach(); }
+            }
+            auto w = Wave{ .ex = &ex, .hs = &hs, .until = time::mono_ns() + 2000000000 };
+            assert(ex.block_on<Wave, bool>(&w)?);
+            assert(w.sum == 25);
+            if (wave == 1) {
+                base = dbg.live;
+                base_bytes = dbg.live_bytes;
+            }
+        }
+        assert(dbg.live <= base);
+        assert(dbg.live_bytes <= base_bytes + 4096);
+        assert(ex.io == 0);
+        auto n = Never{};
+        bool dead = false;
+        _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
+        assert(dead);
+        for (auto i : 0..100) { _ = close(fds[i]); }
+    }
+    dbg.deinit()?;
+}
+
+struct Guarded {
+    async::JoinHandle<Count>* h;
+    async::Sleep s;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->h.poll(cx)) {
+            .Ready(r) => return .Ready(r catch -1);
+            .Pending => {}
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(-2);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "a reader and a writer share one fd" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    const auto big = c_allocator().alloc<u8>(1 << 22)?;
+    defer c_allocator().free<u8>(big);
+    auto s = async::TcpStream{ .ex = &ex, .fd = sv[0] };
+    u8[4] buf;
+    auto hr = ex.spawn<async::Read, Count>(s.read(buf[..]))?;
+    auto hw = ex.spawn<async::Write, Count>(s.write(big))?;
+    const auto b = sv[1];
+    auto t = thread::spawn([b]() -> void {
+        time::sleep_ms(30);
+        u8 x = 'x';
+        _ = write(b, &x as *void, 1);
+        time::sleep_ms(300);
+        u8[4096] sink;
+        auto got = 0;
+        while (got < (1 << 22)) {
+            const auto n = read(b, &sink[0] as *void, 4096);
+            if (n <= 0) { break; }
+            got += n;
+        }
+    })?;
+    defer t.join();
+    auto g = Guarded{ .h = &hr, .s = async::Sleep::after(&ex, 200) };
+    assert(ex.block_on<Guarded, i64>(&g)? == 1);
+    assert(buf[0] == 'x');
+    assert(ex.block_on<async::JoinHandle<Count>, Count>(&hw)?? == 1 << 22);
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}
+
+struct EchoServer {
+    async::TcpListener* l;
+    i32 step;
+    async::Accept acc;
+    async::TcpStream s;
+    async::Read rd;
+    async::Write wr;
+    u8[64] buf;
+    i64 n;
+
+    Poll<bool> poll(Context* cx) {
+        while (true) {
+            if (this->step == 0) {
+                this->acc = this->l.accept();
+                this->step = 1;
+            } else if (this->step == 1) {
+                match (this->acc.poll(cx)) {
+                    .Ready(r) => {
+                        this->s = r catch { return .Ready(false); };
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            } else if (this->step == 2) {
+                if (this->n > 0 && this->buf[this->n - 1] == '\n') {
+                    this->wr = this->s.write(this->buf[0..this->n]);
+                    this->step = 4;
+                } else {
+                    this->rd = this->s.read(this->buf[this->n..]);
+                    this->step = 3;
+                }
+            } else if (this->step == 3) {
+                match (this->rd.poll(cx)) {
+                    .Ready(r) => {
+                        const auto got = r catch { return .Ready(false); };
+                        if (got == 0) { return .Ready(false); }
+                        this->n += got;
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            } else {
+                match (this->wr.poll(cx)) {
+                    .Ready(r) => {
+                        _ = r catch { return .Ready(false); };
+                        this->s.close();
+                        return .Ready(true);
+                    }
+                    .Pending => return .Pending;
+                }
+            }
+        }
+        return .Pending;
+    }
+}
+
+struct EchoClient {
+    async::Executor* ex;
+    i64 port;
+    i32 step;
+    async::TcpStream s;
+    async::Write wr;
+    async::Read rd;
+    u8[64] buf;
+    i64 n;
+
+    Poll<bool> poll(Context* cx) {
+        while (true) {
+            if (this->step == 0) {
+                this->s = async::TcpStream::connect(this->ex, "127.0.0.1", this->port) catch { return .Ready(false); };
+                this->wr = this->s.write("ping\n");
+                this->step = 1;
+            } else if (this->step == 1) {
+                match (this->wr.poll(cx)) {
+                    .Ready(r) => {
+                        _ = r catch { return .Ready(false); };
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            } else if (this->step == 2) {
+                if (this->n == 5) { break; }
+                this->rd = this->s.read(this->buf[this->n..]);
+                this->step = 3;
+            } else {
+                match (this->rd.poll(cx)) {
+                    .Ready(r) => {
+                        const auto got = r catch { return .Ready(false); };
+                        if (got == 0) { break; }
+                        this->n += got;
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            }
+        }
+        this->s.close();
+        return .Ready(this->buf[0..this->n] == "ping\n");
+    }
+}
+
+test "echo over loopback" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto l = async::TcpListener::bind(&ex, "127.0.0.1", 0)?;
+    defer l.close();
+    assert(l.port() > 0);
+    auto h = ex.spawn<EchoServer, bool>(EchoServer{ .l = &l })?;
+    auto c = EchoClient{ .ex = &ex, .port = l.port() };
+    assert(ex.block_on<EchoClient, bool>(&c)?);
+    assert(ex.block_on<async::JoinHandle<bool>, bool>(&h)?);
+}
+
+struct ConnectClose {
+    async::Executor* ex;
+    i64 port;
+    i32 step;
+    async::Sleep s;
+    async::TcpStream c;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->step == 0) {
+            this->c = async::TcpStream::connect(this->ex, "127.0.0.1", this->port) catch { return .Ready(false); };
+            this->s = async::Sleep::after(this->ex, 30);
+            this->step = 1;
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => {
+                this->c.close();
+                return .Ready(true);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+struct ReadEnd {
+    async::TcpListener* l;
+    async::Sleep guard;
+    i32 step;
+    async::Accept acc;
+    async::TcpStream s;
+    async::Read rd;
+    u8[16] buf;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->guard.poll(cx)) {
+            .Ready(_) => {
+                this->acc.cancel();
+                this->rd.cancel();
+                return .Ready(-1);
+            }
+            .Pending => {}
+        }
+        if (this->step == 0) {
+            this->acc = this->l.accept();
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->acc.poll(cx)) {
+                .Ready(r) => {
+                    this->s = r catch { return .Ready(-2); };
+                    this->rd = this->s.read(this->buf[..]);
+                    this->step = 2;
+                }
+                .Pending => return .Pending;
+            }
+        }
+        match (this->rd.poll(cx)) {
+            .Ready(r) => {
+                const auto got = r catch { return .Ready(-3); };
+                this->s.close();
+                return .Ready(got);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "closed peer ends a pending read" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto l = async::TcpListener::bind(&ex, "127.0.0.1", 0)?;
+    defer l.close();
+    auto h = ex.spawn<ConnectClose, bool>(ConnectClose{ .ex = &ex, .port = l.port() })?;
+    auto r = ReadEnd{ .l = &l, .guard = async::Sleep::after(&ex, 2000) };
+    const auto start = time::mono_ns();
+    assert(ex.block_on<ReadEnd, i64>(&r)? == 0);
+    assert(time::mono_ns() - start >= 20000000);
+    assert(ex.block_on<async::JoinHandle<bool>, bool>(&h)?);
+}
+
+struct Nap {
+    async::Sleep s;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(7);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+struct Impatient {
+    async::JoinHandle<i64>* h;
+    async::Sleep s;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->h.poll(cx)) {
+            .Ready(v) => return .Ready(v);
+            .Pending => {}
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(-1);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "a waiter that gave up is not woken after free" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        auto slow = ex.spawn<Nap, i64>(Nap{ .s = async::Sleep::after(&ex, 60) })?;
+        auto w = ex.spawn<Impatient, i64>(Impatient{ .h = &slow, .s = async::Sleep::after(&ex, 5) })?;
+        assert(ex.block_on<async::JoinHandle<i64>, i64>(&w)? == -1);
+        auto s = async::Sleep::after(&ex, 100);
+        assert(ex.block_on<async::Sleep, bool>(&s)?);
+        assert(slow.done());
+        assert(slow.take() == 7);
+        assert(ex.tasks.len == 0);
+    }
+    dbg.deinit()?;
+}
+
+struct LostRead {
+    async::Executor* ex;
+    i32 fd;
+    i32 peer;
+    i32 step;
+    i64 polls;
+    async::Read rd;
+    async::Sleep s;
+    u8[4] buf;
+
+    Poll<i64> poll(Context* cx) {
+        this->polls += 1;
+        if (this->polls > 50) { return .Ready(-1); }
+        if (this->step == 0) {
+            auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };
+            this->rd = st.read(this->buf[..]);
+            this->s = async::Sleep::after(this->ex, 10);
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->rd.poll(cx)) {
+                .Ready(_) => return .Ready(-2);
+                .Pending => {}
+            }
+            match (this->s.poll(cx)) {
+                .Ready(_) => {}
+                .Pending => return .Pending;
+            }
+            this->rd.cancel();
+            u8 x = 'x';
+            _ = write(this->peer, &x as *void, 1);
+            this->s = async::Sleep::after(this->ex, 50);
+            this->step = 2;
+        }
+        if (this->step == 2) {
+            match (this->s.poll(cx)) {
+                .Ready(_) => this->step = 3;
+                .Pending => return .Pending;
+            }
+        }
+        return .Pending;
+    }
+}
+
+test "a cancelled read does not spin or hold the executor" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    auto h = ex.spawn<LostRead, i64>(LostRead{ .ex = &ex, .fd = sv[0], .peer = sv[1] })?;
+    auto n = Never{};
+    bool dead = false;
+    _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
+    assert(dead);
+    assert(!h.done());
+    assert(ex.io == 0);
+    h.detach();
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}
+
+struct ForgotRead {
+    async::Executor* ex;
+    i32 fd;
+    i32 peer;
+    i32 step;
+    i64 polls;
+    i64 io;
+    async::Read rd;
+    async::Sleep s;
+    u8[4] buf;
+
+    Poll<i64> poll(Context* cx) {
+        this->polls += 1;
+        if (this->polls > 50) { return .Ready(-1); }
+        if (this->step == 0) {
+            auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };
+            this->rd = st.read(this->buf[..]);
+            this->s = async::Sleep::after(this->ex, 10);
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->rd.poll(cx)) {
+                .Ready(_) => return .Ready(-2);
+                .Pending => {}
+            }
+            match (this->s.poll(cx)) {
+                .Ready(_) => {}
+                .Pending => return .Pending;
+            }
+            u8 x = 'x';
+            _ = write(this->peer, &x as *void, 1);
+            this->s = async::Sleep::after(this->ex, 100);
+            this->step = 2;
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => {
+                this->io = this->ex.io;
+                return .Ready(this->polls);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "a forgotten read that became ready does not spin" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    auto f = ForgotRead{ .ex = &ex, .fd = sv[0], .peer = sv[1] };
+    const auto n = ex.block_on(&f)?;
+    assert(n > 0 && n < 50);
+    assert(f.io == 1);
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}
+
+struct TwoReads {
+    async::Executor* ex;
+    i32 fd;
+    i32 peer;
+    i32 step;
+    async::Read r1;
+    async::Read r2;
+    async::Sleep s;
+    u8[4] b1;
+    u8[4] b2;
+
+    Poll<i64> poll(Context* cx) {
+        if (this->step == 0) {
+            auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };
+            this->r1 = st.read(this->b1[..]);
+            this->r2 = st.read(this->b2[..]);
+            match (this->r1.poll(cx)) {
+                .Ready(_) => return .Ready(-1);
+                .Pending => {}
+            }
+            match (this->r2.poll(cx)) {
+                .Ready(_) => return .Ready(-1);
+                .Pending => {}
+            }
+            this->r1.cancel();
+            this->s = async::Sleep::after(this->ex, 10);
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->s.poll(cx)) {
+                .Ready(_) => {}
+                .Pending => return .Pending;
+            }
+            u8 x = 'x';
+            _ = write(this->peer, &x as *void, 1);
+            this->step = 2;
+            return .Pending;
+        }
+        match (this->r2.poll(cx)) {
+            .Ready(n) => return .Ready(n catch -1);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "cancelling an older read keeps a newer one armed" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    auto f = TwoReads{ .ex = &ex, .fd = sv[0], .peer = sv[1] };
+    assert(ex.block_on(&f)? == 1);
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}

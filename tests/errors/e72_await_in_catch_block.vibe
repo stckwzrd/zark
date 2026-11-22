@@ -1,0 +1,29 @@
+import "std/async" as async;
+
+struct Yield1 {
+    bool done;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->done) { return .Ready(true); }
+        this->done = true;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+!i64 bad() { return error.Bad; }
+
+i64 seven() { return 7; }
+
+async i64 h() {
+    i64 v = seven() + (bad() catch |e| { await Yield1{}; 1; });
+    return v;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto t = h();
+    i64 r = ex.block_on(&t)?;
+    println(r);
+}

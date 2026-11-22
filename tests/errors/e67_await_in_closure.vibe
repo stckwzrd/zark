@@ -1,0 +1,20 @@
+import "std/async" as async;
+
+async i64 g() { return 3; }
+
+async i64 h() {
+    i64 x = 1;
+    auto c = [&x]() -> void {
+        x = await g();
+    };
+    c();
+    return x;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto t = h();
+    i64 r = ex.block_on(&t)?;
+    println(r);
+}

@@ -34,6 +34,7 @@ struct MatchRes { Type* ty; str slot; }
             auto val = Value{ .ty = null, .v = "" };
             if (s.e != null) {
                 this->bor_field = null;
+                this->set_await(s.e);
                 auto v = this->gen_expr(s.e, ty)?;
                 if (ty != null) { v = this->coerce(v, ty, s.line)?; }
                 val = v;
@@ -69,6 +70,7 @@ struct MatchRes { Type* ty; str slot; }
             if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
             if (s.op == .eq) {
                 this->bor_field = null;
+                if (s.e2.k == .Ident) { this->set_await(s.e); }
                 const auto v = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
                 this->check_store_escape(s.e2, s.e, s.line)?;
                 if (plain_local) { this->check_overwrite(s.e2.name, s.line)?; }
@@ -98,11 +100,13 @@ struct MatchRes { Type* ty; str slot; }
             }
         }
         .ExprS => {
+            this->set_await(s.e);
             const auto v = this->gen_expr(s.e, null)?;
             this->check_dropped(v.ty, s.line)?;
             if (v.ty.k == .Errun) { this->err(s.line); eprintln("error union is ignored; handle it with '?' or 'catch'"); return error.CompileFailed };
         }
         .If => {
+            this->set_await(s.e);
             const auto c = this->gen_cond(s.e)?;
             const auto lt = this->new_label("then")?;
             const auto le = this->new_label("else")?;
@@ -139,6 +143,7 @@ struct MatchRes { Type* ty; str slot; }
             const auto infinite = s.e.k == .BoolLit && s.e.bval;
             this->loops.push(this->loop_new(le, lc, this->scopes.len, s.label, md, infinite)?)?;
             this->label(lc)?;
+            this->set_await(s.e);
             const auto c = this->gen_cond(s.e)?;
             sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
             this->terminated = true;
@@ -171,16 +176,20 @@ struct MatchRes { Type* ty; str slot; }
             const auto lty = this->llty(lo.ty)?;
             const auto it = this->alloca(lo.ty, s.name)?;
             this->store(lo, it)?;
+            auto hslot = "";
+            if (this->af != null) { hslot = this->spill(hi)?.v; }
             const auto lc = this->new_label("fcond")?;
             const auto lb = this->new_label("fbody")?;
             const auto lstep = this->new_label("fstep")?;
             const auto le = this->new_label("fend")?;
             this->label(lc)?;
             const auto cur = this->load(lo.ty, it)?;
+            auto hv = hi.v;
+            if (hslot.len > 0) { hv = this->load(hi.ty, hslot)?.v; }
             const auto c = this->tmp()?;
             auto pred = "ult";
             if (lo.ty.signed) { pred = "slt"; }
-            sprint(this->ins()?, "  {c} = icmp {pred} {lty} {cur.v}, {hi.v}\n")?;
+            sprint(this->ins()?, "  {c} = icmp {pred} {lty} {cur.v}, {hv}\n")?;
             sprint(this->ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?;
             this->terminated = true;
             this->label(lb)?;
@@ -221,6 +230,7 @@ struct MatchRes { Type* ty; str slot; }
             sc.defers.push(Defer{ .stmt = s.body, .is_err = s.is_err })?;
         }
         .Match => {
+            this->set_await(s.e);
             const auto v = this->gen_expr(s.e, null)?;
             this->gen_match(v, s.arms, null)?;
         }
@@ -442,7 +452,10 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         this->join_arm(&jn)?;
         this->push_scope()?;
         if (bind.bind.len > 0) {
-            this->declare_var(bind.bind, Var{ .ptr = pp, .ty = v.ty.si.fields.get(bind.idx).ty, .mutable = false }, arm.body.line)?;
+            const auto bty = v.ty.si.fields.get(bind.idx).ty;
+            auto bp = pp;
+            if (this->af != null) { bp = this->spill(this->load(bty, pp)?)?.v; }
+            this->declare_var(bind.bind, Var{ .ptr = bp, .ty = bty, .mutable = false }, arm.body.line)?;
         }
         this->gen_arm(arm.body, res)?;
         this->pop_scope()?;
@@ -465,6 +478,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     this->bor_field = null;
     auto a = this->gen_addr(s.e)?;
     auto via_slice = false;
+    auto slice_by = "";
     if (a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct)) {
         const auto p = this->load(a.ty, a.v)?;
         a = Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
@@ -475,6 +489,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         sprint(&kb, "{a.ty.si.decl.name}.slice")?;
         if (!this->methods.has(kb.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}' (no slice() method)"); return error.CompileFailed; }
         const auto md = this->methods.get(kb.slice())?;
+        if (md.borrows) { slice_by = "slice"; }
         const auto sv = this->call_method(md, a, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
         const auto slot = this->alloca(sv.ty, "it")?;
         this->store(sv, slot)?;
@@ -498,18 +513,26 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     }
     const auto it = this->alloca(this->t_i64, "idx")?;
     this->store(Value{ .ty = this->t_i64, .v = "0" }, it)?;
+    auto bslot = "";
+    auto lslot = "";
+    if (this->af != null) {
+        bslot = this->spill(Value{ .ty = this->t_ptr_u8, .v = base })?.v;
+        lslot = this->spill(Value{ .ty = this->t_i64, .v = len })?.v;
+    }
     const auto lc = this->new_label("ecnd")?;
     const auto lb = this->new_label("ebody")?;
     const auto lstep = this->new_label("estep")?;
     const auto le = this->new_label("eend")?;
     this->label(lc)?;
     const auto cur = this->load(this->t_i64, it)?;
+    if (lslot.len > 0) { len = this->load(this->t_i64, lslot)?.v; }
     const auto c = this->tmp()?;
     sprint(this->ins()?, "  {c} = icmp slt i64 {cur.v}, {len}\n")?;
     sprint(this->ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?;
     this->terminated = true;
     this->label(lb)?;
     this->push_scope()?;
+    if (bslot.len > 0) { base = this->load(this->t_ptr_u8, bslot)?.v; }
     const auto ep = this->tmp()?;
     if (a.ty.k == .Array) {
         sprint(this->ins()?, "  {ep} = getelementptr {this->llty(a.ty)?}, ptr {base}, i64 0, i64 {cur.v}\n")?;
@@ -526,7 +549,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
     }
     auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?;
-    lp.iter = this->iter_borrow(s.e, via_slice)?;
+    lp.iter = this->iter_borrow(s.e, via_slice, slice_by)?;
     this->loops.push(lp)?;
     this->gen_stmt(s.body)?;
     this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
@@ -553,6 +576,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     if (re != null) {
         if (rt.k == .Void) { this->err(line); eprintln("function returns void but a value was returned"); return error.CompileFailed };
         is_err = re.k == .ErrorVal;
+        this->set_await(re);
         const auto raw = this->gen_expr(re, rt)?;
         maybe_err = raw.ty.k == .Errun || raw.ty.k == .ErrVal;
         val = this->coerce(raw, rt, line)?;
@@ -574,15 +598,15 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         this->terminated = true;
         this->label(le)?;
         this->run_defers(this->scopes.len - 1, 0, true, false)?;
-        sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?;
+        this->ret_val(val)?;
         this->terminated = true;
         this->label(lo)?;
         this->run_defers(this->scopes.len - 1, 0, false, false)?;
-        sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?;
+        this->ret_val(val)?;
         this->terminated = true;
         return;
     }
     this->run_defers(this->scopes.len - 1, 0, is_err, false)?;
-    if (has_val) { sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?; } else { sprint(this->ins()?, "  ret void\n")?; }
+    if (has_val) { this->ret_val(val)?; } else { this->ret_val(Value{ .ty = this->t_void, .v = "" })?; }
     this->terminated = true;
 }
