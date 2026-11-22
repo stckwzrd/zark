@@ -8,12 +8,17 @@ check() { # name, cmd...
   if diff -u "tests/expected/$name.out" <("$@" 2>&1) >/dev/null; then pass=$((pass+1)); echo "ok   $name"
   else fail=$((fail+1)); echo "FAIL $name"; diff -u "tests/expected/$name.out" <("$@" 2>&1) | head -20; fi
 }
-for n in hello features edge memory funcs unions minilang stdlib2 io cpp_style driver memtool interfaces classes operators_oop checks simd align_structs; do check $n $VIBE run examples/$n.vibe $FLAGS; done
+names="hello features edge memory funcs unions minilang stdlib2 io cpp_style interfaces classes operators_oop checks simd align_structs"
+x86=0; [ "$(uname -m)" = x86_64 ] && x86=1
+linux=0; [ "$(uname -s)" = Linux ] && linux=1
+[ $x86 = 1 ] && names="$names driver"
+[ $linux = 1 ] && names="$names memtool"
+for n in $names; do check $n $VIBE run examples/$n.vibe $FLAGS; done
 check showcase $VIBE run examples/showcase/main.vibe $FLAGS
 check showcase_tests $VIBE test examples/showcase/main.vibe $FLAGS
 check showcase_vec $VIBE test examples/showcase/vec.vibe $FLAGS
 check interop $VIBE run examples/interop/main.vibe examples/interop/mathlib.c examples/interop/engine.cpp $FLAGS
-check abi $VIBE run tests/abi/main.vibe tests/abi/lib.c $FLAGS
+[ $x86 = 1 ] && check abi $VIBE run tests/abi/main.vibe tests/abi/lib.c $FLAGS
 for n in ints memory nan move borrow comptime mulcheck iterate threads flow flow2 alias_comptime narrow_div; do check edge_$n $VIBE run tests/edge/$n.vibe $FLAGS; done
 for f in tests/panics/*.vibe; do
   n=panic_$(basename $f .vibe)

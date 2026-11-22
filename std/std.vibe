@@ -808,6 +808,7 @@ extern i32 vrt_clock_gettime(i32 id, Timespec* ts);
 
 /// monotonic wall clock in nanoseconds
 extern i32 vrt_errno();
+extern void vrt_breakpoint();
 extern i64 vrt_syscall(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6);
 
 /// the libc errno of the last failed call as an error (error.NotFound, error.PermissionDenied, ...)
@@ -2097,7 +2098,7 @@ void* __dbg_alloc(void* ctx, u64 n, u64 align) {
     d.live += 1;
     d.live_bytes += n;
     d.peak_bytes = max(d.peak_bytes, d.live_bytes);
-    if (d.trap_id > 0 && d.next_id == d.trap_id) { Cpu::breakpoint(); }
+    if (d.trap_id > 0 && d.next_id == d.trap_id) { vrt_breakpoint(); }
     return user as *void;
 }
 
