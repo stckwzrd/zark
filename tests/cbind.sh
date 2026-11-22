@@ -8,7 +8,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names; do
+for name in scalars structs params layout names consts; do
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
     diff -u "tests/cbind/$name.out" "$name.zk" || fail "$name: output differs"
     diff -u "tests/cbind/$name.err" "$name.err" || fail "$name: warnings differ"
@@ -29,4 +29,20 @@ out=$("$ZARK" cbind flag.h -DVAL=3 2>&1) || fail "flags: exit $?: $out"
 
 if "$ZARK" cbind nosuch.h > /dev/null 2> err.txt; then fail "missing header: expected failure"; fi
 grep -q "nosuch.h" err.txt || fail "missing header: clang message not shown: $(cat err.txt)"
+
+printf 'import "consts.zk";\nvoid main() { println("{H1} {ALLONES} {TEXTP.len} {NEGF} {X1} {S2} {NAME}"); }\n' > use_consts2.zk
+out=$("$ZARK" run use_consts2.zk 2>&1) || fail "consts: run: $out"
+[ "$out" = "18446744073709551615 18446744073709551615 6 -1.5 -2147483648 -1 text" ] || fail "consts: got: $out"
+
+printf '%s\n' "enum { HI = '\\377' };" "#define HC '\\377'" > chars.h
+out=$("$ZARK" cbind chars.h -fsigned-char 2>&1) || fail "signed char: exit $?: $out"
+[ "$out" = "$(printf 'const auto HI = -1;\nconst auto HC = -1;')" ] || fail "signed char: got: $out"
+out=$("$ZARK" cbind chars.h -funsigned-char 2>&1) || fail "unsigned char: exit $?: $out"
+[ "$out" = "$(printf 'const auto HI = 255;\nconst auto HC = 255;')" ] || fail "unsigned char: got: $out"
+
+mkdir -p sysd
+printf '#undef KEEP\n#define SYSM 1\n' > sysd/s.h
+printf '#define KEEP 1\n#include <s.h>\n#define USE_SYSM (SYSM + 1)\n' > undef.h
+out=$("$ZARK" cbind undef.h -isystem sysd 2>&1) || fail "system undef: exit $?: $out"
+[ "$out" = "$(printf 'skipped KEEP: undefined in system header\nconst auto USE_SYSM = 2;')" ] || fail "system undef: got: $out"
 echo "ok   cbind"
