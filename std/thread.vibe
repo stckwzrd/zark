@@ -7,7 +7,7 @@
 // those variables go out of scope. Mutex, Cond, WaitGroup and Channel must not be copied
 // once in use: share them through a pointer.
 
-extern i32 pthread_create(u64* t, void* attr, void* start, void* arg);
+extern i32 vrt_thread_create(u64* t, void* start, void* arg);
 extern i32 pthread_join(u64 t, void** ret);
 extern i32 pthread_detach(u64 t);
 extern u64 pthread_self();
@@ -48,7 +48,7 @@ owned struct Thread {
     const auto words = &c as *u64;
     auto t = Thread{};
     // a closure is {code, context} and its code takes the context first: exactly a thread entry
-    if (pthread_create(&t.id, null, words[0] as *void, words[1] as *void) != 0) { return error.ThreadFailed; }
+    if (vrt_thread_create(&t.id, words[0] as *void, words[1] as *void) != 0) { return error.ThreadFailed; }
     return t;
 }
 
@@ -56,7 +56,7 @@ owned struct Thread {
 !Thread spawn_fn(fn(void*) f, void* arg) {
     auto fp = f;
     auto t = Thread{};
-    if (pthread_create(&t.id, null, *(&fp as **void), arg) != 0) { return error.ThreadFailed; }
+    if (vrt_thread_create(&t.id, *(&fp as **void), arg) != 0) { return error.ThreadFailed; }
     return t;
 }
 

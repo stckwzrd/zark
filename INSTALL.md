@@ -44,6 +44,8 @@ Windows without WSL is not supported: the runtime uses `fork`, `poll` and POSIX 
 
 The own native backend writes x86-64 ELF files, so it exists only on x86-64 Linux. On every other system Vibe uses clang to compile the LLVM IR, which is fully supported. `vibe build --native` on those systems prints an error.
 
+On arm64 (Linux and macOS) passing structs by value to C functions is not supported yet: the compiler lowers extern calls with the x86-64 System V rules. Pass pointers instead. `tests/abi` runs only on x86-64.
+
 The x86-only parts of the language (`examples/baremetal`, the port I/O and privileged instruction helpers, the `Atomic` functions in the prelude) only make sense on x86-64.
 
 ## Linux
@@ -140,4 +142,5 @@ docker run --rm -it -v "$PWD":/src -w /src debian:stable sh -c "sh scripts/insta
 - `ld: not found`: install binutils.
 - `error: the native backend only supports x86-64 Linux`: you passed `--native` on another system, drop the flag.
 - Programs print `fatal: ...` and a backtrace when they crash. Set `VIBE_CRASH_HANDLER=0` to get a plain core dump instead.
+- Do not share one `.vibe-cache` between different systems (for example a Docker bind mount used from Linux and macOS): delete it when you switch.
 - The compiler caches objects in `.vibe-cache` next to where you run it; delete the directory to start clean.

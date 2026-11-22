@@ -809,6 +809,7 @@ extern i32 vrt_clock_gettime(i32 id, Timespec* ts);
 /// monotonic wall clock in nanoseconds
 extern i32 vrt_errno();
 extern void vrt_breakpoint();
+extern i64 vrt_sysconf(i32 name);
 extern i64 vrt_syscall(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6);
 
 /// the libc errno of the last failed call as an error (error.NotFound, error.PermissionDenied, ...)
@@ -2083,11 +2084,14 @@ void* __dbg_alloc(void* ctx, u64 n, u64 align) {
     if (d.fail_after > 0) { d.fail_after -= 1; }
     const auto al = max(align, 1);
     const auto rounded = (n + al - 1) / al * al;
-    const auto pages = (rounded + 4095) / 4096 + 1;
-    const auto len = pages * 4096;
+    u64 pg = 4096;
+    const auto sc = vrt_sysconf(30);
+    if (sc > 0) { pg = sc as u64; }
+    const auto pages = (rounded + pg - 1) / pg + 1;
+    const auto len = pages * pg;
     const auto base = Sys::mmap(null, len, 3, 0x22, -1, 0) catch { return null; };
-    const auto guard = (base as u64) + (pages - 1) * 4096;
-    _ = Sys::call(10, guard as i64, 4096, 0, 0, 0, 0) catch 0;
+    const auto guard = (base as u64) + (pages - 1) * pg;
+    _ = Sys::call(10, guard as i64, pg as i64, 0, 0, 0, 0) catch 0;
     const auto user = guard - rounded;
     d.next_id += 1;
     const auto blk = DbgBlock{ .base = base as u64, .map_len = len, .user = user, .size = n, .id = d.next_id };
