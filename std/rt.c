@@ -45,7 +45,9 @@ void vrt_breakpoint(void)
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <execinfo.h>
+#include <sys/event.h>
 #else
+#include <sys/epoll.h>
 #include <ucontext.h>
 #if defined(__GLIBC__)
 #include <execinfo.h>
@@ -350,6 +352,162 @@ int vrt_thread_create(unsigned long *t, void *(*start)(void *), void *arg)
     pthread_attr_destroy(&at);
     *t = (unsigned long)id;
     return r;
+}
+
+#define POLL_WAKE (~0UL)
+#define POLL_BATCH 64
+
+#if defined(__APPLE__)
+static int q_new(void)
+{
+    return kqueue();
+}
+
+static int q_set(int q, int fd, int r, int w, unsigned long token)
+{
+    int filters[2] = { EVFILT_READ, EVFILT_WRITE };
+    int want[2] = { r, w };
+    int gone = 0;
+    for (int i = 0; i < 2; i++) {
+        struct kevent k;
+        EV_SET(&k, fd, filters[i], want[i] ? EV_ADD | EV_ENABLE : EV_DELETE, 0, 0, (void *)token);
+        if (kevent(q, &k, 1, 0, 0, 0) < 0) {
+            if (want[i] || errno != ENOENT) return -1;
+            gone++;
+        }
+    }
+    if (gone == 2) {
+        errno = ENOENT;
+        return -1;
+    }
+    return 0;
+}
+
+static int q_wait(int q, unsigned long *tokens, int *events, int max, long timeout_ms)
+{
+    struct kevent ev[POLL_BATCH];
+    struct timespec ts;
+    struct timespec *tp = 0;
+    if (timeout_ms >= 0) {
+        ts.tv_sec = timeout_ms / 1000;
+        ts.tv_nsec = (timeout_ms % 1000) * 1000000L;
+        tp = &ts;
+    }
+    int n = kevent(q, 0, 0, ev, max, tp);
+    for (int i = 0; i < n; i++) {
+        int e = ev[i].filter == EVFILT_READ ? 1 : 2;
+        if (ev[i].flags & (EV_EOF | EV_ERROR)) e |= 4;
+        tokens[i] = (unsigned long)ev[i].udata;
+        events[i] = e;
+    }
+    return n;
+}
+#else
+static int q_new(void)
+{
+    return epoll_create1(EPOLL_CLOEXEC);
+}
+
+static int q_set(int q, int fd, int r, int w, unsigned long token)
+{
+    if (!r && !w) return epoll_ctl(q, EPOLL_CTL_DEL, fd, 0);
+    struct epoll_event e;
+    memset(&e, 0, sizeof e);
+    e.events = (r ? EPOLLIN : 0) | (w ? EPOLLOUT : 0);
+    e.data.u64 = token;
+    if (epoll_ctl(q, EPOLL_CTL_MOD, fd, &e) == 0) return 0;
+    if (errno != ENOENT) return -1;
+    return epoll_ctl(q, EPOLL_CTL_ADD, fd, &e);
+}
+
+static int q_wait(int q, unsigned long *tokens, int *events, int max, long timeout_ms)
+{
+    struct epoll_event ev[POLL_BATCH];
+    int t = timeout_ms < 0 ? -1 : timeout_ms > INT_MAX ? INT_MAX : (int)timeout_ms;
+    int n = epoll_wait(q, ev, max, t);
+    for (int i = 0; i < n; i++) {
+        int e = 0;
+        if (ev[i].events & EPOLLIN) e |= 1;
+        if (ev[i].events & EPOLLOUT) e |= 2;
+        if (ev[i].events & (EPOLLERR | EPOLLHUP)) e |= 4;
+        tokens[i] = ev[i].data.u64;
+        events[i] = e;
+    }
+    return n;
+}
+#endif
+
+static int poll_fd(long p, int shift)
+{
+    return (int)((p >> shift) & 0x1fffff);
+}
+
+long vrt_poller_new(void)
+{
+    int fds[2];
+    if (pipe(fds) < 0) return err(-1);
+    for (int i = 0; i < 2; i++) {
+        fcntl(fds[i], F_SETFL, fcntl(fds[i], F_GETFL) | O_NONBLOCK);
+        fcntl(fds[i], F_SETFD, FD_CLOEXEC);
+    }
+    int q = q_new();
+    long e = 0;
+    if (q < 0) e = err(-1);
+    else if (q_set(q, fds[0], 1, 0, POLL_WAKE) < 0) e = err(-1);
+    else if (q > 0x1fffff || fds[0] > 0x1fffff || fds[1] > 0x1fffff) e = -EMFILE;
+    if (e) {
+        if (q >= 0) close(q);
+        close(fds[0]);
+        close(fds[1]);
+        return e;
+    }
+    fcntl(q, F_SETFD, FD_CLOEXEC);
+    return (long)q | (long)fds[0] << 21 | (long)fds[1] << 42;
+}
+
+int vrt_poller_set(long p, int fd, int readable, int writable, unsigned long token)
+{
+    if (p <= 0 || fd < 0 || token == POLL_WAKE) return -EINVAL;
+    if (q_set(poll_fd(p, 0), fd, readable, writable, token) < 0) return (int)err(-1);
+    return 0;
+}
+
+int vrt_poller_wait(long p, unsigned long *tokens, int *events, int max, long timeout_ms)
+{
+    if (max <= 0) return 0;
+    if (p <= 0) return -EBADF;
+    unsigned long tk[POLL_BATCH];
+    int ev[POLL_BATCH];
+    int n = q_wait(poll_fd(p, 0), tk, ev, max > POLL_BATCH ? POLL_BATCH : max, timeout_ms);
+    if (n < 0) return errno == EINTR ? 0 : (int)err(-1);
+    int out = 0;
+    for (int i = 0; i < n; i++) {
+        if (tk[i] == POLL_WAKE) {
+            char buf[64];
+            while (read(poll_fd(p, 21), buf, sizeof buf) > 0) {}
+            continue;
+        }
+        tokens[out] = tk[i];
+        events[out] = ev[i];
+        out++;
+    }
+    return out;
+}
+
+int vrt_poller_wake(long p)
+{
+    if (p <= 0) return -EBADF;
+    char b = 1;
+    if (write(poll_fd(p, 42), &b, 1) < 0 && errno != EAGAIN) return (int)err(-1);
+    return 0;
+}
+
+void vrt_poller_free(long p)
+{
+    if (p <= 0) return;
+    close(poll_fd(p, 0));
+    close(poll_fd(p, 21));
+    close(poll_fd(p, 42));
 }
 
 int vrt_mutex_lock(vmutex *m)
