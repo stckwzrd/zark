@@ -1,105 +1,44 @@
 import "std/async" as async;
 
-struct Server {
-    async::TcpListener* l;
-    i32 step;
-    async::Accept acc;
-    async::TcpStream s;
-    async::Read rd;
-    async::Write wr;
+async !i64 serve(async::TcpStream s) {
     u8[64] buf;
-    i64 n;
-
-    Poll<i64> poll(Context* cx) {
-        while (true) {
-            if (this->step == 0) {
-                this->acc = this->l.accept();
-                this->step = 1;
-            } else if (this->step == 1) {
-                match (this->acc.poll(cx)) {
-                    .Ready(r) => {
-                        this->s = r catch { return .Ready(-1); };
-                        this->step = 2;
-                    }
-                    .Pending => return .Pending;
-                }
-            } else if (this->step == 2) {
-                if (this->n > 0 && this->buf[this->n - 1] == '\n') {
-                    this->wr = this->s.write(this->buf[0..this->n]);
-                    this->step = 4;
-                } else {
-                    this->rd = this->s.read(this->buf[this->n..]);
-                    this->step = 3;
-                }
-            } else if (this->step == 3) {
-                match (this->rd.poll(cx)) {
-                    .Ready(r) => {
-                        const auto got = r catch { return .Ready(-1); };
-                        if (got == 0) { return .Ready(-1); }
-                        this->n += got;
-                        this->step = 2;
-                    }
-                    .Pending => return .Pending;
-                }
-            } else {
-                match (this->wr.poll(cx)) {
-                    .Ready(r) => {
-                        const auto sent = r catch { return .Ready(-1); };
-                        this->s.close();
-                        return .Ready(sent);
-                    }
-                    .Pending => return .Pending;
-                }
-            }
-        }
-        return .Pending;
+    i64 total = 0;
+    while (true) {
+        auto n = await s.read(buf[0..])?;
+        if (n == 0) { break; }
+        auto w = await s.write(buf[0..n])?;
+        total += w;
     }
+    s.close();
+    return total;
 }
 
-struct Client {
-    async::Executor* ex;
-    i64 port;
-    str msg;
-    i32 step;
-    async::TcpStream s;
-    async::Write wr;
-    async::Read rd;
-    u8[64] buf;
-    i64 n;
-
-    Poll<str> poll(Context* cx) {
-        while (true) {
-            if (this->step == 0) {
-                this->s = async::TcpStream::connect(this->ex, "127.0.0.1", this->port) catch { return .Ready(""); };
-                this->wr = this->s.write(this->msg);
-                this->step = 1;
-            } else if (this->step == 1) {
-                match (this->wr.poll(cx)) {
-                    .Ready(r) => {
-                        _ = r catch { return .Ready(""); };
-                        this->step = 2;
-                    }
-                    .Pending => return .Pending;
-                }
-            } else if (this->step == 2) {
-                if (this->n > 0 && this->buf[this->n - 1] == '\n') { break; }
-                this->rd = this->s.read(this->buf[this->n..]);
-                this->step = 3;
-            } else {
-                match (this->rd.poll(cx)) {
-                    .Ready(r) => {
-                        const auto got = r catch { return .Ready(""); };
-                        if (got == 0) { break; }
-                        this->n += got;
-                        this->step = 2;
-                    }
-                    .Pending => return .Pending;
-                }
-            }
-        }
-        this->s.close();
-        return .Ready(this->buf[0..this->n]);
+async !i64 server(async::Executor* ex, async::TcpListener* l, i64 count) {
+    async::JoinHandle<!i64>[8] hs;
+    for (auto i : 0..count) {
+        auto s = await l.accept()?;
+        hs[i] = ex.spawn(serve(s))?;
     }
+    i64 sum = 0;
+    for (auto i : 0..count) {
+        auto h = hs[i];
+        auto r = await h;
+        sum += r?;
+    }
+    return sum;
+}
+
+async !str client(async::Executor* ex, i64 port, str msg, u8[] buf) {
+    auto s = async::TcpStream::connect(ex, "127.0.0.1", port)?;
+    auto w = await s.write(msg)?;
+    i64 got = 0;
+    while (got < w) {
+        auto n = await s.read(buf[got..])?;
+        if (n == 0) { break; }
+        got += n;
+    }
+    s.close();
+    return buf[0..got];
 }
 
 !void main() {
@@ -107,10 +46,18 @@ struct Client {
     defer ex.deinit();
     auto l = async::TcpListener::bind(&ex, "127.0.0.1", 0)?;
     defer l.close();
-    auto h = ex.spawn<Server, i64>(Server{ .l = &l })?;
-    auto c = Client{ .ex = &ex, .port = l.port(), .msg = "hello, async\n" };
-    const auto reply = ex.block_on<Client, str>(&c)?;
-    const auto sent = ex.block_on<async::JoinHandle<i64>, i64>(&h)?;
-    print("client got: {reply}");
-    println("server echoed {sent} bytes");
+    const auto port = l.port();
+    auto sh = ex.spawn(server(&ex, &l, 3))?;
+    u8[64] b1;
+    u8[64] b2;
+    u8[64] b3;
+    auto c1 = ex.spawn(client(&ex, port, "one\n", b1[0..]))?;
+    auto c2 = ex.spawn(client(&ex, port, "two two\n", b2[0..]))?;
+    auto c3 = ex.spawn(client(&ex, port, "three three three\n", b3[0..]))?;
+    auto r1 = ex.block_on(&c1)??;
+    auto r2 = ex.block_on(&c2)??;
+    auto r3 = ex.block_on(&c3)??;
+    auto total = ex.block_on(&sh)??;
+    print("{r1}{r2}{r3}");
+    println("total {total}");
 }
