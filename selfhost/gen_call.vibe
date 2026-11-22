@@ -329,6 +329,7 @@ bool Gen::names_type(Expr* e) {
         if (pte.k == .Ptr) { this->unify(pte.elem, recv.ty, tps, env)? } else { this->unify(pte, recv.ty, tps, env)?; }
     }
     if (!all_bound(tps, env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps, env)?; }
+    if (!all_bound(tps, env)) { this->infer_from_poll(tps, env)?; }
     if (!all_bound(tps, env)) { this->err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed; }
 
     auto targs = List<Type*>::init(this->a);
