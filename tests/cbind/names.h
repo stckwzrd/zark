@@ -1,0 +1,18 @@
+typedef int T;
+typedef T T;
+typedef int A;
+typedef A B;
+typedef B A;
+struct q { T t; A a; B b; };
+extern T vt;
+extern A va;
+typedef int i8;
+typedef unsigned u32;
+struct str { int len; };
+struct bool { char b; };
+struct uses_prim { i8 a; u32 b; struct str s; struct str* p; struct bool* q; };
+i8 small(u32 x, struct str* s);
+int match(int x);
+int type(void);
+int usize(int x);
+struct kw { int fn; int i32; };

@@ -1,0 +1,3 @@
+struct unpk { u8 c; i32 x; }
+struct unpk2 { u8 c; i32 x; }
+extern i32 uses_ok(i32 o);
