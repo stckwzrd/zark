@@ -578,7 +578,6 @@ union Option<T> {
     }
 }
 
-// ================================================================ async protocol
 
 union Poll<T> {
     T Ready;
