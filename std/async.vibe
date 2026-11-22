@@ -65,19 +65,31 @@ void main_wake(void* data) {
 }
 
 struct JoinHandle<T> {
+    Executor* ex;
     Task* task;
     T* slot;
+    i64 gi;
+    u64 gen;
 
-    bool done() { return this->task.state == 3; }
+    Task* live() {
+        if (this->ex.gens.get(this->gi) != this->gen) { panic("JoinHandle used after take() or detach()"); }
+        return this->task;
+    }
+
+    bool done() { return this->live().state == 3; }
     T take() {
+        assert(this->done());
         const auto v = *this->slot;
         this->detach();
         return v;
     }
 
     void detach() {
-        this->task.released = true;
-        this->task.ex.release(this->task);
+        auto t = this->live();
+        this->ex.gens.set(this->gi, this->gen + 1);
+        this->ex.spare.push(this->gi) catch {};
+        t.released = true;
+        this->ex.release(t);
     }
 
     Poll<T> poll(Context* cx) {
@@ -106,6 +118,8 @@ owned struct Executor {
     List<Task*> batch;
     List<Timer> timers;
     List<Reg> regs;
+    List<u64> gens;
+    List<i64> spare;
     Task* current;
     i64 io;
     bool main_woken;
@@ -115,7 +129,7 @@ owned struct Executor {
         if (p <= 0) { return error.SystemCall; }
         return Executor{ .a = a, .poller = p, .tasks = List<Task*>::init(a), .queue = List<Task*>::init(a),
             .batch = List<Task*>::init(a), .timers = List<Timer>::init(a),
-            .regs = List<Reg>::init(a) };
+            .regs = List<Reg>::init(a), .gens = List<u64>::init(a), .spare = List<i64>::init(a) };
     }
 
     void deinit() move {
@@ -125,6 +139,8 @@ owned struct Executor {
         this->batch.deinit();
         this->timers.deinit();
         this->regs.deinit();
+        this->gens.deinit();
+        this->spare.deinit();
         vrt_poller_free(this->poller);
     }
 
@@ -133,7 +149,11 @@ owned struct Executor {
         this->tasks.reserve(n)?;
         this->queue.reserve(n)?;
         this->batch.reserve(n)?;
+        this->gens.reserve(this->gens.len + 1)?;
+        this->spare.reserve(this->gens.len + 1)?;
         auto b = this->a.create<TaskBox<F, T>>()?;
+        auto gi = this->gens.len;
+        if (this->spare.len > 0) { gi = this->spare.pop()?; } else { this->gens.push(0)?; }
         b.fut = fut;
         b.head = Task{ .frame = b as *void, .state = 1, .ex = this, .size = sizeof(TaskBox<F, T>), .index = this->tasks.len,
             .poll_thunk = [](void* p, Context* cx) -> bool {
@@ -149,7 +169,7 @@ owned struct Executor {
             } };
         this->tasks.push(&b.head)?;
         this->queue.push(&b.head)?;
-        return JoinHandle<T>{ .task = &b.head, .slot = &b.result };
+        return JoinHandle<T>{ .ex = this, .task = &b.head, .slot = &b.result, .gi = gi, .gen = this->gens.get(gi) };
     }
 
     template<F, T> !T block_on(F* fut) {

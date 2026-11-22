@@ -1,0 +1,10 @@
+import "std/async" as async;
+
+async i64 one() { return 1; }
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto h = ex.spawn(one())?;
+    println(h.take());
+}
