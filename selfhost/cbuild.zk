@@ -1,3 +1,7 @@
+import "std/fs" as fs;
+import "std/os" as os;
+import "std/thread" as thread;
+
 bool is_compile_flag(str x) {
     if (str_starts_with(x, "-Wl,")) { return false; }
     return str_starts_with(x, "-I") || x == "-isystem" || str_starts_with(x, "-D") || str_starts_with(x, "-U") || str_starts_with(x, "-std=") || x == "-include" || str_starts_with(x, "-f") || str_starts_with(x, "-W") || x == "-pthread";
@@ -16,10 +20,10 @@ struct CSplit {
 !CSplit split_extras(Allocator a, List<str> extras) {
     auto s = CSplit{ .flags = List<str>::init(a), .sources = List<str>::init(a), .link = List<str>::init(a) };
     for (auto x : extras) {
-        if (is_link_arg(x)) {
-            s.link.push(x)?;
-        } else if (is_compile_flag(x)) {
+        if (is_compile_flag(x)) {
             s.flags.push(x)?;
+        } else if (is_link_arg(x)) {
+            s.link.push(x)?;
         } else {
             s.sources.push(x)?;
         }
@@ -27,21 +31,159 @@ struct CSplit {
     return s;
 }
 
+u64 fnv64(u64 h, str s) {
+    auto x = h;
+    for (auto c : s) { x = (x ^ (c as u64)) *% 1099511628211; }
+    return x *% 1099511628211;
+}
+
+!List<str> dep_files(Allocator a, str text) {
+    auto files = List<str>::init(a);
+    auto tok = List<u8>::init(a);
+    auto first = true;
+    auto i = 0;
+    while (i <= text.len) {
+        auto sep = false;
+        if (i == text.len) {
+            sep = true;
+        } else if (text[i] == '\\' && i + 1 < text.len && text[i + 1] == '\n') {
+            sep = true;
+            i += 1;
+        } else if (text[i] == '\\' && i + 1 < text.len && (text[i + 1] == ' ' || text[i + 1] == '#' || text[i + 1] == '\\')) {
+            tok.push(text[i + 1])?;
+            i += 1;
+        } else if (text[i] == '$' && i + 1 < text.len && text[i + 1] == '$') {
+            tok.push('$')?;
+            i += 1;
+        } else if (text[i] == ' ' || text[i] == '\n' || text[i] == '\t' || text[i] == '\r') {
+            sep = true;
+        } else {
+            tok.push(text[i])?;
+        }
+        if (sep && tok.len > 0) {
+            if (first) { first = false; } else { files.push(a.dup(tok.slice())?)?; }
+            tok.clear();
+        }
+        i += 1;
+    }
+    return files;
+}
+
+!str stamp_of(Allocator a, str dfile) {
+    const auto ca = c_allocator();
+    const auto text = read_file(ca, dfile)?;
+    defer ca.free(text);
+    auto h = 0xcbf29ce484222325 as u64;
+    for (auto f : dep_files(a, text)?) {
+        const auto body = read_file(ca, f)?;
+        defer ca.free(body);
+        h = fnv64(fnv64(h, f), body);
+    }
+    auto b = List<u8>::init(a);
+    sprint(&b, "{h:016x}")?;
+    return b.slice();
+}
+
+bool is_hit(Allocator a, str obj) {
+    const auto dfile = str_concat(a, [obj, ".d"]) catch { return false; };
+    const auto stamp = str_concat(a, [obj, ".stamp"]) catch { return false; };
+    if (!file_exists(obj) || !file_exists(dfile)) { return false; }
+    const auto want = read_file(a, stamp) catch { return false; };
+    const auto got = stamp_of(a, dfile) catch { return false; };
+    return got == want;
+}
+
+struct CJob {
+    List<str> argv;
+    str obj;
+    str tmp;
+    str dtmp;
+    i32 code;
+    str out;
+    str err;
+}
+
+void run_job(CJob* j) {
+    const auto r = os::exec(c_allocator(), j.argv.slice()) catch {
+        j.code = 127;
+        j.err = "error: cannot run the C compiler\n";
+        return;
+    };
+    j.code = r.code;
+    j.out = r.out;
+    j.err = r.err;
+    if (r.code != 0) {
+        fs::remove_file(j.tmp) catch {};
+        fs::remove_file(j.dtmp) catch {};
+        return;
+    }
+    const auto dfile = str_concat(c_allocator(), [j.obj, ".d"]) catch { j.code = 1; return; };
+    fs::move(j.dtmp, dfile) catch { j.code = 1; return; };
+    fs::move(j.tmp, j.obj) catch { j.code = 1; };
+}
+
+!void write_stamp(Allocator a, str obj) {
+    const auto stamp = str_concat(a, [obj, ".stamp"])?;
+    auto tb = List<u8>::init(a);
+    sprint(&tb, "{stamp}.tmp.{os::pid()}")?;
+    write_file(tb.slice(), stamp_of(a, str_concat(a, [obj, ".d"])?)?)?;
+    fs::move(tb.slice(), stamp)?;
+}
+
 !List<str> compile_sources(Allocator a, str cache, CSplit* s, str olevel, bool* needs_cxx) {
     auto objs = List<str>::init(a);
+    auto jobs = List<CJob>::init(a);
+    const auto dir = str_concat(a, [cache, "/obj"])?;
+    fs::make_dirs(dir)?;
     for (auto x : s->sources) {
         const auto is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx");
         if (is_cpp) { *needs_cxx = true; }
+        auto flags = List<str>::init(a);
+        for (auto f : s->flags) {
+            if (str_starts_with(f, "-std=")) {
+                const auto cxx_std = str_starts_with(f, "-std=c++") || str_starts_with(f, "-std=gnu++");
+                if (cxx_std != is_cpp) { continue; }
+            }
+            flags.push(f)?;
+        }
+        auto cc = "clang";
+        if (is_cpp) { cc = "clang++"; }
+        const auto text = read_file(a, x) catch {
+            eprintln("error: cannot read {x}");
+            return error.CompileFailed;
+        };
+        auto h = fnv64(fnv64(fnv64(0xcbf29ce484222325 as u64, cc), olevel), x);
+        for (auto f : flags) { h = fnv64(h, f); }
+        h = fnv64(h, text);
         auto ob = List<u8>::init(a);
-        sprint(&ob, "{cache}/{base_of(x)}.o")?;
-        auto cmd = List<str>::init(a);
-        if (is_cpp) { cmd.push("clang++")?; } else { cmd.push("clang")?; }
-        cmd.append([olevel, "-c", x])?;
-        cmd.append(s->flags.slice())?;
-        cmd.append(["-o", ob.slice()])?;
-        const auto code = run(a, cmd.slice())?;
-        if (code != 0) { return error.CompileFailed; }
+        sprint(&ob, "{dir}/{base_of(x)}-{h:016x}.o")?;
         objs.push(ob.slice())?;
+        if (is_hit(a, ob.slice())) { continue; }
+        auto j = CJob{ .argv = List<str>::init(a), .obj = ob.slice() };
+        auto tb = List<u8>::init(a);
+        sprint(&tb, "{ob.slice()}.tmp.{os::pid()}")?;
+        j.tmp = tb.slice();
+        auto db = List<u8>::init(a);
+        sprint(&db, "{ob.slice()}.d.tmp.{os::pid()}")?;
+        j.dtmp = db.slice();
+        j.argv.append([cc, olevel, "-c", x])?;
+        j.argv.append(flags.slice())?;
+        j.argv.append(["-MD", "-MF", j.dtmp, "-o", j.tmp])?;
+        jobs.push(j)?;
     }
+    if (jobs.len == 0) { return objs; }
+    auto k = max(min(os::cpu_count(), 8), 1);
+    const auto e = env("ZARK_JOBS") catch "";
+    if (e.len > 0) { k = max((parse_int(e) catch 1) as i64, 1); }
+    k = min(k, jobs.len);
+    thread::parallel_for(jobs.len, k, [&jobs](i64 i) -> void { run_job(&jobs.items[i]); })?;
+    auto failed = 0;
+    for (auto j : jobs) {
+        print(j.out);
+        eprint(j.err);
+        if (j.code != 0 && failed == 0) { failed = j.code; }
+        if (j.code == 0) { write_stamp(a, j.obj)?; }
+    }
+    if (failed != 0) { return error.CompileFailed; }
     return objs;
 }

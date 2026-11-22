@@ -39,6 +39,84 @@ printf 'extern i64 dep_val();\nvoid main() { println("{dep_val()}"); }\n' > df/s
 out=$(cd df && "$ZARK" run 2>&1)
 [ "$out" = "7" ] || fail "dependency_flags: expected 7, got: $out"
 
+mkdir -p mix
+printf '_Static_assert(1, "c11");\nlong c_val(void) { return 1; }\n' > mix/a.c
+printf '#include <string_view>\nextern "C" long cxx_val() { std::string_view s("ab"); return s.size(); }\n' > mix/b.cpp
+printf 'extern i64 c_val();\nextern i64 cxx_val();\nvoid main() { println("{c_val() + cxx_val()}"); }\n' > mix/main.zk
+out=$("$ZARK" run mix/main.zk mix/a.c mix/b.cpp -std=c++17 -std=c11 2>&1)
+[ "$out" = "3" ] || fail "mixed_c_cpp_std: expected 3, got: $out"
+
+mkdir -p dl
+printf '#define S(x) #x\n#define STR(x) S(x)\nconst char* lib_name(void) { return STR(LIB); }\n' > dl/n.c
+printf 'extern u8* lib_name();\nvoid main() { println("{cstr(lib_name())}"); }\n' > dl/main.zk
+out=$("$ZARK" run dl/main.zk dl/n.c -DLIB=libfoo.a 2>&1)
+[ "$out" = "libfoo.a" ] || fail "define_with_suffix: expected libfoo.a, got: $out"
+
+real=$(command -v clang)
+mkdir -p shim
+printf '#!/bin/sh\necho "$*" >> "%s/clang.log"\nexec "%s" "$@"\n' "$T" "$real" > shim/clang
+chmod +x shim/clang
+: > clang.log
+mkdir -p ch
+printf 'long answer(void) { return 42; }\n' > ch/ans.c
+cp main.zk ch/main.zk
+(cd ch && PATH="$T/shim:$PATH" "$ZARK" build main.zk ans.c -o prog 2>&1) > /dev/null || fail "cache_hit: first build"
+n1=$(grep -c -e '-c ans\.c' clang.log)
+[ "$n1" -ge 1 ] || fail "cache_hit: the shim did not see the compile"
+(cd ch && PATH="$T/shim:$PATH" "$ZARK" build main.zk ans.c -o prog 2>&1) > /dev/null || fail "cache_hit: second build"
+n2=$(grep -c -e '-c ans\.c' clang.log)
+[ "$n1" = "$n2" ] || fail "cache_hit: the second build ran clang on the source ($n1 -> $n2)"
+[ "$(ch/prog)" = "42" ] || fail "cache_hit: wrong output"
+
+mkdir -p he
+printf '#define V 1\n' > he/h.h
+printf '#include "h.h"\nlong v(void) { return V; }\n' > he/v.c
+printf 'extern i64 v();\nvoid main() { println("{v()}"); }\n' > he/main.zk
+out=$(cd he && "$ZARK" run main.zk v.c 2>&1)
+[ "$out" = "1" ] || fail "cache_header_edit: expected 1, got: $out"
+printf '#define V 2\n' > he/h.h
+out=$(cd he && "$ZARK" run main.zk v.c 2>&1)
+[ "$out" = "2" ] || fail "cache_header_edit: expected 2 after the edit, got: $out"
+
+mkdir -p sb/a sb/b
+printf 'long fa(void) { return 1; }\n' > sb/a/util.c
+printf 'long fb(void) { return 2; }\n' > sb/b/util.c
+printf 'extern i64 fa();\nextern i64 fb();\nvoid main() { println("{fa() + fb()}"); }\n' > sb/main.zk
+out=$(cd sb && "$ZARK" run main.zk a/util.c b/util.c 2>&1)
+[ "$out" = "3" ] || fail "same_base_name: expected 3, got: $out"
+
+mkdir -p pd
+srcs=""
+decls=""
+sum=""
+for i in 0 1 2 3 4 5 6 7 8 9; do
+  printf 'long f%s(void) { return %s; }\n' $i $((i * i)) > pd/s$i.c
+  srcs="$srcs s$i.c"
+  decls="${decls}extern i64 f$i();\n"
+  sum="$sum + f$i()"
+done
+printf "${decls}void main() { println(\"{0$sum}\"); }\n" > pd/main.zk
+ref=""
+for jobs in 1 8 1 8 1 8; do
+  rm -rf pd/.zark-cache/obj
+  out=$(cd pd && ZARK_JOBS=$jobs "$ZARK" run main.zk $srcs 2>&1)
+  [ "$out" = "285" ] || fail "parallel_determinism: ZARK_JOBS=$jobs expected 285, got: $out"
+  names=$(ls pd/.zark-cache/obj | grep '\.o$')
+  [ -n "$ref" ] || ref="$names"
+  [ "$names" = "$ref" ] || fail "parallel_determinism: object names differ with ZARK_JOBS=$jobs"
+done
+
+mkdir -p cr
+cp pd/s*.c cr/
+cp pd/main.zk cr/main.zk
+(cd cr && "$ZARK" build main.zk $srcs -o p1 > o1.txt 2>&1) &
+pid1=$!
+(cd cr && "$ZARK" build main.zk $srcs -o p2 > o2.txt 2>&1) &
+pid2=$!
+wait $pid1 || fail "concurrent_runs: first build failed: $(cat cr/o1.txt)"
+wait $pid2 || fail "concurrent_runs: second build failed: $(cat cr/o2.txt)"
+[ "$(cr/p1)" = "285" ] && [ "$(cr/p2)" = "285" ] || fail "concurrent_runs: wrong output"
+
 if command -v pkg-config >/dev/null; then
   mkdir -p pk/src
   printf '[package]\nname = "pk"\n\n[build]\npkg-config = ["zark-no-such-package"]\n' > pk/zark.toml
