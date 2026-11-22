@@ -1,0 +1,40 @@
+import "std/async" as async;
+
+async i64 add(i64 a, i64 b) { return a + b; }
+
+async i64 chain() {
+    auto x = await add(1, 2);
+    auto y = await add(x, 10);
+    return x * y;
+}
+
+struct Yield1 {
+    bool done;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->done) { return .Ready(true); }
+        this->done = true;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+async i64 with_yield() {
+    await Yield1{};
+    return 5;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto a = add(1, 2);
+    i64 r1 = ex.block_on(&a)?;
+    println(r1);
+    auto c = chain();
+    i64 r2 = ex.block_on(&c)?;
+    println(r2);
+    auto w = with_yield();
+    i64 r3 = ex.block_on(&w)?;
+    println(r3);
+    println(sizeof(chain()) > 0);
+}

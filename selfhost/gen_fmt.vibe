@@ -3,6 +3,7 @@
 // Vibe thunk (as source text) that calls the `__fmt_*` hooks of the std.
 
 import "gen_call.vibe";
+import "gen_async.vibe";
 
 str dir_of(str path) {
     const auto i = str_rfind_byte(path, '/');

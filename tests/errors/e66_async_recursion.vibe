@@ -1,0 +1,15 @@
+import "std/async" as async;
+
+async i64 fact(i64 n) {
+    if (n <= 1) { return 1; }
+    auto r = await fact(n - 1);
+    return n * r;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto t = fact(5);
+    i64 r = ex.block_on(&t)?;
+    println(r);
+}
