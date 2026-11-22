@@ -1,1 +1,1 @@
-panic: integer overflow at tests/panics/div_min_i16.vibe:5
+panic: integer overflow at tests/panics/div_min_i16.zk:5

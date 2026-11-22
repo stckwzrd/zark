@@ -1,18 +1,18 @@
 ---
-title: The Vibe Guide
+title: The Zark Guide
 order: 0
-description: A complete guide to the Vibe programming language
+description: A complete guide to the Zark programming language
 ---
 
 <div class="hero">
 
-# Vibe
+# Zark
 
-A small systems language: you control memory, type conversions are visible in the code, and there are no hidden allocations or hidden control flow. The compiler is written in Vibe itself and builds itself (about 15 thousand lines) in about a third of a second.
+A small systems language: you control memory, type conversions are visible in the code, and there are no hidden allocations or hidden control flow. The compiler is written in Zark itself and builds itself (about 15 thousand lines) in about a third of a second.
 
 </div>
 
-```vibe run
+```zark run
 void main() {
     const auto name = "world";
     println("Hello, {name}! 6 * 7 = {6 * 7}");
@@ -25,7 +25,7 @@ This is the complete guide. Every example on these pages was compiled and run by
 
 <div class="cards">
 <a href="getting-started.html"><b>Installation and the first program</b><span>Build the compiler, run Hello World, learn the commands and flags.</span></a>
-<a href="learn.html"><b>Learn Vibe</b><span>A twelve-lesson course with exercises and solutions: from the first program to a finished tool.</span></a>
+<a href="learn.html"><b>Learn Zark</b><span>A twelve-lesson course with exercises and solutions: from the first program to a finished tool.</span></a>
 <a href="safety.html"><b>The safety model</b><span>Exactly what is checked at compile time, what at run time, and what is left to you.</span></a>
 <a href="showcase.html"><b>Showcase</b><span>A multithreaded ray tracer: interfaces, SIMD, JSON, threads, unions and tests in one program.</span></a>
 <a href="tour.html"><b>Quick tour</b><span>The whole language on one page: about twenty small programs.</span></a>

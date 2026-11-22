@@ -2,27 +2,27 @@
 title: Шпаргалка
 order: 44
 section: Справочник
-description: Весь синтаксис Vibe на одной странице: таблицы и короткие примеры для быстрого поиска
+description: Весь синтаксис Zark на одной странице: таблицы и короткие примеры для быстрого поиска
 ---
 
 Краткая памятка. Подробности по каждой теме — по ссылкам.
 
 ## Программа
 
-```vibe run
+```zark run
 void main() {
-    println("Привет, Vibe!");
+    println("Привет, Zark!");
 }
 ```
 
 | Команда | Что делает |
 |---|---|
-| `vibe run f.vibe [-- args]` | собрать и запустить |
-| `vibe build f.vibe [-o out] [--release]` | собрать исполняемый файл |
-| `vibe test f.vibe` | запустить блоки `test` |
-| `vibe fmt [--check] f.vibe` | отформатировать |
-| `vibe lsp` | языковой сервер |
-| `vibe ir f.vibe` | показать LLVM IR |
+| `zark run f.zk [-- args]` | собрать и запустить |
+| `zark build f.zk [-o out] [--release]` | собрать исполняемый файл |
+| `zark test f.zk` | запустить блоки `test` |
+| `zark fmt [--check] f.zk` | отформатировать |
+| `zark lsp` | языковой сервер |
+| `zark ir f.zk` | показать LLVM IR |
 
 См. [установку](getting-started.md) и [инструменты](tooling.md).
 
@@ -57,7 +57,7 @@ void main() {
 
 ## Переменные
 
-```vibe run
+```zark run
 const auto N = 4 * 2;
 i64 counter = 0;
 
@@ -93,7 +93,7 @@ void main() {
 
 ## Управление потоком
 
-```vibe run
+```zark run
 void main() {
     const auto n = 7;
     if (n > 5) { println("big"); } else { println("small"); }
@@ -128,7 +128,7 @@ void main() {
 
 ## Функции
 
-```vibe run
+```zark run
 i64 add(i64 a, i64 b) { return a + b; }
 template<T: Ord> T largest(T a, T b) { if (a > b) { return a; } return b; }
 
@@ -151,7 +151,7 @@ void main() {
 
 ## Структуры, union, enum
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -186,7 +186,7 @@ void main() {
 
 ## Ошибки и опционалы
 
-```vibe run
+```zark run
 !i64 half(i64 n) {
     if (n % 2 != 0) { return error.Odd; }
     return n / 2;
@@ -222,7 +222,7 @@ void main() {
 
 ## Коллекции
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -255,22 +255,22 @@ void main() {
 ## Модули и C
 
 ```text
-import "util.vibe";                 имена в общее пространство
-import "util.vibe" as u;            u::имя
-vibe run main.vibe lib.c x.cpp -lm  C и C++ вместе
+import "util.zk";                 имена в общее пространство
+import "util.zk" as u;            u::имя
+zark run main.zk lib.c x.cpp -lm  C и C++ вместе
 ```
 
 См. [модули](modules.md) и [C](c-interop.md).
 
 ## Тесты
 
-```vibe test
+```zark test
 test "арифметика" {
     assert(1 + 1 == 2);
 }
 ```
 
-`vibe test main.vibe`. См. [тестирование](testing.md).
+`zark test main.zk`. См. [тестирование](testing.md).
 
 ## Ловушки одной строкой
 

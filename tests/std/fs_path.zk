@@ -1,0 +1,66 @@
+import "std/fs" as fs;
+import "std/path" as path;
+
+test "path strings" {
+    assert(path::ext("a/b.tar.gz") == ".gz");
+    assert(path::stem("a/b.tar.gz") == "b.tar");
+    assert(path::ext(".bashrc") == "");
+    assert(path::base("a/b/") == "b" && path::base("/") == "/");
+    assert(path::dir("c.txt") == "." && path::dir("/c") == "/" && path::dir("a/b/c") == "a/b");
+    const auto a = c_allocator();
+    assert(path::normalize(a, "../a/./b//../c/")? == "../a/c");
+    assert(path::normalize(a, "/../x")? == "/x");
+    assert(path::normalize(a, "")? == ".");
+    assert(path::join(a, ["src", "x/../main.zk"])? == "src/main.zk");
+    assert(path::join(a, ["src", "/abs", "f"])? == "/abs/f");
+    assert(path::relative(a, "/a/b/c", "/a/d")? == "../b/c");
+    assert(path::relative(a, "/a", "/a")? == ".");
+}
+
+test "directories, files, walking, removing" {
+    auto dbg = DebugAllocator::init();
+    work(dbg.allocator())?;
+    dbg.deinit()?;
+}
+
+!void work(Allocator a) {
+    const auto tmp = fs::temp_dir(a, "zark-test")?;
+    defer a.free(tmp);
+    defer fs::remove_all(a, tmp) catch |e| {};
+    const auto deep = path::join(a, [tmp, "x/y/../z", "w"])?;
+    defer a.free(deep);
+    fs::make_dirs(deep)?;
+    fs::make_dirs(deep)?;
+    assert(fs::is_dir(deep));
+    const auto f = path::join(a, [deep, "hello.txt"])?;
+    defer a.free(f);
+    write_file(f, "hi")?;
+    fs::append_file(f, " there")?;
+    const auto txt = read_file(a, f)?;
+    defer a.free(txt);
+    assert(txt == "hi there");
+    const auto g = path::join(a, [tmp, "copy.txt"])?;
+    defer a.free(g);
+    fs::copy_file(f, g)?;
+    const auto inf = fs::info(g)?;
+    assert(inf.size == 8 && inf.kind is .File && fs::is_file(g) && !fs::is_dir(g));
+    auto all = fs::walk(a, tmp)?;
+    defer all.deinit();
+    assert(all.items.len == 2 && all.slice()[0] == "copy.txt" && all.slice()[1] == "x/z/w/hello.txt");
+    auto d = fs::list_dir(a, tmp)?;
+    defer d.deinit();
+    assert(d.slice().len == 2 && d.slice()[1].kind is .Dir);
+    auto again = false;
+    fs::make_dir(deep) catch |e| { again = e == error.AlreadyExists; };
+    assert(again);
+    auto nonempty = false;
+    fs::remove_dir(tmp) catch |e| { nonempty = e == error.DirectoryNotEmpty; };
+    assert(nonempty);
+    const auto mv = path::join(a, [tmp, "moved.txt"])?;
+    defer a.free(mv);
+    fs::move(g, mv)?;
+    assert(fs::exists(mv) && !fs::exists(g));
+    auto missing = false;
+    _ = fs::info("/definitely/missing") catch |e| { missing = e == error.NotFound; fs::Info{} };
+    assert(missing);
+}

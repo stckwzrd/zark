@@ -1,4 +1,4 @@
-# Generator for tools/abi_fuzz.sh: writes p.vibe, lib.c and ref.c for one seed.
+# Generator for tools/abi_fuzz.sh: writes p.zk, lib.c and ref.c for one seed.
 import random, sys
 seed=int(sys.argv[1]); random.seed(seed)
 TY=[("i8","signed char"),("u8","unsigned char"),("i16","short"),("u16","unsigned short"),("i32","int"),("u32","unsigned"),("i64","long"),("f32","float"),("f64","double")]
@@ -52,7 +52,7 @@ for fi,args in enumerate(funcs):
     cs_f.append(f"double fn{fi}({', '.join(cparams)}) {{ return {' + '.join(body)}; }}")
     vs_f.append(f"extern f64 fn{fi}({', '.join(vparams)});")
     calls.append(f"fn{fi}({', '.join(vargs)})")
-# makers: struct returned from C, then summed in Vibe via C sum fn
+# makers: struct returned from C, then summed in Zark via C sum fn
 for i in range(nstruct):
     fields,nest=structs[i]
     assigns=" ".join(f"r.f{k} = ({c})(seed * {k+3});" for k,(v,c) in enumerate(fields))
@@ -62,11 +62,11 @@ for i in range(nstruct):
     vs_f.append(f"extern {sname(i)} mk{i}(i64 seed);")
     vs_f.append(f"extern f64 sum{i}({sname(i)} v);")
     calls.append(f"sum{i}(mk{i}({i+2}))")
-open("p.vibe","w").write("\n".join(vs+vs_f)+"\nvoid main() {\n"+"\n".join(f'    println("{{{c}:.6}}");' for c in calls)+"\n}\n")
+open("p.zk","w").write("\n".join(vs+vs_f)+"\nvoid main() {\n"+"\n".join(f'    println("{{{c}:.6}}");' for c in calls)+"\n}\n")
 # C reference main: same calls
 def c_lit(i, rnd2=None): pass
 open("lib.c","w").write("\n".join(cs+cs_f)+"\n")
-# C reference: translate vibe struct literals to C compound literals
+# C reference: translate zark struct literals to C compound literals
 import re
 def to_c(expr):
     e=re.sub(r'(S\d+)\{', r'(\1){', expr)

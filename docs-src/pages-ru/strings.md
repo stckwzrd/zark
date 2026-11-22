@@ -14,7 +14,7 @@ description: Тип str, срезы и сравнение строк, интер
 - Длина — `s.len`, байт — `s[i]`, подстрока — `s[a..b]`.
 - Это **байты**, а не символы. Русская буква занимает 2 байта.
 
-```vibe run
+```zark run
 void main() {
     const auto s = "hello";
     println(s.len, s[0], s[1..4], s[..2], s[3..]);
@@ -29,7 +29,7 @@ void main() {
 
 Содержимое литерала менять нельзя. Попытка записать в него аварийно завершает программу, потому что память литералов защищена от записи:
 
-```vibe run exit
+```zark run exit
 void main() {
     auto s = "abc";
     s[0] = 65;
@@ -38,7 +38,7 @@ void main() {
 
 Чтобы получить изменяемую строку, скопируйте её в свой буфер:
 
-```vibe run
+```zark run
 void main() {
     u8[3] buf = [97, 98, 99];
     const str s = buf[..];
@@ -51,7 +51,7 @@ void main() {
 
 `==` и `!=` сравнивают **содержимое** (внутри — `memcmp`). Порядка (`<`) нет.
 
-```vibe run
+```zark run
 void main() {
     const auto a = "abc";
     const auto b = "ab";
@@ -66,7 +66,7 @@ void main() {
 
 В строковом литерале `{выражение}` вычисляется и вставляется. Можно любое выражение, в том числе вызовы, индексы, арифметику, сравнения и приведения.
 
-```vibe run
+```zark run
 i64 double(i64 x) { return x * 2; }
 
 void main() {
@@ -83,7 +83,7 @@ void main() {
 
 Литеральные фигурные скобки — `{{` и `}}` (или `\{` и `\}`):
 
-```vibe run
+```zark run
 void main() {
     const auto v = 3;
     println("{{\"v\": {v}}}");
@@ -93,7 +93,7 @@ void main() {
 
 **Важно:** интерполяция — это **не** выделение строки. Компилятор разворачивает её в формат для `printf`, значения печатаются сразу, ничего не выделяется в куче. Поэтому `"..{x}.."` без вызова функции печати **не создаёт значения типа `str`**. Интерполяция допустима только в аргументах функции, у которой последний параметр имеет тип `Fmt`: это `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` и ваши собственные (см. [Свои функции вывода](#свои-функции-вывода)):
 
-```vibe error fragment
+```zark error fragment
 const auto n = 5;
 const auto s = "n = {n}";
 println(s);
@@ -112,7 +112,7 @@ println(s);
 
 Аргументы можно перечислять через запятую: они выводятся через пробел. Печатается **любой** тип:
 
-```vibe run
+```zark run
 struct P { i64 x; f64 y; }
 enum Color { Red, Green }
 union U { i64 A; B; }
@@ -167,7 +167,7 @@ void main() {
 | `{n:+}` | `+255` | всегда со знаком |
 | `{c:c}` | `A` для 65 | число как символ |
 
-```vibe run
+```zark run
 void main() {
     const auto n = 255;
     println("[{n}] [{n:x}] [{n:X}] [{n:08X}]");
@@ -190,7 +190,7 @@ void main() {
 | `{f:-8.1}` | `3.1     ` | по левому краю |
 | `{f:e}` | `3.141593e+00` | экспоненциальная запись |
 
-```vibe run
+```zark run
 void main() {
     const auto f = 3.14159265;
     println("[{f}] [{f:.2}] [{f:8.3}] [{f:-8.1}] [{f:e}]");
@@ -204,7 +204,7 @@ void main() {
 
 Ширина работает и со строками:
 
-```vibe run
+```zark run
 void main() {
     const auto name = "hi";
     println("[{name:6}] [{name:-6}]");
@@ -224,7 +224,7 @@ void main() {
 
 `bprint(buf, ...)` форматирует в ваш массив и возвращает `!str`, срез этого буфера. Не влезло — `error.NoSpace`. Ничего не выделяется.
 
-```vibe run
+```zark run
 !void main() {
     u8[32] buf;
     const auto s = bprint(buf[..], "x = {1 + 2}, y = {2.5:.1}")?;
@@ -245,7 +245,7 @@ void main() {
 
 `sprint(&list, ...)` дописывает текст в `List[u8]`. Рост идёт через аллокатор списка. Идеально для сборки по частям:
 
-```vibe run
+```zark run
 !void main() {
     auto out = List<u8>::init(c_allocator());
     defer out.deinit();
@@ -265,7 +265,7 @@ void main() {
 
 Если последний параметр функции — `Fmt`, то строка с `{...}` и все остальные аргументы вызова собираются в него. Передать `Fmt` дальше в `print` или `println` можно как есть:
 
-```vibe run
+```zark run
 void note(str tag, Fmt f) {
     print("[{tag}] ");
     println(f);
@@ -296,12 +296,12 @@ void main() {
 | `!u8* to_cstr(buf, s)` | C-строка в вашем буфере |
 | `!u8* a.dupz(s)` | C-строка в куче |
 
-```vibe run
+```zark run
 !void main() {
-    const auto s = "  Hello, Vibe!  ";
+    const auto s = "  Hello, Zark!  ";
     const auto t = str_trim(s);
     println("[{t}]");
-    println(str_find(t, "Vibe"), str_find(t, "nope"), str_find_byte(t, ','), str_rfind_byte(t, 'l'));
+    println(str_find(t, "Zark"), str_find(t, "nope"), str_find_byte(t, ','), str_rfind_byte(t, 'l'));
     println(str_starts_with(t, "Hello"), str_ends_with(t, "!"));
     println(t[0..5], t[7..]);
     println(parse_int("42") catch -1, parse_int("12x") catch -1);
@@ -315,7 +315,7 @@ void main() {
 
 ### Разбить по разделителю
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -341,13 +341,13 @@ void main() {
 
 Для изменения нужна своя память:
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
     const auto a = arena.allocator();
 
-    const auto src = "Hello, Vibe!";
+    const auto src = "Hello, Zark!";
     const auto up = a.alloc<u8>(src.len)?;
     for (auto [i, c] : src) {
         if (c >= 'a' && c <= 'z') {
@@ -364,7 +364,7 @@ void main() {
 
 `read_line(buf)` читает строку из stdin (без перевода строки) или возвращает `error.EndOfFile`:
 
-```vibe run with=allow-fail
+```zark run with=allow-fail
 void main() {
     u8[128] buf;
     const auto line = read_line(buf[..]) catch {

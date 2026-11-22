@@ -2,16 +2,16 @@
 title: Взаимодействие с C и C++
 order: 30
 section: Интероп и инструменты
-description: extern, export, строки и указатели на границе с C, подключение .c, .cpp и библиотек, структуры, колбэки и фасад extern "C" в Vibe
+description: extern, export, строки и указатели на границе с C, подключение .c, .cpp и библиотек, структуры, колбэки и фасад extern "C" в Zark
 ---
 
-Vibe не нужен отдельный «слой привязки»: C-функцию объявляют одной строкой, а C-файл передают компилятору в командной строке. Здесь собрано всё, что нужно на границе.
+Zark не нужен отдельный «слой привязки»: C-функцию объявляют одной строкой, а C-файл передают компилятору в командной строке. Здесь собрано всё, что нужно на границе.
 
-## Вызов C из Vibe: `extern`
+## Вызов C из Zark: `extern`
 
-`extern` объявляет функцию, которая живёт снаружи. Сигнатура пишется в терминах Vibe, а соответствие с C простое:
+`extern` объявляет функцию, которая живёт снаружи. Сигнатура пишется в терминах Zark, а соответствие с C простое:
 
-| C | Vibe |
+| C | Zark |
 |---|---|
 | `int`, `int32_t` | `i32` |
 | `long`, `int64_t`, `ssize_t` | `i64` |
@@ -25,7 +25,7 @@ Vibe не нужен отдельный «слой привязки»: C-фун�
 | `void` (результат) | результат не пишется |
 | `...` | `...` |
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 extern i32 atoi(u8* s);
 extern u64 strlen(u8* s);
@@ -38,13 +38,13 @@ void main() {
 
 Функции libc, которые часто нужны, уже объявлены в прелюдии (`printf`, `malloc`, `calloc`, `free`, `exit`, `memcpy`, `memset`, `strlen`, `sqrt`, `sin`, `cos`, `pow`, `floor`, `fopen`, `fork` и т. д.). Их можно просто вызывать, а объявлять заново не обязательно.
 
-> **Ловушка.** Если вы объявите `extern` с именем, которое уже занято **функцией Vibe** из прелюдии (`abs`, `min`, `max`, `sort`), будет ошибка «duplicate function». Выберите другой способ или импортируйте C-версию в обёртку с другим именем.
+> **Ловушка.** Если вы объявите `extern` с именем, которое уже занято **функцией Zark** из прелюдии (`abs`, `min`, `max`, `sort`), будет ошибка «duplicate function». Выберите другой способ или импортируйте C-версию в обёртку с другим именем.
 
 ## Строки на границе
 
 Литерал `"..."` всегда заканчивается нулевым байтом и поэтому подходит как `u8*` (то есть `const char *`):
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 
 void main() {
@@ -54,7 +54,7 @@ void main() {
 
 Любой другой `str` (срез) ни на что не заканчивается и **не годится** как C-строка. Тип `str` — это `{ ptr, len }`, и в C уходит только `s.ptr`, который читается до нулевого байта:
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 
 void main() {
@@ -69,7 +69,7 @@ void main() {
 - `to_cstr(buf, s)` — копирует в **ваш** буфер и добавляет нулевой байт (без выделения памяти);
 - `a.dupz(s)` — копирует в куче через аллокатор.
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 
 !void main() {
@@ -89,7 +89,7 @@ extern i32 puts(u8* s);
 
 Обратно: `cstr(p)` превращает C-строку `u8*` в `str` (длина считается через `strlen`, копирования нет):
 
-```vibe run
+```zark run
 extern u8* getenv(u8* name);
 
 void main() {
@@ -105,9 +105,9 @@ void main() {
 
 ## Указатели
 
-Любой указатель Vibe приводится к `void*` и обратно **неявно**; к другим типам указателей — через `as`:
+Любой указатель Zark приводится к `void*` и обратно **неявно**; к другим типам указателей — через `as`:
 
-```vibe run
+```zark run
 void main() {
     i64 x = 258;
     const auto p = &x as *u8;
@@ -117,7 +117,7 @@ void main() {
 
 Массив или срез превращается в указатель на первый элемент через `.ptr` (у срезов) или `&a[0]`/`as T*`:
 
-```vibe run
+```zark run
 extern void* memset(void* dst, i32 c, u64 n);
 
 void main() {
@@ -131,7 +131,7 @@ void main() {
 
 `...` в `extern` допускает вариативные функции. Типы подтягиваются по обычным правилам C: целые расширяются, `f32` → `f64`. Срезы запрещены.
 
-```vibe run
+```zark run
 extern i32 printf(u8* fmt, ...);
 
 void main() {
@@ -139,15 +139,15 @@ void main() {
 }
 ```
 
-Для вывода из самого Vibe лучше `println`: он безопаснее. `printf` пригодится при работе с готовым C-кодом.
+Для вывода из самого Zark лучше `println`: он безопаснее. `printf` пригодится при работе с готовым C-кодом.
 
 ## Структуры
 
-Структуры Vibe лежат в памяти так же, как C-структуры (те же размеры и выравнивание). Поэтому описание на стороне Vibe — копия описания на C.
+Структуры Zark лежат в памяти так же, как C-структуры (те же размеры и выравнивание). Поэтому описание на стороне Zark — копия описания на C.
 
 Структуры можно передавать в `extern`-функции и получать из них **по значению**, как в C: компилятор следует правилам System V x86-64 (маленькие структуры идут в регистрах, большие — через стек или скрытый указатель) на всех бэкендах. Это нужно библиотекам вроде raylib: `extern void DrawCircleV(Vector2 center, f32 radius, Color color);` работает как написано. Передача по указателю тоже работает:
 
-```vibe file=vec.c
+```zark file=vec.c
 typedef struct { double x, y, z; } Vec3;
 
 double vec3_dot(const Vec3 *a, const Vec3 *b) {
@@ -161,7 +161,7 @@ void vec3_scale(Vec3 *v, double k) {
 }
 ```
 
-```vibe run with=vec.c
+```zark run with=vec.c
 struct Vec3 { f64 x; f64 y; f64 z; }
 
 extern f64 vec3_dot(Vec3* a, Vec3* b);
@@ -178,7 +178,7 @@ void main() {
 
 По значению:
 
-```vibe file=v2.c
+```zark file=v2.c
 typedef struct { float x, y; } Vector2;
 typedef struct { unsigned char r, g, b, a; } Color;
 
@@ -186,7 +186,7 @@ Vector2 v2_add(Vector2 a, Vector2 b) { Vector2 r = { a.x + b.x, a.y + b.y }; ret
 Color fade(Color c, float k) { Color o = { c.r, c.g, c.b, (unsigned char)(c.a * k) }; return o; }
 ```
 
-```vibe run with=v2.c
+```zark run with=v2.c
 struct Vector2 { f32 x; f32 y; }
 struct Color { u8 r; u8 g; u8 b; u8 a; }
 
@@ -201,38 +201,38 @@ void main() {
 
 ## Подключение C-файлов
 
-`vibe run`, `vibe build` и `vibe test` принимают `.c`, `.cpp`, `.o`, `.a`, `.so` и ключи `-l...` / `-L...` вместе с исходником:
+`zark run`, `zark build` и `zark test` принимают `.c`, `.cpp`, `.o`, `.a`, `.so` и ключи `-l...` / `-L...` вместе с исходником:
 
 ```sh
-vibe run main.vibe mathlib.c                 # компилирует mathlib.c и линкует
-vibe run main.vibe mathlib.c engine.cpp      # с C++ линковка идёт через clang++
-vibe build main.vibe lib.o -lm -o app        # готовый объект и библиотека
+zark run main.zk mathlib.c                 # компилирует mathlib.c и линкует
+zark run main.zk mathlib.c engine.cpp      # с C++ линковка идёт через clang++
+zark build main.zk lib.o -lm -o app        # готовый объект и библиотека
 ```
 
 Что происходит: каждый `.c` / `.cpp` компилируется через `clang` (`clang++` для C++, уровень оптимизации берётся из `-O`), затем всё линкуется вместе с вашей программой. Если есть хотя бы один `.cpp`, линковщиком становится `clang++`.
 
 Подробности режимов — в [инструментах](tooling.md#режимы-компиляции).
 
-## Вызов Vibe из C: `export`
+## Вызов Zark из C: `export`
 
-`export` выводит функцию Vibe под её собственным именем. C-код её видит как обычный внешний символ:
+`export` выводит функцию Zark под её собственным именем. C-код её видит как обычный внешний символ:
 
-```vibe file=sumsq.c
+```zark file=sumsq.c
 #include <stdint.h>
 
-extern int64_t vibe_square(int64_t x);
+extern int64_t zark_square(int64_t x);
 
 int64_t c_sum_squares(int64_t n) {
     int64_t s = 0;
-    for (int64_t i = 1; i <= n; i++) s += vibe_square(i);
+    for (int64_t i = 1; i <= n; i++) s += zark_square(i);
     return s;
 }
 ```
 
-```vibe run with=sumsq.c
+```zark run with=sumsq.c
 extern i64 c_sum_squares(i64 n);
 
-export i64 vibe_square(i64 x) {
+export i64 zark_square(i64 x) {
     return x * x;
 }
 
@@ -245,9 +245,9 @@ void main() {
 
 ## Колбэки: указатели на функции
 
-Функцию Vibe можно передать в C как `fn(...) -> R`. Это обычный адрес функции без замыкания:
+Функцию Zark можно передать в C как `fn(...) -> R`. Это обычный адрес функции без замыкания:
 
-```vibe run
+```zark run
 extern void qsort(void* base, u64 n, u64 size, fn(void*, void*) -> i32 cmp);
 
 i32 cmp(void* a, void* b) {
@@ -269,9 +269,9 @@ void main() {
 
 ## C++ через фасад `extern "C"`
 
-Vibe не знает C++-ABI (шаблоны, перегрузки, классы). Поэтому C++ прячут за небольшим C-интерфейсом, где объект — непрозрачный указатель.
+Zark не знает C++-ABI (шаблоны, перегрузки, классы). Поэтому C++ прячут за небольшим C-интерфейсом, где объект — непрозрачный указатель.
 
-```vibe file=engine.cpp
+```zark file=engine.cpp
 #include <vector>
 #include <algorithm>
 #include <cstdint>
@@ -290,7 +290,7 @@ extern "C" {
 }
 ```
 
-```vibe run with=engine.cpp
+```zark run with=engine.cpp
 extern void* engine_new();
 extern void engine_push(void* e, f64 x);
 extern f64 engine_median(void* e);
@@ -313,9 +313,9 @@ void main() {
 Подключение системных библиотек — как в C. Ключи `-l` и `-L` и файлы `.a`, `.so`, `.o` передаются линковщику как есть:
 
 ```sh
-vibe run main.vibe -lm
-vibe run main.vibe -L/opt/foo/lib -lfoo
-vibe build main.vibe libbar.a -o app
+zark run main.zk -lm
+zark run main.zk -L/opt/foo/lib -lfoo
+zark build main.zk libbar.a -o app
 ```
 
 Математика (`sqrt`, `sin`, `pow`) линкуется автоматически: `-lm` уже включён.
@@ -323,12 +323,12 @@ vibe build main.vibe libbar.a -o app
 ## Правила и подводные камни
 
 - Нет `@cImport` и разбора заголовков: сигнатуры пишете руками. Это место для ошибок: тип вашего `extern` обязан совпадать с C.
-- Структуры по значению переходят границу только через объявления `extern`. Если C-библиотека вызывает Vibe (функция `export` или указатель на функцию), структуры нужно принимать по указателю.
+- Структуры по значению переходят границу только через объявления `extern`. Если C-библиотека вызывает Zark (функция `export` или указатель на функцию), структуры нужно принимать по указателю.
 - `bool` в C — это `_Bool`/`uint8_t`. Используйте `u8` или `i32`, а не `bool`, если сомневаетесь.
 - Не передавайте `str` вместо `u8*`: нужна `s.ptr` (и нулевой байт, см. выше).
 - `size_t` — это `u64`, `ssize_t` — `i64`.
-- Память, которую вернула C-функция (`malloc`), освобождайте C-функцией (`free`), а не аллокатором Vibe.
-- `extern` с тем же именем, что и функция из прелюдии Vibe, недопустимо.
+- Память, которую вернула C-функция (`malloc`), освобождайте C-функцией (`free`), а не аллокатором Zark.
+- `extern` с тем же именем, что и функция из прелюдии Zark, недопустимо.
 
 ## Что дальше
 

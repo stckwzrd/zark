@@ -1,4 +1,4 @@
-# Vibe roadmap: what to improve and how
+# Zark roadmap: what to improve and how
 
 Ordered by payoff. Each item says *how*, not just *what*.
 
@@ -11,9 +11,9 @@ Ordered by payoff. Each item says *how*, not just *what*.
 ## 2. Drop the textual IR on the native path
 Today the frontend prints LLVM IR text and the native backend parses it back, which is about 40% of backend time. Switch to an in-memory IR (a list of structs) that is either printed as `.ll` (LLVM path) or lowered directly (native path). This is also the base for our own optimizer: constant folding, DCE, inlining small functions.
 
-## 3. Own linker and libc-free runtime → zero external tools for pure Vibe
+## 3. Own linker and libc-free runtime → zero external tools for pure Zark
 - Write a static ELF executable directly (`.text/.data/.bss` + `_start`). Our object writer already has 90% of this; the remaining part is laying out segments and resolving relocations ourselves.
-- `rt.vibe` on Linux syscalls: `write`, `mmap`, `exit`, `clock_gettime`, `open/read`, plus our own `printf` subset (the format strings are already built at compile time).
+- `rt.zk` on Linux syscalls: `write`, `mmap`, `exit`, `clock_gettime`, `open/read`, plus our own `printf` subset (the format strings are already built at compile time).
 - Linking takes about 40 ms today, so this saves those 40 ms and the clang dependency. The system `ld` remains only for `.c/.cpp` interop.
 
 ## 4. Release builds
@@ -22,22 +22,22 @@ Today the frontend prints LLVM IR text and the native backend parses it back, wh
 
 ## 5. Parallel and incremental compilation
 - Code generation per function is independent: spread the backend over threads (`pthread_create` through `extern`), one ELF section per thread, merged at the end.
-- Cache per module: content hash → `.o` in `.vibe-cache`; only modules that changed are recompiled.
+- Cache per module: content hash → `.o` in `.zark-cache`; only modules that changed are recompiled.
 
 ## 6. Language
-Done: closures with explicit captures, `T: Ord` constraints (checked at the call, not inside the generic body), `match` as an expression, `?T` and `orelse`, modules (`import "x.vibe" as x`). Labeled `break`/`continue` are done.
+Done: closures with explicit captures, `T: Ord` constraints (checked at the call, not inside the generic body), `match` as an expression, `?T` and `orelse`, modules (`import "x.zk" as x`). Labeled `break`/`continue` are done.
 - **Closures with an explicit context:** `fn[ctx](x: i64) i64`, lowered to a {fn, ctx} pair, with no hidden allocation (the context lives where the caller says).
 - **Interfaces as generic constraints:** `fn sort[T: Ord](s: []T)`, checked when the generic is declared instead of when it is instantiated, which gives clearer errors.
 - **More `comptime`:** reflection over struct fields and generated declarations (basic `comptime` expressions and static assertions are done).
-- **Modules / namespaces:** `import "net.vibe" as net`, then `net.connect(...)`.
+- **Modules / namespaces:** `import "net.zk" as net`, then `net.connect(...)`.
 - **SIMD types**: done through LLVM (`f32x4`, `i32x8`, ...). Missing: vector instructions in the own backend, comparisons and masks, shuffles.
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
 
 ## 7. Tooling
-Done: `vibe lsp` (language server), `vibe test`, `vibe fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
-- `vibe fmt`: the parser already exists; add a printer for the AST.
-- `vibe test`: `test "name" { ... }` blocks collected and run by the driver.
+Done: `zark lsp` (language server), `zark test`, `zark fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
+- `zark fmt`: the parser already exists; add a printer for the AST.
+- `zark test`: `test "name" { ... }` blocks collected and run by the driver.
 - DWARF line tables from the native backend: done (`break file:line`, `next`, `bt`). `-g` adds variables, structs and arrays (`print x`, `info locals`). Missing: unions, location lists for register variables, and any debug info on the LLVM path.
 
 ## 8. Platforms
-An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.vibe` stays the same; only the encoder and the ABI change.
+An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.zk` stays the same; only the encoder and the ABI change.

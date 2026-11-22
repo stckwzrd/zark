@@ -1,0 +1,505 @@
+// zark — the self-hosted compiler driver.
+
+import "gen_fmt.zk";
+import "native.zk";
+import "resolve.zk";
+import "fmt.zk";
+import "loader.zk";
+import "lsp.zk";
+import "project.zk";
+import "std/os" as osm;
+import "std/path" as pth;
+
+void usage() {
+    eprintln("zark 0.4 (self-hosted) — a compact systems language (LLVM backend)
+
+usage:
+  zark run   <file.zk> [extra.c|.cpp|.o ...] [-O] [-- program args]
+  zark build <file.zk> [extra.c|.cpp|.o ...] [-o out] [-O] [--release]
+  zark test  <file.zk> [extra.c|.cpp|.o ...] [-O]   run the test blocks of a file
+  zark fmt   [--check] <file.zk ...>  format source files in place
+  zark lsp                          language server on stdin/stdout
+  zark ir    <file.zk>            print LLVM IR to stdout
+  zark new   NAME                   create a project (zark.toml, src/main.zk)
+  in a project, run/build/test work without a file: they read zark.toml
+  zark tokens <file.zk ...>       dump tokens
+");
+}
+
+str stem_of(str path) {
+    auto s = path;
+    const auto slash = str_rfind_byte(s, '/');
+    if (slash >= 0) { s = s[slash + 1..]; }
+    const auto dot = str_rfind_byte(s, '.');
+    if (dot > 0) { s = s[0..dot]; }
+    return s;
+}
+
+str base_of(str path) {
+    const auto slash = str_rfind_byte(path, '/');
+    if (slash >= 0) { return path[slash + 1..]; }
+    return path;
+}
+
+!i32 run_tests(Allocator a, str exe, List<FnDecl*> tests) {
+    auto passed = 0;
+    auto failed = 0;
+    const auto out_path = ".zark-cache/test.out";
+    for (auto [i, t] : tests) {
+        auto cmd = List<u8>::init(a);
+        sprint(&cmd, "{exe} {i} > {out_path} 2>&1")?;
+        const auto code = run(a, ["/bin/sh", "-c", cmd.slice()])?;
+        if (code == 0) {
+            passed += 1;
+            println("ok   {t.test_name}");
+            continue;
+        }
+        failed += 1;
+        println("FAIL {t.test_name}");
+        const auto out = read_file(a, out_path) catch "";
+        auto start = 0;
+        for (auto [j, ch] : out) {
+            if (ch == '\n') {
+                println("     {out[start..j]}");
+                start = j + 1;
+            }
+        }
+        if (start < out.len) { println("     {out[start..]}"); }
+    }
+    println("{passed} passed, {failed} failed");
+    if (failed > 0) { return 1; }
+    return 0;
+}
+
+!i32 run_fmt(Allocator a) {
+    auto check = false;
+    auto changed = 0;
+    for (auto k : 2..arg_count()) {
+        const auto path = arg(k);
+        if (path == "--check") {
+            check = true;
+            continue;
+        }
+        const auto src = read_file(a, path) catch |e| {
+            eprintln("error: cannot read '{path}': {e}");
+            return 1;
+        };
+        const auto out = format_source(a, src, path) catch return 1;
+        if (out == src) { continue; }
+        changed += 1;
+        if (check) {
+            println("would reformat {path}");
+        } else {
+            write_file(path, out)?;
+            println("formatted {path}");
+        }
+    }
+    if (check && changed > 0) { return 1; }
+    return 0;
+}
+
+struct RLimit { u64 cur; u64 max; }
+extern i32 getrlimit(i32 resource, RLimit* lim);
+extern i32 setrlimit(i32 resource, RLimit* lim);
+extern i32 execv(u8* path, u8** argv);
+extern i32 setenv(u8* name, u8* value, i32 overwrite);
+extern i64 vrt_exe_path(u8* buf, u64 n);
+extern i32 vrt_native();
+extern i32 vrt_os();
+
+void grow_stack() {
+    if (getenv("ZARK_STACK") != null) { return; }
+    RLimit lim;
+    if (getrlimit(3, &lim) != 0) { return; }
+    u64 want = 1073741824;
+    if (lim.max < want) { want = lim.max; }
+    if (lim.cur >= want) { return; }
+    u8[32] orig;
+    auto ob = FixedBuf::init(orig[..]);
+    auto sb = List<u8>::init(ob.allocator());
+    sprint(&sb, "{lim.cur}") catch return;
+    sb.push(0) catch return;
+    lim.cur = want;
+    if (setrlimit(3, &lim) != 0) { return; }
+    setenv("ZARK_STACK", sb.items.ptr, 1);
+    u8[4096] exe;
+    const auto n = vrt_exe_path(&exe[0], 4095);
+    if (n <= 0) { return; }
+    exe[n] = 0;
+    execv(&exe[0], __argv);
+}
+
+void restore_stack() {
+    const auto v = getenv("ZARK_STACK");
+    if (v == null) { return; }
+    const auto n = parse_int(cstr(v)) catch { return; };
+    RLimit lim;
+    if (getrlimit(3, &lim) != 0) { return; }
+    lim.cur = n as u64;
+    _ = setrlimit(3, &lim);
+}
+
+!str rt_object(Allocator a, str cache, bool freestanding) {
+    u64 h = 7;
+    for (auto i : 0..RT_C.len) { h = (h * 31 + (RT_C[i] as u64)) % 1000000007; }
+    auto kind = "host";
+    if (freestanding) { kind = "free"; }
+    auto ob = List<u8>::init(a);
+    sprint(&ob, "{cache}/vrt-{h}-{RT_C.len}-{vrt_os()}{vrt_native()}-{kind}.o")?;
+    if (file_exists(ob.slice())) { return ob.slice(); }
+    auto cb = List<u8>::init(a);
+    sprint(&cb, "{cache}/vrt.{getpid()}.c")?;
+    auto tb = List<u8>::init(a);
+    sprint(&tb, "{cache}/vrt.{getpid()}.o")?;
+    write_file(cb.slice(), RT_C)?;
+    auto args = List<str>::init(a);
+    args.append(["clang", "-O1", "-c", cb.slice(), "-o", tb.slice()])?;
+    if (freestanding) { args.append(["-ffreestanding", "-DVRT_FREESTANDING"])?; }
+    const auto code = run(a, args.slice())?;
+    _ = run(a, ["rm", "-f", cb.slice()])?;
+    if (code != 0) {
+        _ = run(a, ["rm", "-f", tb.slice()])?;
+        return error.CompileFailed;
+    }
+    const auto mv = run(a, ["mv", "-f", tb.slice(), ob.slice()])?;
+    if (mv != 0) { return error.CompileFailed; }
+    return ob.slice();
+}
+
+!i32 compile(Allocator a) {
+    grow_stack();
+    if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
+    if (arg_count() >= 2 && arg(1) == "new") {
+        if (arg_count() != 3) {
+            eprintln("usage: zark new NAME");
+            return 1;
+        }
+        return scaffold_project(a, arg(2));
+    }
+    // inside a project (a zark.toml here or above), `zark run`, `zark build` and `zark test`
+    // work without a file name
+    auto in_project = false;
+    if (arg_count() >= 2 && (arg(1) == "run" || arg(1) == "build" || arg(1) == "test")) {
+        auto named = false;
+        for (auto k : 2..arg_count()) {
+            if (arg(k) == "--") { break; }
+            if (str_ends_with(arg(k), ".zk")) { named = true; }
+        }
+        in_project = !named;
+    }
+    if (arg_count() < 3 && !in_project) {
+        usage();
+        return 1;
+    }
+    const auto cmd = arg(1);
+    if (cmd == "fmt") { return run_fmt(a); }
+
+    auto argv = List<str>::init(a);
+    for (auto k : 2..arg_count()) { argv.push(arg(k))?; }
+    if (in_project) {
+        const auto pdir = find_project(a, ".")?;
+        if (pdir.len == 0) {
+            eprintln("error: no .zk file given and no zark.toml in this directory or above (create a project with `zark new NAME`)");
+            return 1;
+        }
+        const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
+        if (cmd == "test") {
+            i32 worst = 0;
+            const auto self = osm::exe_path(a)?;
+            const auto files = project_test_files(a, proj)?;
+            for (auto f : files) {
+                println("== {pth::relative(a, f, pdir)?}");
+                auto full = List<str>::init(a);
+                full.append([self, "test"])?;
+                full.append(project_args(a, proj, cmd, argv)?.slice())?;
+                full.items[2] = f;
+                const auto code = run(a, full.slice())?;
+                if (code != 0) { worst = code; }
+            }
+            return worst;
+        }
+        argv = project_args(a, proj, cmd, argv)?;
+    } else {
+        // a file inside a project still sees the project's dependencies
+        for (auto x : argv) {
+            if (x == "--") { break; }
+            if (str_ends_with(x, ".zk")) {
+                const auto pdir = find_project(a, pth::dir(x)) catch "";
+                if (pdir.len > 0) {
+                    const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
+                    auto more = List<str>::init(a);
+                    for (auto src : proj.sources) { more.push(src)?; }
+                    for (auto l : proj.libs) {
+                        auto b = List<u8>::init(a);
+                        sprint(&b, "-l{l}")?;
+                        more.push(b.slice())?;
+                    }
+                    auto at = argv.index_of("--");
+                    if (at < 0) { at = argv.len; }
+                    for (auto m : more) {
+                        if (argv.index_of(m) < 0) {
+                            argv.insert(at, m)?;
+                            at += 1;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    if (cmd == "tokens") {
+        auto out = List<u8>::init(a);
+        for (auto k : 2..arg_count()) {
+            const auto path = arg(k);
+            const auto src = read_file(a, path)?;
+            const auto toks = tokenize(a, src, path) catch return 1;
+            for (auto t : toks) {
+                u8[32] tn;
+                const auto name = bprint(tn[..], t.tag)?;
+                sprint(&out, "{t.line} {name} {t.text}\n")?;
+            }
+        }
+        print(out.slice());
+        return 0;
+    }
+
+    const auto is_run = cmd == "run";
+    const auto is_build = cmd == "build";
+    const auto is_ir = cmd == "ir";
+    const auto is_test = cmd == "test";
+    if (!is_run && !is_build && !is_ir && !is_test) {
+        usage();
+        return 1;
+    }
+
+    auto src_file = "";
+    auto extras = List<str>::init(a);
+    auto prog_args = List<str>::init(a);
+    auto out_path = "";
+    auto opt = false;
+    auto safety = true;
+    auto force_llvm = false;
+    auto force_native = false;
+    auto timing = false;
+    auto freestanding = false;
+    auto fast = false;
+    auto fastmath = false;
+    auto ovf = false;
+    auto debug = false;
+    auto ct_opts = List<str>::init(a);
+    auto i = 0;
+    while (i < argv.len) {
+        const auto x = argv.get(i);
+        if (x == "--") {
+            for (auto j : i + 1..argv.len) { prog_args.push(argv.get(j))?; }
+            break;
+        } else if (x == "-O") {
+            opt = true;
+        } else if (x == "--release") {
+            opt = true;
+            safety = false;
+        } else if (x == "--llvm") {
+            force_llvm = true;
+        } else if (x == "--native") {
+            force_native = true;
+        } else if (x == "--fast-math") {
+            fast = true;
+            fastmath = true;
+            opt = true;
+            safety = false;
+        } else if (x == "-g") {
+            debug = true;
+        } else if (x == "--check-overflow") {
+            ovf = true;
+        } else if (x == "--fast") {
+            opt = true;
+            safety = false;
+            fast = true;
+        } else if (x == "--freestanding") {
+            freestanding = true;
+            safety = false;
+        } else if (x == "--time") {
+            timing = true;
+        } else if (x == "--ct-key" || x == "--ct-mode" || x == "--ct-out" || x == "--ct-chain") {
+            i += 1;
+            if (i < argv.len) { ct_opts.push(x)?; ct_opts.push(argv.get(i))?; }
+        } else if (x == "--no-safety") {
+            safety = false;
+        } else if (x == "-o") {
+            i += 1;
+            if (i < argv.len) { out_path = argv.get(i); }
+        } else if (str_ends_with(x, ".zk")) {
+            src_file = x;
+            // `zark run script.zk a b` from a shebang line: everything after a script is its arguments
+            if (arg(1) == "run" && !in_project && starts_with_shebang(a, x)) {
+                for (auto j : i + 1..argv.len) { if (argv.get(j) != "--" || j > i + 1) { prog_args.push(argv.get(j))?; } }
+                break;
+            }
+        } else {
+            extras.push(x)?;
+        }
+        i += 1;
+    }
+    if (src_file.len == 0) {
+        usage();
+        return 1;
+    }
+
+    if (safety) { ovf = true; }
+    const auto t0 = now_ns();
+    const auto g = new_gen(a, safety)?;
+    g.freestanding = freestanding;
+    g.fast = fast;
+    g.fastmath = fastmath;
+    g.ovf = ovf;
+    g.self_path = osm::exe_path(a)?;
+    g.ct_extras = extras;
+    for (auto j : 0..ct_opts.len / 2) {
+        const auto k = ct_opts.get(j * 2);
+        const auto v = ct_opts.get(j * 2 + 1);
+        if (k == "--ct-key") { g.ct_key = v; }
+        if (k == "--ct-mode") { g.ct_mode = v; }
+        if (k == "--ct-out") { g.ct_out = v; }
+        if (k == "--ct-chain") { g.ct_chain = v; }
+    }
+    auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = Map<str>::init(a) };
+    diag_prelude = PRELUDE;
+    g.test_mode = is_test;
+    g.test_root = src_file;
+    loader.load_source(PRELUDE, "<std>", "") catch {
+        g.flush_diag();
+        return 1;
+    };
+    loader.load_file(src_file, "") catch {
+        g.flush_diag();
+        return 1;
+    };
+    g.generate() catch |e| {
+        g.flush_diag();
+        if (e != error.CompileFailed) { eprintln("error: internal compiler error: {e}"); }
+        return 1;
+    };
+    if (!g.fns.has("main") && !is_test && !is_ir && !freestanding) {
+        eprintln("error: {src_file} has no 'main' function");
+        return 1;
+    }
+
+    auto ir = List<u8>::init(a);
+    g.output(&ir)?;
+    const auto t1 = now_ns();
+    if (is_ir) {
+        print(ir.slice());
+        return 0;
+    }
+
+    const auto cache = ".zark-cache";
+    _ = mkdir(".zark-cache", 493);
+    const auto stem = stem_of(src_file);
+    const auto can_native = vrt_native() != 0;
+    if (force_native && !can_native) {
+        eprintln("error: the native backend only supports x86-64 Linux, use --llvm");
+        return 1;
+    }
+    const auto use_native = can_native && (force_native || (!opt && !force_llvm && !g.needs_llvm));
+    auto llb = List<u8>::init(a);
+    if (use_native) { sprint(&llb, "{cache}/{stem}.o")?; } else { sprint(&llb, "{cache}/{stem}.ll")?; }
+    const auto ll_path = llb.slice();
+    if (use_native) {
+        native_compile(a, ir.slice(), ll_path, debug) catch |e| {
+            eprintln("error: native backend failed: {e}");
+            return 1;
+        }
+    } else {
+        write_file(ll_path, ir.slice())?;
+    }
+    const auto t2 = now_ns();
+
+    auto exe = out_path;
+    if (exe.len == 0) {
+        if (is_run || is_test) {
+            auto eb = List<u8>::init(a);
+            sprint(&eb, "{cache}/{stem}")?;
+            if (is_test) { sprint(&eb, ".test")?; }
+            exe = eb.slice();
+        } else {
+            exe = stem;
+        }
+    }
+    auto olevel = "-O0";
+    if (opt) { olevel = "-O2"; }
+
+    auto objs = List<str>::init(a);
+    auto needs_cxx = false;
+    for (auto x : extras) {
+        if (str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L") || str_starts_with(x, "-Wl,") || str_starts_with(x, "-T") || x == "-nostdlib" || x == "-static") {
+            objs.push(x)?;
+            continue;
+        }
+        const auto is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx");
+        if (is_cpp) { needs_cxx = true; }
+        auto ob = List<u8>::init(a);
+        sprint(&ob, "{cache}/{base_of(x)}.o")?;
+        auto cc = "clang";
+        if (is_cpp) { cc = "clang++"; }
+        const auto code = run(a, [cc, olevel, "-c", x, "-o", ob.slice()])?;
+        if (code != 0) { return code; }
+        objs.push(ob.slice())?;
+    }
+
+    objs.push(rt_object(a, cache, freestanding)?)?;
+
+    auto link = List<str>::init(a);
+    if (needs_cxx) { link.push("clang++")?; } else { link.push("clang")?; }
+    if (freestanding) { link.append(["-nostdlib", "-static", "-ffreestanding"])?; }
+    if (use_native) {
+        link.append(["-no-pie", ll_path])?;
+    } else {
+        link.append([olevel, "-Wno-override-module", ll_path])?;
+    }
+    link.append(objs.slice())?;
+    link.append(["-o", exe])?;
+    if (!freestanding) { link.append(["-lm", "-lpthread", "-ldl"])?; }
+    const auto lc = run(a, link.slice())?;
+    if (lc != 0) {
+        eprintln("error: link failed (input kept at {ll_path})");
+        return lc;
+    }
+    if (timing) {
+        const auto t3 = now_ns();
+        auto backend = "llvm";
+        if (use_native) { backend = "native"; }
+        eprintln("time: frontend {(t1 - t0) as f64 / 1000000.0:.1} ms, {backend} backend {(t2 - t1) as f64 / 1000000.0:.1} ms, link {(t3 - t2) as f64 / 1000000.0:.1} ms");
+    }
+
+    restore_stack();
+    if (is_test) { return run_tests(a, exe, g.tests); }
+
+    if (is_run) {
+        auto argv = List<str>::init(a);
+        if (str_find_byte(exe, '/') < 0) {
+            auto eb = List<u8>::init(a);
+            sprint(&eb, "./{exe}")?;
+            argv.push(eb.slice())?;
+        } else {
+            argv.push(exe)?;
+        }
+        argv.append(prog_args.slice())?;
+        return run(a, argv.slice());
+    }
+    return 0;
+}
+
+i32 main() {
+    auto ar = Arena::init(c_allocator());
+    const auto code = compile(ar.allocator()) catch |e| {
+        eprintln("error: {e}");
+        1;
+    };
+    return code;
+}
+
+bool starts_with_shebang(Allocator a, str path) {
+    const auto src = read_file(a, path) catch { return false; };
+    return src.len >= 2 && src[0] == '#' && src[1] == '!';
+}

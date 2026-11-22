@@ -1,0 +1,154 @@
+// AST for the self-hosted Zark compiler.
+// Nodes are "fat" structs with a kind tag: simple to build and to inspect.
+
+import "lexer.zk";
+
+enum TEK { Name, Ptr, Slice, Array, Errun, Func }
+
+struct TypeExpr {
+    TEK k;
+    str name;                // Name
+    List<TypeExpr*> args;    // Name type args, Func params
+    TypeExpr* elem;          // Ptr/Slice/Array/Errun inner
+    Expr* len;               // Array length
+    TypeExpr* ret;           // Func return (null = void)
+    bool closure;            // Func written as fn[](...)
+    bool vol;                // volatile pointee / field / variable
+    i64 off;                 // Name position, -1 when synthesized
+}
+
+enum EK {
+    IntLit, FloatLit, BoolLit, StrLit, Interp, NullLit, Ident, EnumLit, ErrorVal,
+    Binary, Unary, Call, Field, Index, Slice, StructLit, ArrayLit, Cast, Try, Catch,
+    Sizeof, Alignof, Is, Match, Orelse, Closure, Pre, Comptime, Await,
+}
+
+struct FieldInit { str name; Expr* value; i64 off; }
+
+// interpolation part: kind 0 = literal text, 1 = expression, 2 = expression with format spec
+struct IPart { i64 kind; str lit; Expr* e; str spec; }
+
+struct Expr {
+    EK k;
+    i64 line;
+    i64 off;
+    u64 ival;
+    f64 fval;
+    bool bval;
+    str name;               // Ident, StrLit bytes, EnumLit/ErrorVal/Field/Is name, Catch err name
+    Tag op;                 // Binary/Unary operator
+    Expr* l;                // Binary lhs, Unary/Field/Index/Slice/Cast/Try/Catch/Is operand, Call callee
+    Expr* r;                // Binary rhs, Slice lo
+    Expr* x;                // Slice hi
+    List<Expr*> args;       // Call args, Index args, ArrayLit elems
+    TypeExpr* ty;           // StructLit, Cast, Sizeof, Alignof
+    List<FieldInit> fields; // StructLit
+    List<IPart> parts;      // Interp
+    Stmt* handler;          // Catch
+    List<MatchArm> arms;    // Match
+    FnDecl* func;           // Closure
+    bool has_name;          // Catch |e|
+    i64 name_off;           // Catch |e| position
+}
+
+enum SK { Let, Assign, ExprS, If, While, ForRange, ForEach, Ret, Brk, Cont, Block, Defer, Match }
+
+struct MatchArm { List<Expr*> pats; Stmt* body; }
+
+struct Stmt {
+    SK k;
+    i64 line;
+    i64 off;
+    str name;              // Let/For var name
+    i64 name_off;
+    str label;             // loop label, or the target of break/continue
+    str idx;               // ForEach index name
+    i64 idx_off;
+    i64 end_off;           // Block: offset of the closing brace
+    bool has_idx;
+    bool mutable;          // Let: var
+    bool is_err;           // Defer: errdefer
+    TypeExpr* ty;          // Let type
+    Expr* e;               // Let init, Assign value, ExprS, cond, Ret value, range lo, ForEach seq, Match value
+    Expr* e2;              // Assign target, range hi
+    Tag op;                // Assign op
+    Stmt* body;            // If then, loop body, Defer body
+    Stmt* els;             // If else
+    List<Stmt*> stmts;     // Block
+    List<MatchArm> arms;   // Match
+}
+
+struct Param { str name; TypeExpr* ty; i64 off; bool mutable; bool move; }
+
+struct FnDecl {
+    str name;
+    List<str> type_params;
+    List<str> constraints;
+    List<Param> params;
+    TypeExpr* ret;          // null = void
+    Stmt* body;             // null for extern
+    bool is_extern;
+    bool is_export;
+    bool variadic;
+    i64 line;
+    str file;
+    str receiver;           // "" = free function
+    List<str> receiver_params;
+    bool is_test;
+    str test_name;
+    List<str> captures;
+    List<i64> capture_offs;
+    i64 name_off;
+    i64 end_off;
+    i64 receiver_off;
+    bool is_const;
+    bool invalidates;
+    bool borrows;
+    bool is_async;
+    str link_name;          // extern: the C symbol when `name` got a module prefix ("" = name)
+}
+
+struct Field { str name; TypeExpr* ty; i64 off; Expr* init; }
+
+struct StructDecl {
+    str name;
+    List<str> type_params;
+    List<str> constraints;
+    List<Field> fields;
+    i64 line;
+    i64 name_off;
+    bool is_union;
+    bool packed;
+    bool owned;
+    bool is_iface;
+    i64 align;
+}
+
+struct EnumDecl { str name; List<str> variants; List<i64> variant_offs; i64 line; i64 name_off; }
+
+struct ConstDecl {
+    str name;
+    TypeExpr* ty;
+    Expr* value;
+    bool mutable;
+    i64 line;
+    i64 name_off;
+    i64 align;
+}
+
+enum DK { Func, Struct, Enum, Const, Import, Alias, Check }
+
+struct Decl {
+    DK k;
+    FnDecl* f;
+    StructDecl* s;
+    EnumDecl* en;
+    ConstDecl* c;
+    Expr* ct;               // Check: the comptime expression
+    str path;               // Import path / Alias name
+    str alias;              // Import `as` name
+    i64 name_off;           // Alias / import alias name
+    i64 path_off;           // Import path string
+    TypeExpr* ty;           // Alias target
+    i64 line;
+}

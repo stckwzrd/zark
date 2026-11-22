@@ -1,0 +1,766 @@
+// Static analysis for the language server: symbols, references and shallow type inference over the AST.
+
+import "loader.zk";
+import "resolve.zk";
+
+enum SymK { Fn, Method, Struct, Union, Enum, Const, Var, Alias, Field, Variant, Param, Local, TypeParam, Module }
+
+struct Symbol {
+    SymK k;
+    str name;
+    str file;
+    i64 off;
+    i64 len;
+    TypeExpr* ty;
+    FnDecl* fd;
+    StructDecl* sd;
+    EnumDecl* ed;
+    str owner;
+    bool mutable;
+}
+
+struct Occ { str file; i64 off; i64 len; Symbol* sym; }
+
+struct FileInfo {
+    str path;
+    str src;
+    List<Decl> decls;
+    bool ok;
+}
+
+struct Project {
+    Allocator a;
+    List<FileInfo*> files;
+    Map<FileInfo*> by_path;
+    Map<Symbol*> flat;
+    Map<Symbol*> members;
+    List<Occ> occs;
+    Map<str> overrides;
+    str cursor_file;
+    i64 cursor;
+    bool snap;
+    List<Symbol*> near;
+    FnDecl* cur_fn;
+
+    !Symbol* sym(SymK k, str name, str file, i64 off) {
+        const auto s = this->a.create<Symbol>()?;
+        s.k = k;
+        s.name = last_segment(name);
+        s.file = file;
+        s.off = off;
+        s.len = s.name.len;
+        return s;
+    }
+
+    !FileInfo* parse_file(str src, str path) {
+        const auto fi = this->a.create<FileInfo>()?;
+        fi.path = path;
+        fi.src = src;
+        fi.decls = List<Decl>::init(this->a);
+        fi.ok = true;
+        const auto toks = tokenize(this->a, src, path) catch {
+            fi.ok = false;
+            return fi;
+        };
+        auto p = new_parser(this->a, toks.slice(), path);
+        fi.decls = p.parse_file() catch {
+            fi.ok = false;
+            fi.decls;
+        };
+        return fi;
+    }
+
+    !void load(str path, str prefix) {
+        if (this->by_path.has(path)) { return; }
+        auto src = "";
+        if (this->overrides.has(path)) {
+            src = this->overrides.get(path)?;
+        } else if (is_std_path(path)) {
+            src = std_source(path) catch return;
+        } else {
+            src = read_file(this->a, path) catch return;
+        }
+        const auto fi = this->parse_file(src, path)?;
+        this->by_path.put(path, fi)?;
+        const auto dir = dir_of(path);
+        for (auto d : fi.decls) {
+            if (d.k != .Import) { continue };
+            const auto full = import_target(this->a, dir, d.path)?;
+            this->load(full, d.alias)?;
+        }
+        if (prefix.len > 0 && fi.ok) { resolve_module(this->a, fi.decls, prefix)?; }
+        this->files.push(fi)?;
+    }
+
+    !void load_prelude() {
+        const auto fi = this->parse_file(PRELUDE, "<std>")?;
+        this->by_path.put("<std>", fi)?;
+        this->files.push(fi)?;
+    }
+
+    !void add_flat(Symbol* s, str key) {
+        if (!this->flat.has(key)) { this->flat.put(key, s)?; }
+    }
+
+    !void register(FileInfo* fi) {
+        for (auto d : fi.decls) {
+            match d.k {
+                .Func => {
+                    const auto f = d.f;
+                    if (f.is_test) { continue; }
+                    auto k = SymK::Fn;
+                    if (f.receiver.len > 0) { k = .Method; }
+                    const auto s = this->sym(k, f.name, fi.path, f.name_off)?;
+                    s.fd = f;
+                    s.ty = f.ret;
+                    s.owner = f.receiver;
+                    if (f.receiver.len > 0) {
+                        const auto key = qname(this->a, f.receiver, s.name);
+                        if (!this->members.has(key)) { this->members.put(key, s)?; }
+                    } else {
+                        this->add_flat(s, f.name)?;
+                    }
+                }
+                .Struct => {
+                    const auto sd = d.s;
+                    auto k = SymK::Struct;
+                    if (sd.is_union) { k = .Union; }
+                    const auto s = this->sym(k, sd.name, fi.path, sd.name_off)?;
+                    s.sd = sd;
+                    this->add_flat(s, sd.name)?;
+                    for (auto f : sd.fields) {
+                        const auto fs = this->sym(.Field, f.name, fi.path, f.off)?;
+                        fs.ty = f.ty;
+                        fs.owner = sd.name;
+                        fs.sd = sd;
+                        this->members.put(qname(this->a, sd.name, f.name), fs)?;
+                    }
+                }
+                .Enum => {
+                    const auto ed = d.en;
+                    const auto s = this->sym(.Enum, ed.name, fi.path, ed.name_off)?;
+                    s.ed = ed;
+                    this->add_flat(s, ed.name)?;
+                    for (auto [i, v] : ed.variants) {
+                        const auto vs = this->sym(.Variant, v, fi.path, ed.variant_offs.get(i))?;
+                        vs.owner = ed.name;
+                        vs.ed = ed;
+                        this->members.put(qname(this->a, ed.name, v), vs)?;
+                    }
+                }
+                .Const => {
+                    auto k = SymK::Const;
+                    if (d.c.mutable) { k = .Var; }
+                    const auto s = this->sym(k, d.c.name, fi.path, d.c.name_off)?;
+                    s.ty = d.c.ty;
+                    s.mutable = d.c.mutable;
+                    this->add_flat(s, d.c.name)?;
+                }
+                .Alias => {
+                    const auto s = this->sym(.Alias, d.path, fi.path, d.name_off)?;
+                    s.ty = d.ty;
+                    this->add_flat(s, d.path)?;
+                }
+                .Import => {
+                    if (d.alias.len > 0) {
+                        const auto s = this->sym(.Module, d.alias, fi.path, d.name_off)?;
+                        s.owner = d.path;
+                        this->add_flat(s, d.alias)?;
+                    }
+                }
+            }
+        }
+    }
+
+    !TypeExpr* mk_name(str name) {
+        const auto t = this->a.create<TypeExpr>()?;
+        t.k = .Name;
+        t.name = name;
+        t.off = -1;
+        t.args = List<TypeExpr*>::init(this->a);
+        return t;
+    }
+
+    !TypeExpr* mk_wrap(TEK k, TypeExpr* elem) {
+        const auto t = this->mk_name("")?;
+        t.k = k;
+        t.elem = elem;
+        return t;
+    }
+
+    !TypeExpr* subst(TypeExpr* te, List<str> names, List<TypeExpr*> args) {
+        if (te == null) { return null; }
+        if (te.k == .Name && te.args.len == 0) {
+            for (auto [i, n] : names) {
+                if (n == te.name && i < args.len) { return args.get(i); }
+            }
+            return te;
+        }
+        const auto t = this->a.create<TypeExpr>()?;
+        *t = *te;
+        t.args = List<TypeExpr*>::init(this->a);
+        for (auto x : te.args) { t.args.push(this->subst(x, names, args)?)?; }
+        t.elem = this->subst(te.elem, names, args)?;
+        t.ret = this->subst(te.ret, names, args)?;
+        return t;
+    }
+
+    !TypeExpr* recv_type(FnDecl* f) {
+        const auto t = this->mk_name(f.receiver)?;
+        for (auto x : f.receiver_params) { t.args.push(this->mk_name(x)?)?; }
+        return t;
+    }
+}
+
+str last_segment(str name) {
+    const auto dot = str_rfind_byte(name, '.');
+    if (dot < 0) { return name; }
+    return name[dot + 1..];
+}
+
+str qname(Allocator a, str owner, str name) {
+    auto b = List<u8>::init(a);
+    sprint(&b, "{owner}.{name}") catch return name;
+    return b.slice();
+}
+
+i64 ident_len(str src, i64 off) {
+    auto i = off;
+    while (i < src.len && (is_alnum(src[i]) || src[i] == '_')) { i += 1; }
+    return i - off;
+}
+
+Project new_project(Allocator a, Map<str> overrides) {
+    return Project{
+        .a = a, .files = List<FileInfo*>::init(a), .by_path = Map<FileInfo*>::init(a), .flat = Map<Symbol*>::init(a),
+        .members = Map<Symbol*>::init(a), .occs = List<Occ>::init(a), .overrides = overrides, .cursor_file = "", .cursor = -1,
+        .snap = false, .near = List<Symbol*>::init(a), .cur_fn = null,
+    };
+}
+
+struct Walker {
+    Project* p;
+    FileInfo* fi;
+    List<Symbol*> locals;
+    List<Symbol*> tps;
+    TypeExpr* self_ty;
+
+    Symbol* find(str name) {
+        auto i = this->locals.len;
+        while (i > 0) {
+            i -= 1;
+            if (this->locals.get(i).name == name) { return this->locals.get(i); }
+        }
+        for (auto t : this->tps) { if (t.name == name) { return t; } }
+        return this->p.flat.get(name) catch null;
+    }
+
+    void occ(i64 off, i64 len, Symbol* s) {
+        if (s == null || off < 0) { return; }
+        this->p.occs.push(Occ{ .file = this->fi.path, .off = off, .len = len, .sym = s }) catch return;
+    }
+
+    !void declare(SymK k, str name, i64 off, TypeExpr* ty) {
+        const auto s = this->p.sym(k, name, this->fi.path, off)?;
+        s.ty = ty;
+        this->locals.push(s)?;
+        this->occ(off, name.len, s);
+    }
+
+    void use_name(str name, i64 off) {
+        if (off < 0) { return; }
+        const auto src = this->fi.src;
+        const auto dot = str_find_byte(name, '.');
+        if (dot >= 0 && off + name.len <= src.len && src[off..off + name.len] == name) {
+            const auto alias = name[0..dot];
+            this->occ(off, alias.len, this->p.flat.get(alias) catch null);
+            this->occ(off + dot + 1, name.len - dot - 1, this->p.flat.get(name) catch null);
+            return;
+        }
+        const auto n = last_segment(name);
+        const auto len = ident_len(src, off);
+        auto s = this->find(name);
+        if (s == null && dot >= 0) { s = this->p.flat.get(name) catch null; }
+        this->occ(off, max(len, 0), s);
+        if (len != n.len && s != null && s.k != .Local) { return };
+    }
+
+    void snapshot(i64 off) {
+        if (this->p.snap || this->fi.path != this->p.cursor_file || off <= this->p.cursor) { return; }
+        this->take();
+    }
+
+    void take() {
+        this->p.snap = true;
+        for (auto s : this->locals) { this->p.near.push(s) catch return; }
+    }
+
+    TypeExpr* type_of(str name) {
+        const auto s = this->find(name);
+        if (s == null) { return null; }
+        return s.ty;
+    }
+
+    TypeExpr* peel(TypeExpr* te) {
+        auto t = te;
+        auto guard = 0;
+        while (t != null && guard < 8) {
+            guard += 1;
+            if (t.k == .Ptr) { t = t.elem } else if (t.k == .Name && t.args.len == 0) {
+                const auto s = this->p.flat.get(t.name) catch null;
+                if (s != null && s.k == .Alias && s.ty != null) { t = s.ty; } else { break; }
+            } else {
+                break;
+            }
+        }
+        return t;
+    }
+
+    Symbol* member(TypeExpr* owner, str name) {
+        const auto t = this->peel(owner);
+        if (t == null || t.k != .Name) { return null };
+        return this->p.members.get(qname(this->p.a, t.name, name)) catch null;
+    }
+
+    TypeExpr* member_type(TypeExpr* owner, Symbol* ms) {
+        const auto t = this->peel(owner);
+        if (t == null || ms == null) { return null; }
+        if (ms.k == .Field && ms.sd != null) {
+            if (ms.sd.type_params.len == t.args.len) { return this->p.subst(ms.ty, ms.sd.type_params, t.args) catch ms.ty; }
+            return ms.ty;
+        }
+        if (ms.k == .Method && ms.fd != null) {
+            auto r = ms.fd.ret;
+            if (r == null) { return null; }
+            if (ms.fd.receiver_params.len == t.args.len) { r = this->p.subst(r, ms.fd.receiver_params, t.args) catch r; }
+            if (r.k == .Name && r.name == "Self") { return t; }
+            return r;
+        }
+        return null;
+    }
+
+    TypeExpr* elem_of(TypeExpr* te) {
+        const auto t = this->peel(te);
+        if (t == null) { return null; }
+        if (t.k == .Slice || t.k == .Array) { return t.elem };
+        if (t.k == .Name && t.name == "str") { return this->p.mk_name("u8") catch null; }
+        if (t.k == .Name && t.name == "List" && t.args.len == 1) { return t.args.get(0); }
+        return null;
+    }
+
+    TypeExpr* infer(Expr* e) {
+        if (e == null) { return null; }
+        match e.k {
+            .IntLit => return this->p.mk_name("i64") catch null;
+            .FloatLit => return this->p.mk_name("f64") catch null;
+            .BoolLit, .Is => return this->p.mk_name("bool") catch null;
+            .StrLit, .Interp => return this->p.mk_name("str") catch null;
+            .Sizeof, .Alignof => return this->p.mk_name("u64") catch null;
+            .StructLit, .Cast => return e.ty;
+            .Ident => {
+                const auto s = this->find(e.name);
+                if (s == null) { return null; }
+                if (s.k == .Struct || s.k == .Union || s.k == .Enum || s.k == .Alias) { return this->p.mk_name(e.name) catch null };
+                return s.ty;
+            }
+            .Field => {
+                const auto bt = this->infer(e.l);
+                if (bt == null) { return null; }
+                const auto pt = this->peel(bt);
+                if (pt != null && (pt.k == .Slice || pt.k == .Array || (pt.k == .Name && pt.name == "str"))) {
+                    if (e.name == "len") { return this->p.mk_name("i64") catch null; }
+                    return null;
+                }
+                return this->member_type(bt, this->member(bt, e.name));
+            }
+            .Index => {
+                if (e.l.k == .Ident || e.l.k == .Field) {
+                    const auto ft = this->infer(e.l);
+                    const auto t = this->peel(ft);
+                    if (t != null && t.k == .Name && e.args.len > 0 && ft == null) { return null; }
+                }
+                return this->elem_of(this->infer(e.l));
+            }
+            .Slice => return this->infer(e.l);
+            .Unary => {
+                if (e.op == .amp) {
+                    const auto t = this->infer(e.l);
+                    if (t == null) { return null; }
+                    return this->p.mk_wrap(.Ptr, t) catch null;
+                }
+                if (e.op == .star) {
+                    const auto t = this->infer(e.l);
+                    if (t != null && t.k == .Ptr) { return t.elem };
+                    return null;
+                }
+                if (e.op == .bang) { return this->p.mk_name("bool") catch null; }
+                return this->infer(e.l);
+            }
+            .Binary => {
+                match e.op {
+                    .eqeq, .neq, .lt, .le, .gt, .ge, .andand, .oror => return this->p.mk_name("bool") catch null;
+                }
+                const auto l = this->infer(e.l);
+                if (l != null) { return l; }
+                return this->infer(e.r);
+            }
+            .Try => {
+                const auto t = this->infer(e.l);
+                if (t != null && t.k == .Errun) { return t.elem };
+                return null;
+            }
+            .Catch => {
+                const auto t = this->infer(e.l);
+                if (t != null && t.k == .Errun) { return t.elem };
+                return null;
+            }
+            .Orelse => {
+                const auto t = this->peel(this->infer(e.l));
+                if (t != null && t.k == .Name && t.name == "Option" && t.args.len == 1) { return t.args.get(0); }
+                return null;
+            }
+            .Call => return this->infer_call(e);
+        }
+        return null;
+    }
+
+    TypeExpr* infer_call(Expr* e) {
+        const auto c = e.l;
+        if (c.k == .Ident) {
+            const auto s = this->find(c.name);
+            if (s == null) { return null; }
+            if (s.k == .Struct) { return this->p.mk_name(c.name) catch null };
+            if (s.k == .Fn && s.fd != null) { return this->call_ret(s.fd, e); }
+            if (s.ty != null && s.ty.k == .Func) { return s.ty.ret };
+            return null;
+        }
+        if (c.k == .Field) {
+            const auto bt = this->infer(c.l);
+            if (bt == null) { return null; }
+            auto ms = this->member(bt, c.name);
+            if (ms == null && c.l.k == .Ident) {
+                const auto ts = this->find(c.l.name);
+                if (ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum)) { ms = this->member(this->p.mk_name(c.l.name) catch null, c.name); }
+            }
+            if (ms == null) { return null; }
+            if (ms.k == .Field && ms.ty != null && ms.ty.k == .Func) { return ms.ty.ret };
+            const auto r = this->member_type(bt, ms);
+            if (r != null && ms.fd != null && mentions(r, ms.fd.type_params)) { return this->call_ret(ms.fd, e); }
+            return r;
+        }
+        return null;
+    }
+
+    void bind(TypeExpr* pat, TypeExpr* actual, List<str> names, List<TypeExpr*>*out) {
+        if (pat == null || actual == null) { return; }
+        if (pat.k == .Name && pat.args.len == 0) {
+            for (auto [i, n] : names) {
+                if (n == pat.name && out.items[i] == null) { out.items[i] = actual; }
+            }
+            return;
+        }
+        this->bind(pat.elem, actual.elem, names, out);
+        if (pat.args.len == actual.args.len) {
+            for (auto [i, x] : pat.args) { this->bind(x, actual.args.get(i), names, out); }
+        }
+    }
+
+    TypeExpr* call_ret(FnDecl* fd, Expr* e) {
+        if (fd.ret == null) { return null; }
+        if (fd.type_params.len == 0) { return fd.ret; }
+        auto found = List<TypeExpr*>::init(this->p.a);
+        for (auto _t : fd.type_params) { found.push(null) catch return null; }
+        for (auto [i, p] : fd.params) {
+            if (i >= e.args.len) { break; }
+            this->bind(p.ty, this->infer(e.args.get(i)), fd.type_params, &found);
+        }
+        for (auto x : found) { if (x == null) { return null; } }
+        return this->p.subst(fd.ret, fd.type_params, found) catch null;
+    }
+
+    void wtype(TypeExpr* te) {
+        if (te == null) { return; }
+        if (te.k == .Name && te.off >= 0) { this->use_name(te.name, te.off); }
+        for (auto x : te.args) { this->wtype(x); }
+        this->wtype(te.elem);
+        this->wtype(te.ret);
+        if (te.len != null) { this->wexpr(te.len); }
+    }
+
+    Symbol* variant_of(TypeExpr* owner, str name, i64 off) {
+        auto s = this->member(owner, name);
+        if (s == null) {
+            Symbol* found = null;
+            auto n = 0;
+            for (auto e : this->p.members.entries) {
+                if (e.used && e.value.k == .Variant && e.value.name == name) {
+                    found = e.value;
+                    n += 1;
+                }
+            }
+            if (n == 1) { s = found; }
+        }
+        this->occ(off, name.len, s);
+        return s;
+    }
+
+    TypeExpr* payload_type(TypeExpr* owner, str name) {
+        const auto ms = this->member(owner, name);
+        if (ms == null) { return null; }
+        return this->member_type(owner, ms);
+    }
+
+    void warms(List<MatchArm> arms, TypeExpr* scrut) {
+        for (auto arm : arms) {
+            const auto mark = this->locals.len;
+            for (auto pat : arm.pats) {
+                if (pat.k == .Call && pat.l.k == .EnumLit && pat.args.len == 1 && pat.args.get(0).k == .Ident) {
+                    this->variant_of(scrut, pat.l.name, pat.l.name_off);
+                    const auto b = pat.args.get(0);
+                    if (b.name != "_") { this->declare(.Local, b.name, b.off, this->payload_type(scrut, pat.l.name)) catch {} }
+                } else if (pat.k == .EnumLit) {
+                    this->variant_of(scrut, pat.name, pat.name_off);
+                } else {
+                    this->wexpr(pat);
+                }
+            }
+            this->wstmt(arm.body);
+            this->locals.len = mark;
+        }
+    }
+
+    void wexpr(Expr* e) {
+        if (e == null) { return; }
+        match e.k {
+            .Ident => {
+                this->use_name(e.name, e.off);
+                return;
+            }
+            .Interp => {
+                for (auto p : e.parts) { if (p.kind != 0) { this->wexpr(p.e); } }
+                return;
+            }
+            .Field => {
+                this->wexpr(e.l);
+                auto ms = this->member(this->infer(e.l), e.name);
+                if (ms == null && e.l.k == .Ident) {
+                    const auto ts = this->find(e.l.name);
+                    if (ts != null && (ts.k == .Struct || ts.k == .Union || ts.k == .Enum)) { ms = this->member(this->p.mk_name(e.l.name) catch null, e.name); }
+                }
+                this->occ(e.name_off, e.name.len, ms);
+                return;
+            }
+            .EnumLit => {
+                this->variant_of(null, e.name, e.name_off);
+                return;
+            }
+            .Is => {
+                this->wexpr(e.l);
+                this->occ(e.name_off, e.name.len, this->member(this->infer(e.l), e.name));
+                return;
+            }
+            .StructLit => {
+                this->wtype(e.ty);
+                const auto st = e.ty;
+                for (auto f : e.fields) {
+                    this->wexpr(f.value);
+                    this->occ(f.off, f.name.len, this->member(st, f.name));
+                }
+                return;
+            }
+            .Catch, .Orelse => {
+                this->wexpr(e.l);
+                const auto mark = this->locals.len;
+                if (e.has_name && e.k == .Catch) { this->declare(.Local, e.name, e.name_off, null) catch {} };
+                this->wstmt(e.handler);
+                this->locals.len = mark;
+                return;
+            }
+            .Match => {
+                this->wexpr(e.l);
+                this->warms(e.arms, this->infer(e.l));
+                return;
+            }
+            .Closure => {
+                this->wclosure(e.func);
+                return;
+            }
+        }
+        this->wexpr(e.l);
+        this->wexpr(e.r);
+        this->wexpr(e.x);
+        for (auto a : e.args) { this->wexpr(a); }
+        this->wtype(e.ty);
+    }
+
+    void wclosure(FnDecl* f) {
+        const auto mark = this->locals.len;
+        for (auto [i, c] : f.captures) {
+            const auto s = this->find(c);
+            this->occ(f.capture_offs.get(i), c.len, s);
+        }
+        for (auto p : f.params) { this->wtype(p.ty); }
+        this->wtype(f.ret);
+        auto captured = List<Symbol*>::init(this->p.a);
+        for (auto c : f.captures) {
+            const auto s = this->find(c);
+            if (s != null) { captured.push(s) catch {} }
+        }
+        this->locals.len = mark;
+        for (auto s : captured) { this->locals.push(s) catch {} }
+        for (auto p : f.params) { this->declare(.Param, p.name, p.off, p.ty) catch {} }
+        this->wstmt(f.body);
+        this->locals.len = mark;
+    }
+
+    void wstmt(Stmt* s) {
+        if (s == null) { return; }
+        this->snapshot(s.off);
+        const auto mark = this->locals.len;
+        match s.k {
+            .Let => {
+                this->wtype(s.ty);
+                this->wexpr(s.e);
+                auto ty = s.ty;
+                if (ty == null) { ty = this->infer(s.e); }
+                auto k = SymK::Local;
+                this->declare(k, s.name, s.name_off, ty) catch {};
+                const auto d = this->locals.get(this->locals.len - 1);
+                d.mutable = s.mutable;
+                return;
+            }
+            .Assign => {
+                this->wexpr(s.e2);
+                this->wexpr(s.e);
+            }
+            .ExprS, .Ret => this->wexpr(s.e);
+            .If => {
+                this->wexpr(s.e);
+                this->wstmt(s.body);
+                this->wstmt(s.els);
+            }
+            .While => {
+                this->wexpr(s.e);
+                this->wstmt(s.body);
+            }
+            .ForRange => {
+                this->wexpr(s.e);
+                this->wexpr(s.e2);
+                this->declare(.Local, s.name, s.name_off, this->infer(s.e)) catch {};
+                this->wstmt(s.body);
+            }
+            .ForEach => {
+                this->wexpr(s.e);
+                if (s.has_idx) { this->declare(.Local, s.idx, s.idx_off, this->p.mk_name("i64") catch null) catch {} }
+                this->declare(.Local, s.name, s.name_off, this->elem_of(this->infer(s.e))) catch {};
+                this->wstmt(s.body);
+            }
+            .Block => {
+                for (auto x : s.stmts) { this->wstmt(x); }
+                if (s.end_off >= this->p.cursor && this->fi.path == this->p.cursor_file && !this->p.snap && s.off <= this->p.cursor) { this->take(); }
+            }
+            .Defer => this->wstmt(s.body);
+            .Match => {
+                this->wexpr(s.e);
+                this->warms(s.arms, this->infer(s.e));
+            }
+        }
+        this->locals.len = mark;
+    }
+
+    void add_tp(str name) {
+        const auto t = this->p.sym(.TypeParam, name, this->fi.path, -1) catch return;
+        this->tps.push(t) catch return;
+    }
+
+    void wfn(FnDecl* f) {
+        const auto mark = this->locals.len;
+        const auto tmark = this->tps.len;
+        for (auto x : f.type_params) { this->add_tp(x); }
+        for (auto x : f.receiver_params) { this->add_tp(x); }
+        if (f.receiver.len > 0) {
+            this->occ(f.receiver_off, last_segment(f.receiver).len, this->p.flat.get(f.receiver) catch null);
+            this->self_ty = this->p.recv_type(f) catch null;
+        }
+        this->occ(f.name_off, last_segment(f.name).len, this->sym_for_fn(f));
+        for (auto p : f.params) { this->wtype(p.ty); }
+        this->wtype(f.ret);
+        if (f.body != null) {
+            for (auto p : f.params) {
+                auto ty = p.ty;
+                if (ty != null && this->self_ty != null && p.name == "this" && ty.k == .Ptr) { ty = this->p.mk_wrap(.Ptr, this->self_ty) catch ty };
+                this->declare(.Param, p.name, p.off, ty) catch {}
+            }
+            if (this->p.cursor_file == this->fi.path && f.name_off <= this->p.cursor && this->p.cursor <= f.end_off) { this->p.cur_fn = f; }
+            this->wstmt(f.body);
+        }
+        this->locals.len = mark;
+        this->tps.len = tmark;
+        this->self_ty = null;
+    }
+
+    Symbol* sym_for_fn(FnDecl* f) {
+        if (f.receiver.len > 0) { return this->p.members.get(qname(this->p.a, f.receiver, last_segment(f.name))) catch null; }
+        return this->p.flat.get(f.name) catch null;
+    }
+
+    void wdecl(Decl d) {
+        match d.k {
+            .Func => {
+                if (d.f.is_test) {
+                    this->wfn(d.f);
+                } else {
+                    this->wfn(d.f);
+                }
+            }
+            .Struct => {
+                const auto sd = d.s;
+                const auto tmark = this->tps.len;
+                for (auto x : sd.type_params) { this->add_tp(x); }
+                this->occ(sd.name_off, last_segment(sd.name).len, this->p.flat.get(sd.name) catch null);
+                for (auto f : sd.fields) {
+                    this->occ(f.off, f.name.len, this->p.members.get(qname(this->p.a, sd.name, f.name)) catch null);
+                    this->wtype(f.ty);
+                }
+                this->tps.len = tmark;
+            }
+            .Enum => {
+                const auto ed = d.en;
+                this->occ(ed.name_off, last_segment(ed.name).len, this->p.flat.get(ed.name) catch null);
+                for (auto [i, v] : ed.variants) { this->occ(ed.variant_offs.get(i), v.len, this->p.members.get(qname(this->p.a, ed.name, v)) catch null); }
+            }
+            .Const => {
+                this->occ(d.c.name_off, last_segment(d.c.name).len, this->p.flat.get(d.c.name) catch null);
+                this->wtype(d.c.ty);
+                this->wexpr(d.c.value);
+            }
+            .Alias => {
+                this->occ(d.name_off, last_segment(d.path).len, this->p.flat.get(d.path) catch null);
+                this->wtype(d.ty);
+            }
+            .Import => {
+                if (d.alias.len > 0) { this->occ(d.name_off, d.alias.len, this->p.flat.get(d.alias) catch null); }
+            }
+        }
+    }
+}
+
+bool mentions(TypeExpr* te, List<str> names) {
+    if (te == null) { return false; }
+    if (te.k == .Name && te.args.len == 0) { return contains_str(names, te.name); }
+    for (auto x : te.args) { if (mentions(x, names)) { return true; } }
+    return mentions(te.elem, names) || mentions(te.ret, names);
+}
+
+!void analyze(Project* p, str root, str cursor_file, i64 cursor) {
+    p.cursor_file = cursor_file;
+    p.cursor = cursor;
+    p.load_prelude()?;
+    p.load(root, "")?;
+    for (auto fi : p.files) { p.register(fi)?; }
+    for (auto fi : p.files) {
+        if (fi.path == "<std>" || !fi.ok) { continue; }
+        auto w = Walker{ .p = p, .fi = fi, .locals = List<Symbol*>::init(p.a), .tps = List<Symbol*>::init(p.a), .self_ty = null };
+        for (auto d : fi.decls) { w.wdecl(d); }
+    }
+}

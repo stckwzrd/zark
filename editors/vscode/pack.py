@@ -6,7 +6,7 @@ import zipfile
 here = os.path.dirname(os.path.abspath(__file__))
 pkg = json.load(open(os.path.join(here, "package.json")))
 name = "%s-%s.vsix" % (pkg["name"], pkg["version"])
-files = ["package.json", "extension.js", "language-configuration.json", "syntaxes/vibe.tmLanguage.json", "snippets/vibe.json"]
+files = ["package.json", "extension.js", "language-configuration.json", "syntaxes/zark.tmLanguage.json", "snippets/zark.json"]
 for root, dirs, names in os.walk(os.path.join(here, "node_modules")):
     dirs[:] = [d for d in dirs if d not in (".bin", "test", "tests", "docs")]
     for n in names:

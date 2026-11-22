@@ -15,7 +15,7 @@ description: struct и методы, enum, tagged union, дженерик-стр
 
 ## `struct`
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -32,7 +32,7 @@ void main() {
 
 Все структуры раскладываются в памяти так же, как в C: поля идут по порядку, между ними добавляется выравнивание. Размер можно узнать через `sizeof`:
 
-```vibe run
+```zark run
 struct Small { u8 a; u8 b; u8 c; }
 struct Padded { u8 a; i64 b; u8 c; }
 
@@ -49,7 +49,7 @@ void main() {
 
 Поля, которых в литерале нет, заполняются нулями. `Имя{}` — все поля нулевые:
 
-```vibe run
+```zark run
 struct Config {
     i64 width;
     i64 height;
@@ -69,7 +69,7 @@ void main() {
 
 Опечатка в имени поля — ошибка компиляции:
 
-```vibe error
+```zark error
 struct P { i64 x; i64 y; }
 
 void main() {
@@ -83,7 +83,7 @@ void main() {
 
 Присваивание и передача в функцию копируют все поля:
 
-```vibe run
+```zark run
 struct P { i64 x; i64 y; }
 
 void main() {
@@ -98,7 +98,7 @@ void main() {
 
 ### Вложенные структуры и массивы
 
-```vibe run
+```zark run
 struct Point { i64 x; i64 y; }
 struct Line { Point a; Point b; }
 struct Poly { Point[3] pts; i64 n; }
@@ -117,7 +117,7 @@ void main() {
 
 Структура не может содержать **саму себя** по значению, но может содержать указатель на себя:
 
-```vibe run
+```zark run
 struct Node {
     i64 val;
     Node* next;
@@ -134,7 +134,7 @@ void main() {
 
 `==` для структур не определён. Сравнивайте поля:
 
-```vibe error
+```zark error
 struct A { i64 x; }
 
 void main() {
@@ -147,7 +147,7 @@ void main() {
 
 Функции, привязанные к типу, пишутся прямо внутри `struct`. Поля внутри метода доступны по голому имени, а также через `this`.
 
-```vibe run
+```zark run
 struct Counter {
     i64 n;
     static Self new() {
@@ -179,7 +179,7 @@ void main() {
 - Остальные методы получают `this` — **указатель** на объект — и могут менять поля. Вызывать их можно и у значения, и у указателя.
 - Копии вместо указателя нет: если метод не должен менять объект, возьмите копию сами: `auto c = *this;`.
 
-```vibe run
+```zark run
 struct V {
     i64 n;
     void by_ptr() { this->n += 1; }
@@ -203,7 +203,7 @@ void main() {
 
 Перечисление — набор имён. Значение хранится как целое число (порядковый номер варианта с нуля).
 
-```vibe run
+```zark run
 enum Color { Red, Green, Blue }
 
 void main() {
@@ -219,7 +219,7 @@ void main() {
 
 Перебрать все значения можно через преобразование из целого:
 
-```vibe run
+```zark run
 enum Day { Mon, Tue, Wed }
 
 void main() {
@@ -234,7 +234,7 @@ void main() {
 
 ### `match` по enum
 
-```vibe run
+```zark run
 enum Dir { North, East, South, West }
 
 Dir turn(Dir d) {
@@ -259,7 +259,7 @@ void main() {
 
 ### Методы у enum
 
-```vibe run
+```zark run
 enum Level {
     Low, High;
 
@@ -290,7 +290,7 @@ void main() {
 
 Union хранит **один из вариантов**, и вместе с ним — тег, который говорит какой. У варианта может быть payload (данные) любого типа, а может не быть.
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -307,7 +307,7 @@ void main() {
 
 Раскладка: `{ i32 tag, payload }`, размер определяется самым большим вариантом.
 
-```vibe run
+```zark run
 union V { i64 I; f64 F; str S; N; }
 
 void main() {
@@ -319,7 +319,7 @@ void main() {
 
 Образец `.Вариант(имя)` привязывает payload. Привязанное значение — копия, только для чтения.
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -341,7 +341,7 @@ void main() {
 
 Проверка одного варианта без разбора — `is`:
 
-```vibe run
+```zark run
 union Msg { str Text; Quit; }
 
 void main() {
@@ -354,7 +354,7 @@ void main() {
 
 Union удобен там, где значение бывает разных видов. Например, разбор токена:
 
-```vibe run
+```zark run
 union Token {
     i64 Num;
     Plus;
@@ -379,7 +379,7 @@ void main() {
 
 ### Методы у union
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -407,7 +407,7 @@ void main() {
 
 Конструктор — это метод с именем структуры, без типа результата. Вызывается как функция: `Circle(2.0)`. Он получает уже заполненный значениями по умолчанию объект и дописывает остальное. Память при этом нигде не выделяется.
 
-```vibe run
+```zark run
 struct Config {
     i64 width = 80;
     i64 height = 24;
@@ -447,7 +447,7 @@ void main() {
 
 Интерфейс описывает набор методов. Структура реализует его, если у неё есть все эти методы с теми же типами: объявлять «наследование» не нужно.
 
-```vibe run
+```zark run
 interface Shape {
     f64 area();
     void scale(f64 k);
@@ -490,7 +490,7 @@ void main() {
 
 Для структур можно определить `+ - * / %`, сравнения `== != < <= > >=` и унарный `-`. Это обычные методы с именем `operator+` и так далее, компилятор превращает `a + b` в `a.operator+(b)`. `!=` берётся из `==`, если не определён.
 
-```vibe run
+```zark run
 struct Vec2 {
     f64 x;
     f64 y;
@@ -516,7 +516,7 @@ void main() {
 
 Параметры типа пишутся в угловых скобках после имени: `struct Pair<A, B>`. Методы лежат внутри, отдельно перечислять параметры не нужно.
 
-```vibe run
+```zark run
 struct Pair<A, B> {
     A first;
     B second;
@@ -538,7 +538,7 @@ void main() {
 
 Структура-стек с массивом фиксированного размера и методами:
 
-```vibe run
+```zark run
 struct Stack<T> {
     T[4] items;
     i64 n;

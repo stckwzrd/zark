@@ -2,14 +2,14 @@
 title: Recipes and finished programs
 order: 41
 section: Reference
-description: Complete programs in Vibe: FizzBuzz, a word counter, a calculator, a linked list, a tree, a state machine, argument parsing and more
+description: Complete programs in Zark: FizzBuzz, a word counter, a calculator, a linked list, a tree, a state machine, argument parsing and more
 ---
 
-Every recipe is a whole program that you can copy and run: `vibe run main.vibe`. The output under the code comes from a real run.
+Every recipe is a whole program that you can copy and run: `zark run main.zk`. The output under the code comes from a real run.
 
 ## FizzBuzz
 
-```vibe run
+```zark run
 void main() {
     for (auto i : 1..16) {
         if (i % 15 == 0) {
@@ -27,7 +27,7 @@ void main() {
 
 ## Prime numbers (the sieve of Eratosthenes)
 
-```vibe run
+```zark run
 !void main() {
     const auto n = 50;
     const auto a = c_allocator();
@@ -62,7 +62,7 @@ The memory is zeroed, so the `bool` array starts as `false`.
 
 ## Fibonacci numbers without recursion
 
-```vibe run
+```zark run
 i64 fib(i64 n) {
     auto a = 0;
     auto b = 1;
@@ -83,7 +83,7 @@ void main() {
 
 ## Greatest common divisor and least common multiple
 
-```vibe run
+```zark run
 i64 gcd(i64 a, i64 b) {
     auto x = a;
     auto y = b;
@@ -106,7 +106,7 @@ void main() {
 
 ## Reversing a string and palindromes
 
-```vibe run
+```zark run
 !str reverse(Allocator a, str s) {
     const auto out = a.alloc<u8>(s.len)?;
     for (auto [i, c] : s) { out[s.len - 1 - i] = c; }
@@ -129,7 +129,7 @@ bool is_palindrome(str s) {
     defer arena.deinit();
     const auto a = arena.allocator();
     println(reverse(a, "hello")?);
-    println(is_palindrome("level"), is_palindrome("vibe"));
+    println(is_palindrome("level"), is_palindrome("zark"));
 }
 ```
 
@@ -137,7 +137,7 @@ It works on bytes, so everything is right for ASCII. Multi-byte letters are not 
 
 ## A word counter
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -168,7 +168,7 @@ The list `order` remembers the order in which the words appeared, because the tr
 
 It shows errors, a stack and parsing a string:
 
-```vibe run
+```zark run
 !i64 eval(Allocator a, str src) {
     auto st = List<i64>::init(a);
     defer st.deinit();
@@ -215,7 +215,7 @@ void main() {
 
 The nodes are allocated from an arena, and there is no need to clean them up one by one:
 
-```vibe run
+```zark run
 struct Node {
     i64 val;
     Node* next;
@@ -254,7 +254,7 @@ struct Stack {
 
 ## A binary search tree
 
-```vibe run
+```zark run
 struct Tree {
     i64 key;
     Tree* left;
@@ -305,7 +305,7 @@ i64 height(Tree* t) {
 
 The state is an `enum`, and a transition is a `match`:
 
-```vibe run
+```zark run
 enum Light { Red, Green, Yellow }
 
 Light next(Light l) {
@@ -337,7 +337,7 @@ void main() {
 
 ## A tokenizer on a union
 
-```vibe run
+```zark run
 union Token {
     i64 Num;
     Plus;
@@ -402,7 +402,7 @@ union Token {
 
 ## A matrix: multiplication
 
-```vibe run
+```zark run
 const auto N = 3;
 
 i64[N][N] mul(i64[N][N] a, i64[N][N] b) {
@@ -430,7 +430,7 @@ Arrays are passed and returned **by value**: the function receives copies. Array
 
 ## Reading and processing a file
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -459,7 +459,7 @@ Arrays are passed and returned **by value**: the function receives copies. Array
 
 ## Command-line arguments
 
-```vibe run with=allow-fail
+```zark run with=allow-fail
 void main() {
     if (arg_count() < 2) {
         println("usage: program <name>");
@@ -469,11 +469,11 @@ void main() {
 }
 ```
 
-Running `vibe run main.vibe -- World` passes `World` as `arg(1)`. Number 0 is the program path.
+Running `zark run main.zk -- World` passes `World` as `arg(1)`. Number 0 is the program path.
 
 ## A timer
 
-```vibe run
+```zark run
 i64 work(i64 n) {
     auto s = 0;
     for (auto i : 0..n) { s += i % 7; }
@@ -492,7 +492,7 @@ The time is printed less often than it is checked: it changes from run to run.
 
 ## Calling an external command
 
-```vibe run
+```zark run
 !void main() {
     const auto code = run(c_allocator(), ["/bin/sh", "-c", "echo from the shell; exit 2"])?;
     println("exit code", code);

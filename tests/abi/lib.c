@@ -1,4 +1,4 @@
-// C side of tests/abi/main.vibe
+// C side of tests/abi/main.zk
 typedef struct { float x, y; } Vec2;
 typedef struct { unsigned char r, g, b, a; } Color;
 typedef struct { float x, y, w, h; } Rect;

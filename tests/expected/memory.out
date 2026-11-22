@@ -1,5 +1,5 @@
 xs = [0, 3, 6, 9, 12, 15, 18, 21, 24, 27], buffer used 96/1024
-dup: vibe, remaining 924
+dup: zark, remaining 924
 bprint -> 'sum of first 10 = 30' (20 bytes)
 bprint failed: error.NoSpace
 r.len = 0

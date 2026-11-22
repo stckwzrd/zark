@@ -2,12 +2,12 @@
 title: Functions and closures
 order: 15
 section: Language
-description: Declaring functions, parameters, returning values, generics with constraints, function pointers and closures in Vibe
+description: Declaring functions, parameters, returning values, generics with constraints, function pointers and closures in Zark
 ---
 
 ## Declaring and calling
 
-```vibe run
+```zark run
 i64 add(i64 a, i64 b) {
     return a + b;
 }
@@ -26,7 +26,7 @@ The syntax is `ResultType name(Type parameter, ...) { body }`. The result comes 
 
 The order of declarations in a file does not matter: you can call a function declared further down. This also allows mutual recursion:
 
-```vibe run
+```zark run
 bool even(i64 n) {
     if (n == 0) { return true; }
     return odd(n - 1);
@@ -48,7 +48,7 @@ A trailing comma in the list of parameters and arguments is allowed, and so is w
 
 There must be exactly as many arguments as parameters. There are no default values and no overloading by the number of arguments.
 
-```vibe error
+```zark error
 i64 f(i64 a, i64 b) { return a; }
 
 void main() {
@@ -58,7 +58,7 @@ void main() {
 
 The type of an argument is checked, but integers are widened implicitly:
 
-```vibe run
+```zark run
 i64 double(i64 x) { return x * 2; }
 
 void main() {
@@ -67,7 +67,7 @@ void main() {
 }
 ```
 
-```vibe error
+```zark error
 i32 double(i32 x) { return x * 2; }
 
 void main() {
@@ -82,7 +82,7 @@ A function receives a copy. Structs and arrays are copied whole. A parameter can
 
 To let a function change someone else's data, pass a **pointer** or a **slice**:
 
-```vibe run
+```zark run
 void bump(i64* p) {
     *p += 1;
 }
@@ -103,7 +103,7 @@ void main() {
 
 A parameter declared with `const` cannot be assigned:
 
-```vibe error
+```zark error
 void f(const i64 x) {
     x = 5;
 }
@@ -117,7 +117,7 @@ void main() {
 
 `return value` leaves the function. In a function without a result a plain `return` is enough.
 
-```vibe run
+```zark run
 void check(i64 x) {
     if (x > 0) {
         println("positive");
@@ -134,7 +134,7 @@ void main() {
 
 The result of a function without a value cannot be used:
 
-```vibe error
+```zark error
 void f() { println("x"); }
 
 void main() {
@@ -144,7 +144,7 @@ void main() {
 
 A function with a result must return a value on **every** path, otherwise it does not compile:
 
-```vibe error
+```zark error
 i64 sign(i64 x) {
     if (x < 0) { return -1; }
     if (x > 0) { return 1; }
@@ -157,7 +157,7 @@ void main() { println(sign(5)); }
 
 There are no tuples. For several values, make a small struct:
 
-```vibe run
+```zark run
 struct DivMod { i64 q; i64 r; }
 
 DivMod divmod(i64 a, i64 b) {
@@ -174,7 +174,7 @@ Or return the result through a pointer parameter, as in C.
 
 ## Recursion
 
-```vibe run
+```zark run
 i64 fact(i64 n) {
     if (n <= 1) { return 1; }
     return n * fact(n - 1);
@@ -196,7 +196,7 @@ There is no tail-call optimization: a call that is too deep will exhaust the sta
 
 A result of the form `!T` means "a value or an error", and `?T` means "a value or nothing":
 
-```vibe run
+```zark run
 !i64 safe_div(i64 a, i64 b) {
     if (b == 0) { return error.DivByZero; }
     return a / b;
@@ -221,7 +221,7 @@ Described in detail on the page [errors and optional values](errors-and-optional
 
 A function with type parameters in `template<...>` creates a separate copy for every combination of types (monomorphization). There is no run-time overhead.
 
-```vibe run
+```zark run
 template<T> T first(T[] xs) {
     return xs[0];
 }
@@ -249,7 +249,7 @@ The type is inferred from the arguments. The array literal `[10, 20]` is not sui
 
 The body of a generic is checked at the **use**, not at the declaration, and only for the types actually used. So an unsuitable type produces an error inside the body:
 
-```vibe error
+```zark error
 template<T> T add(T a, T b) {
     return a + b;
 }
@@ -271,7 +271,7 @@ To make the error clear and to report it before the body is compiled, write a co
 | `Int` | integers |
 | `Float` | `f32`, `f64` |
 
-```vibe run
+```zark run
 template<T: Ord> T largest(T a, T b) {
     if (a > b) { return a; }
     return b;
@@ -293,7 +293,7 @@ void main() {
 
 The body of the function is checked against the declared constraint right at the declaration: an operator that the constraint does not provide (`<` with `T: Eq`, `+` with `T: Ord`) is an error even if nobody calls the function. A call that violates the constraint is reported at the call:
 
-```vibe error
+```zark error
 template<T: Ord> T largest(T a, T b) {
     if (a > b) { return a; }
     return b;
@@ -312,7 +312,7 @@ The standard library already has such functions: `min`, `max`, `abs`, `swap`, `s
 
 The name of a function can be passed as a value. The type is written as `fn(Parameters) -> Result`.
 
-```vibe run
+```zark run
 i64 inc(i64 x) { return x + 1; }
 i64 dbl(i64 x) { return x * 2; }
 
@@ -331,7 +331,7 @@ void main() {
 
 Such a value is just an address. It can be `null`:
 
-```vibe run
+```zark run
 void main() {
     fn(i64) -> i64 f = null;
     println(f == null);
@@ -342,7 +342,7 @@ Calling through `null` crashes the program, so check before calling.
 
 A typical example is the comparison in a sort:
 
-```vibe run
+```zark run
 void bubble_sort(i64[] xs, fn(i64, i64) -> bool less) {
     for (auto i : 0..xs.len) {
         for (auto j : i + 1..xs.len) {
@@ -364,7 +364,7 @@ void main() {
 
 An ordinary function does not know the variables around it. A closure remembers them, but does so **explicitly**: the list of captured variables is written in square brackets before the parameters, as in C++: `[&k](i64 x) -> i64 { ... }`.
 
-```vibe run
+```zark run
 i64 apply(fn[](i64) -> i64 f, i64 x) {
     return f(x);
 }
@@ -384,7 +384,7 @@ The type of a closure is `fn[](A) -> R` (with empty square brackets), which diff
 
 The variables in the list are captured **by reference**: the closure stores pointers to them, so it sees the current values and can change them.
 
-```vibe run
+```zark run
 void main() {
     auto total = 0;
     const auto acc = [&total](i64 x) {
@@ -408,7 +408,7 @@ The closure's context lives on the stack of the function where the literal is wr
 
 > **Gotcha:** a closure cannot be returned from a function: after the return the stack is freed, and the closure would refer to garbage. The result "works" but prints random numbers:
 >
-> ```vibe
+> ```zark
 > fn[](i64) -> i64 make() {
 >     const auto k = 5;
 >     return [&k](i64 x) -> i64 { return x + k; };
@@ -421,7 +421,7 @@ The closure's context lives on the stack of the function where the literal is wr
 
 If you forget a variable in the `[...]` list, you get an error:
 
-```vibe error fragment
+```zark error fragment
 const auto k = 3;
 const auto f = [](i64 x) -> i64 { return x + k; };
 ```
@@ -430,7 +430,7 @@ const auto f = [](i64 x) -> i64 { return x + k; };
 
 A parameter of type `fn[](i64) -> i64` accepts only a closure. An ordinary function cannot be passed there, and the other way round:
 
-```vibe error
+```zark error
 i64 apply(fn[](i64) -> i64 f, i64 x) { return f(x); }
 i64 dbl(i64 x) { return x * 2; }
 
@@ -447,13 +447,13 @@ A function inside a `struct` is a method of the type. They are described on the 
 
 ## `extern` and `export`
 
-`extern` declares a function from C, and `export` makes a Vibe function visible to C under its own name. Described in detail in [interoperating with C](c-interop.md).
+`extern` declares a function from C, and `export` makes a Zark function visible to C under its own name. Described in detail in [interoperating with C](c-interop.md).
 
 ## Standard library names
 
 The functions of the standard library live in the same namespace as yours. You cannot declare your own `min`, `max`, `abs`, `sort`, `run`, `env` and so on: you will get a duplicate error.
 
-```vibe error
+```zark error
 i64 max(i64 a, i64 b) { return a; }
 
 void main() {

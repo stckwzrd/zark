@@ -1,0 +1,48 @@
+enum Dir { North, East, South, West;
+    Dir turn() {
+        match *this {
+            .North => return .East;
+            .East => return .South;
+            .South => return .West;
+            _ => return .North;
+        }
+        return .North;
+    }
+}
+
+struct Stack<T> { List<T> items;
+    !void push(T v) { this->items.push(v)?; }
+    !T pop() { return this->items.pop(); }
+}
+
+!void main() {
+    const auto heap = c_allocator();
+    List<i32> xs = List::init(heap);
+    xs.push(10)?;
+    xs.push(20)?;
+    for (auto [i, x] : xs) { println("  [{i}] = {x}"); }
+
+    const f64[] buf = heap.alloc(4)?;
+    defer heap.free(buf);
+    buf[2] = 1.5;
+    println("buf[2] = {buf[2]}");
+
+    auto d = Dir::North;
+    for (auto _k : 0..5) { d = d.turn(); }
+    println("after 5 turns: {d}");
+
+    auto st = Stack<str>{ .items = List::init(heap) };
+    st.push("a")?;
+    st.push("b")?;
+    println("pop: {st.pop()?} {st.pop()?}");
+    const auto empty = st.pop() catch |e| { println("  empty -> {e}"); "none"; };
+    println(empty);
+
+    const str[] words = ["zig", "zark", "c++"];
+    for (auto w : words) { print("{w}:{w.len} "); }
+    println("");
+    const auto hex = 0xff + 0b101;
+    println("hex+bin = {hex}, args = {arg_count()}, first = {arg(0)}");
+    const auto raw = "braces: {{ literal }}";
+    println(raw);
+}

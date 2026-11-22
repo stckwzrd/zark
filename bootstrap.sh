@@ -9,14 +9,14 @@ gzip -dc bootstrap/seed.ll.gz > build/seed.ll
 clang -O1 -Wno-override-module build/seed.ll std/rt.c -o build/seed -lm -lpthread -ldl
 
 echo "== stage1: compiler built from the seed"
-build/seed build selfhost/main.vibe --release -o build/stage1
-echo "== stage2: Vibe compiler built by itself"
-build/stage1 build selfhost/main.vibe --release -o build/stage2
+build/seed build selfhost/main.zk --release -o build/stage1
+echo "== stage2: Zark compiler built by itself"
+build/stage1 build selfhost/main.zk --release -o build/stage2
 echo "== stage3: and again"
-build/stage2 build selfhost/main.vibe --release -o build/stage3
+build/stage2 build selfhost/main.zk --release -o build/stage3
 
-build/stage2 ir selfhost/main.vibe > build/stage2.ll
-build/stage3 ir selfhost/main.vibe > build/stage3.ll
+build/stage2 ir selfhost/main.zk > build/stage2.ll
+build/stage3 ir selfhost/main.zk > build/stage3.ll
 if ! cmp -s build/stage2.ll build/stage3.ll; then
   echo "!! stage2 and stage3 emit different IR"; exit 1
 fi
@@ -27,17 +27,17 @@ echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines
 
 if [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ]; then
   echo "== native backend: compiler built without LLVM, then by itself"
-  build/stage2 build selfhost/main.vibe --native -o build/native1
-  build/native1 build selfhost/main.vibe --native -o build/native2
-  build/native2 build selfhost/main.vibe --native -o build/native3
+  build/stage2 build selfhost/main.zk --native -o build/native1
+  build/native1 build selfhost/main.zk --native -o build/native2
+  build/native2 build selfhost/main.zk --native -o build/native3
   if cmp -s build/native2 build/native3; then echo "== native fixed point reached: native2 == native3"; else echo "!! native2 and native3 differ"; exit 1; fi
-  VIBE=build/native2 tests/run.sh | grep -v '^ok'
+  ZARK=build/native2 tests/run.sh | grep -v '^ok'
 fi
 
 tests/no_magic_names.sh
 
 echo "== test suite with the self-hosted compiler"
-VIBE=build/stage2 tests/run.sh
-cp build/stage2 build/vibe.new
-mv -f build/vibe.new build/vibe
-echo "== done: build/vibe is the self-hosted compiler"
+ZARK=build/stage2 tests/run.sh
+cp build/stage2 build/zark.new
+mv -f build/zark.new build/zark
+echo "== done: build/zark is the self-hosted compiler"

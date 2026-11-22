@@ -1,13 +1,13 @@
 ---
-title: "Learn Vibe: a path from zero to a program"
+title: "Learn Zark: a path from zero to a program"
 order: 1.5
 section: Start
-description: A step-by-step course in twelve lessons with exercises and solutions: how to think in Vibe, write code that the compiler accepts the first time, and finish with a real tool
+description: A step-by-step course in twelve lessons with exercises and solutions: how to think in Zark, write code that the compiler accepts the first time, and finish with a real tool
 ---
 
 This page is a course. Every lesson is short, has a program you can run, one idea to notice and an exercise with a solution. Do the lessons in order and type the code yourself instead of copying it: the compiler's messages are part of the teaching.
 
-You need the compiler built as described in [installation](getting-started.md). Put each program in a file, for example `lesson.vibe`, and run `vibe run lesson.vibe`.
+You need the compiler built as described in [installation](getting-started.md). Put each program in a file, for example `lesson.zk`, and run `zark run lesson.zk`.
 
 How the course is organized:
 
@@ -25,9 +25,9 @@ How the course is organized:
 
 Everything starts in `main`. `println` prints its arguments separated by spaces; inside a string, an expression in curly braces is computed and substituted.
 
-```vibe run
+```zark run
 void main() {
-    const auto name = "Vibe";
+    const auto name = "Zark";
     auto year = 2026;
     year += 1;
     println("Hello, {name}! Next year is {year}.");
@@ -39,7 +39,7 @@ Notice three things. `const` forbids changing a variable and the plain form allo
 
 **Exercise.** Print the average of `3`, `4` and `8` as a number with two digits after the decimal point. Hint: convert before you divide, and use `{x:.2}` in the string.
 
-```vibe run
+```zark run
 void main() {
     const auto sum = 3 + 4 + 8;
     const auto avg = sum as f64 / 3 as f64;
@@ -51,7 +51,7 @@ void main() {
 
 Integers have a size and a sign: `i8`, `i16`, `i32`, `i64` and `u8` … `u64`. Floats are `f32` and `f64`. A value moves to a bigger type of the same kind on its own, and everything else needs `as`.
 
-```vibe run
+```zark run
 void main() {
     const i32 small = 70000;
     const i64 wide = small;
@@ -65,7 +65,7 @@ void main() {
 
 Arithmetic that does not fit is not allowed to go unnoticed. In a normal build it stops the program with a message that has the file and the line:
 
-```vibe run exit
+```zark run exit
 void main() {
     u8 level = 250;
     for (auto i : 0..10) {
@@ -77,7 +77,7 @@ void main() {
 
 When wrapping is exactly what you want (a hash, a counter that goes round), say it with `+%`, `-%` and `*%`.
 
-```vibe run
+```zark run
 void main() {
     u8 level = 250;
     for (auto i : 0..10) { level = level +% 1; }
@@ -87,7 +87,7 @@ void main() {
 
 **Exercise.** What does `200 as u8 + 100 as u8` do? Write it down, then run it.
 
-```vibe run exit
+```zark run exit
 void main() {
     const u8 a = 200;
     const u8 b = 100;
@@ -101,7 +101,7 @@ The answer is a panic, not `44`. To get `44`, write `a +% b`.
 
 `if`, `while` and `for` work as you expect. A range `a..b` includes `a` and excludes `b`. A function has its return type in front of the name.
 
-```vibe run
+```zark run
 bool is_prime(i64 n) {
     if (n < 2) { return false; }
     for (auto d : 2..n) {
@@ -123,7 +123,7 @@ Notice that the loop variable `d` is created by the loop and cannot be changed i
 
 **Exercise.** Write `gcd(a, b)` with Euclid's algorithm, then print `gcd(48, 18)`.
 
-```vibe run
+```zark run
 i64 gcd(i64 a, i64 b) {
     while (b != 0) {
         const auto t = a % b;
@@ -144,7 +144,7 @@ Parameters are copies, so changing `a` and `b` inside the function does not touc
 
 A struct groups fields. Methods are written inside it and use `this`. A literal names the fields it sets, and everything else is zero.
 
-```vibe run
+```zark run
 struct Account {
     str owner;
     i64 cents;
@@ -172,7 +172,7 @@ void main() {
 
 When a value can be one of several different shapes, use a `union`: it carries a tag, and `match` forces you to handle every shape.
 
-```vibe run
+```zark run
 union Cmd {
     i64 Push;
     Pop;
@@ -195,7 +195,7 @@ void main() {
 
 A `match` statement may skip variants: nothing happens for them. A `match` that produces a value has to cover every variant, and the compiler names the one that is missing. That is the point of choosing this form when a forgotten case would be a bug: when you add a variant to the union, every such place stops compiling until you handle it.
 
-```vibe error
+```zark error
 union Shape {
     f64 Circle;
     i64 Square;
@@ -214,7 +214,7 @@ void main() { println(area(.Empty)); }
 
 **Exercise.** Add a `Dup` command that duplicates the top of the stack, and use it in the program.
 
-```vibe run
+```zark run
 union Cmd {
     i64 Push;
     Dup;
@@ -241,7 +241,7 @@ void main() {
 
 A function that can fail returns `!T`. The caller has to do something about it: pass it up with `?`, give a default with `catch`, or look at it with `catch |e|`. Ignoring the result does not compile.
 
-```vibe run exit
+```zark run exit
 !i64 parse_age(str s) {
     const auto n = parse_int(s)?;
     if (n < 0 || n > 150) { return error.OutOfRange; }
@@ -263,7 +263,7 @@ An error is not a panic. Errors are for things that can happen in a correct prog
 
 **Exercise.** Write `!i64 safe_div(i64 a, i64 b)` that returns `error.DivideByZero` instead of panicking.
 
-```vibe run
+```zark run
 !i64 safe_div(i64 a, i64 b) {
     if (b == 0) { return error.DivideByZero; }
     return a / b;
@@ -277,9 +277,9 @@ void main() {
 
 ## Lesson 6. Memory is yours, and the compiler helps
 
-Nothing in Vibe allocates behind your back. To get heap memory you hold an allocator and pass it where it is needed. `defer` puts the cleanup next to the allocation, so it cannot be forgotten, and runs it however the function ends.
+Nothing in Zark allocates behind your back. To get heap memory you hold an allocator and pass it where it is needed. `defer` puts the cleanup next to the allocation, so it cannot be forgotten, and runs it however the function ends.
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     auto numbers = List<i64>::init(a);
@@ -295,9 +295,9 @@ Nothing in Vibe allocates behind your back. To get heap memory you hold an alloc
 }
 ```
 
-Now the part that makes Vibe comfortable. The mistakes that make C programs crash are refused while compiling. Free something and then use it, and the compiler points at the exact line:
+Now the part that makes Zark comfortable. The mistakes that make C programs crash are refused while compiling. Free something and then use it, and the compiler points at the exact line:
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto p = a.create<i64>() catch return;
@@ -309,7 +309,7 @@ void main() {
 
 Free something twice, even through a `defer`, and it is refused as well. Keep a pointer into a list and then add to the list (the buffer may move), and it is refused:
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -322,7 +322,7 @@ void main() {
 
 The fix is in the message: take the pointer again after the change.
 
-```vibe run
+```zark run
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -336,7 +336,7 @@ void main() {
 
 When you create many small objects with one lifetime, do not free them one by one. Use an arena: allocate freely and release everything with one `deinit`.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -350,7 +350,7 @@ When you create many small objects with one lifetime, do not free them one by on
 
 **Exercise.** The function below leaks on the error path. Fix it so that nothing is lost if the second allocation fails.
 
-```vibe run
+```zark run
 !i64 sum_two(Allocator a) {
     const auto x = a.create<i64>()?;
     defer a.destroy(x);
@@ -372,7 +372,7 @@ Putting `defer` right after each allocation is the whole technique. If you need 
 
 A slice `T[]` is a pointer and a length: a view into memory that somebody else owns. `str` is a slice of bytes. Slicing never copies. Every access is checked: an index out of range is a panic with the position, not a silent read of someone else's memory.
 
-```vibe run
+```zark run
 void main() {
     const auto s = "hello, world";
     const auto word = s[7..];
@@ -382,7 +382,7 @@ void main() {
 }
 ```
 
-```vibe run exit
+```zark run exit
 void main() {
     const auto xs = [1, 2, 3];
     auto i = 3;
@@ -392,7 +392,7 @@ void main() {
 
 Because a slice only borrows, the compiler watches where it came from. A slice of a local array cannot be returned from the function, since the array dies with the function:
 
-```vibe error
+```zark error
 u8[] first_four() {
     u8[16] buf;
     return buf[0..4];
@@ -405,7 +405,7 @@ The way out is the same as in every language with manual memory: the caller prov
 
 **Exercise.** Write `count_words(str s)` that returns the number of space-separated words. Use only indexing and a loop.
 
-```vibe run
+```zark run
 i64 count_words(str s) {
     auto n = 0;
     auto in_word = false;
@@ -435,7 +435,7 @@ Programs in this language are written together with the compiler, so learn to re
 
 A short catalogue of messages you will meet in the first week:
 
-```vibe error
+```zark error
 void main() {
     const i64 big = 5;
     const i32 small = big;
@@ -444,7 +444,7 @@ void main() {
 
 Narrowing needs `as`. The compiler never guesses that you accept losing bits.
 
-```vibe error
+```zark error
 void main() {
     const auto x = 10;
     x = 11;
@@ -453,7 +453,7 @@ void main() {
 
 `const` means constant. Remove it if the variable has to change.
 
-```vibe error
+```zark error
 !i64 half(i64 n) {
     if (n % 2 != 0) { return error.Odd; }
     return n / 2;
@@ -466,7 +466,7 @@ void main() {
 
 An error union cannot be dropped silently. Use `?`, `catch` or `_ =` to say what you want.
 
-```vibe error
+```zark error
 void main() {
     auto n = 5;
     println(comptime n + 1);
@@ -479,7 +479,7 @@ void main() {
 
 An interface is a list of methods. Any struct with those methods can be used through it, with no declaration of the relationship. A call goes through a pointer, so the object must outlive the interface value.
 
-```vibe run
+```zark run
 interface Sink {
     void write(str s);
 }
@@ -514,7 +514,7 @@ Notice that `log_all` knows nothing about `Counter` or `Echo`. This is how you m
 
 **Exercise.** Add a `Prefixed` sink that writes a prefix before every line it receives. Keep it independent of `Echo`.
 
-```vibe run
+```zark run
 interface Sink {
     void write(str s);
 }
@@ -543,7 +543,7 @@ void main() {
 
 A closure lists the variables it uses, and by what means: `[&k]` is a reference. The context lives on the stack and nothing is allocated, so a closure must not outlive the variables it points at.
 
-```vibe run
+```zark run
 void each(i64[] xs, fn[](i64) -> void body) {
     for (auto x : xs) { body(x); }
 }
@@ -562,7 +562,7 @@ void main() {
 
 A function or struct can be generic with `template<T>`. A constraint such as `T: Ord` states what the type must support, and a violation is reported at the call, not deep inside the body.
 
-```vibe run
+```zark run
 template<T: Ord> T largest(T[] xs) {
     auto best = xs[0];
     for (auto x : xs) { if (x > best) { best = x; } }
@@ -576,7 +576,7 @@ void main() {
 
 **Exercise.** Write `template<T> i64 count_if(T[] xs, fn[](T) -> bool pred)` and use it to count the even numbers in a list.
 
-```vibe run
+```zark run
 template<T> i64 count_if(T[] xs, fn[](T) -> bool pred) {
     auto n = 0;
     for (auto x : xs) { if (pred(x)) { n += 1; } }
@@ -591,9 +591,9 @@ void main() {
 
 ## Lesson 11. Tests and `comptime`
 
-Tests are part of the language. A `test` block sits next to the code it checks and runs with `vibe test`. Write the test first when you can: it shows you the interface you want.
+Tests are part of the language. A `test` block sits next to the code it checks and runs with `zark test`. Write the test first when you can: it shows you the interface you want.
 
-```vibe test
+```zark test
 i64 clamp(i64 x, i64 lo, i64 hi) {
     if (x < lo) { return lo; }
     if (x > hi) { return hi; }
@@ -612,7 +612,7 @@ test "values are pulled to the edges" {
 
 `comptime` runs ordinary code while compiling. It is the right tool for tables you would otherwise type by hand and for checks that must never be forgotten:
 
-```vibe run
+```zark run
 struct Header { u8 kind; u8 flags; u16 length; }
 
 comptime assert(sizeof(Header) == 4);
@@ -634,7 +634,7 @@ If somebody adds a field to `Header`, the build fails at the `comptime assert` i
 
 **Exercise.** Write a test that checks `clamp` returns `lo` when `lo` equals `hi`.
 
-```vibe test
+```zark test
 i64 clamp(i64 x, i64 lo, i64 hi) {
     if (x < lo) { return lo; }
     if (x > hi) { return hi; }
@@ -651,7 +651,7 @@ test "a single allowed value" {
 
 Now put the pieces together: a program that counts the words in a text, handles every failure, uses an arena for all its memory and keeps the logic in a separate function that takes a `str`, so a test needs no file.
 
-```vibe run
+```zark run
 !void count(str text, Map<i64>* counts, List<str>* order) {
     auto start = 0;
     for (auto i : 0..text.len + 1) {

@@ -3,27 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How it all works · Vibe</title>
-<meta name="description" content="How the Vibe compiler is built: the pipeline, the backends, self-hosting, the memory layout of types and the plans for the future">
+<title>How it all works · Zark</title>
+<meta name="description" content="How the Zark compiler is built: the pipeline, the backends, self-hosting, the memory layout of types and the plans for the future">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/how-it-works.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Zark</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/how-it-works.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="learn.html">Learn Vibe: a path from zero to a program</a><a href="tour.html">Quick tour</a><a href="showcase.html">Showcase: a multithreaded ray tracer</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a><a href="comptime.html">Compile-time evaluation</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="safety.html">The safety model</a><a href="idioms.html">Writing idiomatic Vibe</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a><a href="projects.html">Projects and dependencies</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="std-modules.html">Standard modules</a><a href="net-threads.html">Networking and threads</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="debugging.html">Debugging and reading errors</a><a href="how-it-works.html" class="current">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Zark</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="learn.html">Learn Zark: a path from zero to a program</a><a href="tour.html">Quick tour</a><a href="showcase.html">Showcase: a multithreaded ray tracer</a><a href="cpp-style.html">Zark for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a><a href="comptime.html">Compile-time evaluation</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="safety.html">The safety model</a><a href="idioms.html">Writing idiomatic Zark</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html">Tools: fmt, lsp, flags</a><a href="projects.html">Projects and dependencies</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="std-modules.html">Standard modules</a><a href="net-threads.html">Networking and threads</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="debugging.html">Debugging and reading errors</a><a href="how-it-works.html" class="current">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
 <h1>How it all works</h1>
 <p>This page is for those who want to understand what happens under the hood, or who are going to change the compiler. It is not required for writing programs.</p>
 <h2 id="the-pipeline"><a class="anchor" href="#the-pipeline">#</a>The pipeline</h2>
-<p>The compiler is a program in Vibe itself, about 12 thousand lines in the <code>selfhost/</code> directory. It works as a pipeline:</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>source .vibe</span></span>
+<p>The compiler is a program in Zark itself, about 12 thousand lines in the <code>selfhost/</code> directory. It works as a pipeline:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>source .zk</span></span>
 <span class="line"><span>   │</span></span>
-<span class="line"><span>   ▼  lexer.vibe      tokens</span></span>
-<span class="line"><span>   ▼  parser.vibe     recursive descent → a tree (ast.vibe), string interpolation is parsed here</span></span>
-<span class="line"><span>   ▼  loader.vibe     loading import, module prefixes (resolve.vibe)</span></span>
-<span class="line"><span>   ▼  gen*.vibe       type checking, monomorphization of generics, LLVM IR text</span></span>
+<span class="line"><span>   ▼  lexer.zk      tokens</span></span>
+<span class="line"><span>   ▼  parser.zk     recursive descent → a tree (ast.zk), string interpolation is parsed here</span></span>
+<span class="line"><span>   ▼  loader.zk     loading import, module prefixes (resolve.zk)</span></span>
+<span class="line"><span>   ▼  gen*.zk       type checking, monomorphization of generics, LLVM IR text</span></span>
 <span class="line"><span>   │</span></span>
-<span class="line"><span>   ├── by default:    native.vibe + x64.vibe   IR → x86-64 machine code → ELF .o</span></span>
+<span class="line"><span>   ├── by default:    native.zk + x64.zk   IR → x86-64 machine code → ELF .o</span></span>
 <span class="line"><span>   └── -O / --release / --llvm:                IR → clang (LLVM) → .o</span></span>
 <span class="line"><span>   ▼</span></span>
 <span class="line"><span>linking through clang (together with .c, .cpp, .o) → an executable</span></span></code></pre></div><p>What each file does:</p>
@@ -32,68 +32,68 @@
 <th>Role</th>
 </tr>
 </thead><tbody><tr>
-<td><code>lexer.vibe</code></td>
+<td><code>lexer.zk</code></td>
 <td>tokens (see <a href="lexical.html">lexical structure</a>)</td>
 </tr>
 <tr>
-<td><code>ast.vibe</code></td>
+<td><code>ast.zk</code></td>
 <td>&quot;fat&quot; tree nodes with a kind tag</td>
 </tr>
 <tr>
-<td><code>parser.vibe</code></td>
+<td><code>parser.zk</code></td>
 <td>parsing the syntax, splitting <code>&quot;{x}&quot;</code> into parts</td>
 </tr>
 <tr>
-<td><code>gen.vibe</code></td>
+<td><code>gen.zk</code></td>
 <td>types, instantiating generics, functions, diagnostics</td>
 </tr>
 <tr>
-<td><code>gen_stmt.vibe</code></td>
+<td><code>gen_stmt.zk</code></td>
 <td>statements, <code>defer</code>/<code>errdefer</code>, <code>match</code></td>
 </tr>
 <tr>
-<td><code>gen_expr.vibe</code></td>
+<td><code>gen_expr.zk</code></td>
 <td>expressions, addresses, operators, casts</td>
 </tr>
 <tr>
-<td><code>gen_call.vibe</code></td>
+<td><code>gen_call.zk</code></td>
 <td>calls, inferring type parameters, methods, function pointers</td>
 </tr>
 <tr>
-<td><code>gen_fmt.vibe</code></td>
+<td><code>gen_fmt.zk</code></td>
 <td>building <code>Fmt</code> for calls with interpolation, <code>panic</code>, <code>assert</code>, <code>embed</code></td>
 </tr>
 <tr>
-<td><code>resolve.vibe</code>, <code>loader.vibe</code></td>
+<td><code>resolve.zk</code>, <code>loader.zk</code></td>
 <td>imports and module prefixes</td>
 </tr>
 <tr>
-<td><code>native.vibe</code></td>
+<td><code>native.zk</code></td>
 <td>the own backend: IR → x86-64 (System V ABI), register allocation</td>
 </tr>
 <tr>
-<td><code>x64.vibe</code></td>
+<td><code>x64.zk</code></td>
 <td>the instruction encoder and the ELF64 object writer</td>
 </tr>
 <tr>
-<td><code>fmt.vibe</code></td>
-<td>the <code>vibe fmt</code> formatter</td>
+<td><code>fmt.zk</code></td>
+<td>the <code>zark fmt</code> formatter</td>
 </tr>
 <tr>
-<td><code>lsp.vibe</code>, <code>ide.vibe</code>, <code>analysis.vibe</code>, <code>json.vibe</code>, <code>textpos.vibe</code></td>
+<td><code>lsp.zk</code>, <code>ide.zk</code>, <code>analysis.zk</code>, <code>json.zk</code>, <code>textpos.zk</code></td>
 <td>the language server</td>
 </tr>
 <tr>
-<td><code>diag.vibe</code></td>
+<td><code>diag.zk</code></td>
 <td>nice error messages, &quot;did you mean&quot;</td>
 </tr>
 <tr>
-<td><code>main.vibe</code></td>
+<td><code>main.zk</code></td>
 <td>the command-line driver</td>
 </tr>
 </tbody></table></div>
-<p>You can see the intermediate results right from the CLI: <code>vibe tokens file.vibe</code> (tokens) and <code>vibe ir file.vibe</code> (LLVM IR). More in <a href="tooling.html#intermediate-representations">tooling</a>.</p>
-<p>The prelude (<code>std/std.vibe</code>) is built into the compiler through <code>embed</code>, so <code>vibe</code> is one executable without external data.</p>
+<p>You can see the intermediate results right from the CLI: <code>zark tokens file.zk</code> (tokens) and <code>zark ir file.zk</code> (LLVM IR). More in <a href="tooling.html#intermediate-representations">tooling</a>.</p>
+<p>The prelude (<code>std/std.zk</code>) is built into the compiler through <code>embed</code>, so <code>zark</code> is one executable without external data.</p>
 <h2 id="two-backends"><a class="anchor" href="#two-backends">#</a>Two backends</h2>
 <p><strong>The own one (default).</strong> It parses the textual LLVM IR that the frontend generated and turns it into x86-64 machine code. It uses linear-scan register allocation, fusing a comparison with a branch, constants in operands, and lazy loading of composite values. There is not a single line of LLVM inside. The purpose is a fast build: a typical project builds in fractions of a second.</p>
 <p><strong>LLVM (<code>-O</code>, <code>--release</code>, <code>--llvm</code>).</strong> The same IR is handed to <code>clang</code>, which does full optimization. It is needed for speed in production builds.</p>
@@ -103,11 +103,11 @@
 <th>Time</th>
 </tr>
 </thead><tbody><tr>
-<td>vibe, own backend, safe mode (bounds, division and overflow checks)</td>
+<td>zark, own backend, safe mode (bounds, division and overflow checks)</td>
 <td>about 200 ms</td>
 </tr>
 <tr>
-<td>vibe, own backend, <code>--no-safety</code></td>
+<td>zark, own backend, <code>--no-safety</code></td>
 <td>about 135 ms</td>
 </tr>
 <tr>
@@ -131,12 +131,12 @@
 <td>560 ms</td>
 </tr>
 <tr>
-<td>Vibe <code>--release</code> (no checks)</td>
+<td>Zark <code>--release</code> (no checks)</td>
 <td>100 ms</td>
 <td>575 ms</td>
 </tr>
 <tr>
-<td>Vibe <code>-O</code> (all checks on)</td>
+<td>Zark <code>-O</code> (all checks on)</td>
 <td>170 ms</td>
 <td>540 ms</td>
 </tr>
@@ -146,7 +146,7 @@
 <td>780 ms</td>
 </tr>
 <tr>
-<td>Vibe, own backend (safe mode)</td>
+<td>Zark, own backend (safe mode)</td>
 <td>about 360 ms</td>
 <td>about 1210 ms</td>
 </tr>
@@ -154,9 +154,9 @@
 <p>So <code>--release</code> does not lose to C, <code>-O</code> keeps every check for a small price, and the default build wins in compile speed. The checks cost most in the own backend, which does not optimize them away.</p>
 <h2 id="self-hosting-and-the-fixed-point"><a class="anchor" href="#self-hosting-and-the-fixed-point">#</a>Self-hosting and the fixed point</h2>
 <p>The compiler builds itself. To start from zero, the repository holds a <strong>seed</strong>: the LLVM IR of the compiler itself (<code>bootstrap/seed.ll.gz</code>). <code>clang</code> turns it into the first working compiler.</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>seed (clang)  →  stage1 (Vibe, built from the seed)</span></span>
-<span class="line"><span>              →  stage2 (Vibe, built by stage1)</span></span>
-<span class="line"><span>              →  stage3 (Vibe, built by stage2)</span></span></code></pre></div><p>The check: <strong>stage2 and stage3 are identical byte for byte</strong> (the fixed point). The same is done for the chain with the own backend without LLVM (native2 == native3). The script <code>bootstrap.sh</code> runs everything, then runs the test suite and puts the result into <code>build/vibe</code>.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>seed (clang)  →  stage1 (Zark, built from the seed)</span></span>
+<span class="line"><span>              →  stage2 (Zark, built by stage1)</span></span>
+<span class="line"><span>              →  stage3 (Zark, built by stage2)</span></span></code></pre></div><p>The check: <strong>stage2 and stage3 are identical byte for byte</strong> (the fixed point). The same is done for the chain with the own backend without LLVM (native2 == native3). The script <code>bootstrap.sh</code> runs everything, then runs the test suite and puts the result into <code>build/zark</code>.</p>
 <p>A consequence for development: a new language feature is added in two steps. First the compiler is taught the feature without using it in its own sources, and the seed is updated (<code>tools/update-seed.sh</code>). Only then can the feature be used in <code>selfhost/</code>: otherwise the old seed cannot build the new code.</p>
 <h2 id="the-memory-layout-of-types"><a class="anchor" href="#the-memory-layout-of-types">#</a>The memory layout of types</h2>
 <p>The principle &quot;what you see is what is in memory&quot;:</p>
@@ -211,8 +211,8 @@
 </tbody></table></div>
 <p>This explains why structs can be passed to C (by pointer), why nothing needs to be &quot;packed&quot; at a call and why <code>sizeof</code> is predictable.</p>
 <h2 id="how-interpolation-is-expanded"><a class="anchor" href="#how-interpolation-is-expanded">#</a>How interpolation is expanded</h2>
-<p>The compiler knows neither <code>print</code> nor <code>println</code>. It knows one rule: if the last parameter of the called function has the type <code>Fmt</code> (declared in <code>std/std.vibe</code>), all the remaining arguments and strings with <code>{...}</code> are gathered into a <code>Fmt</code> value.</p>
-<p><code>Fmt</code> is a list of pieces: literal text, a pointer to a value, a function that knows how to print a value of that type, and a specification (<code>:08X</code>, <code>:.2</code> and so on). The print functions for structs, enums, unions and arrays are generated by the compiler from the type as ordinary Vibe code. For numbers, strings and pointers the functions from the prelude are used (<code>__fmt_int</code>, <code>__fmt_str</code> and others).</p>
+<p>The compiler knows neither <code>print</code> nor <code>println</code>. It knows one rule: if the last parameter of the called function has the type <code>Fmt</code> (declared in <code>std/std.zk</code>), all the remaining arguments and strings with <code>{...}</code> are gathered into a <code>Fmt</code> value.</p>
+<p><code>Fmt</code> is a list of pieces: literal text, a pointer to a value, a function that knows how to print a value of that type, and a specification (<code>:08X</code>, <code>:.2</code> and so on). The print functions for structs, enums, unions and arrays are generated by the compiler from the type as ordinary Zark code. For numbers, strings and pointers the functions from the prelude are used (<code>__fmt_int</code>, <code>__fmt_str</code> and others).</p>
 <p>Everything lies on the caller&#39;s stack, and nothing is allocated on the heap. So interpolation is allowed where there is a function with a <code>Fmt</code> parameter: <code>print</code>, <code>println</code>, <code>eprint</code>, <code>eprintln</code>, <code>panic</code>, <code>bprint</code>, <code>sprint</code> and your own.</p>
 <h2 id="how-generics-work"><a class="anchor" href="#how-generics-work">#</a>How generics work</h2>
 <p>Functions and structs with type parameters are <strong>monomorphized</strong>: for each combination of arguments the compiler creates a separate copy. So there is no run-time overhead, and the body of a generic is checked at the <strong>use</strong>. Constraints (<code>T: Ord</code>) are checked at the call, before the body is compiled, so that the message is clear.</p>
@@ -223,7 +223,7 @@
 <h2 id="lazy-compilation"><a class="anchor" href="#lazy-compilation">#</a>Lazy compilation</h2>
 <p>Only the functions <strong>reachable from <code>main</code></strong> are compiled. An extra import does not bloat the file, and errors in dead code are not visible until it is called (unless it is a generic: then the error shows up on the first use).</p>
 <h2 id="build-storage"><a class="anchor" href="#build-storage">#</a>Build storage</h2>
-<p>Intermediate files live in <code>.vibe-cache/</code> next to the place where you run the compiler: <code>.o</code>, <code>.ll</code> and test binaries. The directory can be deleted at any time.</p>
+<p>Intermediate files live in <code>.zark-cache/</code> next to the place where you run the compiler: <code>.o</code>, <code>.ll</code> and test binaries. The directory can be deleted at any time.</p>
 <h2 id="the-compiler-s-own-tests"><a class="anchor" href="#the-compiler-s-own-tests">#</a>The compiler&#39;s own tests</h2>
 <p>In <code>tests/</code>:</p>
 <ul>
@@ -237,7 +237,7 @@
 <p>Known directions of development (more in <code>ROADMAP.md</code>):</p>
 <ul>
 <li><strong>The quality of the backend&#39;s code.</strong> Debug builds are roughly three times slower than gcc -O0. Next: SSA without <code>alloca</code> in the frontend and an in-memory internal representation instead of the textual IR.</li>
-<li><strong>An own linker</strong> and a runtime without libc on Linux system calls: so that pure Vibe programs build without external tools.</li>
+<li><strong>An own linker</strong> and a runtime without libc on Linux system calls: so that pure Zark programs build without external tools.</li>
 <li><strong>More <code>comptime</code>:</strong> reflection over struct fields and generated declarations (expressions and static assertions are done).</li>
 <li><strong><code>@cImport</code>:</strong> parsing C headers and passing structs by value across the C boundary.</li>
 <li><strong>New platforms:</strong> aarch64 and Windows.</li>

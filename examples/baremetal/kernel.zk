@@ -1,0 +1,98 @@
+const u16 COM1 = 0x3F8;
+
+struct Serial {
+    static void init() {
+        Port::out8(COM1 + 1, 0);
+        Port::out8(COM1 + 3, 0x80);
+        Port::out8(COM1 + 0, 1);
+        Port::out8(COM1 + 1, 0);
+        Port::out8(COM1 + 3, 3);
+        Port::out8(COM1 + 2, 0xC7);
+        Port::out8(COM1 + 4, 0x0B);
+    }
+
+    static void put(u8 c) {
+        while ((Port::in8(COM1 + 5) & 0x20) == 0) { Cpu::pause(); }
+        Port::out8(COM1, c);
+    }
+}
+
+!void serial_write(void* ctx, str s) {
+    for (auto c : s) { Serial::put(c); }
+}
+
+void kprintln(Fmt f) {
+    auto w = Writer{ .ctx = null, .write_fn = serial_write };
+    _ = w.put(f);
+    Serial::put('\n');
+}
+
+void qemu_exit(u8 code) {
+    Port::out8(0xF4, code);
+}
+
+packed struct IdtEntry {
+    u16 offset_lo;
+    u16 selector;
+    u8 ist;
+    u8 flags;
+    u16 offset_mid;
+    u32 offset_hi;
+    u32 zero;
+}
+
+packed struct IdtPointer {
+    u16 limit;
+    u64 base;
+}
+
+extern u64 isr_addr(u64 vector);
+
+void idt_set(IdtEntry* idt, u64 vector, u64 handler) {
+    idt[vector].offset_lo = handler as u16;
+    idt[vector].selector = 8;
+    idt[vector].flags = 0x8E;
+    idt[vector].offset_mid = (handler >> 16) as u16;
+    idt[vector].offset_hi = (handler >> 32) as u32;
+}
+
+export void isr_dispatch(u64 vector, u64* frame) {
+    kprintln("interrupt {vector}, error code {frame[16]}, back in the kernel");
+}
+
+export void kmain() {
+    Serial::init();
+    kprintln("Hello from Zark on bare metal!");
+    const auto cr0 = Cpu::cr0();
+    const auto cr3 = Cpu::cr3();
+    kprintln("protected mode = {Bits::get(cr0, 0, 0)}, paging = {Bits::get(cr0, 31, 31)}");
+    kprintln("page table aligned = {(cr3 & 0xFFF) == 0}, 4 * 5 = {4 * 5}");
+    u64[8] fib;
+    fib[0] = 0;
+    fib[1] = 1;
+    for (auto i : 2..8) { fib[i] = fib[i - 1] + fib[i - 2]; }
+    kprintln("fib = {fib}");
+    IdtEntry[256] idt;
+    for (auto v : 0..32) { idt_set(&idt[0], v as u64, isr_addr(v as u64)); }
+    IdtPointer idtr;
+    idtr.limit = (sizeof(IdtEntry) * 256 - 1) as u16;
+    idtr.base = &idt[0] as u64;
+    Cpu::load_idt(&idtr);
+    Cpu::breakpoint();
+    kprintln("after int3");
+    qemu_exit(0);
+    while (true) { Cpu::halt(); }
+}
+
+export void* memset(void* dst, i32 c, u64 n) {
+    auto p = dst as *u8;
+    for (auto i : 0..n) { p[i] = c as u8; }
+    return dst;
+}
+
+export void* memcpy(void* dst, void* src, u64 n) {
+    auto d = dst as *u8;
+    auto s = src as *u8;
+    for (auto i : 0..n) { d[i] = s[i]; }
+    return dst;
+}

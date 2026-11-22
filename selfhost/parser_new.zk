@@ -1,0 +1,664 @@
+// Declarations, templates, methods inside struct, lambdas, for loops.
+
+import "parser.zk";
+
+str operator_method(Tag t) {
+    match t {
+        .plus => return "op_add";
+        .minus => return "op_sub";
+        .star => return "op_mul";
+        .slash => return "op_div";
+        .percent => return "op_rem";
+        .eqeq => return "op_eq";
+        .neq => return "op_ne";
+        .lt => return "op_lt";
+        .le => return "op_le";
+        .gt => return "op_gt";
+        .ge => return "op_ge";
+    }
+    return "";
+}
+
+bool is_builtin_type_name(str s) {
+    match s {
+        "i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "str", "void" => return true;
+    }
+    return false;
+}
+
+!void Parser::expect_gt() {
+    if (this->at(.gt)) {
+        _ = this->advance();
+        return;
+    }
+    if (this->at(.shr)) {
+        this->toks[this->pos].tag = .gt;
+        this->toks[this->pos].text = ">";
+        this->splits.push(this->pos)?;
+        return;
+    }
+    this->fail("expected '>'")?;
+}
+
+void Parser::undo_splits(i64 mark) {
+    while (this->splits.len > mark) {
+        const auto i = this->splits.pop() catch return;
+        this->toks[i].tag = .shr;
+        this->toks[i].text = ">>";
+    }
+}
+
+/// postfix `*`, `[]`, `[N]` of C++-style types
+!TypeExpr* Parser::type_suffix(TypeExpr* base) {
+    auto t = base;
+    if (this->no_post) { return t; }
+    while (this->at(.star)) {
+        _ = this->advance();
+        const auto p = this->te(.Ptr)?;
+        p.elem = t;
+        t = p;
+    }
+    auto dims = List<Expr*>::init(this->a);
+    while (this->at(.lbracket)) {
+        if (this->peek_at(1).tag == .rbracket) {
+            _ = this->advance();
+            _ = this->advance();
+            const auto s = this->te(.Slice)?;
+            s.elem = t;
+            t = s;
+            continue;
+        }
+        _ = this->advance();
+        dims.push(this->parse_expr()?)?;
+        _ = this->expect(.rbracket)?;
+    }
+    auto i = dims.len;
+    while (i > 0) {
+        i -= 1;
+        const auto a = this->te(.Array)?;
+        a.len = dims.get(i);
+        a.elem = t;
+        t = a;
+    }
+    while (this->at(.star)) {
+        _ = this->advance();
+        const auto p = this->te(.Ptr)?;
+        p.elem = t;
+        t = p;
+    }
+    return t;
+}
+
+TypeExpr* Parser::try_type() {
+    const auto save = this->pos;
+    const auto mark = this->splits.len;
+    const auto q = this->quiet;
+    const auto ao = this->arrow_only;
+    this->quiet = true;
+    this->arrow_only = true;
+    const auto t = this->parse_type() catch {
+        this->quiet = q;
+        this->arrow_only = ao;
+        this->pos = save;
+        this->undo_splits(mark);
+        return null;
+    };
+    this->quiet = q;
+    this->arrow_only = ao;
+    return t;
+}
+
+!Expr* Parser::type_to_expr(TypeExpr* t, i64 line, i64 off) {
+    if (t.k == .Name) {
+        const auto e = this->ex(.Ident, Token{ .tag = .ident, .text = t.name, .line = line, .off = off })?;
+        e.name = t.name;
+        if (t.args.len == 0) { return e; }
+        const auto ix = this->ex(.Index, Token{ .tag = .lbracket, .text = "[", .line = line, .off = off })?;
+        ix.op = .lt;
+        ix.l = e;
+        for (auto a : t.args) { ix.args.push(this->type_to_expr(a, line, off)?)?; }
+        return ix;
+    }
+    if (t.k == .Ptr || t.k == .Errun) {
+        Tag tag = .star;
+        if (t.k == .Errun) { tag = .bang };
+        const auto u = this->ex(.Unary, Token{ .tag = tag, .text = "*", .line = line, .off = off })?;
+        u.op = tag;
+        u.l = this->type_to_expr(t.elem, line, off)?;
+        return u;
+    }
+    this->fail("this type cannot be a template argument here")?;
+    return error.ParseFailed;
+}
+
+/// `name<T, U>` followed by `(`, `::` or `{`: returns an Index expression, or null (position restored)
+!Expr* Parser::try_generic_args(Expr* base) {
+    const auto save = this->pos;
+    const auto mark = this->splits.len;
+    const auto q = this->quiet;
+    this->quiet = true;
+    _ = this->advance();
+    auto targs = List<TypeExpr*>::init(this->a);
+    auto ok = true;
+    while (!this->at(.gt) && !this->at(.shr)) {
+        const auto ty = this->try_type();
+        if (ty == null) {
+            ok = false;
+            break;
+        }
+        targs.push(ty)?;
+        if (!this->eat(.comma)) { break; }
+    }
+    if (ok) {
+        this->expect_gt() catch {
+            ok = false;
+        }
+    }
+    this->quiet = q;
+    if (ok) {
+        const auto n = this->peek().tag;
+        ok = n == .lparen || n == .coloncolon || (n == .lbrace && !this->no_struct && is_type_like(base));
+    }
+    if (!ok) {
+        this->pos = save;
+        this->undo_splits(mark);
+        return null;
+    }
+    const auto ix = this->ex(.Index, Token{ .tag = .lbracket, .text = "[", .line = base.line, .off = base.off })?;
+    ix.op = .lt;
+    ix.l = base;
+    for (auto ta : targs) { ix.args.push(this->type_to_expr(ta, base.line, base.off)?)?; }
+    return ix;
+}
+
+// ------------------------------------------------------------ parameters
+!List<Param> Parser::parse_params_new(i64 line, bool* variadic, str this_ty, List<str> ptps) {
+    _ = this->expect(.lparen)?;
+    auto params = List<Param>::init(this->a);
+    if (this_ty.len > 0) {
+        const auto pty = this->te(.Ptr)?;
+        pty.elem = this->te_name("Self")?;
+        params.push(Param{ .name = "this", .ty = pty, .off = -1, .mutable = false })?;
+    }
+    while (!this->at(.rparen)) {
+        if (this->eat(.ellipsis)) {
+            *variadic = true;
+            break;
+        }
+        const auto is_const = this->eat(.kw_const);
+        auto is_move = false;
+        if (this->at(.ident) && this->peek().text == "move" && this->peek_at(1).tag == .ident) {
+            _ = this->advance();
+            is_move = true;
+        }
+        const auto saved = this->arrow_only;
+        this->arrow_only = true;
+        const auto ty = this->parse_type()?;
+        this->arrow_only = saved;
+        const auto pt = this->expect(.ident)?;
+        params.push(Param{ .name = pt.text, .ty = ty, .off = pt.off, .mutable = !is_const, .move = is_move })?;
+        if (!this->eat(.comma)) { break; }
+    }
+    _ = this->expect(.rparen)?;
+    return params;
+}
+
+bool Parser::lambda_ahead() {
+    auto i = this->pos;
+    while (i < this->toks.len) {
+        const auto tg = this->toks[i].tag;
+        if (tg == .rbracket) { break; }
+        if (tg != .amp && tg != .ident && tg != .comma) { return false; }
+        i += 1;
+    }
+    if (i + 1 >= this->toks.len) { return false; }
+    return this->toks[i + 1].tag == .lparen;
+}
+
+!Expr* Parser::parse_lambda(Token t) {
+    const auto e = this->ex(.Closure, t)?;
+    auto caps = this->strs();
+    auto cap_offs = List<i64>::init(this->a);
+    while (!this->at(.rbracket)) {
+        _ = this->eat(.amp);
+        const auto ct = this->expect(.ident)?;
+        caps.push(ct.text)?;
+        cap_offs.push(ct.off)?;
+        if (!this->eat(.comma)) { break; }
+    }
+    _ = this->expect(.rbracket)?;
+    auto variadic = false;
+    const auto params = this->parse_params_new(t.line, &variadic, "", this->strs())?;
+    TypeExpr* ret = null;
+    if (this->eat(.arrow)) {
+        const auto saved = this->arrow_only;
+        this->arrow_only = true;
+        ret = this->parse_type()?;
+        this->arrow_only = saved;
+    }
+    const auto f = this->a.create<FnDecl>()?;
+    *f = FnDecl{
+        .name = "closure", .type_params = this->strs(), .constraints = this->strs(), .params = params, .ret = ret,
+        .body = this->parse_block()?, .line = t.line, .file = this->file, .receiver_params = this->strs(), .captures = caps, .capture_offs = cap_offs
+    };
+    f.end_off = f.body.end_off;
+    e.func = f;
+    return e;
+}
+
+// ------------------------------------------------------------ declarations
+!FnDecl* Parser::fn_rest(List<str> tps, List<str> cons, i64 flags, TypeExpr* ret_te, Token nt, str receiver, List<str> recv_params, i64 recv_off, bool is_static) {
+    auto variadic = false;
+    auto this_ty = "";
+    if (receiver.len > 0 && !is_static) { this_ty = receiver; }
+    auto params = this->parse_params_new(nt.line, &variadic, this_ty, recv_params)?;
+    const auto is_const = this->eat(.kw_const);
+    auto invalidates = false;
+    auto borrows = false;
+    while (this->at(.ident) && (this->peek_at(1).tag == .lbrace || this->peek_at(1).tag == .ident)) {
+        const auto w = this->peek().text;
+        if (w != "move" && w != "invalidates" && w != "borrows") { break; }
+        _ = this->advance();
+        if (this_ty.len == 0) { this->fail("only a method can use move, invalidates or borrows")?; }
+        if (w == "move") { params.items[0].move = true; }
+        if (w == "invalidates") { invalidates = true; }
+        if (w == "borrows") { borrows = true; }
+    }
+    auto ret = ret_te;
+    if (ret != null && ret.k == .Name && ret.name == "void" && ret.args.len == 0) { ret = null; }
+    const auto is_extern = flags == 1;
+    const auto is_export = flags == 2;
+    Stmt* body = null;
+    if (!is_extern) { body = this->parse_block()?; }
+    const auto f = this->a.create<FnDecl>()?;
+    *f = FnDecl{
+        .name = nt.text, .type_params = tps, .constraints = cons, .params = params, .ret = ret, .body = body,
+        .is_extern = is_extern, .is_export = is_export, .variadic = variadic, .line = nt.line,
+        .file = this->file, .receiver = receiver, .receiver_params = recv_params, .name_off = nt.off, .receiver_off = recv_off, .is_const = is_const
+    };
+    f.invalidates = invalidates;
+    f.borrows = borrows;
+    if (body != null) { f.end_off = body.end_off; }
+    return f;
+}
+
+bool Parser::async_ahead() {
+    if (!this->at(.ident) || this->peek().text != "async") { return false; }
+    const auto n = this->peek_at(1).tag;
+    if (n == .bang || n == .question || n == .star) { return true; }
+    if (n != .ident) { return false; }
+    const auto m = this->peek_at(2).tag;
+    return m != .lparen && m != .eq && m != .semi && m != .rbrace && m != .comma && m != .coloncolon;
+}
+
+bool Parser::await_ahead() {
+    if (!this->at(.ident) || this->peek().text != "await") { return false; }
+    const auto n = this->peek_at(1).tag;
+    if (n == .ident && this->peek_at(1).text == "orelse") { return false; }
+    return n == .ident || n == .int_lit || n == .float_lit || n == .str_lit || n == .char_lit || n == .lparen || n == .kw_true || n == .kw_false || n == .kw_null || n == .kw_sizeof || n == .kw_alignof || n == .kw_match;
+}
+
+!void Parser::parse_decl_new(List<Decl>*out) {
+    const auto t = this->peek();
+    auto tps = this->strs();
+    auto cons = this->strs();
+    i64 want_align = 0;
+    if (this->at(.ident) && t.text == "align" && this->peek_at(1).tag == .lparen) {
+        _ = this->advance();
+        _ = this->advance();
+        want_align = (parse_int_radix(this->expect(.int_lit)?.text, 0) catch 0) as i64;
+        _ = this->expect(.rparen)?;
+    }
+    if (this->at(.kw_template)) {
+        _ = this->advance();
+        tps = this->parse_type_params(&cons)?;
+        if (this->at(.kw_struct) || this->at(.kw_union)) {
+            this->fail("write generic types as 'struct Name<T>'")?;
+        }
+    }
+    auto flags = 0;
+    auto out_static = false;
+    auto is_async = false;
+    while (this->at(.kw_extern) || this->at(.kw_export) || this->at(.kw_static) || this->async_ahead()) {
+        const auto k = this->advance().tag;
+        if (k == .kw_extern) { flags = 1; }
+        if (k == .kw_export) { flags = 2; }
+        if (k == .kw_static) { out_static = true; }
+        if (k == .ident) { is_async = true; }
+    }
+    const auto is_const = this->eat(.kw_const);
+    const auto ty = this->try_type();
+    if (ty == null) { this->fail("expected declaration")?; }
+    if (!this->at(.ident)) { this->fail("expected a name after the type")?; }
+    auto nt = this->advance();
+    if (this->at(.lt)) {
+        auto rps = this->strs();
+        auto k = 1;
+        while (this->peek_at(k).tag == .ident && (this->peek_at(k + 1).tag == .comma || this->peek_at(k + 1).tag == .gt)) {
+            rps.push(this->peek_at(k).text)?;
+            if (this->peek_at(k + 1).tag == .gt) { break; }
+            k += 2;
+        }
+        if (this->peek_at(k + 1).tag == .gt && this->peek_at(k + 2).tag == .coloncolon && this->peek_at(k + 3).tag == .ident && this->peek_at(k + 4).tag == .lparen) {
+            this->pos += k + 3;
+            const auto mt = this->advance();
+            const auto f = this->fn_rest(this->strs(), this->strs(), flags, ty, mt, nt.text, rps, nt.off, out_static)?;
+            f.is_async = is_async;
+            out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+            return;
+        }
+    }
+    if (this->at(.coloncolon) && this->peek_at(1).tag == .ident && this->peek_at(2).tag == .lparen) {
+        _ = this->advance();
+        const auto mt = this->advance();
+        const auto f = this->fn_rest(tps, cons, flags, ty, mt, nt.text, this->strs(), nt.off, out_static)?;
+        f.is_async = is_async;
+        out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+        return;
+    }
+    if (this->at(.lparen) && !is_const) {
+        const auto f = this->fn_rest(tps, cons, flags, ty, nt, "", this->strs(), 0, true)?;
+        f.is_async = is_async;
+        out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+        return;
+    }
+    if (is_async) { this->fail("only a function can be async")?; }
+    _ = this->expect(.eq)?;
+    const auto v = this->parse_expr()?;
+    auto vty = ty;
+    if (ty.k == .Name && ty.name == "auto" && ty.args.len == 0) { vty = null; }
+    const auto cd = this->a.create<ConstDecl>()?;
+    *cd = ConstDecl{ .name = nt.text, .ty = vty, .value = v, .mutable = !is_const, .line = t.line, .name_off = nt.off, .align = want_align };
+    out.push(Decl{ .k = .Const, .c = cd, .line = t.line })?;
+}
+
+/// true when the next struct member is written C++-style (type first)
+bool Parser::new_member(bool is_union) {
+    if (this->at(.kw_static) || this->at(.kw_const) || this->at(.kw_template)) { return true; }
+    if (is_union && this->at(.ident)) {
+        const auto n = this->peek_at(1).tag;
+        if (n == .comma || n == .semi || n == .rbrace) { return false; }
+    }
+    return true;
+}
+
+!void Parser::parse_member_new(str sname, List<str> tps, bool is_union, List<Field>*fields, List<Decl>*out) {
+    const auto t = this->peek();
+    auto is_static = false;
+    auto is_async = false;
+    auto mtps = this->strs();
+    auto mcons = this->strs();
+    if (this->at(.kw_template)) {
+        _ = this->advance();
+        mtps = this->parse_type_params(&mcons)?;
+    }
+    if (this->at(.ident) && this->peek().text == sname && this->peek_at(1).tag == .lparen) {
+        auto nt = this->advance();
+        nt.text = "init";
+        const auto f = this->fn_rest(mtps, mcons, 0, this->te_name("void")?, nt, sname, tps, t.off, false)?;
+        out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+        return;
+    }
+    while (this->at(.kw_static) || this->at(.kw_const) || this->async_ahead()) {
+        const auto k = this->advance().tag;
+        if (k == .kw_static) { is_static = true; }
+        if (k == .ident) { is_async = true; }
+    }
+    const auto ty = this->try_type();
+    if (ty == null) { this->fail("expected a member declaration")?; }
+    auto nt = this->expect(.ident)?;
+    if (nt.text == "operator") {
+        const auto ot = this->advance();
+        const auto on = operator_method(ot.tag);
+        if (on.len == 0) { this->fail("this operator cannot be overloaded")?; }
+        nt.text = on;
+        if (on == "op_sub" && this->peek_at(1).tag == .rparen) { nt.text = "op_neg"; }
+    }
+    if (this->at(.lparen)) {
+        const auto f = this->fn_rest(mtps, mcons, 0, ty, nt, sname, tps, t.off, is_static)?;
+        f.is_async = is_async;
+        out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
+        return;
+    }
+    if (is_async) { this->fail("only a function can be async")?; }
+    Expr* init = null;
+    if (this->eat(.eq)) { init = this->parse_expr()?; }
+    fields.push(Field{ .name = nt.text, .ty = ty, .off = nt.off, .init = init })?;
+    if (!this->at(.rbrace)) { _ = this->expect(.semi)?; }
+}
+
+// ------------------------------------------------------------ statements
+!Stmt* Parser::parse_decl_stmt_new(Token t, bool require) {
+    const auto is_const = this->eat(.kw_const);
+    const auto ty = this->try_type();
+    if (ty == null) { this->fail("expected a type")?; }
+    const auto nt = this->expect(.ident)?;
+    const auto s = this->st(.Let, t)?;
+    s.name = nt.text;
+    s.name_off = nt.off;
+    s.mutable = !is_const;
+    if (!(ty.k == .Name && ty.name == "auto" && ty.args.len == 0)) { s.ty = ty; }
+    if (this->eat(.eq)) { s.e = this->parse_expr()?; }
+    if (s.ty == null && s.e == null) {
+        eprintln("{this->file}:{t.line}: error: '{s.name}' needs a type or initializer");
+        show_source(this->file, t.line, t.off);
+        return error.ParseFailed;
+    }
+    return s;
+}
+
+/// `Type name = e;` / `Type name;` / `auto name = e;`, or null (position restored) when it is not a declaration
+!Stmt* Parser::try_decl_stmt(Token t) {
+    if (this->await_ahead()) { return null; }
+    const auto save = this->pos;
+    const auto ty = this->try_type();
+    if (ty == null) { return null; }
+    if (!this->at(.ident)) {
+        this->pos = save;
+        return null;
+    }
+    const auto after = this->peek_at(1).tag;
+    if (after != .eq && after != .semi && after != .rbrace) {
+        this->pos = save;
+        return null;
+    }
+    this->pos = save;
+    return this->parse_decl_stmt_new(t, false);
+}
+
+!Stmt* Parser::incr_stmt(Token t, Expr* target, bool up) {
+    const auto s = this->st(.Assign, t)?;
+    s.op = .plus_eq;
+    if (!up) { s.op = .minus_eq; }
+    s.e2 = target;
+    const auto one = this->ex(.IntLit, t)?;
+    one.ival = 1;
+    s.e = one;
+    return s;
+}
+
+/// for (auto x : seq) / for (T i : a..b) / for (T i = a; i < b; i++)
+!Stmt* Parser::parse_for_new(Token t) {
+    _ = this->expect(.lparen)?;
+    const auto save = this->pos;
+    if (this->at(.ident) && this->peek().text == "auto" && this->peek_at(1).tag == .lbracket && this->peek_at(2).tag == .ident && this->peek_at(3).tag == .comma) {
+        _ = this->advance();
+        _ = this->advance();
+        const auto it = this->advance();
+        _ = this->advance();
+        const auto xt = this->expect(.ident)?;
+        _ = this->expect(.rbracket)?;
+        _ = this->expect(.colon)?;
+        const auto s = this->st(.ForEach, t)?;
+        s.e = this->parse_expr()?;
+        _ = this->expect(.rparen)?;
+        s.idx = it.text;
+        s.idx_off = it.off;
+        s.has_idx = true;
+        s.name = xt.text;
+        s.name_off = xt.off;
+        s.body = this->parse_block()?;
+        return s;
+    }
+    const auto ty = this->try_type();
+    if (ty == null || !this->at(.ident)) {
+        this->pos = save;
+        this->fail("expected a declaration in 'for ('")?;
+    }
+    const auto nt = this->advance();
+    if (this->eat(.colon)) {
+        const auto e = this->parse_expr()?;
+        if (this->eat(.dotdot)) {
+            const auto s = this->st(.ForRange, t)?;
+            s.name = nt.text;
+            s.name_off = nt.off;
+            s.e = e;
+            s.e2 = this->parse_expr()?;
+            _ = this->expect(.rparen)?;
+            s.body = this->parse_block()?;
+            return s;
+        }
+        _ = this->expect(.rparen)?;
+        const auto s = this->st(.ForEach, t)?;
+        s.e = e;
+        s.name = nt.text;
+        s.name_off = nt.off;
+        s.body = this->parse_block()?;
+        return s;
+    }
+    _ = this->expect(.eq)?;
+    const auto lo = this->parse_expr()?;
+    _ = this->expect(.semi)?;
+    const auto c = this->parse_expr()?;
+    _ = this->expect(.semi)?;
+    auto ok = c.k == .Binary && (c.op == .lt || c.op == .le) && c.l.k == .Ident && c.l.name == nt.text;
+    auto step_ok = false;
+    if (this->at(.ident) && this->peek().text == nt.text && this->peek_at(1).tag == .plusplus) {
+        _ = this->advance();
+        _ = this->advance();
+        step_ok = true;
+    } else if (this->at(.plusplus) && this->peek_at(1).text == nt.text) {
+        _ = this->advance();
+        _ = this->advance();
+        step_ok = true;
+    } else if (this->at(.ident) && this->peek().text == nt.text && this->peek_at(1).tag == .plus_eq && this->peek_at(2).tag == .int_lit && this->peek_at(2).text == "1") {
+        _ = this->advance();
+        _ = this->advance();
+        _ = this->advance();
+        step_ok = true;
+    }
+    if (!ok || !step_ok) {
+        this->pos -= 1;
+        this->fail("this for loop is not of the form for (T i = a; i < b; i++); use while for other loops")?;
+    }
+    _ = this->expect(.rparen)?;
+    const auto s = this->st(.ForRange, t)?;
+    s.name = nt.text;
+    s.name_off = nt.off;
+    s.e = lo;
+    s.e2 = c.r;
+    if (c.op == .le) {
+        const auto plus = this->ex(.Binary, t)?;
+        plus.op = .plus;
+        plus.l = c.r;
+        const auto one = this->ex(.IntLit, t)?;
+        one.ival = 1;
+        plus.r = one;
+        s.e2 = plus;
+    }
+    s.body = this->parse_block()?;
+    return s;
+}
+
+struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
+
+/// `interface Name { R m(A a); }` becomes a vtable struct plus a two-word struct `Name { void* data; NameVtable* vt; }` with dispatching methods
+!void Parser::parse_interface(Token t, List<Decl>*out) {
+    _ = this->advance();
+    const auto nt = this->expect(.ident)?;
+    const auto name = nt.text;
+    _ = this->expect(.lbrace)?;
+    auto methods = List<IfaceMethod>::init(this->a);
+    while (!this->at(.rbrace)) {
+        auto ts = List<Token>::init(this->a);
+        while (!this->at(.semi) && !this->at(.rbrace) && !this->at(.eof)) { ts.push(this->advance())?; }
+        _ = this->eat(.semi);
+        if (ts.len == 0) { continue; }
+        auto lp = 0;
+        while (lp < ts.len && ts.get(lp).tag != .lparen) { lp += 1; }
+        if (lp < 2 || lp >= ts.len) { this->fail("expected a method declaration like 'R name(T a);' in an interface")?; }
+        auto m = IfaceMethod{ .ret = "", .name = ts.get(lp - 1).text, .ptypes = this->strs(), .pnames = this->strs() };
+        auto rb = List<u8>::init(this->a);
+        for (auto i : 0..lp - 1) {
+            if (i > 0) { rb.push(' ')?; }
+            rb.append(ts.get(i).text)?;
+        }
+        m.ret = rb.slice();
+        auto depth = 0;
+        auto cur = List<Token>::init(this->a);
+        auto k = lp + 1;
+        while (k < ts.len) {
+            const auto tk = ts.get(k);
+            auto close = false;
+            match tk.tag {
+                .lparen, .lt => depth += 1;
+                .gt => depth -= 1;
+                .shr => depth -= 2;
+                .rparen => {
+                    if (depth == 0) { close = true; } else { depth -= 1; }
+                }
+            }
+            if (close || (tk.tag == .comma && depth == 0)) {
+                if (cur.len > 0) {
+                    auto tb = List<u8>::init(this->a);
+                    for (auto i : 0..cur.len - 1) {
+                        if (i > 0) { tb.push(' ')?; }
+                        tb.append(cur.get(i).text)?;
+                    }
+                    m.ptypes.push(tb.slice())?;
+                    m.pnames.push(cur.get(cur.len - 1).text)?;
+                }
+                cur = List<Token>::init(this->a);
+                if (close) { break; }
+            } else {
+                cur.push(tk)?;
+            }
+            k += 1;
+        }
+        methods.push(m)?;
+    }
+    _ = this->expect(.rbrace)?;
+    auto b = List<u8>::init(this->a);
+    sprint(&b, "struct {name}Vtable {{ ")?;
+    for (auto m : methods) {
+        sprint(&b, "fn(void*")?;
+        for (auto pt : m.ptypes) { sprint(&b, ", {pt}")?; }
+        sprint(&b, ") -> {m.ret} {m.name}; ")?;
+    }
+    sprint(&b, "}\nstruct {name} {{ void* data; {name}Vtable* vt; ")?;
+    for (auto m : methods) {
+        sprint(&b, "{m.ret} {m.name}(")?;
+        for (auto [i, pt] : m.ptypes) {
+            if (i > 0) { b.append(", ")?; }
+            sprint(&b, "{pt} {m.pnames.get(i)}")?;
+        }
+        b.append(") \{ ")?;
+        if (m.ret != "void") { b.append("return ")?; }
+        sprint(&b, "this->vt->{m.name}(this->data")?;
+        for (auto pn : m.pnames) { sprint(&b, ", {pn}")?; }
+        b.append("); } ")?;
+    }
+    b.append("}\n")?;
+    auto toks = tokenize(this->a, b.slice(), this->file)?;
+    for (auto k : 0..toks.len) {
+        toks.items[k].line = t.line;
+        toks.items[k].off = t.off;
+    }
+    auto sub = new_parser(this->a, toks.slice(), this->file);
+    sub.aliases = this->aliases;
+    const auto decls = sub.parse_file()?;
+    for (auto d : decls) {
+        if (d.k == .Struct && d.s.name == name) { d.s.is_iface = true; }
+        out.push(d)?;
+    }
+}
