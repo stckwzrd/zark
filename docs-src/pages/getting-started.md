@@ -20,8 +20,8 @@ No separate starting compiler is needed. The repository contains a "seed" (`boot
 ## Building the compiler
 
 ```sh
-git clone https://github.com/stckwzrd/vibe.git
-cd vibe
+git clone https://github.com/stckwzrd/zark.git
+cd zark
 ./bootstrap.sh
 ```
 
