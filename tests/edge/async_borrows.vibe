@@ -50,6 +50,22 @@ async !i64 spawned(async::Executor* ex) {
     return a + b;
 }
 
+struct Buf {
+    i64[3] a;
+
+    i64[] slice() { return this->a[0..3]; }
+}
+
+async i64 own_slice() {
+    auto b = Buf{ .a = [1, 2, 3] };
+    auto n = 0;
+    for (auto x : b) {
+        await Yield1{};
+        n += x;
+    }
+    return n;
+}
+
 !void main() {
     auto ex = async::Executor::init(c_allocator())?;
     defer ex.deinit();
@@ -68,4 +84,7 @@ async !i64 spawned(async::Executor* ex) {
     auto t4 = spawned(&ex);
     i64 r4 = ex.block_on(&t4)?;
     println(r4);
+    auto t5 = own_slice();
+    i64 r5 = ex.block_on(&t5)?;
+    println(r5);
 }
