@@ -6,17 +6,17 @@ const { marked } = require("marked")
 const { createHighlighter } = require("shiki")
 
 const ROOT = path.resolve(__dirname, "..")
-const VIBE = process.env.VIBE || path.join(ROOT, "build", "vibe")
+const ZARK = process.env.ZARK || path.join(ROOT, "build", "zark")
 const OUT = process.env.DOCS_OUT || path.join(ROOT, "docs")
 const PAGES = path.join(__dirname, "pages")
 const TMP = path.join(__dirname, ".tmp-" + process.pid)
 const CACHE_FILE = process.env.DOCS_CACHE || path.join(__dirname, ".cache.json")
 const ONLY = process.env.DOCS_PAGES ? process.env.DOCS_PAGES.split(",") : null
 const cache = fs.existsSync(CACHE_FILE) ? JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) : {}
-const SITE = "Vibe"
+const SITE = "Zark"
 const LANGS = [
-  { code: "en", pages: "pages", dir: "", up: "", other: "ru", switchTo: "Русский", ui: { out: "Output", errOut: "Compiler output", testOut: "Test output", exit: "exit code", toc: "On this page", prev: "Previous", next: "Next", desc: "A guide to the Vibe programming language", search: "Search the guide (/)", nothing: "Nothing found", copy: "Copy", copied: "Copied", menu: "Menu", theme: "Toggle theme" } },
-  { code: "ru", pages: "pages-ru", dir: "ru", up: "../", other: "en", switchTo: "English", ui: { out: "Вывод", errOut: "Вывод компилятора", testOut: "Вывод тестов", exit: "код выхода", toc: "На этой странице", prev: "Назад", next: "Дальше", desc: "Руководство по языку программирования Vibe", search: "Поиск по руководству (/)", nothing: "Ничего не найдено", copy: "Копировать", copied: "Скопировано", menu: "Меню", theme: "Сменить тему" } },
+  { code: "en", pages: "pages", dir: "", up: "", other: "ru", switchTo: "Русский", ui: { out: "Output", errOut: "Compiler output", testOut: "Test output", exit: "exit code", toc: "On this page", prev: "Previous", next: "Next", desc: "A guide to the Zark programming language", search: "Search the guide (/)", nothing: "Nothing found", copy: "Copy", copied: "Copied", menu: "Menu", theme: "Toggle theme" } },
+  { code: "ru", pages: "pages-ru", dir: "ru", up: "../", other: "en", switchTo: "English", ui: { out: "Вывод", errOut: "Вывод компилятора", testOut: "Вывод тестов", exit: "код выхода", toc: "На этой странице", prev: "Назад", next: "Дальше", desc: "Руководство по языку программирования Zark", search: "Поиск по руководству (/)", nothing: "Ничего не найдено", copy: "Копировать", copied: "Скопировано", menu: "Меню", theme: "Сменить тему" } },
 ]
 const failures = []
 
@@ -52,8 +52,8 @@ function parseInfo(info) {
   return { lang, flags, opts }
 }
 
-function runVibe(page, line, code, mode, extra, withArgs) {
-  const key = crypto.createHash("sha1").update(VIBE_STAMP + mode + "\0" + code + "\0" + JSON.stringify(extra) + withArgs.join(" ")).digest("hex")
+function runZark(page, line, code, mode, extra, withArgs) {
+  const key = crypto.createHash("sha1").update(ZARK_STAMP + mode + "\0" + code + "\0" + JSON.stringify(extra) + withArgs.join(" ")).digest("hex")
   if (cache[key]) {
     if (mode === "error" && cache[key].code === 0) failures.push(`${page}:${line}: example marked 'error' compiled and ran`)
     return cache[key]
@@ -61,14 +61,14 @@ function runVibe(page, line, code, mode, extra, withArgs) {
   const dir = path.join(TMP, key.slice(0, 12))
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(path.join(dir, "main.vibe"), code)
+  fs.writeFileSync(path.join(dir, "main.zk"), code)
   for (const [name, text] of Object.entries(extra)) {
     fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true })
     fs.writeFileSync(path.join(dir, name), text)
   }
   const verb = mode === "test" ? "test" : "run"
-  const args = [verb, "main.vibe", ...withArgs]
-  const r = cp.spawnSync(VIBE, args, { cwd: dir, encoding: "utf8", timeout: 60000 })
+  const args = [verb, "main.zk", ...withArgs]
+  const r = cp.spawnSync(ZARK, args, { cwd: dir, encoding: "utf8", timeout: 60000 })
   let out = (r.stdout || "") + (r.stderr || "")
   out = out.split(dir + "/").join("").split(dir).join(".").replace(/\n+$/, "")
   const res = { out, code: r.status === null ? -1 : r.status }
@@ -77,14 +77,14 @@ function runVibe(page, line, code, mode, extra, withArgs) {
   return res
 }
 
-let VIBE_STAMP = ""
+let ZARK_STAMP = ""
 
 async function main() {
-  VIBE_STAMP = String(fs.statSync(VIBE).mtimeMs)
-  const grammar = JSON.parse(fs.readFileSync(path.join(ROOT, "editors", "vscode", "syntaxes", "vibe.tmLanguage.json"), "utf8"))
+  ZARK_STAMP = String(fs.statSync(ZARK).mtimeMs)
+  const grammar = JSON.parse(fs.readFileSync(path.join(ROOT, "editors", "vscode", "syntaxes", "zark.tmLanguage.json"), "utf8"))
   const hl = await createHighlighter({
     themes: ["github-light", "github-dark"],
-    langs: [{ ...grammar, name: "vibe" }, "sh", "c", "cpp", "json", "text", "zig", "rust", "go", "python", "javascript"],
+    langs: [{ ...grammar, name: "zark" }, "sh", "c", "cpp", "json", "text", "zig", "rust", "go", "python", "javascript"],
   })
 
   fs.rmSync(OUT, { recursive: true, force: true })
@@ -145,25 +145,25 @@ async function buildSite(hl, L) {
       blockNo++
       const { lang, flags, opts } = parseInfo(infostring)
       const lineNo = "block " + blockNo
-      if (lang === "vibe" || lang === "c" || lang === "cpp") {
+      if (lang === "zark" || lang === "c" || lang === "cpp") {
         if (opts.file) {
           extraFiles[opts.file] = code
           return codeHtml(hl, code, lang, opts.file)
         }
       }
-      if (lang === "vibe" && (flags.has("run") || flags.has("error") || flags.has("test"))) {
+      if (lang === "zark" && (flags.has("run") || flags.has("error") || flags.has("test"))) {
         let src = code
         if (flags.has("fragment")) src = "void main() { " + code.replace(/\n$/, "") + "\n}\n"
         const mode = flags.has("error") ? "error" : flags.has("test") ? "test" : "run"
         const withArgs = opts.with ? opts.with.split(",") : []
-        const res = runVibe(p.name, lineNo, src, mode, extraFiles, withArgs.filter((x) => x !== "allow-fail"))
+        const res = runZark(p.name, lineNo, src, mode, extraFiles, withArgs.filter((x) => x !== "allow-fail"))
         extraFiles = {}
         const label = mode === "error" ? U.errOut : mode === "test" ? U.testOut : U.out
         let tail = ""
         if (res.code !== 0 && mode !== "error" && mode !== "test") tail = `<span class="exit">${U.exit} ${res.code}</span>`
         if (mode === "run" && res.code !== 0 && !flags.has("exit") && !flags.has("panic")) failures.push(`${p.name} ${lineNo}: exit ${res.code}: ${res.out.split("\n")[0]}`)
         if (mode === "test" && res.code !== 0 && !flags.has("fails")) failures.push(`${p.name} ${lineNo}: tests failed`)
-        return `<div class="example">${codeHtml(hl, code, "vibe", opts.title || "")}<div class="out ${mode}"><div class="out-head"><span>${label}</span>${tail}</div><pre><code>${esc(res.out)}</code></pre></div></div>\n`
+        return `<div class="example">${codeHtml(hl, code, "zark", opts.title || "")}<div class="out ${mode}"><div class="out-head"><span>${label}</span>${tail}</div><pre><code>${esc(res.out)}</code></pre></div></div>\n`
       }
       return codeHtml(hl, code, lang, opts.title || "")
     }
@@ -227,7 +227,7 @@ ${pager}
 }
 
 function codeHtml(hl, code, lang, title) {
-  const known = ["vibe", "sh", "c", "cpp", "json", "text", "zig", "rust", "go", "python", "javascript"]
+  const known = ["zark", "sh", "c", "cpp", "json", "text", "zig", "rust", "go", "python", "javascript"]
   const l = known.includes(lang) ? lang : "text"
   const body = hl.codeToHtml(code.replace(/\n$/, ""), { lang: l, themes: { light: "github-light", dark: "github-dark" }, defaultColor: false })
   return `<div class="code">${title ? `<div class="code-title">${esc(title)}</div>` : ""}${body}</div>`

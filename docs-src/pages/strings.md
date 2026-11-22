@@ -14,7 +14,7 @@ description: The str type, slices and comparing strings, interpolation, format s
 - The length is `s.len`, a byte is `s[i]`, a substring is `s[a..b]`.
 - These are **bytes**, not characters. A letter like `é` takes 2 bytes.
 
-```vibe run
+```zark run
 void main() {
     const auto s = "hello";
     println(s.len, s[0], s[1..4], s[..2], s[3..]);
@@ -29,7 +29,7 @@ void main() {
 
 The contents of a literal cannot be changed. An attempt to write into it crashes the program, because the memory of literals is write-protected:
 
-```vibe run exit
+```zark run exit
 void main() {
     auto s = "abc";
     s[0] = 65;
@@ -38,7 +38,7 @@ void main() {
 
 To get a mutable string, copy it into your own buffer:
 
-```vibe run
+```zark run
 void main() {
     u8[3] buf = [97, 98, 99];
     const str s = buf[..];
@@ -51,7 +51,7 @@ void main() {
 
 `==` and `!=` compare the **contents** (with `memcmp` inside). There is no ordering (`<`).
 
-```vibe run
+```zark run
 void main() {
     const auto a = "abc";
     const auto b = "ab";
@@ -66,7 +66,7 @@ There is no `+` for strings: joining is done by formatting into a buffer (see be
 
 In a string literal, `{expression}` is evaluated and inserted. Any expression is allowed, including calls, indexing, arithmetic, comparisons and casts.
 
-```vibe run
+```zark run
 i64 double(i64 x) { return x * 2; }
 
 void main() {
@@ -83,7 +83,7 @@ void main() {
 
 Literal curly braces are `{{` and `}}` (or `\{` and `\}`):
 
-```vibe run
+```zark run
 void main() {
     const auto v = 3;
     println("{{\"v\": {v}}}");
@@ -93,7 +93,7 @@ void main() {
 
 **Important:** interpolation is **not** allocating a string. The compiler expands it into a format for `printf`, and the values are printed right away, with nothing allocated on the heap. So `"..{x}.."` without a print function call **does not create a value of type `str`**. Interpolation is allowed only in the arguments of a function whose last parameter has the type `Fmt`: that is `print`, `println`, `eprint`, `eprintln`, `panic`, `bprint`, `sprint` and your own (see [Your own print functions](#your-own-print-functions)):
 
-```vibe error fragment
+```zark error fragment
 const auto n = 5;
 const auto s = "n = {n}";
 println(s);
@@ -112,7 +112,7 @@ If you need a string value, build it in a buffer: `bprint` or `sprint` (see [Bui
 
 Arguments can be listed with commas: they are printed separated by spaces. **Any** type can be printed:
 
-```vibe run
+```zark run
 struct P { i64 x; f64 y; }
 enum Color { Red, Green }
 union U { i64 A; B; }
@@ -167,7 +167,7 @@ After an expression you can put `:` and a specification, as in `printf`: flags, 
 | `{n:+}` | `+255` | always with a sign |
 | `{c:c}` | `A` for 65 | the number as a character |
 
-```vibe run
+```zark run
 void main() {
     const auto n = 255;
     println("[{n}] [{n:x}] [{n:X}] [{n:08X}]");
@@ -190,7 +190,7 @@ There is no binary printing: `{n:b}` prints `<bad format>`. For a binary form, t
 | `{f:-8.1}` | `3.1     ` | left-aligned |
 | `{f:e}` | `3.141593e+00` | exponential notation |
 
-```vibe run
+```zark run
 void main() {
     const auto f = 3.14159265;
     println("[{f}] [{f:.2}] [{f:8.3}] [{f:-8.1}] [{f:e}]");
@@ -204,7 +204,7 @@ Note that `100000.0` is printed as `100000`, and `1000000.0` as `1e+06`. For a c
 
 Width works with strings too:
 
-```vibe run
+```zark run
 void main() {
     const auto name = "hi";
     println("[{name:6}] [{name:-6}]");
@@ -224,7 +224,7 @@ Need a string value? There are two ways.
 
 `bprint(buf, ...)` formats into your array and returns a `!str`, a slice of that buffer. If it does not fit, you get `error.NoSpace`. Nothing is allocated.
 
-```vibe run
+```zark run
 !void main() {
     u8[32] buf;
     const auto s = bprint(buf[..], "x = {1 + 2}, y = {2.5:.1}")?;
@@ -245,7 +245,7 @@ The result lives exactly as long as the buffer.
 
 `sprint(&list, ...)` appends text to a `List<u8>`. It grows through the list's allocator. Ideal for building in pieces:
 
-```vibe run
+```zark run
 !void main() {
     auto out = List<u8>::init(c_allocator());
     defer out.deinit();
@@ -265,7 +265,7 @@ The result lives exactly as long as the buffer.
 
 If the last parameter of a function is `Fmt`, then the string with `{...}` and all the other arguments of the call are gathered into it. You can pass the `Fmt` on to `print` or `println` as it is:
 
-```vibe run
+```zark run
 void note(str tag, Fmt f) {
     print("[{tag}] ");
     println(f);
@@ -296,12 +296,12 @@ void main() {
 | `!u8* to_cstr(buf, s)` | a C string in your buffer |
 | `!u8* a.dupz(s)` | a C string on the heap |
 
-```vibe run
+```zark run
 !void main() {
-    const auto s = "  Hello, Vibe!  ";
+    const auto s = "  Hello, Zark!  ";
     const auto t = str_trim(s);
     println("[{t}]");
-    println(str_find(t, "Vibe"), str_find(t, "nope"), str_find_byte(t, ','), str_rfind_byte(t, 'l'));
+    println(str_find(t, "Zark"), str_find(t, "nope"), str_find_byte(t, ','), str_rfind_byte(t, 'l'));
     println(str_starts_with(t, "Hello"), str_ends_with(t, "!"));
     println(t[0..5], t[7..]);
     println(parse_int("42") catch -1, parse_int("12x") catch -1);
@@ -315,7 +315,7 @@ The prelude has `str_split`, `str_join`, `str_replace`, `str_to_upper` and more 
 
 ### Splitting by a separator
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -341,13 +341,13 @@ The parts are slices of the original string; nothing is copied.
 
 Changing needs your own memory:
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
     const auto a = arena.allocator();
 
-    const auto src = "Hello, Vibe!";
+    const auto src = "Hello, Zark!";
     const auto up = a.alloc<u8>(src.len)?;
     for (auto [i, c] : src) {
         if (c >= 'a' && c <= 'z') {
@@ -364,7 +364,7 @@ Changing needs your own memory:
 
 `read_line(buf)` reads a line from stdin (without the newline) or returns `error.EndOfFile`:
 
-```vibe run with=allow-fail
+```zark run with=allow-fail
 void main() {
     u8[128] buf;
     const auto line = read_line(buf[..]) catch {

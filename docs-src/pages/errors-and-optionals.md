@@ -2,10 +2,10 @@
 title: Errors and optional values
 order: 17
 section: Language
-description: The type !T, error.Name, ?, catch, errdefer, the type ?T and orelse in Vibe, with analysis of typical patterns
+description: The type !T, error.Name, ?, catch, errdefer, the type ?T and orelse in Zark, with analysis of typical patterns
 ---
 
-Vibe has no exceptions. An error is an ordinary value that a function returns alongside its result. Everything is visible in the signature and at the call site.
+Zark has no exceptions. An error is an ordinary value that a function returns alongside its result. Everything is visible in the signature and at the call site.
 
 There are two types for two different situations:
 
@@ -18,7 +18,7 @@ There are two types for two different situations:
 
 A function declares that it can fail by putting `!` before the result type. To return an error, write `return error.Name`.
 
-```vibe run
+```zark run
 !i64 safe_div(i64 a, i64 b) {
     if (b == 0) { return error.DivByZero; }
     return a / b;
@@ -36,7 +36,7 @@ A plain value `T` fits wherever `!T` is expected (an implicit conversion), so in
 
 If you do not need a result but an error is possible, write `!void`:
 
-```vibe run
+```zark run
 !void check(i64 n) {
     if (n < 0) { return error.Negative; }
 }
@@ -49,7 +49,7 @@ void main() {
 
 A `!T` value can be put into a variable and printed. It is printed as the value or as `error.Name`:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return n;
@@ -64,7 +64,7 @@ void main() {
 
 You cannot use such a value as an ordinary number: it has to be "unwrapped" first:
 
-```vibe error
+```zark error
 !i64 f() { return 1; }
 
 void main() {
@@ -76,7 +76,7 @@ void main() {
 
 If you call a function that returns `!T` and do nothing with the result, that is a compile error. You cannot forget about a failure:
 
-```vibe error
+```zark error
 !i64 f() { return 1; }
 
 void main() {
@@ -91,7 +91,7 @@ Choose: propagate (`?`), handle (`catch`) or deliberately discard (`_ =`).
 
 `expression?`: if there is an error inside, the function **immediately returns that same error** to its caller (running `defer` and `errdefer`). If there is a value, it is extracted.
 
-```vibe run
+```zark run
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -112,7 +112,7 @@ void main() {
 
 `?` can be used only in a function that itself returns `!T`. Otherwise it is unclear where to propagate to:
 
-```vibe error
+```zark error
 !i64 f() { return 1; }
 i64 g() { return f()?; }
 
@@ -127,7 +127,7 @@ Chains like `a()?.b()?` are read left to right: every `?` is a point of possible
 
 If `main` returns `!void`, an uncaught error ends the program with code 1 and prints `error: Name`:
 
-```vibe run exit
+```zark run exit
 !void load() {
     return error.FileMissing;
 }
@@ -143,7 +143,7 @@ If `main` returns `!void`, an uncaught error ends the program with code 1 and pr
 
 `expression catch fallback` gives the result of the expression when it succeeds, and `fallback` on an error.
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return n * 10;
@@ -159,7 +159,7 @@ void main() {
 
 `catch |e| { ... }` gives access to the error. The block must **produce a value** (the last expression of the block) or **leave** the function or loop with `return`, `break`, `continue` or `panic`.
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     if (n < 0) { return error.Negative; }
@@ -177,7 +177,7 @@ void main() {
 
 You can pick a value by the kind of error with a comparison. `if` is a statement, so the value is declared in advance:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return error.Other;
@@ -204,7 +204,7 @@ void main() {
 
 A block that gives no value is an error. An expression must come last:
 
-```vibe error
+```zark error
 !i64 f() { return error.X; }
 
 void main() {
@@ -218,7 +218,7 @@ void main() {
 
 In a `catch` branch you can leave the current function or loop:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return n;
@@ -242,7 +242,7 @@ void main() {
 
 If the expression returns nothing, an action simply follows `catch`:
 
-```vibe run
+```zark run
 !void f() { return error.Boom; }
 
 void main() {
@@ -254,7 +254,7 @@ void main() {
 
 ### Deliberately discarding: `_ =`
 
-```vibe run
+```zark run
 !i64 risky() { return error.Fail; }
 
 void main() {
@@ -269,7 +269,7 @@ This is allowed, but rarely needed in practice: more often you write `catch 0` o
 
 `errdefer` runs only when the function exits **with an error**. It is meant for rolling back partially built state. A plain `defer` always runs (see [control flow](control-flow.md#defer-and-errdefer)).
 
-```vibe run
+```zark run
 !i64 make(i64 n) {
     errdefer println("rollback: make({n}) failed");
     defer println("in any case: finished make({n})");
@@ -285,7 +285,7 @@ void main() {
 
 The rule works both for an error that arrived through `?` and for a `return g()` that turned out to be an error:
 
-```vibe run
+```zark run
 !void inner() { return error.OutOfRange; }
 
 !void outer() {
@@ -320,7 +320,7 @@ The functions of the standard library return errors with clear names:
 
 The full table is in the [reference](stdlib.md).
 
-```vibe run
+```zark run
 void main() {
     println(parse_int("42") catch -1);
     const auto e = parse_int("abc") catch |e| {
@@ -337,7 +337,7 @@ void main() {
 
 A value `T` and `null` convert implicitly into `?T`:
 
-```vibe run
+```zark run
 ?i64 find(i64[] xs, i64 want) {
     for (auto [i, x] : xs) {
         if (x == want) { return i; }
@@ -357,7 +357,7 @@ void main() {
 
 `a orelse b` is the value of `a`, or `b` if it is empty. The right-hand side can be an exit: `return`, `break`, `continue`.
 
-```vibe run
+```zark run
 ?i64 find(i64[] xs, i64 want) {
     for (auto [i, x] : xs) {
         if (x == want) { return i; }
@@ -386,7 +386,7 @@ void main() {
 
 ### Testing and taking apart
 
-```vibe run
+```zark run
 ?i64 pick(i64 n) {
     if (n > 0) { return n; }
     return null;
@@ -413,7 +413,7 @@ Methods: `is_some()` and `unwrap_or(fallback)`. The patterns `.Some(v)` and `.No
 
 For "a pointer that may be absent" use `?T*`. You cannot compare a value of type `?T` with `null` directly (`x == null`): use `orelse`, `is .None` or `match`.
 
-```vibe run
+```zark run
 struct Node { i64 v; }
 
 ?Node* find(Node[] xs, i64 v) {
@@ -438,7 +438,7 @@ An ordinary pointer `T*` can itself be `null` and is compared with `null` direct
 
 An operation that can break and can also return "nothing": `!?T`. The `!` is unwrapped first, then the `?`:
 
-```vibe run
+```zark run
 !?i64 lookup(str key) {
     if (key.len == 0) { return error.EmptyKey; }
     if (key == "a") { return 1; }
@@ -464,7 +464,7 @@ Ask: "if there is no result, is that normal or is it a failure?"
 
 For programmer errors (a violated invariant) there are `panic("message")` and `assert(condition)`: they print the location and end the program with code 1. They do not replace `!T`.
 
-```vibe run panic
+```zark run panic
 void main() {
     const auto n = 3;
     assert(n > 0);

@@ -2,10 +2,10 @@
 title: Operators and expressions
 order: 13
 section: Language
-description: Arithmetic, comparisons, logic, bitwise operators, assignment, precedence, as, pointers and slices in Vibe
+description: Arithmetic, comparisons, logic, bitwise operators, assignment, precedence, as, pointers and slices in Zark
 ---
 
-Vibe has few operators and no overloading of the built-in ones: `+` always means adding numbers. Every action on a value is visible in the code.
+Zark has few operators and no overloading of the built-in ones: `+` always means adding numbers. Every action on a value is visible in the code.
 
 ## Arithmetic
 
@@ -16,7 +16,7 @@ Vibe has few operators and no overloading of the built-in ones: `+` always means
 | `%` | remainder (the sign matches the sign of the dividend) |
 | `-x` | negation |
 
-```vibe run
+```zark run
 void main() {
     println(7 + 3, 7 - 3, 7 * 3);
     println(7 / 2, -7 / 2, 7.0 / 2.0);
@@ -26,7 +26,7 @@ void main() {
 
 Both operands must have the same type. An integer can be widened implicitly, but it cannot be mixed with a float:
 
-```vibe error fragment
+```zark error fragment
 const i64 a = 5;
 const f64 b = 2.0;
 println(a + b);
@@ -36,7 +36,7 @@ Convert explicitly: `a as f64 + b`.
 
 Strings are not joined with operators:
 
-```vibe error fragment
+```zark error fragment
 println("a" + "b");
 ```
 
@@ -48,7 +48,7 @@ Integer division by zero panics (see [types](types.md#overflow)); floating-point
 
 `==` `!=` `<` `<=` `>` `>=` give `bool`.
 
-```vibe run
+```zark run
 void main() {
     println(1 == 1, 1 != 2, 3 < 2, 3 >= 3);
     println(1.5 < 2.5, 'a' < 'b');
@@ -58,19 +58,19 @@ void main() {
 
 Only `==` and `!=` are defined for strings. You cannot order strings with `<`:
 
-```vibe error fragment
+```zark error fragment
 println("abc" < "abd");
 ```
 
 Chains of comparisons like `1 < 2 < 3` do not work: the result of `1 < 2` is a `bool`, not a number.
 
-```vibe error fragment
+```zark error fragment
 println(1 < 2 < 3);
 ```
 
 Enum values and pointers can be compared too:
 
-```vibe run
+```zark run
 enum Color { Red, Green }
 
 void main() {
@@ -89,7 +89,7 @@ void main() {
 
 Evaluation is **lazy**: the right-hand side runs only if it is needed for the result.
 
-```vibe run
+```zark run
 bool noisy(str name, bool v) {
     println("called {name}");
     return v;
@@ -105,7 +105,7 @@ void main() {
 
 This lets you write a guard and a check in one condition:
 
-```vibe run
+```zark run
 void main() {
     const auto s = "x";
     auto i = 5;
@@ -117,7 +117,7 @@ void main() {
 }
 ```
 
-```vibe error fragment
+```zark error fragment
 println(!5);
 ```
 
@@ -131,7 +131,7 @@ println(!5);
 | `~x` | bitwise not |
 | `<<` `>>` | shifts |
 
-```vibe run
+```zark run
 void main() {
     println(5 & 3, 5 | 3, 5 ^ 3, ~5);
     println(1 << 4, 0xff >> 4);
@@ -143,7 +143,7 @@ A right shift is arithmetic for signed types (the sign is kept) and logical for 
 
 > **Note:** unlike C, the bitwise `&`, `|`, `^` bind **tighter** than comparisons. The expression `x & 1 == 0` reads as `(x & 1) == 0`, and no parentheses are needed.
 
-```vibe run
+```zark run
 void main() {
     const auto n = 6;
     if (n & 1 == 0) { println("even"); }
@@ -158,7 +158,7 @@ void main() {
 
 The compound forms: `+=` `-=` `*=` `/=` `%=` `|=` `&=` `^=` `<<=` `>>=`.
 
-```vibe run
+```zark run
 void main() {
     auto x = 10;
     x += 5;
@@ -175,7 +175,7 @@ void main() {
 
 `x++` and `x--` exist too, but they are statements, not expressions: you cannot write `y = x++`. There is no simultaneous assignment `a, b = b, a`; use a temporary variable or `swap`:
 
-```vibe run
+```zark run
 void main() {
     auto a = 1;
     auto b = 2;
@@ -186,7 +186,7 @@ void main() {
 
 `_ = expression` evaluates the expression and discards the result. You can call a function that returns a number and ignore the result even without `_`. But a `!T` does not pass without `_`: `_ =` shows that you are ignoring the error on purpose.
 
-```vibe run
+```zark run
 !i64 load() { return 42; }
 
 void main() {
@@ -221,7 +221,7 @@ These operations stand right after an expression and bind the tightest:
 | `x.name` | a field or a method (`->` and `::` mean the same) |
 | `x?` | propagate the error |
 
-```vibe run
+```zark run
 struct Box { i64[3] items; }
 
 void main() {
@@ -238,7 +238,7 @@ Chains like `a.b.c(1)[2].d` are read left to right.
 
 `as` converts a value to another type (see [types](types.md#conversions-as)). It binds more weakly than the unary operators but more strongly than arithmetic:
 
-```vibe run
+```zark run
 void main() {
     const auto a = 5;
     println(-a as f64 / 2 as f64);
@@ -275,7 +275,7 @@ From the weakest to the strongest:
 
 All binary operators are left-associative: `10 - 3 - 2` is `(10 - 3) - 2`.
 
-```vibe run
+```zark run
 void main() {
     println(1 + 2 * 3, (1 + 2) * 3);
     println(10 - 3 - 2);
@@ -291,7 +291,7 @@ void main() {
 
 `catch` and `orelse` are the weakest operators, so their right-hand side is the whole expression to the end:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n < 0) { return error.Neg; }
     return n;
@@ -315,7 +315,7 @@ The first two lines print `5`: a successful result on the left stays as it is, a
 
 `x is .Variant` gives a `bool`: it tests an enum or the tag of a union.
 
-```vibe run
+```zark run
 enum State { Idle, Busy }
 
 union Msg {

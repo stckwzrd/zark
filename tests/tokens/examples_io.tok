@@ -63,7 +63,7 @@
 6 .semi ;
 7 .ident write_file
 7 .lparen (
-7 .str_lit .vibe-cache/vibe_io.txt
+7 .str_lit .zark-cache/zark_io.txt
 7 .comma ,
 7 .ident out
 7 .dot .
@@ -81,7 +81,7 @@
 8 .lparen (
 8 .ident a
 8 .comma ,
-8 .str_lit .vibe-cache/vibe_io.txt
+8 .str_lit .zark-cache/zark_io.txt
 8 .rparen )
 8 .question ?
 8 .semi ;
@@ -100,7 +100,7 @@
 10 .semi ;
 11 .ident println
 11 .lparen (
-11 .str_lit exists: {file_exists(".vibe-cache/vibe_io.txt")} {file_exists("/nope")}
+11 .str_lit exists: {file_exists(".zark-cache/zark_io.txt")} {file_exists("/nope")}
 11 .rparen )
 11 .semi ;
 12 .kw_const const

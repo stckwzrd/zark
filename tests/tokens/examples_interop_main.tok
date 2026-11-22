@@ -1,9 +1,9 @@
 1 .kw_import import
-1 .str_lit ffi.vibe
+1 .str_lit ffi.zk
 1 .semi ;
 3 .kw_export export
 3 .ident i64
-3 .ident vibe_square
+3 .ident zark_square
 3 .lparen (
 3 .ident i64
 3 .ident x
@@ -27,7 +27,7 @@
 6 .semi ;
 7 .ident println
 7 .lparen (
-7 .str_lit sum of squares 1..10 via C->Vibe callback = {c_sum_squares(10)}
+7 .str_lit sum of squares 1..10 via C->Zark callback = {c_sum_squares(10)}
 7 .rparen )
 7 .semi ;
 9 .kw_const const

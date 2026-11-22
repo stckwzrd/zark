@@ -2,10 +2,10 @@
 title: Справочник стандартной библиотеки
 order: 40
 section: Справочник
-description: Все функции и типы прелюдии Vibe: вывод, строки, числа, аллокаторы, List, Map, Option, файлы, процессы, время и математика
+description: Все функции и типы прелюдии Zark: вывод, строки, числа, аллокаторы, List, Map, Option, файлы, процессы, время и математика
 ---
 
-Стандартная библиотека — один файл `std/std.vibe`, написанный на самом Vibe. Он подключается к каждой программе **автоматически** (прелюдия). Ничего импортировать не нужно.
+Стандартная библиотека — один файл `std/std.zk`, написанный на самом Zark. Он подключается к каждой программе **автоматически** (прелюдия). Ничего импортировать не нужно.
 
 Имена из прелюдии занимают общее пространство имён с вашими: свою функцию с именем `min`, `max`, `abs`, `sort`, `swap`, `run`, `env`, `cstr`, `arg` и т. п. объявить нельзя, будет ошибка «duplicate function».
 
@@ -31,7 +31,7 @@ description: Все функции и типы прелюдии Vibe: вывод
 
 ## Аллокаторы
 
-```vibe
+```zark
 struct Allocator {
     void* ctx;
     fn(void*, u64, u64) -> void* alloc_fn;
@@ -117,7 +117,7 @@ struct Allocator {
 
 ## `Option<T>`
 
-```vibe
+```zark
 union Option<T> {
     T Some;
     None;
@@ -144,7 +144,7 @@ union Option<T> {
 | `floor`, `ceil`, `fabs` | округление вниз, вверх, модуль |
 | `PI` | 3.141592653589793 |
 
-```vibe run
+```zark run
 void main() {
     println(sqrt(16.0), sin(0.0), cos(0.0), floor(2.7), ceil(2.1), fabs(-3.0));
     println(exp(0.0), log(1.0), pow(2.0, 10.0), PI);
@@ -175,7 +175,7 @@ void main() {
 | `u64 bits_f64(x)` | биты числа |
 | `f64 f64_from_bits(x)` | число из бит |
 
-```vibe run
+```zark run
 void main() {
     println(parse_int(" -42 ") catch 0);
     println(parse_int("4x") catch -1);
@@ -198,7 +198,7 @@ void main() {
 
 Результат `read_file` выделен через `a`: освободите его (или используйте арену).
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     write_file("demo.txt", "строка 1\nстрока 2\n")?;
@@ -232,7 +232,7 @@ void main() {
 | `str arg(i)` | аргумент по номеру; `arg(0)` — путь программы |
 | `void exit(i32 code)` | завершить программу |
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     const auto code = run(a, ["/bin/echo", "hi", "there"])?;
@@ -244,7 +244,7 @@ void main() {
 }
 ```
 
-Аргументы программы при `vibe run` идут после `--`: `vibe run main.vibe -- a b`.
+Аргументы программы при `zark run` идут после `--`: `zark run main.zk -- a b`.
 
 ## Время и случайные числа
 
@@ -257,7 +257,7 @@ void main() {
 
 Измерить время:
 
-```vibe run
+```zark run
 void main() {
     const auto t0 = now_ns();
     auto s = 0;
@@ -271,7 +271,7 @@ void main() {
 
 Хеш-таблица с ключами любого типа, который можно напечатать и сравнить через `==`: целые, `str`, enum и структуры с `operator==`, сравнивающим все поля. Хеш считается по самому значению (`hash_of`), ничего объявлять не нужно. Ключи не копируются.
 
-```vibe run
+```zark run
 enum Color { Red, Green }
 
 !void main() {
@@ -321,10 +321,10 @@ enum Color { Red, Green }
 
 UTF-8: `utf8_len(s)` считает кодовые точки, `utf8_valid(s)`, `utf8_decode(s, i)` даёт `Rune{ code, size }`, `utf8_encode(buf, cp)`, а `utf8_runes(s)` перебирает (`it.code`, `it.at`).
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
-    auto it = str_split("name=Vibe;year=2026", ";");
+    auto it = str_split("name=Zark;year=2026", ";");
     while (it.next()) {
         const auto eq = str_find_byte(it.part, '=');
         println(it.part[0..eq], "->", it.part[eq + 1..]);
@@ -337,7 +337,7 @@ UTF-8: `utf8_len(s)` считает кодовые точки, `utf8_valid(s)`, 
 
 `!void sort_by(a, T[] s, fn(T, T) -> bool less)` сортирует любой срез вашим сравнением. Сортировка устойчивая (равные элементы сохраняют порядок), аллокатор нужен для временного буфера.
 
-```vibe run
+```zark run
 struct User { str name; i64 age; }
 bool by_age(User x, User y) { return x.age < y.age; }
 
@@ -359,7 +359,7 @@ bool by_age(User x, User y) { return x.age < y.age; }
 - `fail_after_n(n)` делает так, что выделение после `n` успешных завершится ошибкой: так проверяют ветки нехватки памяти;
 - `trap_id = k` останавливает отладчик там, где выделяется блок `#k`.
 
-```vibe run
+```zark run
 !void main() {
     auto dbg = DebugAllocator::init();
     {
@@ -384,11 +384,11 @@ backtrace:
   #0 0x2187 in ./app
   #1 0x13ad in ./app
 where (addr2line):
-vb.get at /home/me/app.vibe:3
-vb.main at /home/me/app.vibe:7
+vb.get at /home/me/app.zk:3
+vb.main at /home/me/app.zk:7
 ```
 
-Различаются причины: нулевой указатель, переполнение стека (бесконечная рекурсия), целочисленное деление на ноль, использование после освобождения и выход за границы блока `DebugAllocator`. Строки исходника берутся из `addr2line` (binutils), если он установлен. `VIBE_CRASH_HANDLER=0` отключает обработчик (например, чтобы получить core dump).
+Различаются причины: нулевой указатель, переполнение стека (бесконечная рекурсия), целочисленное деление на ноль, использование после освобождения и выход за границы блока `DebugAllocator`. Строки исходника берутся из `addr2line` (binutils), если он установлен. `ZARK_CRASH_HANDLER=0` отключает обработчик (например, чтобы получить core dump).
 
 ## Функции libc, доступные без объявления
 

@@ -1,8 +1,8 @@
 build/
 zig-out/
 .zig-cache/
-.vibe-cache/
-bench/w.vibe
+.zark-cache/
+bench/w.zk
 bench/w.c
 bench/wv
 bench/wg

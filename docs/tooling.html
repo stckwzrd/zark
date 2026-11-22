@@ -3,23 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tools: fmt, lsp, flags · Vibe</title>
-<meta name="description" content="The formatter, the language server, compilation modes, diagnostics and debugging in Vibe">
+<title>Tools: fmt, lsp, flags · Zark</title>
+<meta name="description" content="The formatter, the language server, compilation modes, diagnostics and debugging in Zark">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/tooling.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
+<header class="top"><button class="menu" aria-label="Menu">☰</button><a class="logo" href="index.html">Zark</a><div class="search"><input id="q" type="search" placeholder="Search the guide (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="ru/tooling.html">Русский</a><button id="theme" aria-label="Toggle theme">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="learn.html">Learn Vibe: a path from zero to a program</a><a href="tour.html">Quick tour</a><a href="showcase.html">Showcase: a multithreaded ray tracer</a><a href="cpp-style.html">Vibe for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a><a href="comptime.html">Compile-time evaluation</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="safety.html">The safety model</a><a href="idioms.html">Writing idiomatic Vibe</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html" class="current">Tools: fmt, lsp, flags</a><a href="projects.html">Projects and dependencies</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="std-modules.html">Standard modules</a><a href="net-threads.html">Networking and threads</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="debugging.html">Debugging and reading errors</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Zark</a><div class="group"><div class="group-title">Start</div><a href="getting-started.html">Installation and the first program</a><a href="learn.html">Learn Zark: a path from zero to a program</a><a href="tour.html">Quick tour</a><a href="showcase.html">Showcase: a multithreaded ray tracer</a><a href="cpp-style.html">Zark for C++ programmers</a></div><div class="group"><div class="group-title">Language</div><a href="lexical.html">Lexical structure</a><a href="types.html">Types</a><a href="variables.html">Variables and constants</a><a href="operators.html">Operators and expressions</a><a href="control-flow.html">Control flow</a><a href="functions.html">Functions and closures</a><a href="structs-unions-enums.html">Structs, unions and enums</a><a href="errors-and-optionals.html">Errors and optional values</a><a href="strings.html">Strings and formatting</a><a href="modules.html">Modules and imports</a><a href="comptime.html">Compile-time evaluation</a></div><div class="group"><div class="group-title">Memory and data</div><a href="memory.html">Memory and allocators</a><a href="safety.html">The safety model</a><a href="idioms.html">Writing idiomatic Zark</a><a href="collections.html">Collections: List, Map, Option</a></div><div class="group"><div class="group-title">Interop and tools</div><a href="c-interop.html">Interoperating with C and C++</a><a href="drivers.html">Drivers and low-level code</a><a href="testing.html">Testing</a><a href="tooling.html" class="current">Tools: fmt, lsp, flags</a><a href="projects.html">Projects and dependencies</a></div><div class="group"><div class="group-title">Reference</div><a href="stdlib.html">Standard library reference</a><a href="std-modules.html">Standard modules</a><a href="net-threads.html">Networking and threads</a><a href="cookbook.html">Recipes and finished programs</a><a href="gotchas.html">Pitfalls and FAQ</a><a href="debugging.html">Debugging and reading errors</a><a href="how-it-works.html">How it all works</a><a href="cheatsheet.html">Cheat sheet</a></div></nav>
 <main><article>
 <h1>Tools: fmt, lsp, flags</h1>
-<p>All the tools are subcommands of one executable, <code>vibe</code>. Nothing separate needs to be installed.</p>
+<p>All the tools are subcommands of one executable, <code>zark</code>. Nothing separate needs to be installed.</p>
 <h2 id="compiler-diagnostics"><a class="anchor" href="#compiler-diagnostics">#</a>Compiler diagnostics</h2>
 <p>Every error is printed in the form <code>file:line: error: message</code>, and under it the source line is shown with a <code>^</code> pointing at the place of the error:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> count </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"{cuont}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.vibe:3: error: unknown identifier 'cuont' (did you mean 'count'?)
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.zk:3: error: unknown identifier 'cuont' (did you mean 'count'?)
     3 |     println(&quot;{cuont}&quot;);
       |               ^</code></pre></div></div>
 <p>When the program has a similar name, the compiler suggests it (for names shorter than three characters no suggestions are shown, they would be random):</p>
@@ -31,13 +31,13 @@
 <p>Typical messages and their causes are explained on the page <a href="gotchas.html">pitfalls and FAQ</a>.</p>
 <blockquote class="callout note"><p><strong>Note:</strong> the compiler stops at the <strong>first</strong> parser error. It also reports type errors one per run, but the <a href="#language-server-and-editor">language server</a> checks every function separately and shows one error per function.</p>
 </blockquote>
-<h2 id="vibe-fmt"><a class="anchor" href="#vibe-fmt">#</a>vibe fmt</h2>
-<p><code>vibe fmt file.vibe ...</code> rewrites files in place. The formatter works on tokens: it fixes spaces, indentation and blank lines, <strong>never wraps or joins lines</strong> and does not touch comments.</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> cat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<h2 id="zark-fmt"><a class="anchor" href="#zark-fmt">#</a>zark fmt</h2>
+<p><code>zark fmt file.zk ...</code> rewrites files in place. The formatter works on tokens: it fixes spaces, indentation and blank lines, <strong>never wraps or joins lines</strong> and does not touch comments.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> cat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.zk</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   header</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> comment</span></span>
 <span class="line"></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x.vibe"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;   </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> trailing</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x.zk"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;   </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> trailing</span></span>
 <span class="line"></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">struct</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> P{i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> x</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> y</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;}</span></span>
@@ -60,12 +60,12 @@
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">i64*</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> z=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">&#x26;</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">p</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">formatted</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> cat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.zk</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">formatted</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.zk</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> cat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.zk</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">   header</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> comment</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x.vibe"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;   </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> trailing</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "x.zk"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;   </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">//</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> trailing</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">struct</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> P</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> {</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> x</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> y</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> a,</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> i64</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> b</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">{</span></span>
@@ -95,14 +95,14 @@
 </ul>
 <p>What the formatter does <strong>not</strong> do: it does not break long lines, does not align comments to a column, does not reorder declarations, does not rename anything. Spaces around <code>*</code> and <code>&amp;</code>, when the neighboring tokens do not show whether it is multiplication or a pointer (<code>i*2</code> in the example above), are left as they were.</p>
 <p><code>--check</code> changes nothing and prints <code>would reformat file</code> for every file that would be changed, and exits with code 1: handy for CI:</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --check</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">would</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> reformat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.vibe</span></span>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fmt</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --check</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.zk</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">would</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> reformat</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ugly.zk</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> echo</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> $?</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">1</span></span></code></pre></div><p>The formatter is idempotent: running it again on an already formatted file changes nothing. It is guaranteed to preserve the stream of tokens: the meaning of the program cannot change.</p>
 <blockquote class="callout note"><p><strong>Note:</strong> files with <code>\r\n</code> line endings are turned into <code>\n</code> by the formatter.</p>
 </blockquote>
 <h2 id="compilation-modes"><a class="anchor" href="#compilation-modes">#</a>Compilation modes</h2>
-<p>Vibe has two backends:</p>
+<p>Zark has two backends:</p>
 <ul>
 <li><strong>the own x86-64 backend</strong> (the default). The compiler itself turns the intermediate representation into machine code and writes an ELF object. The build is very fast; the code is noticeably faster than &quot;naive&quot; code because there is register allocation, but slower than optimized LLVM;</li>
 <li><strong>LLVM</strong> (<code>--llvm</code>, <code>-O</code>, <code>--release</code>): the compiler prints LLVM IR, and <code>clang</code> optimizes and compiles it.</li>
@@ -114,44 +114,44 @@
 <th>Bounds checks</th>
 </tr>
 </thead><tbody><tr>
-<td><code>vibe run x.vibe</code></td>
+<td><code>zark run x.zk</code></td>
 <td>own</td>
 <td>none</td>
 <td>yes</td>
 </tr>
 <tr>
-<td><code>vibe run x.vibe --llvm</code></td>
+<td><code>zark run x.zk --llvm</code></td>
 <td>LLVM</td>
 <td><code>-O0</code></td>
 <td>yes</td>
 </tr>
 <tr>
-<td><code>vibe run x.vibe -O</code></td>
+<td><code>zark run x.zk -O</code></td>
 <td>LLVM</td>
 <td><code>-O2</code></td>
 <td>yes</td>
 </tr>
 <tr>
-<td><code>vibe run x.vibe --release</code></td>
+<td><code>zark run x.zk --release</code></td>
 <td>LLVM</td>
 <td><code>-O2</code></td>
 <td><strong>no</strong></td>
 </tr>
 <tr>
-<td><code>vibe run x.vibe --no-safety</code></td>
+<td><code>zark run x.zk --no-safety</code></td>
 <td>own</td>
 <td>none</td>
 <td><strong>no</strong></td>
 </tr>
 </tbody></table></div>
 <p>The bounds check is what turns going out of an array into a clear panic. Without it this is <strong>undefined behavior</strong>: the example below fails with a <code>panic</code> in a normal build and silently reads garbage with <code>--release</code>:</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> oob.vibe</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">panic:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> index</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> out</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> of</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> bounds</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (len </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) at oob.vibe:4</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> oob.vibe</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --release</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">140735146892504</span></span></code></pre></div><p>(<code>oob.vibe</code> reads <code>a[5]</code> of an array of three elements.) Keep debug builds with the checks, and turn on <code>--release</code> for finished programs when you are sure the indexes are correct.</p>
-<p>For development use the default mode: it builds the compiler itself (about 15 thousand lines of Vibe) in about a third of a second, not counting the link.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> oob.zk</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">panic:</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> index</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 5</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> out</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> of</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> bounds</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (len </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">3</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) at oob.zk:4</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">$</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> run</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> oob.zk</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --release</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">140735146892504</span></span></code></pre></div><p>(<code>oob.zk</code> reads <code>a[5]</code> of an array of three elements.) Keep debug builds with the checks, and turn on <code>--release</code> for finished programs when you are sure the indexes are correct.</p>
+<p>For development use the default mode: it builds the compiler itself (about 15 thousand lines of Zark) in about a third of a second, not counting the link.</p>
 <h2 id="intermediate-representations"><a class="anchor" href="#intermediate-representations">#</a>Intermediate representations</h2>
-<p><code>vibe ir file.vibe</code> prints the LLVM IR that the frontend generated. It is the same text that the own backend reads. For the function</p>
+<p><code>zark ir file.zk</code> prints the LLVM IR that the frontend generated. It is the same text that the own backend reads. For the function</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">i64 </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fib</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n) {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> n; }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    return </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">fib</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">+</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> fib</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(n </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">-</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
@@ -175,7 +175,7 @@
 <span class="line"><span>  %t10 = call i64 @vb.fib(i64 %t9)</span></span>
 <span class="line"><span>  %t11 = add i64 %t7, %t10</span></span>
 <span class="line"><span>  ret i64 %t11</span></span>
-<span class="line"><span>}</span></span></code></pre></div><p><code>vibe tokens file.vibe</code> prints the tokens: the line number, the kind of the token and the text. Useful when it is unclear how the lexer split a line (especially with quotes and curly braces):</p>
+<span class="line"><span>}</span></span></code></pre></div><p><code>zark tokens file.zk</code> prints the tokens: the line number, the kind of the token and the text. Useful when it is unclear how the lexer split a line (especially with quotes and curly braces):</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>1 .ident i64</span></span>
 <span class="line"><span>1 .ident fib</span></span>
 <span class="line"><span>1 .lparen (</span></span>
@@ -183,7 +183,7 @@
 <span class="line"><span>1 .ident n</span></span>
 <span class="line"><span>1 .rparen )</span></span></code></pre></div><p>How everything else works is on the page <a href="how-it-works.html">how the compiler works</a>.</p>
 <h2 id="language-server-and-editor"><a class="anchor" href="#language-server-and-editor">#</a>Language server and editor</h2>
-<p><code>vibe lsp</code> is a language server over the LSP protocol on standard input/output. It is built on the same parser and generator as the compiler, so the messages are the same as with <code>vibe build</code>, and they also apply to unsaved changes. Features:</p>
+<p><code>zark lsp</code> is a language server over the LSP protocol on standard input/output. It is built on the same parser and generator as the compiler, so the messages are the same as with <code>zark build</code>, and they also apply to unsaved changes. Features:</p>
 <div class="table-wrap"><table><thead><tr>
 <th>Feature</th>
 <th>What it can do</th>
@@ -218,7 +218,7 @@
 </tr>
 <tr>
 <td>Symbol search</td>
-<td><code>Ctrl+T</code> over all the <code>.vibe</code> files of the working directory</td>
+<td><code>Ctrl+T</code> over all the <code>.zk</code> files of the working directory</td>
 </tr>
 <tr>
 <td>Occurrence highlighting</td>
@@ -226,67 +226,67 @@
 </tr>
 <tr>
 <td>Formatting</td>
-<td>the same as <code>vibe fmt</code></td>
+<td>the same as <code>zark fmt</code></td>
 </tr>
 </tbody></table></div>
 <blockquote class="callout note"><p><strong>Note:</strong> diagnostics work like this: the server runs the compiler&#39;s frontend on every function of the file (except generic ones, which are checked only when they are called) and collects one error per function. The parser stops at the first syntax error in a file.</p>
 </blockquote>
 <p>What the server does <strong>not</strong> do: it does not show the types of expressions, cannot refactor except for renaming, and does not infer types in complex generic expressions (there are simply no hints there).</p>
 <h3 id="vs-code-and-code-oss"><a class="anchor" href="#vs-code-and-code-oss">#</a>VS Code and code-oss</h3>
-<p>The repository contains the extension <code>editors/vscode</code>. It starts <code>vibe lsp</code> and adds syntax highlighting, snippets, run and test buttons, and the command &quot;Vibe: Restart Language Server&quot;.</p>
+<p>The repository contains the extension <code>editors/vscode</code>. It starts <code>zark lsp</code> and adds syntax highlighting, snippets, run and test buttons, and the command &quot;Zark: Restart Language Server&quot;.</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> editors/vscode</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">npm</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> install</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">python3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> pack.py</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe-lang.vsix</span></span>
-<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">code-oss</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --install-extension</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe-lang.vsix</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">      # or: code --install-extension vibe-lang.vsix</span></span></code></pre></div><p>After installing, reload the window (<code>Ctrl+Shift+P</code> → &quot;Developer: Reload Window&quot;) and open any <code>.vibe</code> file. Settings:</p>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">python3</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> pack.py</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark-lang.vsix</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">code-oss</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --install-extension</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark-lang.vsix</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">      # or: code --install-extension zark-lang.vsix</span></span></code></pre></div><p>After installing, reload the window (<code>Ctrl+Shift+P</code> → &quot;Developer: Reload Window&quot;) and open any <code>.zk</code> file. Settings:</p>
 <div class="table-wrap"><table><thead><tr>
 <th>Setting</th>
 <th>Value</th>
 </tr>
 </thead><tbody><tr>
-<td><code>vibe.path</code></td>
-<td>the path to <code>vibe</code>; by default it is searched in <code>PATH</code>, then in <code>~/.local/bin</code></td>
+<td><code>zark.path</code></td>
+<td>the path to <code>zark</code>; by default it is searched in <code>PATH</code>, then in <code>~/.local/bin</code></td>
 </tr>
 <tr>
-<td><code>vibe.trace.server</code></td>
+<td><code>zark.trace.server</code></td>
 <td><code>off</code>, <code>messages</code> or <code>verbose</code>: a log of the exchange with the server in the output tab</td>
 </tr>
 </tbody></table></div>
-<p>Hotkeys: <code>Ctrl+Alt+R</code> runs the file, <code>Ctrl+Alt+T</code> runs the tests. &quot;Run&quot; links appear above <code>main</code> and above every <code>test</code>. Formatting on save is on by default for <code>.vibe</code>.</p>
+<p>Hotkeys: <code>Ctrl+Alt+R</code> runs the file, <code>Ctrl+Alt+T</code> runs the tests. &quot;Run&quot; links appear above <code>main</code> and above every <code>test</code>. Formatting on save is on by default for <code>.zk</code>.</p>
 <h3 id="other-editors"><a class="anchor" href="#other-editors">#</a>Other editors</h3>
-<p>Any LSP client will do: the start command is <code>vibe lsp</code>, the transport is stdio, the file extension is <code>.vibe</code>. Below are typical settings; I have not checked them in every editor, so treat them as a starting point.</p>
+<p>Any LSP client will do: the start command is <code>zark lsp</code>, the transport is stdio, the file extension is <code>.zk</code>. Below are typical settings; I have not checked them in every editor, so treat them as a starting point.</p>
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>-- Neovim (0.11+)</span></span>
-<span class="line"><span>vim.filetype.add({ extension = { vibe = "vibe" } })</span></span>
-<span class="line"><span>vim.lsp.config("vibe", { cmd = { "vibe", "lsp" }, filetypes = { "vibe" }, root_markers = { ".git" } })</span></span>
-<span class="line"><span>vim.lsp.enable("vibe")</span></span></code></pre></div><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span># Helix: languages.toml</span></span>
-<span class="line"><span>[language-server.vibe]</span></span>
-<span class="line"><span>command = "vibe"</span></span>
+<span class="line"><span>vim.filetype.add({ extension = { zark = "zark" } })</span></span>
+<span class="line"><span>vim.lsp.config("zark", { cmd = { "zark", "lsp" }, filetypes = { "zark" }, root_markers = { ".git" } })</span></span>
+<span class="line"><span>vim.lsp.enable("zark")</span></span></code></pre></div><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span># Helix: languages.toml</span></span>
+<span class="line"><span>[language-server.zk]</span></span>
+<span class="line"><span>command = "zark"</span></span>
 <span class="line"><span>args = ["lsp"]</span></span>
 <span class="line"><span></span></span>
 <span class="line"><span>[[language]]</span></span>
-<span class="line"><span>name = "vibe"</span></span>
-<span class="line"><span>scope = "source.vibe"</span></span>
-<span class="line"><span>file-types = ["vibe"]</span></span>
-<span class="line"><span>language-servers = ["vibe"]</span></span>
+<span class="line"><span>name = "zark"</span></span>
+<span class="line"><span>scope = "source.zk"</span></span>
+<span class="line"><span>file-types = ["zark"]</span></span>
+<span class="line"><span>language-servers = ["zark"]</span></span>
 <span class="line"><span>comment-token = "//"</span></span>
 <span class="line"><span>indent = { tab-width = 4, unit = "    " }</span></span></code></pre></div><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>;; Emacs (eglot)</span></span>
-<span class="line"><span>(add-to-list 'auto-mode-alist '("\\.vibe\\'" . prog-mode))</span></span>
-<span class="line"><span>(add-to-list 'eglot-server-programs '(prog-mode . ("vibe" "lsp")))</span></span></code></pre></div><p>Highlighting for Zed, Sublime and other editors can use the TextMate grammar from <code>editors/vscode/syntaxes/vibe.tmLanguage.json</code>.</p>
+<span class="line"><span>(add-to-list 'auto-mode-alist '("\\.zk\\'" . prog-mode))</span></span>
+<span class="line"><span>(add-to-list 'eglot-server-programs '(prog-mode . ("zark" "lsp")))</span></span></code></pre></div><p>Highlighting for Zed, Sublime and other editors can use the TextMate grammar from <code>editors/vscode/syntaxes/zark.tmLanguage.json</code>.</p>
 <h2 id="debugging"><a class="anchor" href="#debugging">#</a>Debugging</h2>
 <ul>
 <li><strong><code>println</code></strong> is the main tool. Output goes out at once, and <code>eprintln</code> writes to stderr.</li>
 <li><strong><code>panic(&quot;message {x}&quot;)</code></strong> prints the message with a file and line and ends the program with code 1.</li>
 <li><strong><code>assert(condition)</code></strong> panics with a file and line if the condition is false.</li>
-<li><strong><code>vibe ir</code></strong> lets you see how the compiler understood the program and find, for example, extra copies of aggregates.</li>
-<li><strong>gdb</strong>: the own backend puts a DWARF line table into the file. <code>break file.vibe:12</code>, <code>next</code>, <code>step</code> and <code>bt</code> with line numbers work; in a backtrace the functions look like <code>vb[fib]</code>, <code>vb[main]</code>. Add <code>-g</code> to also see variables: <code>vibe build x.vibe -g</code> keeps every local in a stack slot and describes it, so <code>print x</code>, <code>info locals</code> and <code>up</code> work (integers, floats, <code>bool</code>, pointers, structs, arrays and strings; unions and interfaces are not described yet). Without <code>-g</code> the variables may live in registers and are not described. Builds through <code>--llvm</code> and <code>--release</code> contain nothing but function symbols.</li>
-<li><strong><code>vibe tokens</code></strong> helps when you suspect a lexer problem: an unclosed quote, a curly brace inside a string and the like.</li>
+<li><strong><code>zark ir</code></strong> lets you see how the compiler understood the program and find, for example, extra copies of aggregates.</li>
+<li><strong>gdb</strong>: the own backend puts a DWARF line table into the file. <code>break file.zk:12</code>, <code>next</code>, <code>step</code> and <code>bt</code> with line numbers work; in a backtrace the functions look like <code>vb[fib]</code>, <code>vb[main]</code>. Add <code>-g</code> to also see variables: <code>zark build x.zk -g</code> keeps every local in a stack slot and describes it, so <code>print x</code>, <code>info locals</code> and <code>up</code> work (integers, floats, <code>bool</code>, pointers, structs, arrays and strings; unions and interfaces are not described yet). Without <code>-g</code> the variables may live in registers and are not described. Builds through <code>--llvm</code> and <code>--release</code> contain nothing but function symbols.</li>
+<li><strong><code>zark tokens</code></strong> helps when you suspect a lexer problem: an unclosed quote, a curly brace inside a string and the like.</li>
 </ul>
 <h2 id="cache-and-temporary-files"><a class="anchor" href="#cache-and-temporary-files">#</a>Cache and temporary files</h2>
-<p>All the build debris lives in <code>.vibe-cache/</code> in the current directory: object files, <code>.ll</code> (for the LLVM mode), objects of external C/C++ files and the executable of <code>vibe run</code>. The directory is safe to delete entirely. Tests (<code>vibe test</code>) create <code>name.test</code> and <code>test.out</code> there.</p>
+<p>All the build debris lives in <code>.zark-cache/</code> in the current directory: object files, <code>.ll</code> (for the LLVM mode), objects of external C/C++ files and the executable of <code>zark run</code>. The directory is safe to delete entirely. Tests (<code>zark test</code>) create <code>name.test</code> and <code>test.out</code> there.</p>
 <h2 id="environment-variables-and-version"><a class="anchor" href="#environment-variables-and-version">#</a>Environment variables and version</h2>
 <p>The compiler has no environment variables for configuration. It calls <code>clang</code> (and <code>clang++</code> if there is C++ among the extra files) from <code>PATH</code>.</p>
 
 <div class="pager"><a class="prev" href="testing.html"><small>Previous</small>Testing</a><a class="next" href="projects.html"><small>Next</small>Projects and dependencies</a></div>
-</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#compiler-diagnostics">Compiler diagnostics</a><a class="l2" href="#vibe-fmt">vibe fmt</a><a class="l2" href="#compilation-modes">Compilation modes</a><a class="l2" href="#intermediate-representations">Intermediate representations</a><a class="l2" href="#language-server-and-editor">Language server and editor</a><a class="l3" href="#vs-code-and-code-oss">VS Code and code-oss</a><a class="l3" href="#other-editors">Other editors</a><a class="l2" href="#debugging">Debugging</a><a class="l2" href="#cache-and-temporary-files">Cache and temporary files</a><a class="l2" href="#environment-variables-and-version">Environment variables and version</a></aside></main>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#compiler-diagnostics">Compiler diagnostics</a><a class="l2" href="#zark-fmt">zark fmt</a><a class="l2" href="#compilation-modes">Compilation modes</a><a class="l2" href="#intermediate-representations">Intermediate representations</a><a class="l2" href="#language-server-and-editor">Language server and editor</a><a class="l3" href="#vs-code-and-code-oss">VS Code and code-oss</a><a class="l3" href="#other-editors">Other editors</a><a class="l2" href="#debugging">Debugging</a><a class="l2" href="#cache-and-temporary-files">Cache and temporary files</a><a class="l2" href="#environment-variables-and-version">Environment variables and version</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>

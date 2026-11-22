@@ -9,7 +9,7 @@ description: Как читать сообщения компилятора, чт
 
 ## Как устроено сообщение об ошибке
 
-```vibe error
+```zark error
 void main() {
     const auto total = 10;
     println(totl);
@@ -27,7 +27,7 @@ void main() {
 
 Тип не подходит. Компилятор сам не сужает и не меняет знак:
 
-```vibe error
+```zark error
 void main() {
     const i64 big = 1000;
     const i32 small = big;
@@ -39,7 +39,7 @@ void main() {
 
 Функция возвращает не на каждом пути:
 
-```vibe error
+```zark error
 i64 sign(i64 x) {
     if (x < 0) { return -1; }
     if (x > 0) { return 1; }
@@ -52,7 +52,7 @@ void main() { println(sign(5)); }
 
 Забытая ошибка:
 
-```vibe error
+```zark error
 !i64 parse(str s) { return parse_int(s); }
 
 void main() {
@@ -64,7 +64,7 @@ void main() {
 
 `match`, в котором не хватает варианта:
 
-```vibe error
+```zark error
 enum Dir { North, South, East, West }
 
 str name(Dir d) {
@@ -82,7 +82,7 @@ void main() { println(name(.West)); }
 
 Структура, не удовлетворяющая интерфейсу:
 
-```vibe error
+```zark error
 interface Shape { f64 area(); f64 perimeter(); }
 
 struct Square {
@@ -101,7 +101,7 @@ void main() {
 
 Строка с фигурными скобками:
 
-```vibe error
+```zark error
 void main() {
     println("{"a": 1, "b": 2}");
 }
@@ -113,7 +113,7 @@ void main() {
 
 Они приходят от проверок, описанных в разделе [модель безопасности](safety.md). В них всегда названы две строки: где что-то перестало быть действительным и где вы это использовали.
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto buf = a.alloc<u8>(16) catch return;
@@ -124,7 +124,7 @@ void main() {
 
 `'buf' is used after 'free' consumed it`: строка выше — это `free`. Либо уберите последующее использование, либо перенесите `free` после последнего использования, либо сначала присвойте переменной новое значение.
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -137,7 +137,7 @@ void main() {
 
 `'view' points into 'l', and 'push' ... may have moved or freed that memory`: возьмите `view` заново после `push`.
 
-```vibe error
+```zark error
 i64* make() {
     i64 local = 5;
     return &local;
@@ -163,9 +163,9 @@ void main() { println(*make()); }
 Запустите упавший случай ещё раз под `-g` и `gdb`, чтобы увидеть переменные.
 
 ```text
-$ vibe build -g crash.vibe -o crash
+$ zark build -g crash.zk -o crash
 $ gdb ./crash
-(gdb) break crash.vibe:12
+(gdb) break crash.zk:12
 (gdb) run
 (gdb) print total
 (gdb) bt
@@ -176,9 +176,9 @@ $ gdb ./crash
 ## Программа неправильная, но ничего не падает
 
 1. **Напечатайте данные.** `println` печатает структуру с именами полей и срез с его элементами. Печатайте до и после шага, который подозреваете.
-2. **Напишите падающий тест.** Положите наименьший вход, показывающий проблему, в блок `test`, запустите `vibe test file.vibe` и правьте, пока не позеленеет. Тест остаётся как защита.
+2. **Напишите падающий тест.** Положите наименьший вход, показывающий проблему, в блок `test`, запустите `zark test file.zk` и правьте, пока не позеленеет. Тест остаётся как защита.
 3. **Сократите вход.** Убирайте код и данные, пока проблема не останется одна. Причина обычно видна в этот момент.
-4. **Спросите другой бэкенд.** `vibe run file.vibe`, затем `vibe run file.vibe --llvm` и `-O`. В безопасном режиме все они должны печатать одно и то же. Если нет, вы нашли баг компилятора; сохраните файл.
+4. **Спросите другой бэкенд.** `zark run file.zk`, затем `zark run file.zk --llvm` и `-O`. В безопасном режиме все они должны печатать одно и то же. Если нет, вы нашли баг компилятора; сохраните файл.
 
 ## Проблемы с памятью
 
@@ -191,7 +191,7 @@ $ gdb ./crash
 ## Когда медленно
 
 ```text
-$ vibe run app.vibe --time
+$ zark run app.zk --time
 time: frontend 12.0 ms, native backend 4.1 ms, link 18.3 ms
 ```
 
@@ -201,9 +201,9 @@ time: frontend 12.0 ms, native backend 4.1 ms, link 18.3 ms
 
 | Команда | Показывает |
 |---|---|
-| `vibe tokens file.vibe` | токены после лексера |
-| `vibe ir file.vibe` | LLVM IR, который генерирует компилятор |
-| `vibe fmt file.vibe` | ничего: перезаписывает файл стандартным форматированием (`--check` только проверяет) |
+| `zark tokens file.zk` | токены после лексера |
+| `zark ir file.zk` | LLVM IR, который генерирует компилятор |
+| `zark fmt file.zk` | ничего: перезаписывает файл стандартным форматированием (`--check` только проверяет) |
 
 Когда сообщаете о баге компилятора, приложите наименьший файл, который его показывает, команду и вывод.
 

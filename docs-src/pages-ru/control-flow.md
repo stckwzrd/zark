@@ -2,14 +2,14 @@
 title: Управление потоком
 order: 14
 section: Язык
-description: if, while, for, break, continue, match и defer в Vibe: все формы с примерами и граничными случаями
+description: if, while, for, break, continue, match и defer в Zark: все формы с примерами и граничными случаями
 ---
 
 Управляющих конструкций немного, и у каждой одна форма записи. Условие пишется в круглых скобках, а фигурные скобки блока обязательны всегда, даже для одного оператора.
 
 ## `if` / `else`
 
-```vibe run
+```zark run
 void main() {
     const auto n = 7;
     if (n > 10) {
@@ -24,21 +24,21 @@ void main() {
 
 Условие обязано быть `bool`. Число или указатель в роли условия не принимаются, нужно явное сравнение:
 
-```vibe error fragment
+```zark error fragment
 const auto n = 5;
 if (n) { println("да"); }
 ```
 
 Фигурные скобки обязательны:
 
-```vibe error fragment
+```zark error fragment
 const auto n = 5;
 if (n > 3) println("да");
 ```
 
 `if` — это оператор, а не выражение: `auto x = if ...;` не пишется. Когда нужно выбрать значение по условию, используйте [`match`](#match-как-выражение) или заранее заведённую переменную:
 
-```vibe run
+```zark run
 void main() {
     const auto n = 7;
     auto kind = "мало";
@@ -55,7 +55,7 @@ void main() {
 
 ## `while`
 
-```vibe run
+```zark run
 void main() {
     auto i = 0;
     while (i < 3) {
@@ -77,7 +77,7 @@ void main() {
 
 `for (auto i : a..b)` перебирает целые от `a` включительно до `b` **не включая**. Если `a >= b`, цикл не выполнится ни разу. Конец диапазона вычисляется один раз до начала цикла.
 
-```vibe run
+```zark run
 void main() {
     for (auto i : 0..4) {
         println(i);
@@ -93,7 +93,7 @@ void main() {
 
 Включающей формы `0..=3` нет: пишите `0..4`. Обратного хода тоже нет. Для обратного прохода используйте `while`:
 
-```vibe run
+```zark run
 void main() {
     auto i = 3;
     while (i > 0) {
@@ -107,7 +107,7 @@ void main() {
 
 Переменная цикла неизменяема внутри тела:
 
-```vibe error fragment
+```zark error fragment
 for (auto i : 0..3) {
     i += 1;
 }
@@ -117,7 +117,7 @@ for (auto i : 0..3) {
 
 `for (auto x : seq)` перебирает элементы массива, среза или любого значения с методом `slice()` (например, `List`). `for (auto [i, x] : seq)` добавляет индекс.
 
-```vibe run
+```zark run
 void main() {
     const auto arr = [10, 20, 30];
     for (auto x : arr) { println(x); }
@@ -134,7 +134,7 @@ void main() {
 
 Строка перебирается побайтово: `c` здесь число типа `u8` (97, 98, 99). Элемент — это **копия**. Чтобы изменить элементы на месте, идите по индексу:
 
-```vibe run
+```zark run
 void main() {
     auto xs = [1, 2, 3];
     for (auto i : 0..xs.len) {
@@ -146,7 +146,7 @@ void main() {
 
 Перебирать число нельзя:
 
-```vibe error fragment
+```zark error fragment
 for (auto x : 5) { println(x); }
 ```
 
@@ -154,7 +154,7 @@ for (auto x : 5) { println(x); }
 
 `break` выходит из ближайшего цикла, `continue` переходит к следующей итерации. Чтобы выйти из внешнего цикла, поставьте перед ним метку и назовите её в `break` или `continue`.
 
-```vibe run
+```zark run
 void main() {
     auto i = 0;
     while (true) {
@@ -175,7 +175,7 @@ void main() {
 
 Метка пишется перед `for` или `while`:
 
-```vibe run
+```zark run
 void main() {
     auto found = 0;
     rows: for (auto i : 0..5) {
@@ -191,7 +191,7 @@ void main() {
 
 `break` и `continue` работают и внутри `match`, влияя на объемлющий цикл:
 
-```vibe run
+```zark run
 void main() {
     for (auto x : [1, 2, 3, 4, 5]) {
         match x {
@@ -208,7 +208,7 @@ void main() {
 
 `match` сравнивает значение с образцами сверху вниз и выполняет первую подходящую ветку. «Проваливания» между ветками нет.
 
-```vibe run
+```zark run
 enum Dir { North, East, South, West }
 
 void main() {
@@ -241,7 +241,7 @@ void main() {
 
 Ветка `_` — «всё остальное». В **операторе** `match` она необязательна: если ничего не подошло, ничего не произойдёт.
 
-```vibe run
+```zark run
 void main() {
     const auto n = 5;
     match n {
@@ -255,7 +255,7 @@ void main() {
 
 Для union образец `.Вариант(имя)` привязывает содержимое варианта к имени. Привязанное значение только для чтения, оно живёт внутри ветки.
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -283,7 +283,7 @@ void main() {
 
 `match` может стоять справа от `=`, в `return`, в аргументе. Ветки тогда — выражения (или блоки, значением которых служит последнее выражение), все приводятся к одному типу.
 
-```vibe run
+```zark run
 enum Level { Low, Mid, High }
 
 i64 score(Level l) {
@@ -316,7 +316,7 @@ void main() {
 
 У `match`-выражения есть жёсткое требование: он должен быть **исчерпывающим**. Покройте все варианты или добавьте `_`:
 
-```vibe error
+```zark error
 enum D { N, E }
 
 void main() {
@@ -330,7 +330,7 @@ void main() {
 
 Ветка может не давать значение вовсе, а выходить из функции или цикла через `return`, `break`, `continue`:
 
-```vibe run
+```zark run
 i64 first_positive(i64[] xs) {
     for (auto x : xs) {
         const auto ok = match x > 0 {
@@ -352,7 +352,7 @@ void main() {
 
 `defer оператор` откладывает оператор до выхода из текущего блока: через конец блока, `return`, `break` или `continue`. Несколько `defer` выполняются в обратном порядке, последний объявленный — первым.
 
-```vibe run
+```zark run
 void main() {
     defer println("объявлен первым, выполнится последним");
     defer println("объявлен вторым, выполнится первым");
@@ -362,7 +362,7 @@ void main() {
 
 `defer` привязан к **блоку**, а не к функции. В цикле он срабатывает на каждой итерации:
 
-```vibe run
+```zark run
 void main() {
     for (auto i : 0..3) {
         defer println("конец итерации {i}");
@@ -374,7 +374,7 @@ void main() {
 
 Откладывать можно и блок:
 
-```vibe run
+```zark run
 i64 work() {
     auto x = 1;
     defer {
@@ -393,7 +393,7 @@ void main() {
 
 Типичное применение — освободить ресурс сразу после получения:
 
-```vibe run
+```zark run
 !void main() {
     auto list = List<i64>::init(c_allocator());
     defer list.deinit();
@@ -407,7 +407,7 @@ void main() {
 
 `errdefer` — то же самое, но только на путях, где функция вернула **ошибку** (`return error.X`, `?` на ошибке и т. п.). На успешном выходе он не выполняется. Идеален для отката частично созданного:
 
-```vibe run
+```zark run
 !i64 make(i64 n) {
     errdefer println("откат: make({n}) провалился");
     defer println("в любом случае: завершили make({n})");

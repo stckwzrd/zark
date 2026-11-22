@@ -2,14 +2,14 @@
 title: Рецепты и готовые программы
 order: 41
 section: Справочник
-description: Законченные программы на Vibe: FizzBuzz, счётчик слов, калькулятор, связный список, дерево, конечный автомат, разбор аргументов и другое
+description: Законченные программы на Zark: FizzBuzz, счётчик слов, калькулятор, связный список, дерево, конечный автомат, разбор аргументов и другое
 ---
 
-Каждый рецепт — целая программа, которую можно скопировать и запустить: `vibe run main.vibe`. Вывод под кодом получен настоящим запуском.
+Каждый рецепт — целая программа, которую можно скопировать и запустить: `zark run main.zk`. Вывод под кодом получен настоящим запуском.
 
 ## FizzBuzz
 
-```vibe run
+```zark run
 void main() {
     for (auto i : 1..16) {
         if (i % 15 == 0) {
@@ -27,7 +27,7 @@ void main() {
 
 ## Простые числа (решето Эратосфена)
 
-```vibe run
+```zark run
 !void main() {
     const auto n = 50;
     const auto a = c_allocator();
@@ -62,7 +62,7 @@ void main() {
 
 ## Числа Фибоначчи без рекурсии
 
-```vibe run
+```zark run
 i64 fib(i64 n) {
     auto a = 0;
     auto b = 1;
@@ -83,7 +83,7 @@ void main() {
 
 ## Наибольший общий делитель и НОК
 
-```vibe run
+```zark run
 i64 gcd(i64 a, i64 b) {
     auto x = a;
     auto y = b;
@@ -106,7 +106,7 @@ void main() {
 
 ## Разворот строки и палиндромы
 
-```vibe run
+```zark run
 !str reverse(Allocator a, str s) {
     const auto out = a.alloc<u8>(s.len)?;
     for (auto [i, c] : s) { out[s.len - 1 - i] = c; }
@@ -129,7 +129,7 @@ bool is_palindrome(str s) {
     defer arena.deinit();
     const auto a = arena.allocator();
     println(reverse(a, "hello")?);
-    println(is_palindrome("level"), is_palindrome("vibe"));
+    println(is_palindrome("level"), is_palindrome("zark"));
 }
 ```
 
@@ -137,7 +137,7 @@ bool is_palindrome(str s) {
 
 ## Счётчик слов
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -168,7 +168,7 @@ bool is_palindrome(str s) {
 
 Показывает ошибки, стек и разбор строки:
 
-```vibe run
+```zark run
 !i64 eval(Allocator a, str src) {
     auto st = List<i64>::init(a);
     defer st.deinit();
@@ -215,7 +215,7 @@ void main() {
 
 Узлы выделяются из арены, и очищать их по одному не нужно:
 
-```vibe run
+```zark run
 struct Node {
     i64 val;
     Node* next;
@@ -254,7 +254,7 @@ struct Stack {
 
 ## Двоичное дерево поиска
 
-```vibe run
+```zark run
 struct Tree {
     i64 key;
     Tree* left;
@@ -305,7 +305,7 @@ i64 height(Tree* t) {
 
 Состояние — `enum`, переход — `match`:
 
-```vibe run
+```zark run
 enum Light { Red, Green, Yellow }
 
 Light next(Light l) {
@@ -337,7 +337,7 @@ void main() {
 
 ## Токенизатор на union
 
-```vibe run
+```zark run
 union Token {
     i64 Num;
     Plus;
@@ -402,7 +402,7 @@ union Token {
 
 ## Матрица: умножение
 
-```vibe run
+```zark run
 const auto N = 3;
 
 i64[N][N] mul(i64[N][N] a, i64[N][N] b) {
@@ -430,7 +430,7 @@ void main() {
 
 ## Чтение и обработка файла
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -459,7 +459,7 @@ void main() {
 
 ## Аргументы командной строки
 
-```vibe run with=allow-fail
+```zark run with=allow-fail
 void main() {
     if (arg_count() < 2) {
         println("использование: программа <имя>");
@@ -469,11 +469,11 @@ void main() {
 }
 ```
 
-Запуск через `vibe run main.vibe -- Мир` передаёт `Мир` как `arg(1)`. Номер 0 — путь программы.
+Запуск через `zark run main.zk -- Мир` передаёт `Мир` как `arg(1)`. Номер 0 — путь программы.
 
 ## Таймер
 
-```vibe run
+```zark run
 i64 work(i64 n) {
     auto s = 0;
     for (auto i : 0..n) { s += i % 7; }
@@ -492,7 +492,7 @@ void main() {
 
 ## Вызов внешней команды
 
-```vibe run
+```zark run
 !void main() {
     const auto code = run(c_allocator(), ["/bin/sh", "-c", "echo из shell; exit 2"])?;
     println("код выхода", code);

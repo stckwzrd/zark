@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Модель безопасности · Vibe</title>
-<meta name="description" content="Что именно Vibe проверяет при компиляции, что проверяет во время работы, что оставляет вам и как закрыть остальное инструментами">
+<title>Модель безопасности · Zark</title>
+<meta name="description" content="Что именно Zark проверяет при компиляции, что проверяет во время работы, что оставляет вам и как закрыть остальное инструментами">
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../safety.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Zark</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../safety.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="learn.html">Учим Vibe: путь от нуля до программы</a><a href="tour.html">Быстрый тур</a><a href="showcase.html">Витрина: многопоточный трассировщик лучей</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a><a href="comptime.html">Вычисления при компиляции</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="safety.html" class="current">Модель безопасности</a><a href="idioms.html">Пишем идиоматично на Vibe</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="debugging.html">Отладка и чтение ошибок</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Zark</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="learn.html">Учим Zark: путь от нуля до программы</a><a href="tour.html">Быстрый тур</a><a href="showcase.html">Витрина: многопоточный трассировщик лучей</a><a href="cpp-style.html">Zark для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a><a href="comptime.html">Вычисления при компиляции</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="safety.html" class="current">Модель безопасности</a><a href="idioms.html">Пишем идиоматично на Zark</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="debugging.html">Отладка и чтение ошибок</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
 <main><article>
 <h1>Модель безопасности</h1>
-<p>Vibe — системный язык, поэтому он не может обещать того, что обещает язык со сборщиком мусора. Он даёт более узкое и честное обещание: <strong>ошибка останавливается как можно раньше, пока компилятор её видит, а иначе — громко, с файлом и строкой, а не тихо портит память.</strong> Эта страница перечисляет все случаи, чтобы вы знали, на что можно опираться.</p>
+<p>Zark — системный язык, поэтому он не может обещать того, что обещает язык со сборщиком мусора. Он даёт более узкое и честное обещание: <strong>ошибка останавливается как можно раньше, пока компилятор её видит, а иначе — громко, с файлом и строкой, а не тихо портит память.</strong> Эта страница перечисляет все случаи, чтобы вы знали, на что можно опираться.</p>
 <h2 id="режимы-сборки"><a class="anchor" href="#режимы-сборки">#</a>Режимы сборки</h2>
 <div class="table-wrap"><table><thead><tr>
 <th>Режим</th>
@@ -23,7 +23,7 @@
 </tr>
 </thead><tbody><tr>
 <td>безопасный</td>
-<td><code>vibe run</code>, <code>vibe build</code></td>
+<td><code>zark run</code>, <code>zark build</code></td>
 <td>всё, что ниже</td>
 <td>разработка, тесты, большинство программ</td>
 </tr>
@@ -51,7 +51,7 @@
 <p>Любая проблема заканчивается ровно одним из трёх способов.</p>
 <ol>
 <li><strong>Ошибка компиляции.</strong> Программа не собирается. Это лучший исход.</li>
-<li><strong>Паника.</strong> Программа сразу останавливается с сообщением, файлом и строкой (<code>panic: index 3 out of bounds (len 3) at main.vibe:4</code>). Паника означает баг в программе, и её нельзя перехватить.</li>
+<li><strong>Паника.</strong> Программа сразу останавливается с сообщением, файлом и строкой (<code>panic: index 3 out of bounds (len 3) at main.zk:4</code>). Паника означает баг в программе, и её нельзя перехватить.</li>
 <li><strong>Значение-ошибка.</strong> Функция возвращает <code>!T</code>, и вызывающий решает, что делать. Это для того, что может случиться в правильной программе: нет файла, плохой ввод, нет памяти.</li>
 </ol>
 <h2 id="что-и-когда-останавливается"><a class="anchor" href="#что-и-когда-останавливается">#</a>Что и когда останавливается</h2>
@@ -154,7 +154,7 @@
 </tbody></table></div>
 <p>В безопасном режиме ничто из этого списка не является неопределённым поведением. Одна и та же программа даёт один результат на нативном бэкенде, с <code>--llvm</code> и с <code>-O</code>, и тест в репозитории это поддерживает.</p>
 <h2 id="владение-и-заимствование-без-borrow-checker"><a class="anchor" href="#владение-и-заимствование-без-borrow-checker">#</a>Владение и заимствование без borrow checker</h2>
-<p>В Vibe нет времён жизни и borrow checker, как в Rust. Есть кое-что поменьше, что можно выучить за десять минут и что ловит ошибки, случающиеся на практике. Оно следит за <strong>переменными</strong> внутри <strong>одной функции</strong>:</p>
+<p>В Zark нет времён жизни и borrow checker, как в Rust. Есть кое-что поменьше, что можно выучить за десять минут и что ловит ошибки, случающиеся на практике. Оно следит за <strong>переменными</strong> внутри <strong>одной функции</strong>:</p>
 <ul>
 <li>Параметр или метод с пометкой <code>move</code> забирает значение. В стандартной библиотеке <code>move</code> стоит на <code>free</code>, <code>destroy</code>, каждом <code>deinit</code>, <code>join</code> и на <code>close</code> сокетов и потоков. После вызова переменная мертва, пока вы не присвоите ей значение заново.</li>
 <li>Метод с пометкой <code>borrows</code> возвращает указатель или срез внутрь объекта (<code>List.at</code>, <code>List.slice</code>, <code>Map.get_ptr</code>). Метод с пометкой <code>invalidates</code> может сдвинуть память (<code>push</code>, <code>put</code>, <code>insert</code>). Если вызвать метод <code>invalidates</code>, все указатели и срезы, взятые из этого объекта раньше, становятся мёртвыми.</li>
@@ -183,17 +183,17 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">destroy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p);</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>
-fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7fc5ee6b8ff8)
+fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7fd623685ff8)
 backtrace:
-  #0 0x1ced in .vibe-cache/main
-  #1 0x13bf in .vibe-cache/main
-  #2 0x108f0 in .vibe-cache/main
+  #0 0x2c69 in .zark-cache/main
+  #1 0x26bf in .zark-cache/main
+  #2 0x118ae in .zark-cache/main
   #3 0x27781 in /usr/lib/libc.so.6
   #4 0x278b9 in /usr/lib/libc.so.6
-  #5 0x11b5 in .vibe-cache/main
+  #5 0x24b5 in .zark-cache/main
 where (addr2line):
-vb.touch at main.vibe:1
-vb.main at main.vibe:9
+vb.touch at main.zk:1
+vb.main at main.zk:9
 main at ??:?
 _start at ??:?
 error: error.Signaled</code></pre></div></div>
@@ -203,12 +203,12 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7f3a46bd0ff8
-leak: block #2, 100 bytes at 0x7f3a46bcef9c
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>leak: block #2, 100 bytes at 0x7f6b5164df9c
+leak: block #1, 8 bytes at 0x7f6b5164fff8
 DebugAllocator: 2 block(s) leaked, 108 bytes (set trap_id to a block number to stop in gdb where it is allocated)
 error: MemoryLeak</code></pre></div></div>
 <p>Запускайте тесты с <code>DebugAllocator</code> в роли аллокатора. Поскольку функции получают аллокатор параметром, менять код для этого не нужно.</p>
-<p><strong><code>vibe test</code></strong> запускает каждый блок <code>test</code>. <strong><code>-g</code></strong> добавляет информацию о строках и переменных для <code>gdb</code>. <strong>Обработчик падений</strong> печатает сигнал, причину (нулевой указатель, переполнение стека, использование после освобождения) и бэктрейс, а <code>VIBE_CRASH_HANDLER=0</code> отключает его, чтобы получить core-файл. См. <a href="tooling.html">инструменты</a>.</p>
+<p><strong><code>zark test</code></strong> запускает каждый блок <code>test</code>. <strong><code>-g</code></strong> добавляет информацию о строках и переменных для <code>gdb</code>. <strong>Обработчик падений</strong> печатает сигнал, причину (нулевой указатель, переполнение стека, использование после освобождения) и бэктрейс, а <code>ZARK_CRASH_HANDLER=0</code> отключает его, чтобы получить core-файл. См. <a href="tooling.html">инструменты</a>.</p>
 <h2 id="потоки"><a class="anchor" href="#потоки">#</a>Потоки</h2>
 <p>Замыкания захватывают переменные по указателю. Поток, переживший переменные, которые он использует, читает освобождённый стек. Правила:</p>
 <ol>
@@ -220,7 +220,7 @@ error: MemoryLeak</code></pre></div></div>
 <h2 id="чек-лист-перед-выпуском"><a class="anchor" href="#чек-лист-перед-выпуском">#</a>Чек-лист перед выпуском</h2>
 <ul>
 <li><input disabled="" type="checkbox"> Все тесты проходят в безопасном режиме, а в тестах памяти стоит <code>DebugAllocator</code>.</li>
-<li><input disabled="" type="checkbox"> <code>vibe build -O</code> проходит те же тесты.</li>
+<li><input disabled="" type="checkbox"> <code>zark build -O</code> проходит те же тесты.</li>
 <li><input disabled="" type="checkbox"> Каждый <code>+%</code>, <code>-%</code> и <code>*%</code> в коде стоит не зря (хеш, счётчик).</li>
 <li><input disabled="" type="checkbox"> Каждый <code>comptime assert</code>, охраняющий формат файла или раскладку, на месте.</li>
 <li><input disabled="" type="checkbox"> Только потом, если нужна скорость, соберите с <code>--release</code> и снова запустите тесты.</li>
@@ -231,7 +231,7 @@ error: MemoryLeak</code></pre></div></div>
 <li>Как писать код, который проверки любят: <a href="idioms.html">идиомы</a>.</li>
 </ul>
 
-<div class="pager"><a class="prev" href="memory.html"><small>Назад</small>Память и аллокаторы</a><a class="next" href="idioms.html"><small>Дальше</small>Пишем идиоматично на Vibe</a></div>
+<div class="pager"><a class="prev" href="memory.html"><small>Назад</small>Память и аллокаторы</a><a class="next" href="idioms.html"><small>Дальше</small>Пишем идиоматично на Zark</a></div>
 </article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#режимы-сборки">Режимы сборки</a><a class="l2" href="#три-исхода">Три исхода</a><a class="l2" href="#что-и-когда-останавливается">Что и когда останавливается</a><a class="l2" href="#владение-и-заимствование-без-borrow-checker">Владение и заимствование без borrow checker</a><a class="l2" href="#закрываем-пробел-инструментами">Закрываем пробел инструментами</a><a class="l2" href="#потоки">Потоки</a><a class="l2" href="#чек-лист-перед-выпуском">Чек-лист перед выпуском</a><a class="l2" href="#что-дальше">Что дальше</a></aside></main>
 </div>
 <script src="../assets/site.js"></script>

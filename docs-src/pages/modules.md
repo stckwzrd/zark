@@ -2,16 +2,16 @@
 title: Modules and imports
 order: 19
 section: Language
-description: How to split a program into files: import, import as, namespaces, paths, cycles and the visibility rules in Vibe
+description: How to split a program into files: import, import as, namespaces, paths, cycles and the visibility rules in Zark
 ---
 
 A program can consist of several files. One file brings in another through `import`. This page describes what exactly is brought in, how names are assigned and which rules the compiler checks.
 
 ## A plain import
 
-Suppose two files lie side by side. The first is `shapes.vibe`:
+Suppose two files lie side by side. The first is `shapes.zk`:
 
-```vibe file=shapes.vibe
+```zark file=shapes.zk
 struct Rect { i64 w; i64 h; }
 
 i64 area(Rect r) {
@@ -23,8 +23,8 @@ const auto SIDES = 4;
 
 The second is the main file. The import is written at the top:
 
-```vibe run
-import "shapes.vibe";
+```zark run
+import "shapes.zk";
 
 void main() {
     const auto r = Rect{ .w = 3, .h = 4 };
@@ -32,21 +32,21 @@ void main() {
 }
 ```
 
-A plain `import "file.vibe";` puts **all** the names of the file (functions, structs, unions, enums, constants, global variables, type aliases) into the common namespace. They are used without a prefix.
+A plain `import "file.zk";` puts **all** the names of the file (functions, structs, unions, enums, constants, global variables, type aliases) into the common namespace. They are used without a prefix.
 
 Properties of an import:
 
 - The path is a string, **relative to the file that contains the `import`**, not to the place where you run the compiler.
 - Each file is loaded **once**, however many times and from wherever it is imported.
 - Imports can be put anywhere at the top level, but by convention they are written at the start.
-- Subdirectories are allowed: `import "lib/util.vibe";`.
+- Subdirectories are allowed: `import "lib/util.zk";`.
 - Cyclic imports are allowed: a file is loaded once, so the cycle simply stops.
 
 ## `import ... as name;`
 
 If the names from a file might collide with yours, import it with an alias. Then all its names get the prefix `name::`:
 
-```vibe file=geometry.vibe
+```zark file=geometry.zk
 struct Point {
     i64 x;
     i64 y;
@@ -66,8 +66,8 @@ i64 dist2(Point p) {
 }
 ```
 
-```vibe run
-import "geometry.vibe" as geo;
+```zark run
+import "geometry.zk" as geo;
 
 void main() {
     const auto p = geo::Point{ .x = 3, .y = 4 };
@@ -92,13 +92,13 @@ Methods and variant literals (`.Y`, `.Yes(5)`) do not need a prefix: they are in
 
 A file is loaded once, however many times and under whatever names it is imported. Two names for the same file both work:
 
-```vibe file=util.vibe
+```zark file=util.zk
 i64 tool() { return 1; }
 ```
 
-```vibe run
-import "util.vibe" as a;
-import "util.vibe" as b;
+```zark run
+import "util.zk" as a;
+import "util.zk" as b;
 
 void main() { println(a::tool() + b::tool()); }
 ```
@@ -107,20 +107,20 @@ This is what lets a library import `std/thread` as `thread` while your program i
 
 ## A plain import "leaks"
 
-If the file `util.vibe` itself does a **plain** `import "base.vibe"`, the names from `base.vibe` end up in the common namespace and become visible everywhere, including the main file:
+If the file `util.zk` itself does a **plain** `import "base.zk"`, the names from `base.zk` end up in the common namespace and become visible everywhere, including the main file:
 
-```vibe file=lib/base.vibe
+```zark file=lib/base.zk
 i64 base_val() { return 41; }
 ```
 
-```vibe file=lib/util.vibe
-import "base.vibe";
+```zark file=lib/util.zk
+import "base.zk";
 
 i64 helper() { return base_val() + 1; }
 ```
 
-```vibe run
-import "lib/util.vibe" as u;
+```zark run
+import "lib/util.zk" as u;
 
 void main() {
     println(u::helper());
@@ -128,16 +128,16 @@ void main() {
 }
 ```
 
-The names from `util.vibe` got the prefix `u::`, but `base_val` from the nested plain import did not. If you want an isolated module, import everything through `as`, and then the prefix is explicit everywhere.
+The names from `util.zk` got the prefix `u::`, but `base_val` from the nested plain import did not. If you want an isolated module, import everything through `as`, and then the prefix is explicit everywhere.
 
 ## Paths
 
-The path in `import` is read from the directory of the **current file**. So `lib/util.vibe`, bringing in `"base.vibe"`, looks for it next to itself, in `lib/`, not next to the main file.
+The path in `import` is read from the directory of the **current file**. So `lib/util.zk`, bringing in `"base.zk"`, looks for it next to itself, in `lib/`, not next to the main file.
 
 A missing file is a compile-time error:
 
-```vibe error
-import "missing.vibe" as m;
+```zark error
+import "missing.zk" as m;
 
 void main() {}
 ```
@@ -150,17 +150,17 @@ An `extern` declared in a module imported `as name` gets the prefix like everyth
 
 If two plain imports define the same name, the compiler stops with a duplicate message:
 
-```vibe file=one.vibe
+```zark file=one.zk
 i64 helper() { return 1; }
 ```
 
-```vibe file=two.vibe
+```zark file=two.zk
 i64 helper() { return 2; }
 ```
 
-```vibe error
-import "one.vibe";
-import "two.vibe";
+```zark error
+import "one.zk";
+import "two.zk";
 
 void main() {
     println(helper());
@@ -177,27 +177,27 @@ There are no "packages" and no manifest file. A module is simply a file. For a s
 
 ```text
 project/
-├── main.vibe        the main file, contains main()
-├── model.vibe       structs and their methods
-├── parse.vibe       parsing the input
-└── util.vibe        small helpers
+├── main.zk        the main file, contains main()
+├── model.zk       structs and their methods
+├── parse.zk       parsing the input
+└── util.zk        small helpers
 ```
 
 The main file brings in the others:
 
 ```text
-import "model.vibe" as model;
-import "parse.vibe" as parse;
-import "util.vibe";
+import "model.zk" as model;
+import "parse.zk" as parse;
+import "util.zk";
 ```
 
-Run it with `vibe run main.vibe`. The other files are pulled in by themselves.
+Run it with `zark run main.zk`. The other files are pulled in by themselves.
 
 ## Only what is reachable is compiled
 
 From the imported files the compiler takes only the functions that can be reached from `main`. An extra import does not bloat the binary, and an unused function is not type-checked (unless it is a generic, whose errors show up on first use).
 
-```vibe file=maybe.vibe
+```zark file=maybe.zk
 i64 used() { return 1; }
 
 i64 never_called() {
@@ -205,8 +205,8 @@ i64 never_called() {
 }
 ```
 
-```vibe run
-import "maybe.vibe";
+```zark run
+import "maybe.zk";
 
 void main() {
     println(used());

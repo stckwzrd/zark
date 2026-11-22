@@ -5,9 +5,9 @@ section: Interop and tools
 description: volatile, packed struct, inline asm, Cpu, Port, Bits, atomics, building without libc and a kernel that boots in QEMU
 ---
 
-Vibe is suited to drivers and kernels: device registers are described with structs, privileged instructions are called like ordinary functions, and the program is built without libc. Everything you need is built into the language and the prelude. No macros, no `#pragma`, no compiler attributes.
+Zark is suited to drivers and kernels: device registers are described with structs, privileged instructions are called like ordinary functions, and the program is built without libc. Everything you need is built into the language and the prelude. No macros, no `#pragma`, no compiler attributes.
 
-| Task | In C | In Vibe |
+| Task | In C | In Zark |
 |---|---|---|
 | a device register | `volatile uint32_t *` and macros | `volatile u32* reg` or `volatile u32` in a `struct` |
 | a descriptor format | `__attribute__((packed))` | `packed struct` |
@@ -21,7 +21,7 @@ Vibe is suited to drivers and kernels: device registers are described with struc
 
 `volatile` goes before the type and means that every read and write goes to memory: the compiler does not merge or drop them. This is needed for device registers.
 
-```vibe run
+```zark run
 struct Uart {
     volatile u32 data;
     volatile u32 status;
@@ -40,7 +40,7 @@ void main() {
 
 `volatile` applies to what lies at the address: `volatile u32* p` is a pointer to a `volatile u32`. A field `volatile u32 data` and a variable `volatile u32 x` work too. The width of an access always equals the width of the type: `volatile u8*` reads exactly one byte, `volatile u16*` two.
 
-```vibe run
+```zark run
 void main() {
     u32 word = 0xAABBCCDD;
     volatile u8* bytes = &word as *u8;
@@ -57,7 +57,7 @@ The real address of registers is given as a number through `as`: `auto uart = 0x
 
 An ordinary struct aligns its fields as in C. A `packed struct` puts the fields back to back, without gaps: this is how descriptors, IDT and GDT tables, packet headers and PCI configuration are laid out.
 
-```vibe run
+```zark run
 packed struct Descriptor {
     u64 addr;
     u32 len;
@@ -83,7 +83,7 @@ Access to unaligned fields is ordinary: x86-64 allows it. Aligning a struct type
 
 ## Register bits: `Bits`
 
-```vibe run
+```zark run
 void main() {
     u64 reg = 0;
     reg = Bits::set(reg, 7, 4, 0xA);
@@ -99,7 +99,7 @@ void main() {
 | `Bits::get(v, hi, lo)` | the value of a bit field |
 | `Bits::set(v, hi, lo, x)` | `v` with the field replaced |
 
-The results have the type `u64`; for a 32-bit register add `as u32`: narrowing in Vibe is always explicit.
+The results have the type `u64`; for a 32-bit register add `as u32`: narrowing in Zark is always explicit.
 
 ## The processor: `Cpu`, and ports: `Port`
 
@@ -119,7 +119,7 @@ These are ordinary static methods. Privileged instructions crash in an ordinary 
 
 `rdtsc`, `pause` and the barriers also work in ordinary programs:
 
-```vibe run
+```zark run
 void main() {
     Cpu::fence();
     const auto a = Cpu::rdtsc();
@@ -132,7 +132,7 @@ void main() {
 
 Page tables and DMA buffers must lie at an address that is a multiple of the page size. Write `align(N)` before a global variable; `N` is a power of two.
 
-```vibe run
+```zark run
 align(4096) u64[512] page_table = 0;
 
 void main() {
@@ -144,7 +144,7 @@ A struct type can be aligned too: `align(64) struct Line { u8 tag; i64 val; }` m
 
 ## Atomic operations and `Spinlock`
 
-```vibe run
+```zark run
 void main() {
     u32 counter = 5;
     const auto old = Atomic::fetch_add32(&counter, 3);
@@ -170,7 +170,7 @@ void main() {
 
 If the instruction you need is not in `Cpu`, you can insert it yourself: `asm<Type>("template", "constraints", operands...)`. The template and the constraints are in the LLVM (AT&T) syntax. Curly braces in the strings are escaped: `\{rax\}`.
 
-```vibe
+```zark
 u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 ```
 
@@ -191,7 +191,7 @@ Most "drivers for reading memory and hardware" on Linux work without a kernel mo
 
 Reads and writes through `Mapping` go through `volatile` and check the bounds: going past the page gives `error.OutOfRange`, not a crash.
 
-```vibe run
+```zark run
 !void main() {
     auto page = Mapping::anonymous(4096)?;
     defer _ = page.unmap();
@@ -203,7 +203,7 @@ Reads and writes through `Mapping` go through `volatile` and check the bounds: g
 
 Reading the memory of a process (your own, or one you have the right to by `ptrace_scope`):
 
-```vibe run
+```zark run
 !void main() {
     u32[4] secret = [11, 22, 33, 44];
     u8[16] copy;
@@ -214,7 +214,7 @@ Reading the memory of a process (your own, or one you have the right to by `ptra
 
 Listing the memory maps and finding a region:
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -225,7 +225,7 @@ Listing the memory maps and finding a region:
 
 PCI device identifiers (readable without root):
 
-```vibe
+```zark
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -240,11 +240,11 @@ Such programs build into one small executable. The usual permissions apply as al
 
 ## Building without libc: `--freestanding`
 
-`vibe build kernel.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` links with `-nostdlib -static` and turns off the bounds checks (their messages need libc). In this mode you can use everything that does not call libc: `Fmt` and `Writer` work without allocations, `println` is not needed because you write the output yourself.
+`zark build kernel.zk boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` links with `-nostdlib -static` and turns off the bounds checks (their messages need libc). In this mode you can use everything that does not call libc: `Fmt` and `Writer` work without allocations, `println` is not needed because you write the output yourself.
 
 The compiler may call `memset` and `memcpy` when copying and zeroing large values. In a kernel, define them yourself: a definition with `export` replaces the declaration from the prelude.
 
-```vibe
+```zark
 export void* memset(void* dst, i32 c, u64 n) {
     auto p = dst as *u8;
     for (auto i : 0..n) { p[i] = c as u8; }
@@ -256,9 +256,9 @@ The files `.S`, `.c`, `.o` and the parameters `-Wl,...`, `-T...`, `-nostdlib`, `
 
 ## An example: a kernel that boots in QEMU
 
-`examples/baremetal/` holds a complete x86-64 kernel in Vibe: `boot.S` (the Multiboot header, the switch to 64-bit mode, interrupt stubs), `linker.ld` and `kernel.vibe`.
+`examples/baremetal/` holds a complete x86-64 kernel in Zark: `boot.S` (the Multiboot header, the switch to 64-bit mode, interrupt stubs), `linker.ld` and `kernel.zk`.
 
-```vibe
+```zark
 struct Serial {
     static void put(u8 c) {
         while ((Port::in8(0x3F8 + 5) & 0x20) == 0) { Cpu::pause(); }
@@ -277,16 +277,16 @@ void kprintln(Fmt f) {
 }
 
 export void kmain() {
-    kprintln("Hello from Vibe on bare metal!");
+    kprintln("Hello from Zark on bare metal!");
     kprintln("paging = {Bits::get(Cpu::cr0(), 31, 31)}");
 }
 ```
 
-Your own `kprintln` with string interpolation comes out of `Fmt` and `Writer` in six lines, and no memory is allocated. The kernel prints text to the serial port, builds an IDT (a `packed struct`), catches an `int3` exception in a handler written in Vibe and returns from it. Running it:
+Your own `kprintln` with string interpolation comes out of `Fmt` and `Writer` in six lines, and no memory is allocated. The kernel prints text to the serial port, builds an IDT (a `packed struct`), catches an `int3` exception in a handler written in Zark and returns from it. Running it:
 
 ```sh
 $ examples/baremetal/run.sh
-Hello from Vibe on bare metal!
+Hello from Zark on bare metal!
 protected mode = 1, paging = 1
 page table aligned = true, 4 * 5 = 20
 fib = [0, 1, 1, 2, 3, 5, 8, 13]
@@ -299,13 +299,13 @@ The script builds the kernel, turns the ELF into a 32-bit image for Multiboot (`
 ## What is not there yet
 
 - Linux kernel modules: they need the kernel headers (`linux-headers`), a third-party C file with `module_init` and a check in a virtual machine. The object file from `--freestanding` can be plugged into Kbuild, but there is no ready example yet.
-- An `interrupt` attribute: interrupt handlers are written as assembly stubs (see `boot.S`) that call a Vibe function.
+- An `interrupt` attribute: interrupt handlers are written as assembly stubs (see `boot.S`) that call a Zark function.
 - Bit fields in `struct`: use `Bits`.
 - Encoding of arbitrary `asm` in the own backend.
 - Targets other than x86-64.
 
 ## What next
 
-- C and assembly files next to Vibe: [interoperating with C](c-interop.md).
+- C and assembly files next to Zark: [interoperating with C](c-interop.md).
 - Memory without a heap: [memory and allocators](memory.md).
 - How the backends work: [how it all works](how-it-works.md).

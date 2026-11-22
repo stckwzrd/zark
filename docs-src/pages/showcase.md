@@ -5,12 +5,12 @@ section: Start
 description: One larger program that uses interfaces, SIMD, threads, JSON, unions, generics, operators, closures, error handling and tests together
 ---
 
-This page walks through `examples/showcase/`, a small ray tracer written in Vibe. It reads a scene from JSON, renders it on several threads and prints the picture as ASCII art. The same program is used as a test of the compiler: its output is checked on every backend.
+This page walks through `examples/showcase/`, a small ray tracer written in Zark. It reads a scene from JSON, renders it on several threads and prints the picture as ASCII art. The same program is used as a test of the compiler: its output is checked on every backend.
 
 ```sh
-vibe run examples/showcase/main.vibe
-vibe run examples/showcase/main.vibe -- --ppm scene.ppm
-vibe test examples/showcase/main.vibe
+zark run examples/showcase/main.zk
+zark run examples/showcase/main.zk -- --ppm scene.ppm
+zark test examples/showcase/main.zk
 ```
 
 The program is built through LLVM automatically, because it uses SIMD vectors.
@@ -19,14 +19,14 @@ The program is built through LLVM automatically, because it uses SIMD vectors.
 
 | File | What it shows |
 |---|---|
-| `vec.vibe` | a `Vec3` struct on top of a SIMD `f32x4`, operator overloading (`+ - *` and unary `-`), a constructor, `const` methods, a generic `clamp<T: Ord>`, and `test` blocks |
-| `scene.vibe` | an `interface Shape` implemented by two structs without any declaration, a tagged `union Material` with a payload, `?Hit` optionals, and loading a scene with the `std/json` module and `!T` errors |
-| `render.vibe` | a generic `Grid<T>`, `match` on the union, recursion for reflections, worker threads with an atomic row counter and a `WaitGroup`, a closure that captures its context explicitly, and the wrapping operator `*%` in a checksum |
-| `main.vibe` | an `Arena` with `defer`, `embed` of the scene file, a `Writer` over `print`, error handling with `catch`, command-line arguments, and tests of the whole pipeline |
+| `vec.zk` | a `Vec3` struct on top of a SIMD `f32x4`, operator overloading (`+ - *` and unary `-`), a constructor, `const` methods, a generic `clamp<T: Ord>`, and `test` blocks |
+| `scene.zk` | an `interface Shape` implemented by two structs without any declaration, a tagged `union Material` with a payload, `?Hit` optionals, and loading a scene with the `std/json` module and `!T` errors |
+| `render.zk` | a generic `Grid<T>`, `match` on the union, recursion for reflections, worker threads with an atomic row counter and a `WaitGroup`, a closure that captures its context explicitly, and the wrapping operator `*%` in a checksum |
+| `main.zk` | an `Arena` with `defer`, `embed` of the scene file, a `Writer` over `print`, error handling with `catch`, command-line arguments, and tests of the whole pipeline |
 
 ## A vector on SIMD
 
-```vibe
+```zark
 struct Vec3 {
     f32x4 v;
 
@@ -46,7 +46,7 @@ struct Vec3 {
 
 ## Shapes without inheritance
 
-```vibe
+```zark
 interface Shape {
     ?Hit intersect(Ray r);
 }
@@ -64,7 +64,7 @@ struct Sphere {
 
 ## A union with data
 
-```vibe
+```zark
 union Material {
     Vec3 Diffuse;
     Vec3 Mirror;
@@ -82,7 +82,7 @@ match hit.mat {
 
 Reading the scene returns `!Scene`. A missing field, a wrong vector length, an unknown shape and invalid JSON each become an error that the caller can print or test:
 
-```vibe
+```zark
 !Material read_material(json::Value* m) {
     const auto kind = m.get("kind").as_str()?;
     const auto color = read_vec(m.get("color"))?;
@@ -95,7 +95,7 @@ Reading the scene returns `!Scene`. A missing field, a wrong vector length, an u
 
 ## Threads without hidden allocation
 
-```vibe
+```zark
 !void render(Scene* sc, Grid<Vec3>* img, i64 workers) {
     auto next_row = thread::AtomicI64{};
     auto wg = thread::WaitGroup{};

@@ -2,7 +2,7 @@
 title: Quick tour
 order: 2
 section: Start
-description: The whole Vibe language on one page: short programs with real output
+description: The whole Zark language on one page: short programs with real output
 ---
 
 This page shows all the essentials in one sitting. The details of each topic are on separate pages, linked at the end of the sections.
@@ -11,7 +11,7 @@ This page shows all the essentials in one sitting. The details of each topic are
 
 Variables are mutable by default, and `const` makes them immutable. You can write `auto` instead of a type: it is inferred from the value.
 
-```vibe run fragment
+```zark run fragment
 const auto a = 10;
 auto b = 20;
 b += a;
@@ -21,7 +21,7 @@ println("a = {a}, b = {b}, pi = {pi}");
 
 Trying to change a `const` variable does not compile:
 
-```vibe error fragment
+```zark error fragment
 const auto a = 10;
 a = 11;
 ```
@@ -32,7 +32,7 @@ More: [variables and constants](variables.md).
 
 Integer and floating-point types are named as in Rust: `i8..i64`, `u8..u64`, `f32`, `f64`. Only lossless widening is implicit; everything else goes through `as`.
 
-```vibe run fragment
+```zark run fragment
 const i32 small = 1000;
 const i64 big = small;
 const auto back = big as i32;
@@ -43,7 +43,7 @@ println(big, back, f, t);
 
 Narrowing without `as` does not compile:
 
-```vibe error fragment
+```zark error fragment
 const i64 big = 1000;
 const i32 small = big;
 ```
@@ -54,8 +54,8 @@ More: [types](types.md), [operators](operators.md).
 
 `str` is a slice of bytes. Inside `"..."` you can write any expression in curly braces, and a format after a colon.
 
-```vibe run fragment
-const auto name = "Vibe";
+```zark run fragment
+const auto name = "Zark";
 const auto n = 255;
 println("{name} has {name.len} letters");
 println("hex {n:x}, padded {n:08X}, width [{n:6}] [{n:-6}]");
@@ -66,7 +66,7 @@ More: [strings and formatting](strings.md).
 
 ## Control flow
 
-```vibe run fragment
+```zark run fragment
 for (auto i : 1..6) {
     if (i % 2 == 0) {
         println("{i} is even");
@@ -85,7 +85,7 @@ More: [control flow](control-flow.md).
 
 ## Functions
 
-```vibe run
+```zark run
 i64 square(i64 x) {
     return x * x;
 }
@@ -95,7 +95,7 @@ void greet(str name) {
 }
 
 void main() {
-    greet("Vibe");
+    greet("Zark");
     println(square(12));
 }
 ```
@@ -104,7 +104,7 @@ More: [functions](functions.md).
 
 ## Structs and methods
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -128,7 +128,7 @@ More: [structs, unions and enums](structs-unions-enums.md).
 
 ## Enums, unions and match
 
-```vibe run
+```zark run
 enum Color { Red, Green, Blue }
 
 union Shape {
@@ -163,7 +163,7 @@ void main() {
 
 An error is a value. A function that can fail returns `!T`. The `?` operator propagates the error upwards, and `catch` handles it.
 
-```vibe run exit
+```zark run exit
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -186,7 +186,7 @@ More: [errors and optional values](errors-and-optionals.md).
 
 `?T` is a value or nothing. `orelse` supplies a fallback.
 
-```vibe run
+```zark run
 ?i64 find(i64[] items, i64 want) {
     for (auto [i, x] : items) {
         if (x == want) { return i; }
@@ -205,7 +205,7 @@ void main() {
 
 Nothing allocates by itself. The heap is reachable only through an allocator that you pass explicitly.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -221,7 +221,7 @@ Nothing allocates by itself. The heap is reachable only through an allocator tha
 
 ## Generics
 
-```vibe run
+```zark run
 template<T: Ord> T largest(T a, T b) {
     if (a > b) { return a; }
     return b;
@@ -240,7 +240,7 @@ void main() {
 
 A closure lists explicitly which variables it uses. The context lives on the stack, and nothing is allocated.
 
-```vibe run
+```zark run
 i64 apply(fn[](i64) -> i64 f, i64 x) {
     return f(x);
 }
@@ -258,7 +258,7 @@ void main() {
 
 ## Tests
 
-```vibe test
+```zark test
 i64 add(i64 a, i64 b) { return a + b; }
 
 test "adds" {
@@ -276,14 +276,14 @@ More: [tests](testing.md).
 
 A file is brought in with `import`. With `as`, its names get a prefix:
 
-```vibe file=geometry.vibe
+```zark file=geometry.zk
 struct Rect { i64 w; i64 h; }
 
 i64 area(Rect r) { return r.w * r.h; }
 ```
 
-```vibe run
-import "geometry.vibe" as geo;
+```zark run
+import "geometry.zk" as geo;
 
 void main() {
     const auto r = geo::Rect{ .w = 3, .h = 4 };
@@ -295,7 +295,7 @@ More: [modules and imports](modules.md).
 
 ## Calling C
 
-```vibe run
+```zark run
 extern i32 atoi(u8* s);
 
 void main() {
@@ -307,7 +307,7 @@ More: [interoperating with C](c-interop.md).
 
 ## Where to go next
 
-- Coming from C++? The differences are collected on the page [Vibe for C++ programmers](cpp-style.md).
+- Coming from C++? The differences are collected on the page [Zark for C++ programmers](cpp-style.md).
 - To go deeper, follow the pages of the "Language" section in order: [lexical structure](lexical.md), [types](types.md) and on.
 - To see finished programs: [cookbook](cookbook.md).
 - If something behaves unexpectedly: [pitfalls and FAQ](gotchas.md).
