@@ -6,7 +6,7 @@ import "std/path" as path;
 
 enum CTK { Ident, Num, Str, Chr, Punct, Eof }
 
-struct CTok { CTK k; str text; bool rel; }
+struct CTok { CTK k; str text; bool rel; bool packed; }
 
 struct CDef { i64 at; str name; str body; bool func_like; bool undef; bool rel; }
 
@@ -47,6 +47,8 @@ struct CLexer {
     i64 i;
     bool rel;
     bool in_stub;
+    i64 pack;
+    List<i64> packs;
     Map<bool> seen;
     CLex out;
 
@@ -87,6 +89,30 @@ struct CLexer {
         this->out.defs.push(CDef{ .at = this->out.toks.len, .name = rest[0..j], .body = str_trim(rest[j..]), .func_like = func_like, .undef = undef, .rel = this->rel })?;
     }
 
+    !void set_pack(str s) {
+        const auto o = str_find(s, "(");
+        const auto c = str_find(s, ")");
+        if (o < 0 || c < o) { return; }
+        auto op = "";
+        i64 n = -1;
+        auto first = true;
+        auto it = str_split(s[o + 1..c], ",");
+        while (it.next()) {
+            const auto w = str_trim(it.part);
+            if (first) { op = w; }
+            first = false;
+            if (w.len > 0 && is_digit(w[0])) { n = cb_int(w)?; }
+        }
+        if (op == "push") {
+            this->packs.push(this->pack)?;
+        } else if (op == "pop") {
+            this->pack = this->packs.pop() catch 0;
+        } else if (op == "") {
+            this->pack = 0;
+        }
+        if (n >= 0) { this->pack = n; }
+    }
+
     !void directive(str line) {
         const auto s = str_trim_start(line);
         if (s.len > 0 && is_digit(s[0])) {
@@ -95,6 +121,8 @@ struct CLexer {
             this->define(str_trim_start(s[7..]), false)?;
         } else if (str_starts_with(s, "undef ")) {
             this->define(str_trim_start(s[6..]), true)?;
+        } else if (str_starts_with(s, "pragma ") && str_starts_with(str_trim_start(s[7..]), "pack")) {
+            this->set_pack(s)?;
         }
     }
 
@@ -150,7 +178,7 @@ struct CLexer {
             } else {
                 this->i += cb_punct_len(src[this->i..]);
             }
-            this->out.toks.push(CTok{ .k = k, .text = src[st..this->i], .rel = this->rel })?;
+            this->out.toks.push(CTok{ .k = k, .text = src[st..this->i], .rel = this->rel, .packed = this->pack > 0 })?;
         }
         this->out.toks.push(CTok{ .k = .Eof, .text = "" })?;
     }
@@ -251,6 +279,20 @@ i64 cb_prec(str op) {
     return l >> r;
 }
 
+!i64 cb_char(str text) {
+    if (text.len == 3) { return text[1] as i64; }
+    if (text.len != 4 || text[1] != '\\') { return error.ParseFailed; }
+    match text[2] {
+        'n' => return 10;
+        't' => return 9;
+        'r' => return 13;
+        '0' => return 0;
+        '\\' => return 92;
+        '\'' => return 39;
+    }
+    return error.ParseFailed;
+}
+
 !i64 cb_int(str text) {
     auto s = text;
     while (s.len > 0 && (s[s.len - 1] == 'u' || s[s.len - 1] == 'U' || s[s.len - 1] == 'l' || s[s.len - 1] == 'L')) { s = s[0..s.len - 1]; }
@@ -279,7 +321,10 @@ struct CParser {
     Map<bool> tags;
     List<CDecl*> decls;
     bool attr_layout;
+    str attr_why;
     bool asm_label;
+    Map<str> bad_enums;
+    Map<i64> enums;
 
     CTok peek() { return this->toks[this->pos]; }
     CTok peek_at(i64 n) { return this->toks[min(this->pos + n, this->toks.len - 1)]; }
@@ -356,11 +401,18 @@ struct CParser {
                 if (!this->at("(")) { continue; }
                 const auto from = this->pos;
                 this->skip_group();
-                if (t == "_Alignas" || t == "alignas") { this->attr_layout = true; }
+                if (t == "_Alignas" || t == "alignas") {
+                    this->attr_layout = true;
+                    this->attr_why = "aligned attribute";
+                }
                 if (t == "__asm__" || t == "__asm" || t == "asm") { this->asm_label = true; }
                 for (auto k : from..this->pos) {
                     const auto w = this->toks[k].text;
                     if (w == "packed" || w == "__packed__" || w == "aligned" || w == "__aligned__") { this->attr_layout = true; }
+                    if (w == "packed" || w == "__packed__") { this->attr_why = "packed attribute"; }
+                    if (w == "aligned" || w == "__aligned__") { this->attr_why = "aligned attribute"; }
+                    if (w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type") { this->attr_why = "vector_size attribute"; }
+                    if (w == "mode" || w == "__mode__") { this->attr_why = "mode attribute"; }
                 }
                 continue;
             }
@@ -473,6 +525,8 @@ struct CParser {
 
     !CType* record(bool is_union) {
         const auto saved = this->attr_layout;
+        const auto saved_why = this->attr_why;
+        defer this->attr_why = saved_why;
         this->attr_layout = false;
         this->skip_noise();
         const auto rel = this->peek().rel;
@@ -496,6 +550,7 @@ struct CParser {
         }
         const auto d = this->decl(.Struct, tag, rel)?;
         d.complete = true;
+        const auto packed = this->peek().packed;
         d.is_union = is_union;
         if (tag.len > 0) { this->tags.put(tag, true)?; }
         _ = this->next();
@@ -505,7 +560,7 @@ struct CParser {
         }
         _ = this->next();
         this->skip_noise();
-        d.layout_attr = this->attr_layout;
+        d.layout_attr = this->attr_layout || packed;
         this->attr_layout = saved;
         if (tag.len > 0) {
             this->decls.push(d)?;
@@ -516,6 +571,7 @@ struct CParser {
     }
 
     !void field(CDecl* d) {
+        this->attr_why = "";
         this->skip_noise();
         if (this->eat(";")) { return; }
         if (this->at("_Static_assert") || this->at("static_assert")) {
@@ -537,26 +593,69 @@ struct CParser {
         }
         if (this->eat(";")) { return; }
         while (true) {
-            const auto f = this->declarator(s.ty)?;
+            auto f = this->declarator(s.ty)?;
             if (this->eat(":")) {
                 d.bitfields = true;
                 this->skip_until_comma();
             }
             this->skip_noise();
+            if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
             d.fields.push(f)?;
             if (!this->eat(",")) { break; }
         }
         this->expect(";")?;
     }
 
+    !void enum_values() {
+        _ = this->next();
+        i64 v = 0;
+        while (!this->eat("}")) {
+            const auto t = this->next();
+            if (t.k != .Ident) { return error.ParseFailed; }
+            this->skip_noise();
+            if (this->eat("=")) { v = this->cexpr(1)?; }
+            this->enums.put(t.text, v)?;
+            if (v < -2147483648 || v > 2147483647) { return error.OutOfRange; }
+            v += 1;
+            if (!this->eat(",")) {
+                this->expect("}")?;
+                return;
+            }
+        }
+    }
+
     !CType* enum_spec() {
+        const auto saved = this->attr_layout;
+        const auto saved_why = this->attr_why;
+        defer this->attr_layout = saved;
+        defer this->attr_why = saved_why;
+        this->attr_layout = false;
         this->skip_noise();
         auto tag = "";
         if (this->peek().k == .Ident) { tag = this->next().text; }
         this->skip_noise();
-        if (this->eat(":")) { _ = this->specs()?; }
-        if (this->at("{{")) { this->skip_group(); }
+        auto why = "";
+        if (this->eat(":")) {
+            _ = this->specs()?;
+            why = "enum with fixed underlying type";
+        }
+        if (this->at("{{")) {
+            const auto from = this->pos;
+            this->enum_values() catch |e| {
+                if (e != error.ParseFailed && e != error.OutOfRange) { return e; }
+                if (why.len == 0 && e == error.OutOfRange) { why = "enum value range"; }
+                if (why.len == 0) { why = "enum value not evaluated"; }
+                this->pos = from;
+                this->skip_group();
+            };
+        }
         this->skip_noise();
+        if (this->attr_layout) { why = "packed enum"; }
+        if (tag.len > 0) {
+            if (why.len > 0) { this->bad_enums.put(tag, why)?; }
+            why = this->bad_enums.get_or(tag, "");
+        }
+        if (why.len > 0) { return this->bad(why); }
         if (tag.len == 0) { return this->int_ty(32, true); }
         const auto t = this->mk(.Named)?;
         t.name = tag;
@@ -650,9 +749,10 @@ struct CParser {
             }
             const auto s = this->specs()?;
             auto p = this->declarator(s.ty)?;
-            if (p.ty.k == .Array) {
-                p.ty = this->ptr(p.ty.elem)?;
-            } else if (p.ty.k == .Func) {
+            const auto rt = this->resolve(p.ty);
+            if (rt.k == .Array) {
+                p.ty = this->ptr(rt.elem)?;
+            } else if (rt.k == .Func) {
                 p.ty = this->ptr(p.ty)?;
             }
             f.params.push(p)?;
@@ -672,7 +772,6 @@ struct CParser {
             const auto r = this->cexpr(p + 1)?;
             l = cb_binop(op, l, r)?;
         }
-        return l;
     }
 
     !i64 cunary() {
@@ -686,6 +785,8 @@ struct CParser {
         if (t.text == "+") { return this->cunary(); }
         if (t.text == "~") { return ~this->cunary()?; }
         if (t.k == .Num) { return cb_int(t.text); }
+        if (t.k == .Chr) { return cb_char(t.text); }
+        if (t.k == .Ident && this->enums.has(t.text)) { return this->enums.get(t.text); }
         return error.ParseFailed;
     }
 
@@ -700,7 +801,7 @@ struct CParser {
     }
 
     !void typedef_decl(CField f, CType* base, bool rel) {
-        this->typedefs.put(f.name, f.ty)?;
+        if (!this->typedefs.has(f.name)) { this->typedefs.put(f.name, f.ty)?; }
         if (base.rec != null && base.rec.name.len == 0 && f.ty == base) {
             base.rec.name = f.name;
             base.rec.rel = rel;
@@ -713,14 +814,16 @@ struct CParser {
     }
 
     !void top() {
+        this->attr_why = "";
         const auto rel = this->peek().rel;
         const auto s = this->specs()?;
         if (this->eat(";")) { return; }
         while (true) {
             this->asm_label = false;
-            const auto f = this->declarator(s.ty)?;
+            auto f = this->declarator(s.ty)?;
             if (f.name.len == 0) { return error.ParseFailed; }
             if (s.is_typedef) {
+                if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
                 this->typedef_decl(f, s.ty, rel)?;
             } else {
                 const auto rt = this->resolve(f.ty);
@@ -731,6 +834,7 @@ struct CParser {
                     d.is_inline = s.is_inline;
                     d.is_extern = s.is_extern;
                     d.asm_label = this->asm_label;
+                    d.reason = this->attr_why;
                     this->decls.push(d)?;
                     if (this->at("{{")) {
                         d.has_body = true;
@@ -826,6 +930,13 @@ struct CParser {
     }
 }
 
+bool cb_is_prim(str w) {
+    for (auto q : ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "isize", "usize", "f32", "f64", "bool", "void", "str"]) {
+        if (w == q) { return true; }
+    }
+    return false;
+}
+
 str cb_known(str name) {
     match name {
         "size_t" => return "usize";
@@ -876,7 +987,7 @@ struct CEmit {
         this->bad.put(name, true)?;
     }
     !void esc(List<u8>* b, str name) {
-        if (keyword(name) == .ident) {
+        if (keyword(name) == .ident && !cb_is_prim(name)) {
             sprint(b, "{name}")?;
         } else {
             sprint(b, "{name}_")?;
@@ -962,8 +1073,9 @@ struct CEmit {
     }
 
     !void ptr_ty(List<u8>* b, CType* t) {
-        if (t.elem.k == .Func) {
-            this->fn_ty(b, t.elem)?;
+        const auto e = this->expand(t.elem);
+        if (e.k == .Func) {
+            this->fn_ty(b, e)?;
             return;
         }
         auto inner = List<u8>::init(this->a);
@@ -1048,6 +1160,9 @@ struct CEmit {
         if (d.is_inline && d.has_body) { return this->warn(d.name, "inline function"); }
         if (d.asm_label) { this->relabeled.put(d.name, true)?; }
         if (this->relabeled.has(d.name)) { return this->warn(d.name, "asm label"); }
+        if (d.reason.len > 0) { return this->warn(d.name, d.reason); }
+        if (keyword(d.name) != .ident) { return this->warn(d.name, "Zark keyword"); }
+        if (cb_is_prim(d.name)) { return this->warn(d.name, "Zark type name"); }
         if (!this->claim(d.name, 3)?) { return; }
         const auto f = d.ty;
         auto b = List<u8>::init(this->a);
@@ -1202,9 +1317,9 @@ struct CBind {
         eprint(r.err);
         return error.CompileFailed;
     }
-    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a) } };
+    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a) } };
     lx.run()?;
-    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .decls = List<CDecl*>::init(a) };
+    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .bad_enums = Map<str>::init(a), .enums = Map<i64>::init(a), .decls = List<CDecl*>::init(a) };
     p.parse_all()?;
     auto e = CEmit{ .a = a, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a) };
     e.run(p.decls)?;
