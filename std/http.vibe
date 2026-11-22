@@ -631,6 +631,6 @@ struct Server {
     }
 }
 
-i64 net_cpus() { return sysconf(84); }
+i64 net_cpus() { return vrt_sysconf(84); }
 
-extern i64 sysconf(i32 name);
+extern i64 vrt_sysconf(i32 name);

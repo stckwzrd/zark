@@ -10,21 +10,23 @@
 
 struct AddrInfo { i32 flags; i32 family; i32 socktype; i32 protocol; u32 addrlen; i32 pad; u8* addr; u8* canonname; AddrInfo* next; }
 
-extern i32 getaddrinfo(u8* node, u8* service, AddrInfo* hints, AddrInfo** res);
-extern void freeaddrinfo(AddrInfo* res);
+extern i32 vrt_getaddrinfo(u8* node, u8* service, i32 passive, AddrInfo** res);
+extern void vrt_freeaddrinfo(AddrInfo* res);
 extern u8* gai_strerror(i32 code);
-extern i32 socket(i32 domain, i32 kind, i32 protocol);
+extern i32 vrt_socket(i32 domain, i32 kind, i32 protocol);
 extern i32 connect(i32 fd, u8* addr, u32 len);
 extern i32 bind(i32 fd, u8* addr, u32 len);
 extern i32 accept(i32 fd, u8* addr, u32* len);
-extern i32 setsockopt(i32 fd, i32 level, i32 name, void* value, u32 len);
+extern i32 vrt_setsockopt(i32 fd, i32 level, i32 name, void* value, u32 len);
 extern i32 getsockname(i32 fd, u8* addr, u32* len);
 extern i32 getpeername(i32 fd, u8* addr, u32* len);
 extern i32 shutdown(i32 fd, i32 how);
 extern i32 close(i32 fd);
-extern i64 send(i32 fd, void* buf, u64 n, i32 flags);
+extern i64 vrt_send(i32 fd, void* buf, u64 n, i32 flags);
 extern i64 recv(i32 fd, void* buf, u64 n, i32 flags);
-extern u8* inet_ntop(i32 family, void* src, u8* dst, u32 n);
+extern u8* vrt_inet_ntop(i32 family, void* src, u8* dst, u32 n);
+extern i32 vrt_family(u8* sa);
+extern i32 vrt_errno();
 
 const auto MSG_NOSIGNAL = 0x4000;
 
@@ -37,12 +39,10 @@ struct Timeval { i64 sec; i64 usec; }
     u8* node = null;
     if (host.len > 0) { node = to_cstr(hb[..], host)?; }
     const auto service = to_cstr(pb[..], bprint(pb[..], "{port}")?)?;
-    auto hints = AddrInfo{ .socktype = 1 };
-    if (passive) { hints.flags = 1; }
     AddrInfo* res = null;
-    const auto rc = getaddrinfo(node, service, &hints, &res);
+    const auto rc = vrt_getaddrinfo(node, service, passive as i32, &res);
     if (rc != 0) { return error.HostNotFound; }
-    defer freeaddrinfo(res);
+    defer vrt_freeaddrinfo(res);
     auto p = res;
     while (p != null) {
         const auto fd = each(p);
@@ -54,22 +54,22 @@ struct Timeval { i64 sec; i64 usec; }
 }
 
 i32 try_connect(AddrInfo* ai) {
-    const auto fd = socket(ai.family, 1 | 0o2000000, ai.protocol);
+    const auto fd = vrt_socket(ai.family, 1 | 0o2000000, ai.protocol);
     if (fd < 0) { return -1; }
     if (connect(fd, ai.addr, ai.addrlen) != 0) {
         _ = close(fd);
         return -1;
     }
     i32 one = 1;
-    _ = setsockopt(fd, 6, 1, &one as *void, 4);   // TCP_NODELAY
+    _ = vrt_setsockopt(fd, 6, 1, &one as *void, 4);   // TCP_NODELAY
     return fd;
 }
 
 i32 try_bind(AddrInfo* ai) {
-    const auto fd = socket(ai.family, 1 | 0o2000000, ai.protocol);
+    const auto fd = vrt_socket(ai.family, 1 | 0o2000000, ai.protocol);
     if (fd < 0) { return -1; }
     i32 one = 1;
-    _ = setsockopt(fd, 1, 2, &one as *void, 4);   // SO_REUSEADDR
+    _ = vrt_setsockopt(fd, 1, 2, &one as *void, 4);   // SO_REUSEADDR
     if (bind(fd, ai.addr, ai.addrlen) != 0 || Sys::raw(50, fd as i64, 128, 0, 0, 0, 0) != 0) {
         _ = close(fd);
         return -1;
@@ -86,8 +86,8 @@ struct Conn {
         while (true) {
             const auto n = recv(this->fd, buf.ptr, buf.len as u64, 0);
             if (n >= 0) { return n; }
-            if (*__errno_location() == 4) { continue; }
-            if (*__errno_location() == 11) { return error.TimedOut; }
+            if (vrt_errno() == 4) { continue; }
+            if (vrt_errno() == 11) { return error.TimedOut; }
             errno_error()?;
         }
         return 0;
@@ -96,9 +96,9 @@ struct Conn {
     !void write_all(str data) {
         auto off = 0;
         while (off < data.len) {
-            const auto n = send(this->fd, data.ptr + off, (data.len - off) as u64, MSG_NOSIGNAL);
+            const auto n = vrt_send(this->fd, data.ptr + off, (data.len - off) as u64, MSG_NOSIGNAL);
             if (n < 0) {
-                if (*__errno_location() == 4) { continue; }
+                if (vrt_errno() == 4) { continue; }
                 errno_error()?;
             }
             off += n;
@@ -116,8 +116,8 @@ struct Conn {
     /// gives up waiting for reads and writes after `ms` milliseconds (0 = wait forever)
     !void set_timeout(i64 ms) {
         auto tv = Timeval{ .sec = ms / 1000, .usec = (ms % 1000) * 1000 };
-        if (setsockopt(this->fd, 1, 20, &tv as *void, 16) != 0) { errno_error()?; }
-        if (setsockopt(this->fd, 1, 21, &tv as *void, 16) != 0) { errno_error()?; }
+        if (vrt_setsockopt(this->fd, 1, 20, &tv as *void, 16) != 0) { errno_error()?; }
+        if (vrt_setsockopt(this->fd, 1, 21, &tv as *void, 16) != 0) { errno_error()?; }
     }
 
     /// no more writes from this side; the peer reads end of stream
@@ -144,13 +144,13 @@ struct Conn {
 
 !str format_addr(u8[] buf, u8[] sa) {
     u8[64] ip;
-    const auto family = (sa[0] as u16) | ((sa[1] as u16) << 8);
+    const auto family = vrt_family(&sa[0]);
     const auto port = ((sa[2] as u64) << 8) | (sa[3] as u64);
     if (family == 10) {
-        if (inet_ntop(10, &sa[8] as *void, &ip[0], 64) == null) { return error.InvalidAddress; }
+        if (vrt_inet_ntop(10, &sa[8] as *void, &ip[0], 64) == null) { return error.InvalidAddress; }
         return bprint(buf, "[{cstr(&ip[0])}]:{port}");
     }
-    if (inet_ntop(2, &sa[4] as *void, &ip[0], 64) == null) { return error.InvalidAddress; }
+    if (vrt_inet_ntop(2, &sa[4] as *void, &ip[0], 64) == null) { return error.InvalidAddress; }
     return bprint(buf, "{cstr(&ip[0])}:{port}");
 }
 
@@ -172,7 +172,7 @@ struct Listener {
         while (true) {
             const auto fd = accept(this->fd, null, null);
             if (fd >= 0) { return Conn{ .fd = fd }; }
-            const auto e = *__errno_location();
+            const auto e = vrt_errno();
             if (e == 4 || e == 103) { continue; }
             if (e == 22 || e == 9) { return error.Closed; }
             errno_error()?;

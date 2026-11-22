@@ -804,20 +804,21 @@ f64 f64_from_bits(u64 x) { auto y = x; return *(&y as *f64); }
 
 // ================================================================ time
 struct Timespec { i64 sec; i64 nsec; }
-extern i32 clock_gettime(i32 id, Timespec* ts);
+extern i32 vrt_clock_gettime(i32 id, Timespec* ts);
 
 /// monotonic wall clock in nanoseconds
-extern i32* __errno_location();
+extern i32 vrt_errno();
+extern i64 vrt_syscall(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6);
 
 /// the libc errno of the last failed call as an error (error.NotFound, error.PermissionDenied, ...)
 !void errno_error() {
-    _ = __sys_result(0 - (*__errno_location()) as i64)?;
+    _ = __sys_result(0 - vrt_errno() as i64)?;
     return error.SystemCall;
 }
 
 i64 now_ns() {
     auto ts = Timespec{ .sec = 0, .nsec = 0 };
-    _ = clock_gettime(1, &ts);
+    _ = vrt_clock_gettime(1, &ts);
     return ts.sec * 1000000000 + ts.nsec;
 }
 
@@ -1283,7 +1284,7 @@ struct Spinlock {
 
 struct Sys {
     static i64 raw(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6) {
-        return asm<i64>("syscall", "=\{rax\},\{rax\},\{rdi\},\{rsi\},\{rdx\},\{r10\},\{r8\},\{r9\},~\{rcx\},~\{r11\},~\{memory\}", nr, a1, a2, a3, a4, a5, a6);
+        return vrt_syscall(nr, a1, a2, a3, a4, a5, a6);
     }
     static !i64 call(i64 nr, i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, i64 a6) { return __sys_result(Sys::raw(nr, a1, a2, a3, a4, a5, a6)); }
     static !i64 read(i64 fd, void* buf, u64 n) { return Sys::call(0, fd, buf as i64, n as i64, 0, 0, 0); }
@@ -2135,26 +2136,19 @@ void __dbg_free(void* ctx, void* p, u64 n) {
 // handler that turns SIGSEGV, SIGBUS, SIGFPE and SIGILL into a readable message with the cause
 // and a backtrace. Set VIBE_CRASH_HANDLER=0 to keep the default behavior (core dumps).
 
-struct RtSigAction { fn(i32, u8*, u8*) handler; u64[16] mask; i32 flags; i32 pad; void* restorer; }
-struct RtStack { void* sp; i32 flags; i32 pad; u64 size; }
 struct DlInfo { u8* fname; void* fbase; u8* sname; void* saddr; }
 
-extern i32 sigaction(i32 sig, RtSigAction* act, RtSigAction* old);
-extern i32 sigaltstack(RtStack* ss, RtStack* old);
-extern i32 backtrace(void** buf, i32 n);
+extern void vrt_crash_install(fn(i32, i64, u64, u64, u64, u64) f);
+extern i32 vrt_backtrace(void** buf, i32 n);
+extern i32 vrt_os();
+extern i64 vrt_exe_path(u8* buf, u64 n);
 extern i32 dladdr(void* addr, DlInfo* info);
 extern i32 dup2(i32 a, i32 b);
-extern i64 readlink(u8* path, u8* buf, u64 n);
 
 void __rt_init() {
     const auto e = getenv("VIBE_CRASH_HANDLER");
     if (e != null && cstr(e) == "0") { return; }
-    const auto st = Sys::mmap(null, 65536, 3, 0x22, -1, 0) catch { return; };
-    auto ss = RtStack{ .sp = st as *void, .size = 65536 };
-    _ = sigaltstack(&ss, null);
-    // SA_SIGINFO | SA_ONSTACK | SA_RESETHAND: the second fault of the same kind kills the process
-    auto act = RtSigAction{ .handler = __crash_handler, .flags = 0x4 | 0x08000000 | (0x80000000 as u32) as i32 };
-    for (auto sig : [11, 7, 8, 4]) { _ = sigaction(sig as i32, &act, null); }
+    vrt_crash_install(__crash_handler);
 }
 
 void __crash_write(str s) {
@@ -2166,13 +2160,9 @@ void __crash_write(str s) {
     }
 }
 
-void __crash_handler(i32 sig, u8* info, u8* uc) {
+void __crash_handler(i32 sig, i64 code, u64 addr, u64 rip, u64 rsp, u64 bp) {
     u8[512] line;
     u8[256] extra;
-    const auto code = *((info + 8) as *i32);
-    const auto addr = *((info + 16) as *u64);
-    const auto rip = *((uc + 168) as *u64);
-    const auto rsp = *((uc + 160) as *u64);
     _ = fflush(null);
     auto what = "crash";
     auto why = "";
@@ -2203,7 +2193,7 @@ void __crash_handler(i32 sig, u8* info, u8* uc) {
     frames[0] = rip as *void;
     auto n = 1;
     void*[48] raw;
-    const auto got = backtrace(&raw[0], 48);
+    const auto got = vrt_backtrace(&raw[0], 48);
     auto started = false;
     for (auto i : 0..got as i64) {
         if (raw[i] as u64 == rip) { started = true; continue; }
@@ -2211,7 +2201,7 @@ void __crash_handler(i32 sig, u8* info, u8* uc) {
     }
     if (n == 1) {
         // no unwind tables (our own backend): follow the frame-pointer chain while it stays on the stack
-        auto fp = *((uc + 120) as *u64);
+        auto fp = bp;
         while (n < 48 && fp > rsp && fp < rsp + 67108864 && (fp & 7) == 0) {
             const auto ret = *((fp + 8) as *u64);
             if (ret < 4096) { break; }
@@ -2230,7 +2220,7 @@ void __crash_handler(i32 sig, u8* info, u8* uc) {
     u8*[56] argv;
     auto ac = 0;
     u8[1024] exe;
-    const auto el = readlink("/proc/self/exe", &exe[0], 1023);
+    const auto el = vrt_exe_path(&exe[0], 1023);
     if (el <= 0) { return; }
     exe[el] = 0;
     for (auto a : ["addr2line", "-f", "-C", "-i", "-p", "-e"]) {
@@ -2262,7 +2252,7 @@ void __crash_handler(i32 sig, u8* info, u8* uc) {
             }
         }
     }
-    if (ac > 7) {
+    if (ac > 7 && vrt_os() == 1) {
         argv[ac] = null;
         __crash_write("where (addr2line):\n");
         const auto pid = fork();

@@ -138,7 +138,7 @@ long vrt_syscall(long nr, long a, long b, long c, long d, long e, long f)
 #endif
 }
 
-long vrt_clock_gettime(int id, vtimespec *ts)
+int vrt_clock_gettime(int id, vtimespec *ts)
 {
     struct timespec t;
     int r = clock_gettime(id == 0 ? CLOCK_REALTIME : CLOCK_MONOTONIC, &t);
