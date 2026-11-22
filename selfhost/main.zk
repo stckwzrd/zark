@@ -5,6 +5,7 @@ import "native.zk";
 import "resolve.zk";
 import "fmt.zk";
 import "loader.zk";
+import "cbuild.zk";
 import "lsp.zk";
 import "project.zk";
 import "std/os" as osm;
@@ -429,23 +430,9 @@ void restore_stack() {
     auto olevel = "-O0";
     if (opt) { olevel = "-O2"; }
 
-    auto objs = List<str>::init(a);
     auto needs_cxx = false;
-    for (auto x : extras) {
-        if (str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L") || str_starts_with(x, "-Wl,") || str_starts_with(x, "-T") || x == "-nostdlib" || x == "-static") {
-            objs.push(x)?;
-            continue;
-        }
-        const auto is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx");
-        if (is_cpp) { needs_cxx = true; }
-        auto ob = List<u8>::init(a);
-        sprint(&ob, "{cache}/{base_of(x)}.o")?;
-        auto cc = "clang";
-        if (is_cpp) { cc = "clang++"; }
-        const auto code = run(a, [cc, olevel, "-c", x, "-o", ob.slice()])?;
-        if (code != 0) { return code; }
-        objs.push(ob.slice())?;
-    }
+    auto sp = split_extras(a, extras)?;
+    auto objs = compile_sources(a, cache, &sp, olevel, &needs_cxx) catch { return 1; };
 
     objs.push(rt_object(a, cache, freestanding)?)?;
 
@@ -458,6 +445,7 @@ void restore_stack() {
         link.append([olevel, "-Wno-override-module", ll_path])?;
     }
     link.append(objs.slice())?;
+    link.append(sp.link.slice())?;
     link.append(["-o", exe])?;
     if (!freestanding) { link.append(["-lm", "-lpthread", "-ldl"])?; }
     const auto lc = run(a, link.slice())?;
