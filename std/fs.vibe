@@ -6,6 +6,8 @@
 extern void* opendir(u8* path);
 extern u8* readdir(void* d);
 extern i32 closedir(void* d);
+extern u8* vrt_dirent_name(u8* ent);
+extern i32 vrt_dirent_type(u8* ent);
 extern i32 rmdir(u8* path);
 extern i32 unlink(u8* path);
 extern i32 rename(u8* from, u8* to);
@@ -99,10 +101,10 @@ bool entry_less(Entry x, Entry y) { return str_less(x.name, y.name); }
     while (true) {
         const auto ent = readdir(d);
         if (ent == null) { break; }
-        const auto name = cstr(ent + 19);
+        const auto name = cstr(vrt_dirent_name(ent));
         if (name == "." || name == "..") { continue; }
         auto k = Kind::Other;
-        match ent[18] {
+        match vrt_dirent_type(ent) {
             8 => k = Kind::File;
             4 => k = Kind::Dir;
             10 => k = Kind::Link;

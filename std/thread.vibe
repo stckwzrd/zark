@@ -11,13 +11,16 @@ extern i32 pthread_create(u64* t, void* attr, void* start, void* arg);
 extern i32 pthread_join(u64 t, void** ret);
 extern i32 pthread_detach(u64 t);
 extern u64 pthread_self();
-extern i32 pthread_mutex_lock(Mutex* m);
-extern i32 pthread_mutex_trylock(Mutex* m);
-extern i32 pthread_mutex_unlock(Mutex* m);
-extern i32 pthread_cond_wait(Cond* c, Mutex* m);
-extern i32 pthread_cond_timedwait(Cond* c, Mutex* m, Timespec* abstime);
-extern i32 pthread_cond_signal(Cond* c);
-extern i32 pthread_cond_broadcast(Cond* c);
+extern i32 vrt_mutex_lock(Mutex* m);
+extern i32 vrt_mutex_trylock(Mutex* m);
+extern i32 vrt_mutex_unlock(Mutex* m);
+extern i32 vrt_cond_wait(Cond* c, Mutex* m);
+extern i32 vrt_cond_timedwait(Cond* c, Mutex* m, Timespec* abstime);
+extern i32 vrt_cond_signal(Cond* c);
+extern i32 vrt_cond_broadcast(Cond* c);
+extern u64 vrt_fetch_add64(u64* p, u64 v);
+extern u64 vrt_swap64(u64* p, u64 v);
+extern u64 vrt_cas64(u64* p, u64 expected, u64 desired);
 extern i32 sched_yield();
 
 owned struct Thread {
@@ -66,35 +69,35 @@ u64 current_id() { return pthread_self(); }
 
 /// a mutual-exclusion lock; the zero value is unlocked and ready
 struct Mutex {
-    u64[5] raw;
+    u64[10] raw;
 
-    void lock() { _ = pthread_mutex_lock(this); }
-    void unlock() { _ = pthread_mutex_unlock(this); }
-    bool try_lock() { return pthread_mutex_trylock(this) == 0; }
+    void lock() { _ = vrt_mutex_lock(this); }
+    void unlock() { _ = vrt_mutex_unlock(this); }
+    bool try_lock() { return vrt_mutex_trylock(this) == 0; }
 }
 
 /// a condition variable; the zero value is ready
 struct Cond {
-    u64[6] raw;
+    u64[8] raw;
 
     /// atomically unlocks `m`, sleeps until signaled, locks `m` again
-    void wait(Mutex* m) { _ = pthread_cond_wait(this, m); }
+    void wait(Mutex* m) { _ = vrt_cond_wait(this, m); }
 
     /// like wait, but gives up after `ms` milliseconds; false on timeout
     bool wait_ms(Mutex* m, i64 ms) {
         auto ts = Timespec{ .sec = 0, .nsec = 0 };
-        _ = clock_gettime(0, &ts);
+        _ = vrt_clock_gettime(0, &ts);
         ts.sec += ms / 1000;
         ts.nsec += (ms % 1000) * 1000000;
         if (ts.nsec >= 1000000000) {
             ts.sec += 1;
             ts.nsec -= 1000000000;
         }
-        return pthread_cond_timedwait(this, m, &ts) == 0;
+        return vrt_cond_timedwait(this, m, &ts) == 0;
     }
 
-    void signal() { _ = pthread_cond_signal(this); }
-    void broadcast() { _ = pthread_cond_broadcast(this); }
+    void signal() { _ = vrt_cond_signal(this); }
+    void broadcast() { _ = vrt_cond_broadcast(this); }
 }
 
 /// an integer shared between threads
@@ -102,12 +105,12 @@ struct AtomicI64 {
     i64 v;
 
     /// adds `d` and returns the previous value
-    i64 add(i64 d) { return Atomic::fetch_add64(&this->v as *u64, d as u64) as i64; }
-    i64 load() { return Atomic::fetch_add64(&this->v as *u64, 0) as i64; }
-    void store(i64 x) { _ = Atomic::swap64(&this->v as *u64, x as u64); }
+    i64 add(i64 d) { return vrt_fetch_add64(&this->v as *u64, d as u64) as i64; }
+    i64 load() { return vrt_fetch_add64(&this->v as *u64, 0) as i64; }
+    void store(i64 x) { _ = vrt_swap64(&this->v as *u64, x as u64); }
     /// sets the value to `desired` if it is `expected`; true when it did
     bool compare_swap(i64 expected, i64 desired) {
-        return Atomic::cas64(&this->v as *u64, expected as u64, desired as u64) == expected as u64;
+        return vrt_cas64(&this->v as *u64, expected as u64, desired as u64) == expected as u64;
     }
 }
 
@@ -232,7 +235,7 @@ void chunk_main(void* p) {
 /// returns when all calls have finished
 !void parallel_for(i64 n, i64 threads, fn[](i64) -> void body) {
     auto k = threads;
-    if (k <= 0) { k = max(sysconf(84), 1); }
+    if (k <= 0) { k = max(vrt_sysconf(84), 1); }
     k = min(k, max(n, 1));
     k = min(k, 64);
     Chunk[64] chunks;
@@ -252,4 +255,4 @@ void chunk_main(void* p) {
     for (auto t : 1..started + 1) { ts[t].join(); }
 }
 
-extern i64 sysconf(i32 name);
+extern i64 vrt_sysconf(i32 name);

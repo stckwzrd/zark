@@ -142,7 +142,7 @@ void exit(i32 code) {
 /// the path of the running executable (a new string)
 !str exe_path(Allocator a) {
     u8[4096] b;
-    const auto n = readlink("/proc/self/exe", &b[0], 4095);
+    const auto n = vrt_exe_path(&b[0], 4095);
     if (n <= 0) { errno_error()?; }
     return a.dup(b[0..n]);
 }
@@ -157,9 +157,10 @@ void exit(i32 code) {
 
 /// the number of online CPUs
 i64 cpu_count() {
-    const auto n = sysconf(84);
+    const auto n = vrt_sysconf(84);
     if (n < 1) { return 1; }
     return n;
 }
 
-extern i64 sysconf(i32 name);
+extern i64 vrt_sysconf(i32 name);
+extern i64 vrt_exe_path(u8* buf, u64 n);

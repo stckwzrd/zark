@@ -103,6 +103,8 @@ extern i32 getrlimit(i32 resource, RLimit* lim);
 extern i32 setrlimit(i32 resource, RLimit* lim);
 extern i32 execv(u8* path, u8** argv);
 extern i32 setenv(u8* name, u8* value, i32 overwrite);
+extern i64 vrt_exe_path(u8* buf, u64 n);
+extern i32 vrt_native();
 
 void grow_stack() {
     if (getenv("VIBE_STACK") != null) { return; }
@@ -118,7 +120,11 @@ void grow_stack() {
     lim.cur = want;
     if (setrlimit(3, &lim) != 0) { return; }
     setenv("VIBE_STACK", sb.items.ptr, 1);
-    execv("/proc/self/exe", __argv);
+    u8[4096] exe;
+    const auto n = vrt_exe_path(&exe[0], 4095);
+    if (n <= 0) { return; }
+    exe[n] = 0;
+    execv(&exe[0], __argv);
 }
 
 void restore_stack() {
@@ -377,7 +383,12 @@ void restore_stack() {
     const auto cache = ".vibe-cache";
     _ = mkdir(".vibe-cache", 493);
     const auto stem = stem_of(src_file);
-    const auto use_native = force_native || (!opt && !force_llvm && !g.needs_llvm);
+    const auto can_native = vrt_native() != 0;
+    if (force_native && !can_native) {
+        eprintln("error: the native backend only supports x86-64 Linux, use --llvm");
+        return 1;
+    }
+    const auto use_native = can_native && (force_native || (!opt && !force_llvm && !g.needs_llvm));
     auto llb = List<u8>::init(a);
     if (use_native) { sprint(&llb, "{cache}/{stem}.o")?; } else { sprint(&llb, "{cache}/{stem}.ll")?; }
     const auto ll_path = llb.slice();
