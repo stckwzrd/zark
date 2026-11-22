@@ -282,6 +282,22 @@ bool Parser::lambda_ahead() {
     return f;
 }
 
+bool Parser::async_ahead() {
+    if (!this->at(.ident) || this->peek().text != "async") { return false; }
+    const auto n = this->peek_at(1).tag;
+    if (n == .bang || n == .question || n == .star) { return true; }
+    if (n != .ident) { return false; }
+    const auto m = this->peek_at(2).tag;
+    return m != .lparen && m != .eq && m != .semi && m != .rbrace && m != .comma && m != .coloncolon;
+}
+
+bool Parser::await_ahead() {
+    if (!this->at(.ident) || this->peek().text != "await") { return false; }
+    const auto n = this->peek_at(1).tag;
+    if (n == .ident && this->peek_at(1).text == "orelse") { return false; }
+    return n == .ident || n == .int_lit || n == .float_lit || n == .str_lit || n == .char_lit || n == .lparen || n == .kw_true || n == .kw_false || n == .kw_null || n == .kw_sizeof || n == .kw_alignof || n == .kw_match;
+}
+
 !void Parser::parse_decl_new(List<Decl>*out) {
     const auto t = this->peek();
     auto tps = this->strs();
@@ -302,11 +318,13 @@ bool Parser::lambda_ahead() {
     }
     auto flags = 0;
     auto out_static = false;
-    while (this->at(.kw_extern) || this->at(.kw_export) || this->at(.kw_static)) {
+    auto is_async = false;
+    while (this->at(.kw_extern) || this->at(.kw_export) || this->at(.kw_static) || this->async_ahead()) {
         const auto k = this->advance().tag;
         if (k == .kw_extern) { flags = 1; }
         if (k == .kw_export) { flags = 2; }
         if (k == .kw_static) { out_static = true; }
+        if (k == .ident) { is_async = true; }
     }
     const auto is_const = this->eat(.kw_const);
     const auto ty = this->try_type();
@@ -325,6 +343,7 @@ bool Parser::lambda_ahead() {
             this->pos += k + 3;
             const auto mt = this->advance();
             const auto f = this->fn_rest(this->strs(), this->strs(), flags, ty, mt, nt.text, rps, nt.off, out_static)?;
+            f.is_async = is_async;
             out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
             return;
         }
@@ -333,14 +352,17 @@ bool Parser::lambda_ahead() {
         _ = this->advance();
         const auto mt = this->advance();
         const auto f = this->fn_rest(tps, cons, flags, ty, mt, nt.text, this->strs(), nt.off, out_static)?;
+        f.is_async = is_async;
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
     }
     if (this->at(.lparen) && !is_const) {
         const auto f = this->fn_rest(tps, cons, flags, ty, nt, "", this->strs(), 0, true)?;
+        f.is_async = is_async;
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
     }
+    if (is_async) { this->fail("only a function can be async")?; }
     _ = this->expect(.eq)?;
     const auto v = this->parse_expr()?;
     auto vty = ty;
@@ -363,6 +385,7 @@ bool Parser::new_member(bool is_union) {
 !void Parser::parse_member_new(str sname, List<str> tps, bool is_union, List<Field>*fields, List<Decl>*out) {
     const auto t = this->peek();
     auto is_static = false;
+    auto is_async = false;
     auto mtps = this->strs();
     auto mcons = this->strs();
     if (this->at(.kw_template)) {
@@ -376,8 +399,10 @@ bool Parser::new_member(bool is_union) {
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
     }
-    while (this->at(.kw_static) || this->at(.kw_const)) {
-        if (this->advance().tag == .kw_static) { is_static = true; }
+    while (this->at(.kw_static) || this->at(.kw_const) || this->async_ahead()) {
+        const auto k = this->advance().tag;
+        if (k == .kw_static) { is_static = true; }
+        if (k == .ident) { is_async = true; }
     }
     const auto ty = this->try_type();
     if (ty == null) { this->fail("expected a member declaration")?; }
@@ -391,9 +416,11 @@ bool Parser::new_member(bool is_union) {
     }
     if (this->at(.lparen)) {
         const auto f = this->fn_rest(mtps, mcons, 0, ty, nt, sname, tps, t.off, is_static)?;
+        f.is_async = is_async;
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
     }
+    if (is_async) { this->fail("only a function can be async")?; }
     Expr* init = null;
     if (this->eat(.eq)) { init = this->parse_expr()?; }
     fields.push(Field{ .name = nt.text, .ty = ty, .off = nt.off, .init = init })?;
@@ -422,6 +449,7 @@ bool Parser::new_member(bool is_union) {
 
 /// `Type name = e;` / `Type name;` / `auto name = e;`, or null (position restored) when it is not a declaration
 !Stmt* Parser::try_decl_stmt(Token t) {
+    if (this->await_ahead()) { return null; }
     const auto save = this->pos;
     const auto ty = this->try_type();
     if (ty == null) { return null; }

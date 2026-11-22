@@ -1,0 +1,24 @@
+1 .ident async
+1 .ident i64
+1 .ident f
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+2 .kw_return return
+2 .int_lit 1
+2 .semi ;
+3 .rbrace }
+5 .ident void
+5 .ident main
+5 .lparen (
+5 .rparen )
+5 .lbrace {
+6 .ident auto
+6 .ident x
+6 .eq =
+6 .ident f
+6 .lparen (
+6 .rparen )
+6 .semi ;
+7 .rbrace }
+8 .eof 
