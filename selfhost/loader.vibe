@@ -4,6 +4,7 @@ import "gen_fmt.vibe";
 import "resolve.vibe";
 
 const auto PRELUDE = embed("../std/std.vibe");
+const auto RT_C = embed("../std/rt.c");
 
 // Standard library modules, embedded like the prelude. `import "std/fs" as fs;` loads "<std>/fs.vibe".
 const auto STD_FS = embed("../std/fs.vibe");
