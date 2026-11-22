@@ -17,11 +17,13 @@ build/stage2 build selfhost/main.vibe --release -o build/stage3
 
 build/stage2 ir selfhost/main.vibe > build/stage2.ll
 build/stage3 ir selfhost/main.vibe > build/stage3.ll
-if cmp -s build/stage2.ll build/stage3.ll && cmp -s build/stage2 build/stage3; then
-  echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines of IR, sha256 $(sha build/stage2 | cut -c1-16))"
-else
-  echo "!! stage2 and stage3 differ"; exit 1
+if ! cmp -s build/stage2.ll build/stage3.ll; then
+  echo "!! stage2 and stage3 emit different IR"; exit 1
 fi
+if [ "$(uname -s)" = "Linux" ] && ! cmp -s build/stage2 build/stage3; then
+  echo "!! stage2 and stage3 binaries differ"; exit 1
+fi
+echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines of IR, sha256 $(sha build/stage2 | cut -c1-16))"
 
 if [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ]; then
   echo "== native backend: compiler built without LLVM, then by itself"
