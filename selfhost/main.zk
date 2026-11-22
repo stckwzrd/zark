@@ -228,13 +228,7 @@ void restore_stack() {
                 const auto pdir = find_project(a, pth::dir(x)) catch "";
                 if (pdir.len > 0) {
                     const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
-                    auto more = List<str>::init(a);
-                    for (auto src : proj.sources) { more.push(src)?; }
-                    for (auto l : proj.libs) {
-                        auto b = List<u8>::init(a);
-                        sprint(&b, "-l{l}")?;
-                        more.push(b.slice())?;
-                    }
+                    const auto more = project_c_args(a, proj) catch { return 1; };
                     auto at = argv.index_of("--");
                     if (at < 0) { at = argv.len; }
                     for (auto m : more) {
