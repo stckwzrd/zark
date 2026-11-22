@@ -20,8 +20,8 @@ Zark распространяется как исходный код: компи
 ## Сборка компилятора
 
 ```sh
-git clone https://github.com/stckwzrd/vibe.git
-cd vibe
+git clone https://github.com/stckwzrd/zark.git
+cd zark
 ./bootstrap.sh
 ```
 

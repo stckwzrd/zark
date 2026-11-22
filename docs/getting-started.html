@@ -38,8 +38,8 @@
 </tbody></table></div>
 <p>No separate starting compiler is needed. The repository contains a &quot;seed&quot; (<code>bootstrap/seed.ll.gz</code>): the Zark compiler written as LLVM IR. <code>clang</code> builds the first version from it, and after that the compiler builds itself.</p>
 <h2 id="building-the-compiler"><a class="anchor" href="#building-the-compiler">#</a>Building the compiler</h2>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">git</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> clone</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> https://github.com/stckwzrd/vibe.git</span></span>
-<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> vibe</span></span>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">git</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> clone</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> https://github.com/stckwzrd/zark.git</span></span>
+<span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">cd</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> zark</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">./bootstrap.sh</span></span></code></pre></div><p>The script runs the whole chain and checks the result:</p>
 <ol>
 <li>builds the first compiler from the seed with <code>clang</code>, and with it <code>stage1</code> from the sources in <code>selfhost/</code>;</li>

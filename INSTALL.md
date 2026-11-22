@@ -3,8 +3,8 @@
 Zark builds from source with one command. The repository contains a bootstrap seed (the compiler's own LLVM IR), so the only compiler you need is clang.
 
 ```
-git clone https://github.com/stckwzrd/vibe.git
-cd vibe
+git clone https://github.com/stckwzrd/zark.git
+cd zark
 sh scripts/install-deps.sh
 ./bootstrap.sh
 ./install.sh
@@ -55,7 +55,7 @@ The x86-only parts of the language (`examples/baremetal`, the port I/O and privi
 ```
 sudo apt-get update
 sudo apt-get install -y clang binutils diffutils gzip make bash git python3
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
@@ -63,7 +63,7 @@ git clone https://github.com/stckwzrd/vibe.git && cd vibe
 
 ```
 sudo dnf install -y clang binutils diffutils gzip make bash git python3 glibc-devel
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
@@ -71,7 +71,7 @@ git clone https://github.com/stckwzrd/vibe.git && cd vibe
 
 ```
 sudo pacman -Syu --needed clang binutils diffutils gzip make bash git python glibc linux-api-headers
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
@@ -79,7 +79,7 @@ git clone https://github.com/stckwzrd/vibe.git && cd vibe
 
 ```
 sudo zypper install -y clang binutils diffutils gzip make bash git python3 glibc-devel
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
@@ -87,7 +87,7 @@ git clone https://github.com/stckwzrd/vibe.git && cd vibe
 
 ```
 sudo apk add clang gcc binutils musl-dev diffutils gzip make bash git python3
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
@@ -97,7 +97,7 @@ git clone https://github.com/stckwzrd/vibe.git && cd vibe
 
 ```
 sudo xbps-install -Sy clang binutils diffutils gzip make bash git python3
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
@@ -113,7 +113,7 @@ The same commands as for your distribution. The bootstrap skips the native backe
 
 ```
 xcode-select --install
-git clone https://github.com/stckwzrd/vibe.git && cd vibe
+git clone https://github.com/stckwzrd/zark.git && cd zark
 ./bootstrap.sh && ./install.sh
 ```
 
