@@ -1,0 +1,292 @@
+import "std/async" as async;
+
+struct Yield1 {
+    bool done;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->done) { return .Ready(true); }
+        this->done = true;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+enum Color { Red, Green, Blue }
+
+union Shape { i64 Circle; i64 Square; bool Dot; }
+
+async i64 val(i64 n) {
+    await Yield1{};
+    return n;
+}
+
+async bool is_even(i64 n) {
+    await Yield1{};
+    return n % 2 == 0;
+}
+
+async Color color_of(i64 n) {
+    await Yield1{};
+    if (n == 0) { return .Red; }
+    if (n == 1) { return .Green; }
+    return .Blue;
+}
+
+async Shape shape_of(i64 n) {
+    await Yield1{};
+    if (n == 0) { return .Circle(3); }
+    if (n == 1) { return .Square(4); }
+    return .Dot(true);
+}
+
+async i64 sum_loop() {
+    i64 s = 0;
+    for (auto i : 0..100000) {
+        auto v = await val(i);
+        s += v;
+    }
+    return s;
+}
+
+async i64 branches(i64 n) {
+    i64 r = 0;
+    if (await is_even(n)) {
+        r = await val(10);
+        if (n > 2) {
+            await Yield1{};
+            r += 1;
+        } else {
+            r = await val(r * 2);
+        }
+    } else {
+        r = await val(100);
+    }
+    return r;
+}
+
+async i64 loops() {
+    i64 total = 0;
+    i64 i = 0;
+    while (i < 10) {
+        i += 1;
+        if (await is_even(i)) { continue; }
+        if (i == 9) { break; }
+        auto v = await val(i);
+        total += v;
+    }
+    i64 k = 0;
+    while (await is_even(k)) {
+        await Yield1{};
+        k += 2;
+        if (k > 6) { break; }
+    }
+    total += k;
+    i64[4] arr = [1, 2, 3, 4];
+    for (auto x : arr) {
+        if (x == 2) { continue; }
+        auto w = await val(x * 1000);
+        total += w;
+    }
+    for (auto [j, x] : arr) {
+        for (auto m : 0..j) {
+            auto w = await val(m);
+            total += w * x;
+        }
+    }
+    outer: for (auto a : 0..5) {
+        for (auto b : 0..5) {
+            await Yield1{};
+            if (b == 2) { continue outer; }
+            if (a == 3) { break outer; }
+            total += 1;
+        }
+    }
+    return total;
+}
+
+async i64 matches(i64 n) {
+    i64 r = 0;
+    match await color_of(n) {
+        .Red => r = await val(1);
+        .Green => {
+            await Yield1{};
+            r = await val(2);
+        }
+        .Blue => r = 3;
+    }
+    match await shape_of(n) {
+        .Circle(c) => {
+            auto v = await val(c);
+            r = r * 10 + v;
+        }
+        .Square(q) => r = r * 10 + q;
+        .Dot(d) => {
+            await Yield1{};
+            if (d) { r = r * 10 + 9; }
+        }
+    }
+    match n {
+        0 => {
+            auto v = await val(5);
+            r = r * 10 + v;
+        }
+        _ => {}
+    }
+    return r;
+}
+
+async !i64 level3() {
+    await Yield1{};
+    return error.Boom;
+}
+
+async !i64 level2() {
+    auto v = await level3()?;
+    return v + 1;
+}
+
+async !i64 level1() {
+    auto v = await level2()?;
+    return v + 1;
+}
+
+async !bool positive(i64 n) {
+    await Yield1{};
+    if (n < 0) { return error.Negative; }
+    return n > 0;
+}
+
+async !i64 count_down(i64 n) {
+    i64 k = n;
+    i64 steps = 0;
+    while (await positive(k)?) {
+        k -= 1;
+        steps += 1;
+    }
+    return steps;
+}
+
+async !i64 caught() {
+    auto v = await level1() catch 42;
+    if (await positive(-1) catch true) { v += 1; }
+    if (await positive(0)?) { v += 100; } else { v += 1000; }
+    auto s = await count_down(3) catch -1;
+    match await positive(-5) catch false {
+        true => v += 10000;
+        false => v += s * 100000;
+    }
+    return v;
+}
+
+async i64 deferred(i64* hits) {
+    defer *hits += 1;
+    auto v = await val(7);
+    if (v > 100) { return 0; }
+    for (auto i : 0..3) {
+        defer *hits += 10;
+        await Yield1{};
+        if (i == 1) { break; }
+    }
+    return v;
+}
+
+async !i64 deferred_err(i64* hits) {
+    defer *hits += 1;
+    errdefer *hits += 100;
+    auto v = await level3()?;
+    return v;
+}
+
+template<T> async T identity(T v) {
+    await Yield1{};
+    return v;
+}
+
+struct Counter {
+    i64 n;
+
+    async i64 bump(i64 by) {
+        await Yield1{};
+        this->n += by;
+        auto v = await val(this->n);
+        return v;
+    }
+
+    async i64 unused() {
+        await Yield1{};
+        return this->n;
+    }
+}
+
+async i64 use_counter(Counter* c) {
+    auto a = await c.bump(5);
+    auto b = await c.bump(a);
+    return b;
+}
+
+!void run_loop() {
+    auto dbg = DebugAllocator::init();
+    {
+        auto ex = async::Executor::init(dbg.allocator())?;
+        defer ex.deinit();
+        auto f = sum_loop();
+        const auto before = sizeof(f);
+        i64 r = ex.block_on(&f)?;
+        println(r);
+        println(sizeof(f) == before);
+    }
+    println(dbg.live);
+    dbg.deinit()?;
+}
+
+!void main() {
+    run_loop()?;
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    for (auto n : 0..4) {
+        auto b = branches(n);
+        i64 rb = ex.block_on(&b)?;
+        println(rb);
+    }
+    auto l = loops();
+    i64 rl = ex.block_on(&l)?;
+    println(rl);
+    for (auto n : 0..3) {
+        auto m = matches(n);
+        i64 rm = ex.block_on(&m)?;
+        println(rm);
+    }
+    auto top = level1();
+    i64 rt = ex.block_on(&top) catch |e| {
+        println("{e}");
+        -1;
+    };
+    println(rt);
+    auto c = caught();
+    i64 rc = ex.block_on(&c)?;
+    println(rc);
+    i64 hits = 0;
+    auto d = deferred(&hits);
+    i64 rd = ex.block_on(&d)?;
+    println("{rd} {hits}");
+    i64 hits2 = 0;
+    auto de = deferred_err(&hits2);
+    i64 rde = ex.block_on(&de) catch -1;
+    println("{rde} {hits2}");
+    auto i1 = identity(41);
+    i64 ri = ex.block_on(&i1)?;
+    println(ri);
+    auto i2 = identity("text");
+    str rs = ex.block_on(&i2)?;
+    println(rs);
+    auto i3 = identity(true);
+    bool rbo = ex.block_on(&i3)?;
+    println(rbo);
+    auto cnt = Counter{ .n = 1 };
+    auto bf = cnt.bump(2);
+    i64 rbf = ex.block_on(&bf)?;
+    println("{rbf} {cnt.n}");
+    auto uc = use_counter(&cnt);
+    i64 ruc = ex.block_on(&uc)?;
+    println("{ruc} {cnt.n}");
+}

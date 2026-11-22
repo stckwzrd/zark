@@ -19,7 +19,7 @@ check showcase_tests $VIBE test examples/showcase/main.vibe $FLAGS
 check showcase_vec $VIBE test examples/showcase/vec.vibe $FLAGS
 check interop $VIBE run examples/interop/main.vibe examples/interop/mathlib.c examples/interop/engine.cpp $FLAGS
 [ $x86 = 1 ] && check abi $VIBE run tests/abi/main.vibe tests/abi/lib.c $FLAGS
-for n in ints memory nan move borrow comptime mulcheck iterate threads flow flow2 alias_comptime narrow_div async_names async_basic async_try; do check edge_$n $VIBE run tests/edge/$n.vibe $FLAGS; done
+for n in ints memory nan move borrow comptime mulcheck iterate threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow; do check edge_$n $VIBE run tests/edge/$n.vibe $FLAGS; done
 for f in tests/panics/*.vibe; do
   n=panic_$(basename $f .vibe)
   if out=$($VIBE run "$f" $FLAGS 2>&1); then fail=$((fail+1)); echo "FAIL $f (expected a panic)"

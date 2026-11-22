@@ -151,6 +151,7 @@ struct Gen {
     bool has_pend;
     AsyncFn* af;
     Expr* await_at;
+    i64 edepth;
     bool in_defer;
 
     Type* t_i64;
@@ -763,9 +764,9 @@ struct Gen {
                 continue;
             }
         }
-        for (auto e : this->methods.entries) {
-            if (!e.used) { continue; }
-            const auto m = e.value;
+        auto ms = List<FnDecl*>::init(this->a);
+        for (auto e : this->methods.entries) { if (e.used) { ms.push(e.value)?; } }
+        for (auto m : ms) {
             if (m.file != root || m.type_params.len > 0 || m.receiver_params.len > 0 || m.body == null) { continue; }
             const auto te = this->a.create<TypeExpr>()?;
             te.k = .Name;
