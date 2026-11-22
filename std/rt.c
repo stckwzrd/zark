@@ -494,6 +494,13 @@ int vrt_poller_wait(long p, unsigned long *tokens, int *events, int max, long ti
     return out;
 }
 
+int vrt_set_nonblocking(int fd)
+{
+    int f = fcntl(fd, F_GETFL);
+    if (f < 0 || fcntl(fd, F_SETFL, f | O_NONBLOCK) < 0) return (int)err(-1);
+    return 0;
+}
+
 int vrt_poller_wake(long p)
 {
     if (p <= 0) return -EBADF;
