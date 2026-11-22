@@ -250,7 +250,7 @@ struct Manifest {
     List<str> flags;
     List<str> cflags;
     List<str> pkgs;
-    List<str> lib_dirs; // absolute
+    List<str> lib_dirs;
 }
 
 /// the directory with a zark.toml, searching upward from `start`; "" when there is none
@@ -398,8 +398,6 @@ struct Manifest {
     while (it.next()) { out.push(it.part)?; }
 }
 
-/// what a project adds to the command line for its C/C++ side: sources, libs, compile flags,
-/// pkg-config results, library directories
 !List<str> project_c_args(Allocator a, Manifest* p) {
     auto out = List<str>::init(a);
     for (auto s : p.sources) { out.push(s)?; }
