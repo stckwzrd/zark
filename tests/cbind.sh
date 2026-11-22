@@ -8,8 +8,10 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts; do
-    timeout 20 "$ZARK" cbind "tests/cbind/$name.h" > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
+for name in scalars structs params layout names consts clash shorten; do
+    flags=""
+    [ "$name" = shorten ] && flags="-fshort-enums"
+    timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
     diff -u "tests/cbind/$name.out" "$name.zk" || fail "$name: output differs"
     diff -u "tests/cbind/$name.err" "$name.err" || fail "$name: warnings differ"
     printf 'import "%s.zk";\nvoid main() {}\n' "$name" > "use_$name.zk"
@@ -45,4 +47,14 @@ printf '#undef KEEP\n#define SYSM 1\n' > sysd/s.h
 printf '#define KEEP 1\n#include <s.h>\n#define USE_SYSM (SYSM + 1)\n' > undef.h
 out=$("$ZARK" cbind undef.h -isystem sysd 2>&1) || fail "system undef: exit $?: $out"
 [ "$out" = "$(printf 'skipped KEEP: undefined in system header\nconst auto USE_SYSM = 2;')" ] || fail "system undef: got: $out"
+printf '#define A "abc\n#define B "ok"\n' > unterm.h
+out=$("$ZARK" cbind unterm.h 2>&1) || fail "unterminated string: exit $?: $out"
+[ "$out" = "$(printf 'skipped A: not a constant\nconst auto B = "ok";')" ] || fail "unterminated string: got: $out"
+
+for i in $(seq 1 20000); do
+    if [ "$i" = 1 ]; then echo "#define M1 1"; else echo "#define M$i M$((i - 1))"; fi
+done > chain.h
+timeout 10 "$ZARK" cbind chain.h > chain.zk 2> chain.err || fail "chain: exit $?"
+grep -qx "const auto M50 = 1;" chain.zk || fail "chain: M50 missing"
+grep -qx "skipped M20000: expansion too deep" chain.err || fail "chain: M20000 not skipped: $(tail -1 chain.err)"
 echo "ok   cbind"

@@ -226,7 +226,7 @@ struct CDecl {
     str reason;
 }
 
-struct CMac { str body; bool live; bool func_like; bool bad; CDecl* d; }
+struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
 
 struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; }
 
@@ -567,6 +567,7 @@ struct CParser {
     str attr_bad;
     bool asm_label;
     bool uchar;
+    bool short_enums;
     Map<CType*> enum_tys;
     Map<CVal> enums;
     Map<CMac*> macs;
@@ -959,7 +960,7 @@ struct CParser {
         } else if (fixed != null) {
             t = fixed;
         } else if (body) {
-            t = this->enum_type(vals, this->attr_layout)?;
+            t = this->enum_type(vals, this->attr_layout || this->short_enums)?;
         } else {
             if (tag.len > 0 && this->enum_tys.has(tag)) { return this->enum_tys.get(tag); }
             return this->bad("incomplete enum");
@@ -1043,7 +1044,10 @@ struct CParser {
                 _ = this->next();
             } else {
                 const auto start = this->pos;
-                n = (this->eval_const() catch CVal{ .v = -2 }).v;
+                n = (this->eval_const() catch |e| {
+                    if (e != error.ParseFailed && e != error.OutOfRange) { return e; }
+                    CVal{ .v = -2 };
+                }).v;
                 if (n < 0 || !this->at("]")) {
                     n = -2;
                     this->pos = start - 1;
@@ -1312,11 +1316,16 @@ struct CParser {
         }
     }
 
-    !void expand(str body, List<str>* hide, List<CTok>* out) {
-        if (body.len > 0 && body[0] == '#') { return error.ParseFailed; }
-        auto lx = CLexer{ .a = this->a, .src = body, .packs = List<i64>::init(this->a), .seen = Map<bool>::init(this->a), .out = CLex{ .toks = List<CTok>::init(this->a), .defs = List<CDef>::init(this->a), .deps = List<str>::init(this->a) } };
-        lx.run()?;
-        for (auto t : lx.out.toks.slice()) {
+    !void expand(CMac* c, List<str>* hide, List<CTok>* out) {
+        if (hide.len > 64) { return error.TooDeep; }
+        if (!c.lexed) {
+            if (c.body.len > 0 && c.body[0] == '#') { return error.ParseFailed; }
+            auto lx = CLexer{ .a = this->a, .src = c.body, .packs = List<i64>::init(this->a), .seen = Map<bool>::init(this->a), .out = CLex{ .toks = List<CTok>::init(this->a), .defs = List<CDef>::init(this->a), .deps = List<str>::init(this->a) } };
+            lx.run()?;
+            c.toks = lx.out.toks;
+            c.lexed = true;
+        }
+        for (auto t : c.toks.slice()) {
             if (t.k == .Eof) { break; }
             if (out.len > 10000) { return error.ParseFailed; }
             const auto m = this->macs.get_or(t.text, null);
@@ -1324,7 +1333,7 @@ struct CParser {
                 if (m.bad) { return error.ParseFailed; }
                 if (!m.func_like) {
                     hide.push(t.text)?;
-                    this->expand(m.body, hide, out)?;
+                    this->expand(m, hide, out)?;
                     hide.len -= 1;
                     continue;
                 }
@@ -1338,7 +1347,11 @@ struct CParser {
         auto hide = List<str>::init(this->a);
         hide.push(d.name)?;
         auto ts = List<CTok>::init(this->a);
-        this->expand(d.body, &hide, &ts) catch |e| {
+        this->expand(this->macs.get_or(d.name, null), &hide, &ts) catch |e| {
+            if (e == error.TooDeep) {
+                d.reason = "expansion too deep";
+                return;
+            }
             if (e != error.ParseFailed) { return e; }
             return;
         };
@@ -1347,7 +1360,7 @@ struct CParser {
             return;
         }
         auto strs = true;
-        for (auto t : ts.slice()) { if (t.k != .Str) { strs = false; } }
+        for (auto t : ts.slice()) { if (t.k != .Str || t.text.len < 2 || t.text[t.text.len - 1] != '"') { strs = false; } }
         if (strs) {
             auto b = List<u8>::init(this->a);
             for (auto t : ts.slice()) {
@@ -1466,6 +1479,7 @@ struct CEmit {
     Map<bool> relabeled;
     Map<bool> warned;
     Map<i64> done;
+    Map<str> owner;
     Map<bool> typed;
     Map<bool> defined;
     Map<CType*> typedefs;
@@ -1493,15 +1507,23 @@ struct CEmit {
         this->warn(name, why)?;
         this->bad.put(name, true)?;
     }
+    !str ename(str name) {
+        if (keyword(name) == .ident && !cb_is_prim(name)) { return name; }
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "{name}_")?;
+        return b.slice();
+    }
     !void esc(List<u8>* b, str name) {
-        if (keyword(name) == .ident && !cb_is_prim(name)) {
-            sprint(b, "{name}")?;
-        } else {
-            sprint(b, "{name}_")?;
-        }
+        const auto n = this->ename(name)?;
+        sprint(b, "{n}")?;
     }
     !bool claim(str name, i64 kind) {
-        const auto k = this->done.get_or(name, 0);
+        const auto key = this->ename(name)?;
+        if (this->owner.get_or(key, name) != name) {
+            this->skip(name, "name clash")?;
+            return false;
+        }
+        const auto k = this->done.get_or(key, 0);
         if (k == kind) { return false; }
         if (k != 0) {
             this->warn(name, "name clash")?;
@@ -1518,7 +1540,9 @@ struct CEmit {
             }
             return false;
         }
-        this->done.put(name, kind)?;
+        const auto key = this->ename(name)?;
+        this->done.put(key, kind)?;
+        this->owner.put(key, name)?;
         sprint(&this->out, "{text}\n")?;
         return true;
     }
@@ -1800,6 +1824,7 @@ struct CEmit {
             this->out = List<u8>::init(this->a);
             this->warnings = List<str>::init(this->a);
             this->done = Map<i64>::init(this->a);
+            this->owner = Map<str>::init(this->a);
             this->warned = Map<bool>::init(this->a);
             this->typed = Map<bool>::init(this->a);
             for (auto d : decls.slice()) { this->decl(d)?; }
@@ -1841,6 +1866,10 @@ struct CBind {
     lx.run()?;
     auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
+    for (auto f : flags.slice()) {
+        if (f == "-fshort-enums") { p.short_enums = true; }
+        if (f == "-fno-short-enums") { p.short_enums = false; }
+    }
     p.parse_all()?;
     auto e = CEmit{ .a = a, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a) };
     e.run(p.decls)?;
