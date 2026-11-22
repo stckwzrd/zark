@@ -1,5 +1,6 @@
 import "std/thread" as thread;
 import "std/time" as time;
+import "std/async" as async;
 
 extern i64 vrt_poller_new();
 extern i32 vrt_poller_set(i64 p, i32 fd, i32 readable, i32 writable, u64 token);
@@ -69,4 +70,91 @@ test "wake interrupts wait" {
     assert(time::mono_ns() - start < 1000000000);
     t.join();
     vrt_poller_free(p);
+}
+
+struct Countdown {
+    i64 n;
+
+    Poll<i64> poll(Context* cx) {
+        if (this->n == 0) { return .Ready(42); }
+        this->n -= 1;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+struct SleepPush {
+    async::Sleep s;
+    i64 v;
+    List<i64>* out;
+
+    Poll<bool> poll(Context* cx) {
+        match (this->s.poll(cx)) {
+            .Ready(_) => {
+                this->out.push(this->v) catch {};
+                return .Ready(true);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+struct AllDone<T> {
+    List<async::JoinHandle<T>>* hs;
+
+    Poll<bool> poll(Context* cx) {
+        for (auto h : this->hs.slice()) {
+            if (!h.done()) {
+                cx.waker.wake();
+                return .Pending;
+            }
+        }
+        return .Ready(true);
+    }
+}
+
+test "block_on drives a hand-written future" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto f = Countdown{ .n = 5 };
+    const auto v = ex.block_on<Countdown, i64>(&f)?;
+    assert(v == 42);
+}
+
+test "sleep orders tasks by deadline" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto out = List<i64>::init(c_allocator());
+    auto hs = List<async::JoinHandle<bool>>::init(c_allocator());
+    for (auto ms : [30, 10, 20]) {
+        const auto t = SleepPush{ .s = async::Sleep::after(&ex, ms), .v = ms, .out = &out };
+        hs.push(ex.spawn<SleepPush, bool>(t)?)?;
+    }
+    auto all = AllDone<bool>{ .hs = &hs };
+    assert(ex.block_on<AllDone<bool>, bool>(&all)?);
+    assert(out.len == 3);
+    assert(out.get(0) == 10);
+    assert(out.get(1) == 20);
+    assert(out.get(2) == 30);
+    hs.deinit();
+    out.deinit();
+}
+
+test "ten thousand tasks" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        auto hs = List<async::JoinHandle<i64>>::init(a);
+        defer hs.deinit();
+        for (auto i : 0..10000) {
+            hs.push(ex.spawn<Countdown, i64>(Countdown{ .n = 3 })?)?;
+        }
+        auto all = AllDone<i64>{ .hs = &hs };
+        assert(ex.block_on<AllDone<i64>, bool>(&all)?);
+        for (auto h : hs.slice()) { assert(h.take() == 42); }
+    }
+    dbg.deinit()?;
 }

@@ -1,0 +1,245 @@
+extern i64 vrt_poller_new();
+extern i32 vrt_poller_set(i64 p, i32 fd, i32 readable, i32 writable, u64 token);
+extern i32 vrt_poller_wait(i64 p, u64* tokens, i32* events, i32 max, i64 timeout_ms);
+extern void vrt_poller_free(i64 p);
+
+struct Task {
+    void* frame;
+    fn[](void*, Context*) -> bool poll_thunk;
+    i32 state;
+    Executor* ex;
+    u64 size;
+}
+
+struct TaskBox<F, T> {
+    Task head;
+    F fut;
+    T result;
+}
+
+struct Timer {
+    i64 deadline;
+    Waker waker;
+}
+
+void task_wake(void* data) {
+    auto t = data as *Task;
+    if (t.state == 0 || t.state == 2) {
+        t.state = 1;
+        auto q = &t.ex.queue;
+        q.items[q.len] = t;
+        q.len += 1;
+    }
+}
+
+void main_wake(void* data) {
+    auto ex = data as *Executor;
+    ex.main_woken = true;
+}
+
+struct JoinHandle<T> {
+    Task* task;
+    T* slot;
+
+    bool done() { return this->task.state == 3; }
+    T take() { return *this->slot; }
+}
+
+owned struct Executor {
+    Allocator a;
+    i64 poller;
+    List<Task*> tasks;
+    List<Task*> queue;
+    List<Task*> batch;
+    List<Timer> timers;
+    i64 io;
+    bool main_woken;
+
+    static !Executor init(Allocator a) {
+        const auto p = vrt_poller_new();
+        if (p <= 0) { return error.SystemCall; }
+        return Executor{ .a = a, .poller = p, .tasks = List<Task*>::init(a), .queue = List<Task*>::init(a),
+            .batch = List<Task*>::init(a), .timers = List<Timer>::init(a) };
+    }
+
+    void deinit() move {
+        for (auto t : this->tasks.slice()) { this->a.free<u8>((t as *u8)[0..t.size as i64]); }
+        this->tasks.deinit();
+        this->queue.deinit();
+        this->batch.deinit();
+        this->timers.deinit();
+        vrt_poller_free(this->poller);
+    }
+
+    template<F, T> !JoinHandle<T> spawn(F fut) {
+        const auto n = this->tasks.len + 1;
+        this->tasks.reserve(n)?;
+        this->queue.reserve(n)?;
+        this->batch.reserve(n)?;
+        auto b = this->a.create<TaskBox<F, T>>()?;
+        b.fut = fut;
+        b.head = Task{ .frame = b as *void, .state = 1, .ex = this, .size = sizeof(TaskBox<F, T>),
+            .poll_thunk = [](void* p, Context* cx) -> bool {
+                auto b = p as *TaskBox<F, T>;
+                match (b.fut.poll(cx)) {
+                    .Ready(v) => {
+                        b.result = v;
+                        return true;
+                    }
+                    .Pending => return false;
+                }
+                return false;
+            } };
+        this->tasks.push(&b.head)?;
+        this->queue.push(&b.head)?;
+        return JoinHandle<T>{ .task = &b.head, .slot = &b.result };
+    }
+
+    template<F, T> !T block_on(F* fut) {
+        auto cx = Context{ .waker = Waker{ .data = this as *void, .wake_fn = main_wake } };
+        u64[64] tokens;
+        i32[64] events;
+        this->main_woken = true;
+        while (true) {
+            this->fire_timers();
+            if (this->main_woken) {
+                this->main_woken = false;
+                match (fut.poll(&cx)) {
+                    .Ready(v) => return v;
+                    .Pending => {}
+                }
+            }
+            this->run_batch();
+            if (this->main_woken || this->queue.len > 0) { continue; }
+            const auto timeout = this->timeout_ms();
+            if (timeout < 0 && this->io == 0) { return error.Deadlock; }
+            const auto n = vrt_poller_wait(this->poller, &tokens[0], &events[0], 64, timeout);
+            if (n < 0) { return error.SystemCall; }
+            for (auto i : 0..n as i64) {
+                auto w = tokens[i] as *Io;
+                w.ready = true;
+                w.waker.wake();
+            }
+        }
+        return error.Deadlock;
+    }
+
+    void run_batch() {
+        const auto tmp = this->batch;
+        this->batch = this->queue;
+        this->queue = tmp;
+        auto i = 0;
+        while (i < this->batch.len) {
+            auto t = this->batch.get(i);
+            t.state = 2;
+            auto cx = Context{ .waker = Waker{ .data = t as *void, .wake_fn = task_wake } };
+            if (t.poll_thunk(t.frame, &cx)) {
+                t.state = 3;
+            } else if (t.state == 2) {
+                t.state = 0;
+            }
+            i += 1;
+        }
+        this->batch.clear();
+    }
+
+    !void add_timer(i64 deadline, Waker w) {
+        this->timers.push(Timer{ .deadline = deadline, .waker = w })?;
+        auto h = this->timers.slice();
+        auto i = h.len - 1;
+        while (i > 0 && h[(i - 1) / 2].deadline > h[i].deadline) {
+            swap(&h[i], &h[(i - 1) / 2]);
+            i = (i - 1) / 2;
+        }
+    }
+
+    void fire_timers() {
+        const auto now = now_ns();
+        while (this->timers.len > 0 && this->timers.get(0).deadline <= now) {
+            const auto w = this->timers.get(0).waker;
+            this->timers.set(0, this->timers.get(this->timers.len - 1));
+            this->timers.len -= 1;
+            auto h = this->timers.slice();
+            auto i = 0;
+            while (true) {
+                auto m = i;
+                const auto l = 2 * i + 1;
+                if (l < h.len && h[l].deadline < h[m].deadline) { m = l; }
+                if (l + 1 < h.len && h[l + 1].deadline < h[m].deadline) { m = l + 1; }
+                if (m == i) { break; }
+                swap(&h[i], &h[m]);
+                i = m;
+            }
+            w.wake();
+        }
+    }
+
+    i64 timeout_ms() {
+        if (this->timers.len == 0) { return -1; }
+        const auto left = this->timers.get(0).deadline - now_ns();
+        if (left <= 0) { return 0; }
+        return (left + 999999) / 1000000;
+    }
+}
+
+struct Sleep {
+    Executor* ex;
+    i64 deadline;
+    bool armed;
+
+    static Sleep after(Executor* ex, i64 ms) { return Sleep{ .ex = ex, .deadline = now_ns() + ms * 1000000 }; }
+
+    Poll<bool> poll(Context* cx) {
+        if (now_ns() >= this->deadline) { return .Ready(true); }
+        if (!this->armed) {
+            this->ex.add_timer(this->deadline, cx.waker) catch {
+                cx.waker.wake();
+                return .Pending;
+            };
+            this->armed = true;
+        }
+        return .Pending;
+    }
+}
+
+struct Io {
+    Executor* ex;
+    i32 fd;
+    i32 readable;
+    i32 writable;
+    bool armed;
+    bool ready;
+    Waker waker;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->ready) {
+            if (this->armed) {
+                _ = vrt_poller_set(this->ex.poller, this->fd, 0, 0, this as u64);
+                this->ex.io -= 1;
+                this->armed = false;
+            }
+            return .Ready(true);
+        }
+        this->waker = cx.waker;
+        if (!this->armed) {
+            if (vrt_poller_set(this->ex.poller, this->fd, this->readable, this->writable, this as u64) != 0) { return .Ready(true); }
+            this->armed = true;
+            this->ex.io += 1;
+        }
+        return .Pending;
+    }
+}
+
+struct Readable {
+    Io io;
+
+    static Readable on(Executor* ex, i32 fd) { return Readable{ .io = Io{ .ex = ex, .fd = fd, .readable = 1 } }; }
+    Poll<bool> poll(Context* cx) { return this->io.poll(cx); }
+}
+
+struct Writable {
+    Io io;
+
+    static Writable on(Executor* ex, i32 fd) { return Writable{ .io = Io{ .ex = ex, .fd = fd, .writable = 1 } }; }
+    Poll<bool> poll(Context* cx) { return this->io.poll(cx); }
+}
