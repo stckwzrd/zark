@@ -1,0 +1,48 @@
+import "std/async" as async;
+
+async !i64 checked(i64 v) {
+    if (v < 0) { return error.Negative; }
+    return v * 2;
+}
+
+async !i64 use_checked(i64 v) {
+    auto x = await checked(v)?;
+    return x + 1;
+}
+
+async i64 use_catch(i64 v) {
+    auto x = await checked(v) catch 7;
+    return x;
+}
+
+async void note(i64* out) {
+    *out = 11;
+}
+
+async i64 use_note() {
+    i64 n = 0;
+    await note(&n);
+    auto done = await note(&n);
+    if (done) { n += 1; }
+    return n;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto g = use_checked(4);
+    i64 rg = ex.block_on(&g)?;
+    println(rg);
+    auto h = use_checked(-1);
+    i64 rh = ex.block_on(&h) catch -1;
+    println(rh);
+    auto c1 = use_catch(3);
+    i64 r1 = ex.block_on(&c1)?;
+    println(r1);
+    auto c2 = use_catch(-3);
+    i64 r2 = ex.block_on(&c2)?;
+    println(r2);
+    auto n = use_note();
+    i64 r3 = ex.block_on(&n)?;
+    println(r3);
+}

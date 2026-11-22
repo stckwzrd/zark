@@ -568,7 +568,14 @@ struct Parser {
             _ = this->advance();
             const auto w = this->ex(.Await, t)?;
             w.l = this->parse_prefix()?;
-            return w;
+            Expr* top = w;
+            while (w.l.k == .Try) {
+                const auto q = w.l;
+                w.l = q.l;
+                q.l = top;
+                top = q;
+            }
+            return top;
         }
         match t.tag {
             .minus, .bang, .tilde, .amp, .star => {
@@ -813,7 +820,19 @@ struct Parser {
                 EK k = .Sizeof;
                 if (t.tag == .kw_alignof) { k = .Alignof; }
                 const auto e = this->ex(k, t)?;
-                e.ty = this->parse_type()?;
+                const auto save = this->pos;
+                const auto mark = this->splits.len;
+                const auto q = this->quiet;
+                this->quiet = true;
+                TypeExpr* ty = this->parse_type() catch null;
+                this->quiet = q;
+                if (ty != null && this->at(.rparen)) {
+                    e.ty = ty;
+                } else {
+                    this->pos = save;
+                    this->undo_splits(mark);
+                    e.l = this->parse_expr()?;
+                }
                 _ = this->expect(.rparen)?;
                 return e;
             }
