@@ -1,0 +1,33 @@
+// No heap at all: everything lives in a stack buffer.
+!void main() {
+    u8[1024] mem;
+    auto fb = FixedBuf::init(mem[..]);
+    const auto a = fb.allocator();
+
+    auto xs = List<i32>::init(a);
+    for (auto i : 0..10) { xs.push((i * 3) as i32)?; }
+    println("xs = {xs.slice()}, buffer used {fb.used}/{mem.len}");
+
+    const auto name = a.dup("zark")?;
+    println("dup: {name}, remaining {fb.remaining()}");
+
+    // formatting never allocates: write into a buffer you own
+    u8[64] line;
+    const auto s = bprint(line[..], "sum of first {xs.len} = {xs.get(9) + xs.get(1)}")?;
+    println("bprint -> '{s}' ({s.len} bytes)");
+
+    u8[4] tiny;
+    const auto r = bprint(tiny[..], "too long for four bytes") catch |e| { println("bprint failed: {e}"); ""; };
+    println("r.len = {r.len}");
+
+    // out of memory is an explicit error, not a crash
+    auto big = List<i64>::init(a);
+    for (auto i : 0..1000) {
+        big.push(i) catch |e| {
+            println("OOM after {big.len} items: {e}");
+            break;
+        }
+    }
+    fb.reset();
+    println("after reset: used {fb.used}");
+}

@@ -2,16 +2,16 @@
 title: Interoperating with C and C++
 order: 30
 section: Interop and tools
-description: extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, structs, callbacks and the extern "C" facade in Vibe
+description: extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, structs, callbacks and the extern "C" facade in Zark
 ---
 
-Vibe needs no separate "binding layer": a C function is declared in one line, and a C file is passed to the compiler on the command line. This page collects everything you need at the boundary.
+Zark needs no separate "binding layer": a C function is declared in one line, and a C file is passed to the compiler on the command line. This page collects everything you need at the boundary.
 
-## Calling C from Vibe: `extern`
+## Calling C from Zark: `extern`
 
-`extern` declares a function that lives outside. The signature is written in Vibe terms, and the correspondence with C is simple:
+`extern` declares a function that lives outside. The signature is written in Zark terms, and the correspondence with C is simple:
 
-| C | Vibe |
+| C | Zark |
 |---|---|
 | `int`, `int32_t` | `i32` |
 | `long`, `int64_t`, `ssize_t` | `i64` |
@@ -25,7 +25,7 @@ Vibe needs no separate "binding layer": a C function is declared in one line, an
 | `void` (a result) | no result is written |
 | `...` | `...` |
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 extern i32 atoi(u8* s);
 extern u64 strlen(u8* s);
@@ -38,13 +38,13 @@ void main() {
 
 The libc functions that are often needed are already declared in the prelude (`printf`, `malloc`, `calloc`, `free`, `exit`, `memcpy`, `memset`, `strlen`, `sqrt`, `sin`, `cos`, `pow`, `floor`, `fopen`, `fork` and so on). You can simply call them, and declaring them again is not required.
 
-> **Gotcha:** if you declare an `extern` with a name that is already taken by a **Vibe function** from the prelude (`abs`, `min`, `max`, `sort`), you get the error "duplicate function". Choose another approach, or import the C version into a wrapper with a different name.
+> **Gotcha:** if you declare an `extern` with a name that is already taken by a **Zark function** from the prelude (`abs`, `min`, `max`, `sort`), you get the error "duplicate function". Choose another approach, or import the C version into a wrapper with a different name.
 
 ## Strings at the boundary
 
 A literal `"..."` always ends with a zero byte, so it fits as a `u8*` (that is, a `const char *`):
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 
 void main() {
@@ -54,7 +54,7 @@ void main() {
 
 Any other `str` (a slice) does not end with anything and is **not suitable** as a C string. The type `str` is `{ ptr, len }`, and only `s.ptr` goes to C, which is read up to a zero byte:
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 
 void main() {
@@ -69,7 +69,7 @@ You expected `ab` and got `abc`: after `ab` there is no zero byte, and C reads o
 - `to_cstr(buf, s)` copies into **your** buffer and adds a zero byte (no memory allocation);
 - `a.dupz(s)` copies onto the heap through an allocator.
 
-```vibe run
+```zark run
 extern i32 puts(u8* s);
 
 !void main() {
@@ -89,7 +89,7 @@ extern i32 puts(u8* s);
 
 The other way: `cstr(p)` turns a C string `u8*` into a `str` (the length is computed with `strlen`, nothing is copied):
 
-```vibe run
+```zark run
 extern u8* getenv(u8* name);
 
 void main() {
@@ -105,9 +105,9 @@ void main() {
 
 ## Pointers
 
-Any Vibe pointer converts to `void*` and back **implicitly**; to other pointer types, through `as`:
+Any Zark pointer converts to `void*` and back **implicitly**; to other pointer types, through `as`:
 
-```vibe run
+```zark run
 void main() {
     i64 x = 258;
     const auto p = &x as *u8;
@@ -117,7 +117,7 @@ void main() {
 
 An array or a slice becomes a pointer to the first element through `.ptr` (for slices) or `&a[0]`/`as T*`:
 
-```vibe run
+```zark run
 extern void* memset(void* dst, i32 c, u64 n);
 
 void main() {
@@ -131,7 +131,7 @@ void main() {
 
 `...` in an `extern` allows variadic functions. The types are promoted by the usual C rules: integers are widened, `f32` → `f64`. Slices are not allowed.
 
-```vibe run
+```zark run
 extern i32 printf(u8* fmt, ...);
 
 void main() {
@@ -139,15 +139,15 @@ void main() {
 }
 ```
 
-For output from Vibe itself, `println` is better: it is safer. `printf` is handy when working with ready-made C code.
+For output from Zark itself, `println` is better: it is safer. `printf` is handy when working with ready-made C code.
 
 ## Structs
 
-Vibe structs lie in memory the same way as C structs (the same sizes and alignment). So the description on the Vibe side is a copy of the description in C.
+Zark structs lie in memory the same way as C structs (the same sizes and alignment). So the description on the Zark side is a copy of the description in C.
 
 Structs can be passed to `extern` functions and returned from them **by value**, as in C: the compiler follows the System V x86-64 rules (small structs travel in registers, larger ones on the stack or through a hidden pointer), on every backend. This is what libraries like raylib need: `extern void DrawCircleV(Vector2 center, f32 radius, Color color);` works as written. Passing by pointer works as well:
 
-```vibe file=vec.c
+```zark file=vec.c
 typedef struct { double x, y, z; } Vec3;
 
 double vec3_dot(const Vec3 *a, const Vec3 *b) {
@@ -161,7 +161,7 @@ void vec3_scale(Vec3 *v, double k) {
 }
 ```
 
-```vibe run with=vec.c
+```zark run with=vec.c
 struct Vec3 { f64 x; f64 y; f64 z; }
 
 extern f64 vec3_dot(Vec3* a, Vec3* b);
@@ -178,7 +178,7 @@ void main() {
 
 By value:
 
-```vibe file=v2.c
+```zark file=v2.c
 typedef struct { float x, y; } Vector2;
 typedef struct { unsigned char r, g, b, a; } Color;
 
@@ -186,7 +186,7 @@ Vector2 v2_add(Vector2 a, Vector2 b) { Vector2 r = { a.x + b.x, a.y + b.y }; ret
 Color fade(Color c, float k) { Color o = { c.r, c.g, c.b, (unsigned char)(c.a * k) }; return o; }
 ```
 
-```vibe run with=v2.c
+```zark run with=v2.c
 struct Vector2 { f32 x; f32 y; }
 struct Color { u8 r; u8 g; u8 b; u8 a; }
 
@@ -201,38 +201,38 @@ void main() {
 
 ## Bringing in C files
 
-`vibe run`, `vibe build` and `vibe test` accept `.c`, `.cpp`, `.o`, `.a`, `.so` and the options `-l...` / `-L...` together with the source:
+`zark run`, `zark build` and `zark test` accept `.c`, `.cpp`, `.o`, `.a`, `.so` and the options `-l...` / `-L...` together with the source:
 
 ```sh
-vibe run main.vibe mathlib.c                 # compiles mathlib.c and links
-vibe run main.vibe mathlib.c engine.cpp      # with C++ the link goes through clang++
-vibe build main.vibe lib.o -lm -o app        # a ready object and a library
+zark run main.zk mathlib.c                 # compiles mathlib.c and links
+zark run main.zk mathlib.c engine.cpp      # with C++ the link goes through clang++
+zark build main.zk lib.o -lm -o app        # a ready object and a library
 ```
 
 What happens: every `.c` / `.cpp` is compiled with `clang` (`clang++` for C++, the optimization level comes from `-O`), then everything is linked together with your program. If there is at least one `.cpp`, the linker becomes `clang++`.
 
 Details of the modes are in [tooling](tooling.md#compilation-modes).
 
-## Calling Vibe from C: `export`
+## Calling Zark from C: `export`
 
-`export` exposes a Vibe function under its own name. C code sees it as an ordinary external symbol:
+`export` exposes a Zark function under its own name. C code sees it as an ordinary external symbol:
 
-```vibe file=sumsq.c
+```zark file=sumsq.c
 #include <stdint.h>
 
-extern int64_t vibe_square(int64_t x);
+extern int64_t zark_square(int64_t x);
 
 int64_t c_sum_squares(int64_t n) {
     int64_t s = 0;
-    for (int64_t i = 1; i <= n; i++) s += vibe_square(i);
+    for (int64_t i = 1; i <= n; i++) s += zark_square(i);
     return s;
 }
 ```
 
-```vibe run with=sumsq.c
+```zark run with=sumsq.c
 extern i64 c_sum_squares(i64 n);
 
-export i64 vibe_square(i64 x) {
+export i64 zark_square(i64 x) {
     return x * x;
 }
 
@@ -245,9 +245,9 @@ The names of `extern` and `export` are C symbols, so they **get no module prefix
 
 ## Callbacks: function pointers
 
-A Vibe function can be passed to C as `fn(...) -> R`. This is a plain function address without a closure:
+A Zark function can be passed to C as `fn(...) -> R`. This is a plain function address without a closure:
 
-```vibe run
+```zark run
 extern void qsort(void* base, u64 n, u64 size, fn(void*, void*) -> i32 cmp);
 
 i32 cmp(void* a, void* b) {
@@ -269,9 +269,9 @@ A closure `fn[](...) -> R` cannot be passed to C: it has a context, and C expect
 
 ## C++ through an `extern "C"` facade
 
-Vibe does not know the C++ ABI (templates, overloads, classes). So C++ is hidden behind a small C interface where an object is an opaque pointer.
+Zark does not know the C++ ABI (templates, overloads, classes). So C++ is hidden behind a small C interface where an object is an opaque pointer.
 
-```vibe file=engine.cpp
+```zark file=engine.cpp
 #include <vector>
 #include <algorithm>
 #include <cstdint>
@@ -290,7 +290,7 @@ extern "C" {
 }
 ```
 
-```vibe run with=engine.cpp
+```zark run with=engine.cpp
 extern void* engine_new();
 extern void engine_push(void* e, f64 x);
 extern f64 engine_median(void* e);
@@ -313,9 +313,9 @@ void main() {
 Bringing in system libraries works as in C. The options `-l` and `-L` and the files `.a`, `.so`, `.o` are passed to the linker as they are:
 
 ```sh
-vibe run main.vibe -lm
-vibe run main.vibe -L/opt/foo/lib -lfoo
-vibe build main.vibe libbar.a -o app
+zark run main.zk -lm
+zark run main.zk -L/opt/foo/lib -lfoo
+zark build main.zk libbar.a -o app
 ```
 
 Math (`sqrt`, `sin`, `pow`) is linked automatically: `-lm` is already included.
@@ -323,12 +323,12 @@ Math (`sqrt`, `sin`, `pow`) is linked automatically: `-lm` is already included.
 ## Rules and pitfalls
 
 - There is no `@cImport` and no header parsing: you write the signatures by hand. This is a place for mistakes: the type of your `extern` must match C.
-- Structs cross the boundary by value only through `extern` declarations. A C library calling back into Vibe (an `export` function or a function pointer) must take structs by pointer.
+- Structs cross the boundary by value only through `extern` declarations. A C library calling back into Zark (an `export` function or a function pointer) must take structs by pointer.
 - `bool` in C is `_Bool`/`uint8_t`. Use `u8` or `i32`, not `bool`, if in doubt.
 - Do not pass a `str` instead of a `u8*`: you need `s.ptr` (and a zero byte, see above).
 - `size_t` is `u64`, `ssize_t` is `i64`.
-- Memory returned by a C function (`malloc`) must be freed by a C function (`free`), not by a Vibe allocator.
-- An `extern` with the same name as a function from the Vibe prelude is not allowed.
+- Memory returned by a C function (`malloc`) must be freed by a C function (`free`), not by a Zark allocator.
+- An `extern` with the same name as a function from the Zark prelude is not allowed.
 
 ## What next
 

@@ -1,2 +1,2 @@
 1
-panic: JoinHandle used after take() or detach() (<std>/async.vibe:77)
+panic: JoinHandle used after take() or detach() (<std>/async.zk:77)

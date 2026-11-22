@@ -2,16 +2,16 @@
 title: Pitfalls and FAQ
 order: 42
 section: Reference
-description: Common beginner mistakes in Vibe, non-obvious behavior, language limitations and answers to the "why is it so" questions
+description: Common beginner mistakes in Zark, non-obvious behavior, language limitations and answers to the "why is it so" questions
 ---
 
-This page collects what is not obvious: places where you can make a mistake and places where Vibe works differently from the languages you are used to. Every pitfall has an example. If you got a strange result or an error, look here.
+This page collects what is not obvious: places where you can make a mistake and places where Zark works differently from the languages you are used to. Every pitfall has an example. If you got a strange result or an error, look here.
 
 ## Numbers
 
 ### A literal must fit its type
 
-```vibe error
+```zark error
 void main() {
     const u8 b = 300;
     println(b);
@@ -22,7 +22,7 @@ void main() {
 
 ### Integer overflow is a panic
 
-```vibe run exit
+```zark run exit
 void main() {
     const u8 a = 250;
     const auto b = a + 10;
@@ -34,7 +34,7 @@ In a safe build the program stops with `panic: integer overflow` and the file an
 
 ### Integer division by zero panics
 
-```vibe run exit
+```zark run exit
 void main() {
     const auto a = 10;
     const auto z = a - 10;
@@ -64,7 +64,7 @@ A literal in `as` is handled as a constant and may not be truncated. To check th
 
 ### `{` in a string opens an interpolation
 
-```vibe run
+```zark run
 void main() {
     println("{"key": 1}");
 }
@@ -72,7 +72,7 @@ void main() {
 
 The compiler took `{"key"...` for an interpolation of the string `"key"`, and instead of JSON you got an unexpected output. Write a literal brace as `{{` and `}}`:
 
-```vibe run
+```zark run
 void main() {
     println("{{\"key\": 1}}");
 }
@@ -84,7 +84,7 @@ void main() {
 
 ### You cannot modify a literal
 
-```vibe run exit
+```zark run exit
 void main() {
     auto s = "abc";
     s[0] = 65;
@@ -117,7 +117,7 @@ The format `{n:b}` is not supported: the allowed ones for integers are `d`, `i`,
 
 ### A parameter is a copy
 
-```vibe run
+```zark run
 void f(i64 x) {
     x = 5;
 }
@@ -133,7 +133,7 @@ Parameters and variables are mutable, but the function changes its own copy. To 
 
 ### The same name twice in one block
 
-```vibe error fragment
+```zark error fragment
 const auto x = 1;
 const auto x = 2;
 ```
@@ -164,7 +164,7 @@ You cannot declare functions `max`, `min`, `abs`, `sort`, `swap`, `run`, `env`, 
 
 Every statement ends with `;`. Without it the compiler stops at the next token:
 
-```vibe error
+```zark error
 void main() {
     const auto total = 1
     println(total);
@@ -197,7 +197,7 @@ A forgotten variant causes no error: nothing simply happens. For a `match` expre
 
 ### A function must return a value on every path
 
-```vibe error
+```zark error
 i64 f(i64 n) {
     if (n > 0) { return 1; }
 }
@@ -251,7 +251,7 @@ Assignment and passing to a function copy everything. For shared work take a poi
 
 ### A method changes even a `const` object
 
-```vibe run
+```zark run
 struct C {
     i64 n;
     void inc() { this->n += 1; }
@@ -372,19 +372,19 @@ Through a small struct. There are no tuples.
 
 ### How do I debug?
 
-`println` and `eprintln` are the first tool. For a panic, look at the location (file and line) in the message. For the build: `vibe ir` shows the LLVM IR, `vibe tokens` shows the tokens, `--time` shows the time of the phases (see [tooling](tooling.md)).
+`println` and `eprintln` are the first tool. For a panic, look at the location (file and line) in the message. For the build: `zark ir` shows the LLVM IR, `zark tokens` shows the tokens, `--time` shows the time of the phases (see [tooling](tooling.md)).
 
 ### How do I find out what exactly is compiled?
 
-`vibe ir main.vibe` prints the resulting LLVM IR. Only reachable functions are generated.
+`zark ir main.zk` prints the resulting LLVM IR. Only reachable functions are generated.
 
 ### Where is the source code of the standard library?
 
-In `std/std.vibe` of the repository. You can read it as a sample of idiomatic code.
+In `std/std.zk` of the repository. You can read it as a sample of idiomatic code.
 
 ### Can I write without `main`?
 
-For tests, yes (`vibe test`). To run, `main` is needed.
+For tests, yes (`zark test`). To run, `main` is needed.
 
 ## What next
 

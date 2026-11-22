@@ -1,5 +1,5 @@
 1 .kw_import import
-1 .str_lit cpp_style_lib.vibe
+1 .str_lit cpp_style_lib.zk
 1 .kw_as as
 1 .ident lib
 1 .semi ;

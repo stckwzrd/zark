@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Отладка и чтение ошибок · Vibe</title>
+<title>Отладка и чтение ошибок · Zark</title>
 <meta name="description" content="Как читать сообщения компилятора, что означает каждый вид паники и как искать баг тестами, печатью, gdb и отладочным аллокатором">
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../debugging.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Zark</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../debugging.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="learn.html">Учим Vibe: путь от нуля до программы</a><a href="tour.html">Быстрый тур</a><a href="showcase.html">Витрина: многопоточный трассировщик лучей</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a><a href="comptime.html">Вычисления при компиляции</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="safety.html">Модель безопасности</a><a href="idioms.html">Пишем идиоматично на Vibe</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="debugging.html" class="current">Отладка и чтение ошибок</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Zark</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="learn.html">Учим Zark: путь от нуля до программы</a><a href="tour.html">Быстрый тур</a><a href="showcase.html">Витрина: многопоточный трассировщик лучей</a><a href="cpp-style.html">Zark для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a><a href="comptime.html">Вычисления при компиляции</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="safety.html">Модель безопасности</a><a href="idioms.html">Пишем идиоматично на Zark</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="debugging.html" class="current">Отладка и чтение ошибок</a><a href="how-it-works.html">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
 <main><article>
 <h1>Отладка и чтение ошибок</h1>
 <p>Большая часть времени с новым языком уходит на чтение того, что он говорит. Эта страница учит этому: как устроено сообщение, какие сообщения встречаются чаще всего и как их исправить, и что делать, когда программа компилируется, но всё равно делает не то.</p>
@@ -18,7 +18,7 @@
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> total </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 10</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(totl);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:3: error: unknown identifier 'totl' (did you mean 'total'?)
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:3: error: unknown identifier 'totl' (did you mean 'total'?)
     3 |     println(totl);
       |             ^</code></pre></div></div>
 <ol>
@@ -34,7 +34,7 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> big </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1000</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> i32</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> small </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> big;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(small);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:3: error: type mismatch: expected 'i32', got 'i64'
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:3: error: type mismatch: expected 'i32', got 'i64'
     3 |     const i32 small = big;
       |     ^</code></pre></div></div>
 <p>Исправление: напишите <code>big as i32</code>, если потеря битов допустима, или возьмите более широкий тип.</p>
@@ -44,7 +44,7 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    if</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> (x </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">></span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">return</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">; }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sign</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)); }</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:1: error: function 'sign' does not return a value on every path; add a 'return' at the end
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">sign</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">5</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)); }</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:1: error: function 'sign' does not return a value on every path; add a 'return' at the end
     1 | i64 sign(i64 x) {</code></pre></div></div>
 <p>Исправление: добавьте <code>return 0;</code> для оставшегося случая.</p>
 <p>Забытая ошибка:</p>
@@ -52,7 +52,7 @@
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    parse</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"12"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:4: error: error union is ignored; handle it with '?' or 'catch'
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:4: error: error union is ignored; handle it with '?' or 'catch'
     4 |     parse(&quot;12&quot;);
       |     ^</code></pre></div></div>
 <p>Исправление: <code>parse(&quot;12&quot;)?</code> в функции, возвращающей <code>!T</code>, <code>catch</code> со значением по умолчанию или <code>_ = parse(&quot;12&quot;) catch 0;</code>, если вы правда хотите её проигнорировать.</p>
@@ -67,7 +67,7 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.West</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)); }</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:4: error: match is not exhaustive: missing '.West' (add the arm or a '_' arm)
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.West</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)); }</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:4: error: match is not exhaustive: missing '.West' (add the arm or a '_' arm)
     4 |     return match d {
       |            ^</code></pre></div></div>
 <p>Исправление: добавьте <code>.West</code> (именно эта проверка делает добавление варианта безопасным).</p>
@@ -83,14 +83,14 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Square</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">{ </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">.side</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> =</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 2.0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> };</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    Shape</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> sh </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">s;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(sh.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">area</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">());</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:10: error: 'Square' does not implement 'Shape': missing method 'perimeter'
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:10: error: 'Square' does not implement 'Shape': missing method 'perimeter'
    10 |     Shape sh = &amp;s;
       |     ^</code></pre></div></div>
 <p>Исправление: реализуйте недостающий метод.</p>
 <p>Строка с фигурными скобками:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"{"a": </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">, "b": </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">}"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:2: error: bad format ' 1, &quot;b&quot;: 2' after ':': a format is [flags][width][.precision][letter], like {x:08X} or {pi:.3}; to print a literal brace write {{ or }}
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:2: error: bad format ' 1, &quot;b&quot;: 2' after ':': a format is [flags][width][.precision][letter], like {x:08X} or {pi:.3}; to print a literal brace write {{ or }}
     2 |     println(&quot;{&quot;a&quot;: 1, &quot;b&quot;: 2}&quot;);
       |            ^</code></pre></div></div>
 <p>Исправление: литеральная скобка пишется дважды, <code>&quot;{{\&quot;a\&quot;: 1, \&quot;b\&quot;: 2}}&quot;</code>. Интерполяция — это <code>{выражение}</code> или <code>{выражение:формат}</code>.</p>
@@ -101,7 +101,7 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> buf </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">16</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">free</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(buf);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    buf[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:5: error: 'buf' is used after 'free' consumed it on line 4; assign it a new value first
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:5: error: 'buf' is used after 'free' consumed it on line 4; assign it a new value first
     5 |     buf[0] = 1;
       |     ^</code></pre></div></div>
 <p><code>&#39;buf&#39; is used after &#39;free&#39; consumed it</code>: строка выше — это <code>free</code>. Либо уберите последующее использование, либо перенесите <code>free</code> после последнего использования, либо сначала присвойте переменной новое значение.</p>
@@ -112,7 +112,7 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> view </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> l.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">slice</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    l.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">push</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">) </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">catch</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> return</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(view.len);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:7: error: 'view' points into 'l', and 'push' on line 6 may have moved or freed that memory; take the pointer again after it
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:7: error: 'view' points into 'l', and 'push' on line 6 may have moved or freed that memory; take the pointer again after it
     7 |     println(view.len);
       |                 ^</code></pre></div></div>
 <p><code>&#39;view&#39; points into &#39;l&#39;, and &#39;push&#39; ... may have moved or freed that memory</code>: возьмите <code>view</code> заново после <code>push</code>.</p>
@@ -121,7 +121,7 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    return</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> &#x26;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">local;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span>
 <span class="line"></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">make</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()); }</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.vibe:3: error: returning something that points into local 'local' (a pointer, a slice, or a closure that captured it), which dies when the function returns; allocate it with an Allocator or take a pointer from the caller
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() { </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">*</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">make</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()); }</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:3: error: returning something that points into local 'local' (a pointer, a slice, or a closure that captured it), which dies when the function returns; allocate it with an Allocator or take a pointer from the caller
     3 |     return &amp;local;
       |     ^</code></pre></div></div>
 <p><code>returning something that points into local</code>: локальная переменная умирает при возврате из функции. Верните значение, пусть вызывающий передаст место или выделите память аллокатором.</p>
@@ -159,18 +159,18 @@
 </tr>
 </tbody></table></div>
 <p>Запустите упавший случай ещё раз под <code>-g</code> и <code>gdb</code>, чтобы увидеть переменные.</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>$ vibe build -g crash.vibe -o crash</span></span>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>$ zark build -g crash.zk -o crash</span></span>
 <span class="line"><span>$ gdb ./crash</span></span>
-<span class="line"><span>(gdb) break crash.vibe:12</span></span>
+<span class="line"><span>(gdb) break crash.zk:12</span></span>
 <span class="line"><span>(gdb) run</span></span>
 <span class="line"><span>(gdb) print total</span></span>
 <span class="line"><span>(gdb) bt</span></span></code></pre></div><p><code>-g</code> добавляет в отладочную информацию номера строк, локальные переменные, структуры и массивы. Точки останова по <code>файл:строка</code> работают.</p>
 <h2 id="программа-неправильная-но-ничего-не-падает"><a class="anchor" href="#программа-неправильная-но-ничего-не-падает">#</a>Программа неправильная, но ничего не падает</h2>
 <ol>
 <li><strong>Напечатайте данные.</strong> <code>println</code> печатает структуру с именами полей и срез с его элементами. Печатайте до и после шага, который подозреваете.</li>
-<li><strong>Напишите падающий тест.</strong> Положите наименьший вход, показывающий проблему, в блок <code>test</code>, запустите <code>vibe test file.vibe</code> и правьте, пока не позеленеет. Тест остаётся как защита.</li>
+<li><strong>Напишите падающий тест.</strong> Положите наименьший вход, показывающий проблему, в блок <code>test</code>, запустите <code>zark test file.zk</code> и правьте, пока не позеленеет. Тест остаётся как защита.</li>
 <li><strong>Сократите вход.</strong> Убирайте код и данные, пока проблема не останется одна. Причина обычно видна в этот момент.</li>
-<li><strong>Спросите другой бэкенд.</strong> <code>vibe run file.vibe</code>, затем <code>vibe run file.vibe --llvm</code> и <code>-O</code>. В безопасном режиме все они должны печатать одно и то же. Если нет, вы нашли баг компилятора; сохраните файл.</li>
+<li><strong>Спросите другой бэкенд.</strong> <code>zark run file.zk</code>, затем <code>zark run file.zk --llvm</code> и <code>-O</code>. В безопасном режиме все они должны печатать одно и то же. Если нет, вы нашли баг компилятора; сохраните файл.</li>
 </ol>
 <h2 id="проблемы-с-памятью"><a class="anchor" href="#проблемы-с-памятью">#</a>Проблемы с памятью</h2>
 <p>Если программа падает с segmentation fault или результат меняется от запуска к запуску, подозревайте память в первую очередь.</p>
@@ -180,7 +180,7 @@
 <li>Если назван номер блока, поставьте <code>dbg.trap_id</code> равным ему и запустите под <code>gdb</code>: программа остановится там, где блок был выделен.</li>
 </ol>
 <h2 id="когда-медленно"><a class="anchor" href="#когда-медленно">#</a>Когда медленно</h2>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>$ vibe run app.vibe --time</span></span>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>$ zark run app.zk --time</span></span>
 <span class="line"><span>time: frontend 12.0 ms, native backend 4.1 ms, link 18.3 ms</span></span></code></pre></div><p>Это время самого компилятора. Для времени программы соберите с <code>-O</code> (оптимизировано и по-прежнему безопасно). Если всё ещё медленно и протестировано, <code>--release</code> убирает проверки. Измеряйте до и после: не гадайте.</p>
 <h2 id="заглянуть-внутрь-компилятора"><a class="anchor" href="#заглянуть-внутрь-компилятора">#</a>Заглянуть внутрь компилятора</h2>
 <div class="table-wrap"><table><thead><tr>
@@ -188,15 +188,15 @@
 <th>Показывает</th>
 </tr>
 </thead><tbody><tr>
-<td><code>vibe tokens file.vibe</code></td>
+<td><code>zark tokens file.zk</code></td>
 <td>токены после лексера</td>
 </tr>
 <tr>
-<td><code>vibe ir file.vibe</code></td>
+<td><code>zark ir file.zk</code></td>
 <td>LLVM IR, который генерирует компилятор</td>
 </tr>
 <tr>
-<td><code>vibe fmt file.vibe</code></td>
+<td><code>zark fmt file.zk</code></td>
 <td>ничего: перезаписывает файл стандартным форматированием (<code>--check</code> только проверяет)</td>
 </tr>
 </tbody></table></div>

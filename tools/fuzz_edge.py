@@ -88,25 +88,25 @@ def program(seed):
     return helpers + "\nvoid main() {\n" + body + "\n" + prints + "\n}\n"
 
 
-def run(vibe, path, flags):
-    p = subprocess.run([vibe, "run", path] + flags, capture_output=True, text=True, timeout=120)
+def run(zark, path, flags):
+    p = subprocess.run([zark, "run", path] + flags, capture_output=True, text=True, timeout=120)
     return p.returncode, p.stdout + p.stderr
 
 
 def main():
-    vibe = os.environ.get("VIBE", "build/vibe")
+    zark = os.environ.get("ZARK", "build/zark")
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     start = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     bad = 0
     for seed in range(start, start + n):
         src = program(seed)
         d = tempfile.mkdtemp()
-        path = os.path.join(d, "f.vibe")
+        path = os.path.join(d, "f.zk")
         open(path, "w").write(src)
         res = {}
         for name, flags in (("native", []), ("llvm", ["--llvm"]), ("O2", ["-O"]), ("rel", ["--release"])):
             try:
-                res[name] = run(vibe, path, flags)
+                res[name] = run(zark, path, flags)
             except subprocess.TimeoutExpired:
                 res[name] = (-1, "timeout")
         safe = {k: v for k, v in res.items() if k != "rel"}
@@ -118,7 +118,7 @@ def main():
             bad += 1
         elif not ok or (res["native"][0] == 0 and res["rel"] != res["native"]):
             bad += 1
-            keep = f"/tmp/claude-1000/fuzz_edge_{seed}.vibe"
+            keep = f"/tmp/claude-1000/fuzz_edge_{seed}.zk"
             open(keep, "w").write(src)
             print(f"seed {seed}: MISMATCH saved {keep}")
             for k, v in res.items():

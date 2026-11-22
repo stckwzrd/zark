@@ -1,15 +1,15 @@
 ---
-title: Vibe для C++-программиста
+title: Zark для C++-программиста
 order: 3
 section: Старт
-description: Синтаксис Vibe глазами C++-программиста: типы впереди, template, методы внутри struct, лямбды, for с круглыми скобками и список отличий от C++
+description: Синтаксис Zark глазами C++-программиста: типы впереди, template, методы внутри struct, лямбды, for с круглыми скобками и список отличий от C++
 ---
 
-Vibe записывается почти как C++: типы пишутся впереди, дженерики — через `template` и `<...>`, методы лежат внутри `struct`, захват в лямбдах — `[&k]`. Эта страница показывает всё основное и перечисляет, чем язык отличается от C++.
+Zark записывается почти как C++: типы пишутся впереди, дженерики — через `template` и `<...>`, методы лежат внутри `struct`, захват в лямбдах — `[&k]`. Эта страница показывает всё основное и перечисляет, чем язык отличается от C++.
 
 ## Объявления: тип впереди
 
-```vibe run
+```zark run
 const i64 LIMIT = 4;
 i64 counter = 0;
 
@@ -40,7 +40,7 @@ i32 main() {
 
 ## Структуры и методы внутри struct
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -65,7 +65,7 @@ i32 main() {
 
 ## Union, enum и `::`
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -94,7 +94,7 @@ i32 main() {
 
 ## Шаблоны
 
-```vibe run
+```zark run
 struct Pair<A, B> {
     A first;
     B second;
@@ -120,7 +120,7 @@ i32 main() {
 
 В `if` и `while` условие в круглых скобках, фигурные скобки остаются обязательными.
 
-```vibe run
+```zark run
 i64 sum(i64[] xs) {
     i64 total = 0;
     for (i64 x : xs) { total += x; }
@@ -154,7 +154,7 @@ i32 main() {
 
 ## Ошибки и опциональные значения
 
-```vibe run
+```zark run
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -179,7 +179,7 @@ i32 main() {
 
 Захват записывается как в C++, `[&k]`: переменные захватываются **по ссылке**, контекст лежит на стеке, замыкание нельзя возвращать из функции.
 
-```vibe run
+```zark run
 i32 main() {
     i64 n = 10;
     i64 calls = 0;
@@ -196,12 +196,12 @@ i32 main() {
 
 ## Модули
 
-```vibe file=cpp_lib.vibe
+```zark file=cpp_lib.zk
 i64 twice(i64 x) { return x * 2; }
 ```
 
-```vibe run
-import "cpp_lib.vibe" as lib;
+```zark run
+import "cpp_lib.zk" as lib;
 
 i32 main() {
     println(lib::twice(21));
@@ -216,7 +216,7 @@ i32 main() {
 
 ## Таблица отличий
 
-| C++ | Vibe |
+| C++ | Zark |
 |---|---|
 | `int`, `long`, `double` | `i32`, `i64`, `f64` |
 | `T* p`, `const T& r` | `T* p`; ссылок нет, только указатели и срезы |

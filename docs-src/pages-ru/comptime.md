@@ -2,12 +2,12 @@
 title: Вычисления при компиляции
 order: 19.5
 section: Язык
-description: comptime в Vibe: обычные функции выполняются при компиляции, таблицы строятся заранее, факты о типах проверяются до сборки программы
+description: comptime в Zark: обычные функции выполняются при компиляции, таблицы строятся заранее, факты о типах проверяются до сборки программы
 ---
 
 `comptime` выполняет кусок вашей программы **во время компиляции** и кладёт результат в бинарник как константу. Это тот же язык с теми же функциями, циклами и стандартной библиотекой: никакого второго «языка макросов» нет.
 
-```vibe run
+```zark run
 i64 fib(i64 n) {
     if (n < 2) { return n; }
     return fib(n - 1) + fib(n - 2);
@@ -24,7 +24,7 @@ void main() {
 
 Результат должен быть простыми данными: число, `bool`, enum, `str`, а также массив или структура из них. Указатель или срез чужих данных не имеет смысла в другом процессе, поэтому они отклоняются:
 
-```vibe error
+```zark error
 i64* nothing() { return null; }
 
 void main() {
@@ -36,7 +36,7 @@ void main() {
 
 Функции, константы, типы и другие значения `comptime`. Нельзя использовать локальные переменные и параметры типов шаблона: значений для них ещё нет:
 
-```vibe error
+```zark error
 void main() {
     auto n = 5;
     println(comptime n + 1);
@@ -47,7 +47,7 @@ void main() {
 
 Главное применение — таблица, которую иначе пришлось бы набирать руками или заполнять при запуске. Функция, строящая её, — обычная функция:
 
-```vibe run
+```zark run
 u32[256] make_crc() {
     u32[256] t;
     for (auto i : 0..256) {
@@ -77,11 +77,11 @@ void main() {
 
 Структуры и строки работают так же:
 
-```vibe run
+```zark run
 struct Limits { i64 max_users; f64 ratio; bool strict; }
 
 Limits defaults() { return Limits{ .max_users = 100, .ratio = 0.75, .strict = true }; }
-str banner() { return "vibe"; }
+str banner() { return "zark"; }
 
 void main() {
     const auto l = comptime defaults();
@@ -93,7 +93,7 @@ void main() {
 
 `comptime` на верхнем уровне вычисляется до сборки программы. Если он паникует или не проходит `assert`, компиляция останавливается. Это статическая проверка:
 
-```vibe error
+```zark error
 struct Header { u8 kind; i64 length; }
 
 comptime assert(sizeof(Header) == 9);

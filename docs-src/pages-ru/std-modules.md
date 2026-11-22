@@ -7,7 +7,7 @@ description: Модули, которые импортируются из std/: 
 
 Кроме прелюдии, которую каждая программа получает автоматически, в стандартной библиотеке есть модули, которые подключаются по имени. Они встроены в компилятор, устанавливать ничего не нужно:
 
-```vibe fragment
+```zark fragment
 import "std/fs" as fs;
 import "std/json" as json;
 ```
@@ -26,11 +26,11 @@ import "std/json" as json;
 | `std/http` | HTTP/1.1-клиент и небольшой сервер |
 | `std/thread` | потоки, `Mutex`, `Cond`, `WaitGroup`, `Channel<T>` |
 
-Как и всё в Vibe, здесь ничего не выделяет память само: функции, возвращающие новые строки или списки, принимают `Allocator`, а у результата есть `deinit()` или его освобождают тем же аллокатором.
+Как и всё в Zark, здесь ничего не выделяет память само: функции, возвращающие новые строки или списки, принимают `Allocator`, а у результата есть `deinit()` или его освобождают тем же аллокатором.
 
 ## `std/fs`
 
-```vibe run
+```zark run
 import "std/fs" as fs;
 import "std/path" as path;
 
@@ -42,12 +42,12 @@ import "std/path" as path;
     const auto dir = fs::temp_dir(a, "demo")?;
     defer fs::remove_all(a, dir) catch |e| {};
     fs::make_dirs(path::join(a, [dir, "src/util"])?)?;
-    write_file(path::join(a, [dir, "src/main.vibe"])?, "void main() {{}")?;
-    write_file(path::join(a, [dir, "src/util/str.vibe"])?, "")?;
+    write_file(path::join(a, [dir, "src/main.zk"])?, "void main() {{}")?;
+    write_file(path::join(a, [dir, "src/util/str.zk"])?, "")?;
 
     const auto files = fs::walk(a, dir)?;
     println(files.slice());
-    const auto info = fs::info(path::join(a, [dir, "src/main.vibe"])?)?;
+    const auto info = fs::info(path::join(a, [dir, "src/main.zk"])?)?;
     println(info.kind, info.size, fs::is_dir(path::join(a, [dir, "src"])?));
 }
 ```
@@ -67,19 +67,19 @@ import "std/path" as path;
 
 ## `std/path`
 
-```vibe run
+```zark run
 import "std/path" as path;
 
 !void main() {
     const auto a = c_allocator();
-    println(path::base("src/net/http.vibe"), path::dir("src/net/http.vibe"), path::ext("a.tar.gz"), path::stem("a.tar.gz"));
+    println(path::base("src/net/http.zk"), path::dir("src/net/http.zk"), path::ext("a.tar.gz"), path::stem("a.tar.gz"));
     println(path::join(a, ["src", "../lib", "x.c"])?, path::normalize(a, "/a/./b/../c//")?, path::relative(a, "/a/b/c", "/a/d")?);
 }
 ```
 
 ## `std/time`
 
-```vibe run
+```zark run
 import "std/time" as time;
 
 !void main() {
@@ -97,7 +97,7 @@ import "std/time" as time;
 
 ## `std/os`
 
-```vibe run
+```zark run
 import "std/os" as os;
 
 !void main() {
@@ -116,7 +116,7 @@ import "std/os" as os;
 
 ## `std/args`
 
-```vibe run
+```zark run
 import "std/args" as args;
 
 !void main() {
@@ -135,7 +135,7 @@ import "std/args" as args;
 
 ## `std/json`
 
-```vibe run
+```zark run
 import "std/json" as json;
 
 !void main() {
@@ -143,7 +143,7 @@ import "std/json" as json;
     defer ar.deinit();
     const auto a = ar.allocator();
 
-    const auto doc = json::parse(a, "{{\"name\": \"vibe\", \"tags\": [\"fast\", \"small\"], \"stars\": 42}")?;
+    const auto doc = json::parse(a, "{{\"name\": \"zark\", \"tags\": [\"fast\", \"small\"], \"stars\": 42}")?;
     println(doc.get("name").str_or("?"), doc.get("stars").int_or(0), doc.get("missing").get("x").is_null());
     for (auto t : doc.get("tags").items()) { print("{*t} "); }
     println("");

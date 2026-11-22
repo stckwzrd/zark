@@ -15,7 +15,7 @@ There are three ways to describe your own data type:
 
 ## `struct`
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -32,7 +32,7 @@ A field is declared like a variable: type, name, `;`. A struct is printed as `Na
 
 All structs are laid out in memory as in C: the fields go in order, with padding added between them. The size is available through `sizeof`:
 
-```vibe run
+```zark run
 struct Small { u8 a; u8 b; u8 c; }
 struct Padded { u8 a; i64 b; u8 c; }
 
@@ -49,7 +49,7 @@ A literal is written as `Name{ .field = value, ... }`. It is recognized only if 
 
 Fields that are missing from the literal are filled with zeros. `Name{}` has all fields zero:
 
-```vibe run
+```zark run
 struct Config {
     i64 width;
     i64 height;
@@ -69,7 +69,7 @@ void main() {
 
 A typo in a field name is a compile error:
 
-```vibe error
+```zark error
 struct P { i64 x; i64 y; }
 
 void main() {
@@ -83,7 +83,7 @@ Defaults can be given in the field declaration (see [defaults and constructors](
 
 Assignment and passing to a function copy all the fields:
 
-```vibe run
+```zark run
 struct P { i64 x; i64 y; }
 
 void main() {
@@ -98,7 +98,7 @@ To work with one object, pass a pointer `P*` (fields are read through it with a 
 
 ### Nested structs and arrays
 
-```vibe run
+```zark run
 struct Point { i64 x; i64 y; }
 struct Line { Point a; Point b; }
 struct Poly { Point[3] pts; i64 n; }
@@ -117,7 +117,7 @@ void main() {
 
 A struct cannot contain **itself** by value, but it can contain a pointer to itself:
 
-```vibe run
+```zark run
 struct Node {
     i64 val;
     Node* next;
@@ -134,7 +134,7 @@ void main() {
 
 `==` is not defined for structs. Compare the fields:
 
-```vibe error
+```zark error
 struct A { i64 x; }
 
 void main() {
@@ -147,7 +147,7 @@ void main() {
 
 Functions tied to a type are written right inside the `struct`. Inside a method the fields are available by their bare names, and also through `this`.
 
-```vibe run
+```zark run
 struct Counter {
     i64 n;
     static Self new() {
@@ -179,7 +179,7 @@ void main() {
 - Other methods receive `this`, a **pointer** to the object, and can change the fields. They can be called on a value and on a pointer.
 - There is no by-copy form: if a method must not change the object, make a copy yourself: `auto c = *this;`.
 
-```vibe run
+```zark run
 struct V {
     i64 n;
     void by_ptr() { this->n += 1; }
@@ -203,7 +203,7 @@ void main() {
 
 An enumeration is a set of names. The value is stored as an integer (the ordinal number of the variant, from zero).
 
-```vibe run
+```zark run
 enum Color { Red, Green, Blue }
 
 void main() {
@@ -219,7 +219,7 @@ You cannot set the number of a variant (`A = 5`): it is always 0, 1, 2 and so on
 
 You can walk over all the values through a conversion from an integer:
 
-```vibe run
+```zark run
 enum Day { Mon, Tue, Wed }
 
 void main() {
@@ -234,7 +234,7 @@ void main() {
 
 ### `match` on an enum
 
-```vibe run
+```zark run
 enum Dir { North, East, South, West }
 
 Dir turn(Dir d) {
@@ -259,7 +259,7 @@ As a `match` expression it must cover all the variants. More: [control flow](con
 
 ### Methods on an enum
 
-```vibe run
+```zark run
 enum Level {
     Low, High;
 
@@ -290,7 +290,7 @@ Inside a method `this` is a pointer, so dereference it: `match *this { ... }`.
 
 A union stores **one of its variants**, and together with it a tag that says which one. A variant can have a payload (data) of any type, or none.
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -307,7 +307,7 @@ void main() {
 
 Layout: `{ i32 tag, payload }`; the size is determined by the largest variant.
 
-```vibe run
+```zark run
 union V { i64 I; f64 F; str S; N; }
 
 void main() {
@@ -319,7 +319,7 @@ void main() {
 
 The pattern `.Variant(name)` binds the payload. The bound value is a copy, read-only.
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -341,7 +341,7 @@ void main() {
 
 Testing a single variant without taking it apart is `is`:
 
-```vibe run
+```zark run
 union Msg { str Text; Quit; }
 
 void main() {
@@ -354,7 +354,7 @@ void main() {
 
 A union is convenient where a value comes in different kinds. For example, parsing a token:
 
-```vibe run
+```zark run
 union Token {
     i64 Num;
     Plus;
@@ -379,7 +379,7 @@ void main() {
 
 ### Methods on a union
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -407,7 +407,7 @@ A field can have a default value. It is applied when a struct is created with a 
 
 A constructor is a method named like the struct, without a result type. It is called like a function: `Circle(2.0)`. It receives an object already filled with the defaults and fills in the rest. No memory is allocated anywhere.
 
-```vibe run
+```zark run
 struct Config {
     i64 width = 80;
     i64 height = 24;
@@ -447,7 +447,7 @@ Nested structs get their own defaults too. There are no destructors: release res
 
 An interface describes a set of methods. A struct implements it if it has all those methods with the same types: there is no need to declare "inheritance".
 
-```vibe run
+```zark run
 interface Shape {
     f64 area();
     void scale(f64 k);
@@ -490,7 +490,7 @@ There is no implementation inheritance: shared code goes into a function or into
 
 For structs you can define `+ - * / %`, the comparisons `== != < <= > >=` and unary `-`. These are ordinary methods named `operator+` and so on, and the compiler turns `a + b` into `a.operator+(b)`. `!=` is taken from `==` if it is not defined.
 
-```vibe run
+```zark run
 struct Vec2 {
     f64 x;
     f64 y;
@@ -516,7 +516,7 @@ The operators `[]`, `()`, `->`, `<<` and assignment cannot be overloaded: an act
 
 Type parameters are written in angle brackets after the name: `struct Pair<A, B>`. The methods live inside, and the parameters need not be listed separately.
 
-```vibe run
+```zark run
 struct Pair<A, B> {
     A first;
     B second;
@@ -538,7 +538,7 @@ For every combination of arguments the compiler makes a separate copy of the typ
 
 A stack struct with a fixed-size array and methods:
 
-```vibe run
+```zark run
 struct Stack<T> {
     T[4] items;
     i64 n;

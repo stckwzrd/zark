@@ -2,16 +2,16 @@
 title: The safety model
 order: 20.5
 section: Memory and data
-description: Exactly what Vibe checks at compile time, what it checks while running, what it leaves to you, and how to cover the rest with tools
+description: Exactly what Zark checks at compile time, what it checks while running, what it leaves to you, and how to cover the rest with tools
 ---
 
-Vibe is a systems language, so it cannot promise what a garbage-collected language promises. It makes a narrower, honest promise: **a mistake is stopped as early as the compiler can see it, and otherwise it is stopped loudly, with a file and a line, instead of corrupting memory in silence.** This page lists every case, so you know what you can lean on.
+Zark is a systems language, so it cannot promise what a garbage-collected language promises. It makes a narrower, honest promise: **a mistake is stopped as early as the compiler can see it, and otherwise it is stopped loudly, with a file and a line, instead of corrupting memory in silence.** This page lists every case, so you know what you can lean on.
 
 ## Build modes
 
 | Mode | How | Checks | Use it for |
 |---|---|---|---|
-| safe | `vibe run`, `vibe build` | everything below | development, tests, most programs |
+| safe | `zark run`, `zark build` | everything below | development, tests, most programs |
 | safe and optimized | `-O` | the same checks, optimized by LLVM | production when you want the checks to stay |
 | unchecked | `--release` | bounds, division, overflow and null checks removed | a program that you have already run through the safe modes |
 | bare metal | `--freestanding` | no runtime helpers, so no checks | kernels and drivers |
@@ -23,7 +23,7 @@ Compile-time checks (types, ownership, escapes) are the same in all modes. The d
 Every problem ends in exactly one of three ways.
 
 1. **A compile error.** The program is not built. This is the best outcome.
-2. **A panic.** The program stops at once with a message, a file and a line (`panic: index 3 out of bounds (len 3) at main.vibe:4`). A panic means a bug in the program, and it cannot be caught.
+2. **A panic.** The program stops at once with a message, a file and a line (`panic: index 3 out of bounds (len 3) at main.zk:4`). A panic means a bug in the program, and it cannot be caught.
 3. **An error value.** A function returns `!T` and the caller decides. This is for things that can go wrong in a correct program: no file, bad input, no memory.
 
 ## What is stopped, and when
@@ -58,7 +58,7 @@ Nothing in the list is undefined behavior in the safe mode. The same program giv
 
 ## Ownership and borrowing without a borrow checker
 
-Vibe does not have lifetimes or a borrow checker as Rust has. It has something smaller that you can learn in ten minutes, and that catches the mistakes that happen in practice. It follows **variables** inside **one function**:
+Zark does not have lifetimes or a borrow checker as Rust has. It has something smaller that you can learn in ten minutes, and that catches the mistakes that happen in practice. It follows **variables** inside **one function**:
 
 - A parameter or method marked `move` takes the value over. The standard library marks `free`, `destroy`, every `deinit`, `join`, and the `close` of sockets and streams. After the call, the variable is dead until you assign it again.
 - A method marked `borrows` returns a pointer or slice into the object (`List.at`, `List.slice`, `Map.get_ptr`). A method marked `invalidates` may move the memory (`push`, `put`, `insert`). If you call an `invalidates` method, every pointer or slice you took from that object earlier is dead.
@@ -81,7 +81,7 @@ What the compiler cannot prove, a tool can catch while you test.
 
 **`DebugAllocator`** gives every block its own pages and makes a freed block inaccessible. A use after free, even through a copy of the pointer, stops at the exact access with the block's number, and `deinit()` lists everything that was never freed.
 
-```vibe run exit
+```zark run exit
 void touch(i64* p) { *p = 1; }
 
 !void main() {
@@ -94,7 +94,7 @@ void touch(i64* p) { *p = 1; }
 }
 ```
 
-```vibe run exit
+```zark run exit
 !void main() {
     auto dbg = DebugAllocator::init();
     const auto a = dbg.allocator();
@@ -106,7 +106,7 @@ void touch(i64* p) { *p = 1; }
 
 Run your tests with a `DebugAllocator` as the allocator. Because functions receive the allocator as a parameter, no code needs to change to do it.
 
-**`vibe test`** runs every `test` block. **`-g`** adds line and variable information for `gdb`. **A crash handler** prints the signal, the reason (null pointer, stack overflow, use after free) and a backtrace, and `VIBE_CRASH_HANDLER=0` turns it off to get a core file. See [tooling](tooling.md).
+**`zark test`** runs every `test` block. **`-g`** adds line and variable information for `gdb`. **A crash handler** prints the signal, the reason (null pointer, stack overflow, use after free) and a backtrace, and `ZARK_CRASH_HANDLER=0` turns it off to get a core file. See [tooling](tooling.md).
 
 ## Threads
 
@@ -121,7 +121,7 @@ The compiler enforces the first rule for a `Thread` held in a variable: it must 
 ## A checklist before you ship
 
 - [ ] All tests pass in the safe mode, with a `DebugAllocator` in the memory tests.
-- [ ] `vibe build -O` passes the same tests.
+- [ ] `zark build -O` passes the same tests.
 - [ ] Every `+%`, `-%` and `*%` in the code is there for a reason (a hash, a counter).
 - [ ] Every `comptime assert` that guards a file format or a layout is still there.
 - [ ] Only then, if you need the speed, build with `--release` and run the tests again.

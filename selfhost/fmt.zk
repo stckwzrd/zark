@@ -1,0 +1,256 @@
+// zark fmt: fixes spacing, indentation and blank lines. It works on tokens, keeps every line break
+// and comment where they are, and never changes the token stream.
+
+import "lexer.zk";
+
+bool value_end(Tag t) {
+    match t {
+        .ident, .int_lit, .float_lit, .str_lit, .char_lit, .rparen, .rbracket, .kw_true, .kw_false, .kw_null, .question => return true;
+    }
+    return false;
+}
+
+bool ends_value(Token t) {
+    if (t.tag == .ident && t.text == "orelse") { return false; }
+    return value_end(t.tag);
+}
+
+bool is_binary_op(Tag t) {
+    match t {
+        .eq, .eqeq, .neq, .lt, .le, .gt, .ge, .shl, .shr, .andand, .oror, .plus_eq, .minus_eq, .star_eq, .slash_eq,
+        .percent_eq, .pipe_eq, .amp_eq, .caret_eq, .shl_eq, .shr_eq, .fat_arrow, .plus, .slash, .percent, .caret, .plus_wrap, .minus_wrap, .star_wrap => return true;
+    }
+    return false;
+}
+
+bool type_start(Tag t) {
+    return t == .ident || t == .star || t == .bang || t == .question || t == .lbracket || t == .kw_fn;
+}
+
+bool is_closer(Tag t) { return t == .rbrace || t == .rparen || t == .rbracket; }
+bool is_opener(Tag t) { return t == .lbrace || t == .lparen || t == .lbracket; }
+
+i64 token_end(Token t) {
+    if (t.tag == .str_lit || t.tag == .char_lit) { return t.off + t.text.len + 1; }
+    return t.off + t.text.len;
+}
+
+i64 token_start(Token t) {
+    if (t.tag == .str_lit || t.tag == .char_lit) { return t.off - 1; }
+    return t.off;
+}
+
+struct Formatter {
+    Allocator a;
+    str src;
+    List<u8> out;
+    List<i64> stack;
+    i64 indent;
+    i64 gen;
+    bool cur_gen;
+    bool prev_gen;
+
+    !void newline(i64 n) {
+        this->out.push('\n')?;
+        if (n > 1) { this->out.push('\n')?; }
+    }
+
+    !void pad(i64 n) {
+        for (auto _i : 0..n) { this->out.push(' ')?; }
+    }
+
+    i64 base_indent() {
+        if (this->stack.len == 0) { return 0; }
+        return this->stack.get(this->stack.len - 1) + 4;
+    }
+
+    i64 line_indent(Token cur, Token prev, bool have_prev) {
+        if (is_closer(cur.tag) && this->stack.len > 0) { return this->stack.get(this->stack.len - 1); }
+        auto ind = this->base_indent();
+        if (have_prev && prev.tag != .rbrace && prev.tag != .lbrace && prev.tag != .semi && prev.tag != .comma && prev.tag != .lparen && prev.tag != .lbracket) {
+            ind += 4;
+        }
+        return ind;
+    }
+
+    bool prefix_op(Token prev2, bool have2, Token prev, Token cur, bool prev_orig, bool orig, bool prev2_pq) {
+        const auto before = !have2 || !ends_value(prev2) || prev2_pq;
+        match prev.tag {
+            .bang, .tilde => return true;
+            .minus, .star, .amp => return before;
+            .question => return before || prev_orig || (!orig && type_start(cur.tag));
+        }
+        return false;
+    }
+
+    bool wants_space(Token prev2, bool have2, Token prev, Token cur, bool prev_orig, bool orig, bool prev2_pq) {
+        const auto p = prev.tag;
+        const auto c = cur.tag;
+        const auto p2 = prev2.tag;
+        if (c == .rparen || c == .rbracket || c == .comma || c == .semi) { return false; }
+        if (c == .rbrace) { return p != .lbrace; }
+        if (p == .lbrace) { return c != .rbrace; }
+        if (p == .lparen || p == .lbracket || p == .dot) { return false; }
+        if (c == .coloncolon || p == .coloncolon) { return false; }
+        if (c == .arrow || p == .arrow) { return orig; }
+        if (c == .plusplus || c == .minusminus || p == .plusplus || p == .minusminus) { return false; }
+        if ((c == .lt || c == .gt || c == .shr) && this->cur_gen) { return orig; }
+        if ((p == .lt || p == .gt || p == .shr) && this->prev_gen) { return orig; }
+        if (c == .colon) {
+            if (have2 && p == .ident && p2 == .ident) { return orig; }
+            if (p == .rbracket && orig) { return true; }
+            return false;
+        }
+        if (c == .lbracket && p == .ident && prev.text == "auto") { return true; }
+        if (p == .colon) { return true; }
+        if (c == .question && ends_value(prev)) {
+            if (p == .rparen || p == .rbracket) { return orig; }
+            return false;
+        }
+        if (c == .dot && (ends_value(prev) || p == .rbracket || p == .kw_error)) { return false; }
+        if (p == .dotdot || c == .dotdot) {
+            if (p == .comma || p == .lbrace) { return true; }
+            return false;
+        }
+        if (this->prefix_op(prev2, have2, prev, cur, prev_orig, orig, prev2_pq)) { return false; }
+        if (p == .pipe || c == .pipe) { return orig; }
+        if (c == .lbrace) {
+            if (have2 && (p2 == .kw_struct || p2 == .kw_union || p2 == .kw_enum)) { return true; }
+            if (p == .rbracket) { return orig; }
+            if (p == .ident && prev.text.len > 0 && is_upper(prev.text[0])) { return orig; }
+            return true;
+        }
+        if (c == .lparen) {
+            if (p == .ident || p == .rparen || p == .rbracket || p == .question || p == .kw_fn || p == .kw_sizeof || p == .kw_alignof) { return false; }
+            return true;
+        }
+        if (c == .lbracket) {
+            if (p == .rparen) { return orig; }
+            if (p == .ident || p == .rbracket || p == .question || p == .kw_fn) { return false; }
+            return true;
+        }
+        if (c == .star && p == .ident) { return orig; }
+        if (p == .star && have2 && p2 == .ident) { return orig; }
+        if ((c == .star || c == .amp || c == .minus) && (p == .rparen || p == .rbracket)) { return orig; }
+        if ((p == .star || p == .amp || p == .minus) && (p2 == .rparen || p2 == .rbracket) && have2) { return orig; }
+        if (p == .rbracket && (c == .ident || c == .star || c == .lbracket || c == .bang || c == .question || c == .kw_fn)) { return orig; }
+        return true;
+    }
+
+    !GapOut gap(str gap, Token next, Token prev, bool have_tok, bool have_out) {
+        auto res = GapOut{ .nl = 0, .comment = false };
+        auto have = have_out;
+        auto i = 0;
+        while (i < gap.len) {
+            const auto ch = gap[i];
+            if (ch == '\n') {
+                res.nl += 1;
+                i += 1;
+                continue;
+            }
+            const auto line_comment = ch == '/' && i + 1 < gap.len && gap[i + 1] == '/';
+            const auto block_comment = ch == '/' && i + 1 < gap.len && gap[i + 1] == '*';
+            if (!line_comment && !block_comment) {
+                i += 1;
+                continue;
+            }
+            auto j = i;
+            if (line_comment) {
+                while (j < gap.len && gap[j] != '\n') { j += 1; }
+            } else {
+                j = i + 2;
+                while (j + 1 < gap.len && !(gap[j] == '*' && gap[j + 1] == '/')) { j += 1; }
+                if (j + 1 >= gap.len) { j = gap.len; } else { j += 2; }
+            }
+            auto e = j;
+            while (e > i && (gap[e - 1] == ' ' || gap[e - 1] == '\t' || gap[e - 1] == '\r')) { e -= 1; }
+            if (res.nl == 0 && have) {
+                auto k = i;
+                while (k > 0 && (gap[k - 1] == ' ' || gap[k - 1] == '\t')) { k -= 1; }
+                this->pad(max(i - k, 1))?;
+            } else {
+                if (have) { this->newline(res.nl)?; }
+                this->indent = this->line_indent(next, prev, have_tok);
+                if (is_closer(next.tag)) { this->indent = this->base_indent(); }
+                this->pad(this->indent)?;
+            }
+            this->out.append(gap[i..e])?;
+            res.nl = 0;
+            res.comment = true;
+            have = true;
+            i = j;
+        }
+        return res;
+    }
+}
+
+struct GapOut { i64 nl; bool comment; }
+
+!str format_source(Allocator a, str src, str file) {
+    const auto all = tokenize(a, src, file)?;
+    auto toks = List<Token>::init(a);
+    for (auto t : all) {
+        if (t.tag == .eof) { continue; }
+        if (t.tag == .semi && (t.text == "\\n" || t.text == "")) { continue; }
+        toks.push(t)?;
+    }
+    auto f = Formatter{ .a = a, .src = src, .out = List<u8>::init(a), .stack = List<i64>::init(a), .indent = 0, .gen = 0, .cur_gen = false, .prev_gen = false };
+    auto prev = Token{ .tag = .eof, .text = "", .line = 0, .off = 0 };
+    auto prev2 = Token{ .tag = .eof, .text = "", .line = 0, .off = 0 };
+    auto prev_orig = false;
+    auto last_pq = false;
+    auto have_prev = false;
+    auto have_out = false;
+    auto have_prev2 = false;
+    auto pos = 0;
+    for (auto t : toks) {
+        const auto gap = src[pos..token_start(t)];
+        const auto g = f.gap(gap, t, prev, have_prev, have_out)?;
+        auto cur_gen = false;
+        if (t.tag == .lt) { cur_gen = have_prev && (prev.tag == .kw_template || (prev.tag == .ident && gap.len == 0)); }
+        if ((t.tag == .gt || t.tag == .shr) && f.gen > 0) { cur_gen = true; }
+        f.cur_gen = cur_gen;
+        const auto pq = prev.tag == .question && have_prev && f.prefix_op(prev2, have_prev2, prev, t, prev_orig, gap.len > 0, last_pq);
+        if (g.comment) { have_out = true; }
+        if (have_out) {
+            if (g.nl > 0) {
+                auto n = g.nl;
+                if (prev.tag == .lbrace || prev.tag == .lparen || prev.tag == .lbracket || is_closer(t.tag)) { n = 1; }
+                f.newline(n)?;
+                f.indent = f.line_indent(t, prev, have_prev);
+                f.pad(f.indent)?;
+            } else if (g.comment || (have_prev && f.wants_space(prev2, have_prev2, prev, t, prev_orig, gap.len > 0, last_pq))) {
+                f.out.append(" ")?;
+            }
+        }
+        if (t.tag == .str_lit) {
+            f.out.append("\"")?;
+            f.out.append(t.text)?;
+            f.out.append("\"")?;
+        } else if (t.tag == .char_lit) {
+            f.out.append("'")?;
+            f.out.append(t.text)?;
+            f.out.append("'")?;
+        } else {
+            f.out.append(t.text)?;
+        }
+        if (cur_gen && t.tag == .lt) { f.gen += 1; }
+        if (cur_gen && t.tag == .gt) { f.gen -= 1; }
+        if (cur_gen && t.tag == .shr) { f.gen = max(f.gen - 2, 0); }
+        f.prev_gen = cur_gen;
+        if (is_closer(t.tag) && f.stack.len > 0) { f.stack.len -= 1; }
+        if (is_opener(t.tag)) { f.stack.push(f.indent)?; }
+        prev2 = prev;
+        prev_orig = gap.len > 0;
+        last_pq = pq;
+        have_prev2 = have_prev && g.nl == 0;
+        prev = t;
+        have_prev = true;
+        have_out = true;
+        pos = token_end(t);
+    }
+    _ = f.gap(src[pos..], Token{ .tag = .eof, .text = "", .line = 0, .off = 0 }, prev, have_prev, have_out)?;
+    if (toks.len == 0 && f.out.len == 0) { return ""; }
+    f.out.append("\n")?;
+    return f.out.slice();
+}

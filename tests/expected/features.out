@@ -1,5 +1,5 @@
 grid = [0, 1, 4, 9, 16, 25, 36, 49]
-Pair[i64, str]{ first: 42, second: "vibe" } -> Pair[str, i64]{ first: "vibe", second: 42 }
+Pair[i64, str]{ first: 42, second: "zark" } -> Pair[str, i64]{ first: "zark", second: 42 }
 sorted: [1, 2, 3, 7, 8, 9]
 reversed: [9, 8, 7, 3, 2, 1] contains 7? true
 popped 1, len now 5

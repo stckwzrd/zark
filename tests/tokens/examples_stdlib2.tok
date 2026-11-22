@@ -151,7 +151,7 @@
 20 .semi ;
 21 .ident println
 21 .lparen (
-21 .str_lit rfind {str_rfind_byte("a/b/c.vibe", '/')} bad {parse_float("2.x") catch -1.0}
+21 .str_lit rfind {str_rfind_byte("a/b/c.zk", '/')} bad {parse_float("2.x") catch -1.0}
 21 .rparen )
 21 .semi ;
 22 .rbrace }

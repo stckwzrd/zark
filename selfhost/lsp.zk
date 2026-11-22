@@ -1,0 +1,1213 @@
+// Language server over stdio: `zark lsp`. It reuses the compiler frontend, so what the editor shows is what the compiler says.
+
+import "loader.zk";
+import "json.zk";
+import "fmt.zk";
+import "textpos.zk";
+import "ide.zk";
+import "project.zk";
+
+extern i64 read(i32 fd, u8* buf, u64 n);
+extern i32 dup(i32 fd);
+extern i32 dup2(i32 from, i32 to);
+extern i32 close(i32 fd);
+extern i32 fileno(void* f);
+extern void* tmpfile();
+extern i32 poll(PollFd* fds, u64 n, i32 timeout);
+
+struct PollFd { i32 fd; i16 events; i16 revents; }
+
+struct Reader {
+    u8[] buf;
+    i64 pos;
+    i64 len;
+
+    bool fill() {
+        const auto n = read(0, this->buf.ptr, this->buf.len as u64);
+        if (n <= 0) { return false; }
+        this->pos = 0;
+        this->len = n;
+        return true;
+    }
+
+    i64 byte() {
+        if (this->pos >= this->len && !this->fill()) { return -1; }
+        const auto b = this->buf[this->pos];
+        this->pos += 1;
+        return b as i64;
+    }
+
+    bool pending() {
+        if (this->pos < this->len) { return true; }
+        auto p = PollFd{ .fd = 0, .events = 1, .revents = 0 };
+        return poll(&p, 1, 0) > 0;
+    }
+
+    !str message(Allocator a) {
+        auto length = -1;
+        while (true) {
+            auto line = List<u8>::init(a);
+            while (true) {
+                const auto b = this->byte();
+                if (b < 0) { return error.Eof; }
+                if (b == '\n') { break; }
+                if (b != '\r') { line.push(b as u8)?; }
+            }
+            if (line.len == 0) {
+                if (length >= 0) { break; }
+                continue;
+            }
+            const auto h = line.slice();
+            if (h.len > 15 && str_starts_with(h, "Content-Length:")) {
+                length = (parse_int(str_trim(h[15..])) catch 0) as i64;
+            }
+        }
+        if (length > 268435456) { length = 0; }
+        const auto body = a.alloc<u8>(length)?;
+        for (auto i : 0..length) {
+            const auto b = this->byte();
+            if (b < 0) { return error.Eof; }
+            body[i] = b as u8;
+        }
+        return body;
+    }
+}
+
+!Reader new_reader(Allocator a) {
+    return Reader{ .buf = a.alloc<u8>(65536)?, .pos = 0, .len = 0 };
+}
+
+struct Doc {
+    str uri;
+    str path;
+    str text;
+    i64 version;
+    List<i64> starts;
+    bool open;
+    str last_syms;
+
+    Text tx() { return Text{ .text = this->text, .starts = this->starts } };
+}
+
+struct Server {
+    Allocator a;
+    Reader rd;
+    void* out;
+    Map<Doc*> docs;
+    List<str> dirty;
+    Map<List<str >> published;
+    str root;
+    bool down;
+
+    void send(str body) {
+        auto hdr = List<u8>::init(this->a);
+        sprint(&hdr, "Content-Length: {body.len}\r\n\r\n") catch return;
+        _ = fwrite(hdr.items.ptr, 1, hdr.len as u64, this->out);
+        _ = fwrite(body.ptr, 1, body.len as u64, this->out);
+        _ = fflush(this->out);
+        hdr.deinit();
+    }
+
+    !void reply(Allocator a, Json* id, str result) {
+        auto w = new_jw(a);
+        w.obj()?;
+        w.key("jsonrpc")?;
+        w.str("2.0")?;
+        w.key("id")?;
+        if (jkind(id) == .Str) { w.str(jstr(id, ""))? } else { w.int(jint(id, 0))?; }
+        w.key("result")?;
+        w.raw(result)?;
+        w.end()?;
+        this->send(w.text());
+    }
+
+    !void fail(Allocator a, Json* id, i64 code, str msg) {
+        auto w = new_jw(a);
+        w.obj()?;
+        w.key("jsonrpc")?;
+        w.str("2.0")?;
+        w.key("id")?;
+        if (jkind(id) == .Str) { w.str(jstr(id, ""))? } else { w.int(jint(id, 0))?; }
+        w.key("error")?;
+        w.obj()?;
+        w.key("code")?;
+        w.int(code)?;
+        w.key("message")?;
+        w.str(msg)?;
+        w.end()?;
+        w.end()?;
+        this->send(w.text());
+    }
+
+    !void notify(Allocator a, str method, str params) {
+        auto w = new_jw(a);
+        w.obj()?;
+        w.key("jsonrpc")?;
+        w.str("2.0")?;
+        w.key("method")?;
+        w.str(method)?;
+        w.key("params")?;
+        w.raw(params)?;
+        w.end()?;
+        this->send(w.text());
+    }
+
+    Doc* doc_at(Json* j) {
+        const auto uri = jstr(jget(jget(j, "textDocument"), "uri"), "");
+        return this->docs.get(uri) catch null;
+    }
+
+    !void set_doc(str uri, str text, i64 version) {
+        const auto copy = this->a.dup(text)?;
+        if (this->docs.has(uri)) {
+            const auto old = this->docs.get(uri)?;
+            this->a.free(old.text);
+            old.starts.deinit();
+            old.text = copy;
+            old.starts = compute_starts(this->a, copy)?;
+            old.version = version;
+            old.open = true;
+            return;
+        }
+        const auto path = uri_to_path(this->a, uri)?;
+        const auto d = this->a.create<Doc>()?;
+        d.uri = this->a.dup(uri)?;
+        d.path = canonical(this->a, path)?;
+        uri_map.put(d.path, d.uri)?;
+        d.text = copy;
+        d.version = version;
+        d.starts = compute_starts(this->a, copy)?;
+        d.open = true;
+        this->docs.put(d.uri, d)?;
+    }
+
+    !void publish(Allocator a, str uri, str diags) {
+        auto w = new_jw(a);
+        w.obj()?;
+        w.key("uri")?;
+        w.str(uri)?;
+        w.key("diagnostics")?;
+        w.raw(diags)?;
+        w.end()?;
+        this->notify(a, "textDocument/publishDiagnostics", w.text())?;
+    }
+
+    !void mark_dirty(str uri) {
+        for (auto x : this->dirty) { if (x == uri) { return; } }
+        this->dirty.push(this->a.dup(uri)?)?;
+    }
+}
+
+i64 hex_val(u8 c) {
+    if (c >= '0' && c <= '9') { return (c - '0') as i64; }
+    if (c >= 'a' && c <= 'f') { return (c - 'a') as i64 + 10; }
+    if (c >= 'A' && c <= 'F') { return (c - 'A') as i64 + 10; }
+    return -1;
+}
+
+!str uri_to_path(Allocator a, str uri) {
+    auto s = uri;
+    if (str_starts_with(s, "file://")) { s = s[7..]; }
+    auto b = List<u8>::init(a);
+    auto i = 0;
+    while (i < s.len) {
+        if (s[i] == '%' && i + 2 < s.len && hex_val(s[i + 1]) >= 0 && hex_val(s[i + 2]) >= 0) {
+            b.push((hex_val(s[i + 1]) * 16 + hex_val(s[i + 2])) as u8)?;
+            i += 3;
+        } else {
+            b.push(s[i])?;
+            i += 1;
+        }
+    }
+    return b.slice();
+}
+
+Map<str> uri_map = Map<str>{};
+bool rename_blocked = false;
+
+!str path_to_uri(Allocator a, str path) {
+    if (uri_map.has(path)) { return uri_map.get(path); }
+    auto b = List<u8>::init(a);
+    b.append("file://")?;
+    for (auto c : path) {
+        if (is_alnum(c) || c == '/' || c == '-' || c == '_' || c == '.' || c == '~') {
+            b.push(c)?;
+        } else {
+            sprint(&b, "%{c:02X}")?;
+        }
+    }
+    return b.slice();
+}
+
+!str capabilities(Allocator a) {
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("capabilities")?;
+    w.obj()?;
+    w.key("positionEncoding")?;
+    w.str("utf-16")?;
+    w.key("textDocumentSync")?;
+    w.obj()?;
+    w.key("openClose")?;
+    w.bool(true)?;
+    w.key("change")?;
+    w.int(1)?;
+    w.key("save")?;
+    w.obj()?;
+    w.end()?;
+    w.end()?;
+    w.key("documentSymbolProvider")?;
+    w.bool(true)?;
+    w.key("documentFormattingProvider")?;
+    w.bool(true)?;
+    w.key("hoverProvider")?;
+    w.bool(true)?;
+    w.key("completionProvider")?;
+    w.obj()?;
+    w.key("triggerCharacters")?;
+    w.arr()?;
+    w.str(".")?;
+    w.str(":")?;
+    w.str(">")?;
+    w.end()?;
+    w.end()?;
+    w.key("signatureHelpProvider")?;
+    w.obj()?;
+    w.key("triggerCharacters")?;
+    w.arr()?;
+    w.str("(")?;
+    w.str(",")?;
+    w.end()?;
+    w.end()?;
+    w.key("definitionProvider")?;
+    w.bool(true)?;
+    w.key("referencesProvider")?;
+    w.bool(true)?;
+    w.key("workspaceSymbolProvider")?;
+    w.bool(true)?;
+    w.key("codeActionProvider")?;
+    w.obj()?;
+    w.key("codeActionKinds")?;
+    w.arr()?;
+    w.str("quickfix")?;
+    w.end()?;
+    w.end()?;
+    w.key("documentHighlightProvider")?;
+    w.bool(true)?;
+    w.key("renameProvider")?;
+    w.obj()?;
+    w.key("prepareProvider")?;
+    w.bool(true)?;
+    w.end()?;
+    w.end()?;
+    w.key("serverInfo")?;
+    w.obj()?;
+    w.key("name")?;
+    w.str("zark")?;
+    w.end()?;
+    w.end()?;
+    return w.text();
+}
+
+!str format_doc(Server* s, Allocator a, Doc* d) {
+    auto w = new_jw(a);
+    w.arr()?;
+    const auto saved = dup(2);
+    const auto tmp = tmpfile();
+    _ = dup2(fileno(tmp), 2);
+    const auto out = format_source(a, d.text, d.path) catch "";
+    _ = dup2(saved, 2);
+    _ = close(saved);
+    _ = fclose(tmp);
+    if (out.len > 0 && out != d.text) {
+        const auto last = d.starts.len - 1;
+        w.obj()?;
+        w.key("range")?;
+        auto rw = new_jw(a);
+        try_range(&rw, d.tx(), 0, d.text.len)?;
+        w.raw(rw.text())?;
+        w.key("newText")?;
+        w.str(out)?;
+        w.end()?;
+    }
+    w.end()?;
+    return w.text();
+}
+
+struct Diag {
+    str path;
+    i64 line;
+    str text;
+    i64 col;
+    str msg;
+}
+
+i32 silence_begin() {
+    const auto saved = dup(2);
+    const auto tmp = tmpfile();
+    _ = dup2(fileno(tmp), 2);
+    _ = fclose(tmp);
+    return saved;
+}
+
+void silence_end(i32 saved) {
+    _ = dup2(saved, 2);
+    _ = close(saved);
+}
+
+void run_frontend(Server* s, Allocator a, Doc* d) {
+    const auto g = new_gen(a, true) catch return;
+    auto overrides = Map<str>::init(a);
+    for (auto e : s.docs.entries) {
+        if (e.used && e.value.open) { overrides.put(e.value.path, e.value.text) catch return; }
+    }
+    auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = overrides };
+    diag_prelude = PRELUDE;
+    diag_files = overrides;
+    g.test_root = d.path;
+    loader.load_source(PRELUDE, "<std>", "") catch {
+        g.flush_diag();
+        return;
+    };
+    project_setup_for(a, d.path);
+    loader.load_file(d.path, "") catch {
+        g.flush_diag();
+        return;
+    };
+    g.generate_check(d.path) catch g.flush_diag();
+}
+
+!str capture_check(Server* s, Allocator a, Doc* d) {
+    const auto saved = dup(2);
+    const auto tmp = tmpfile();
+    _ = dup2(fileno(tmp), 2);
+    run_frontend(s, a, d);
+    diag_files = Map<str>{};
+    _ = dup2(saved, 2);
+    _ = close(saved);
+    _ = fseek(tmp, 0, 2);
+    const auto n = ftell(tmp);
+    _ = fseek(tmp, 0, 0);
+    auto out = "";
+    if (n > 0) {
+        const auto buf = a.alloc<u8>(n)?;
+        _ = fread(buf.ptr, 1, n as u64, tmp);
+        out = buf;
+    }
+    _ = fclose(tmp);
+    return out;
+}
+
+!List<Diag> parse_diags(Allocator a, str text, str root) {
+    auto out = List<Diag>::init(a);
+    auto lines = List<str>::init(a);
+    auto st = 0;
+    for (auto [i, c] : text) {
+        if (c == '\n') {
+            lines.push(text[st..i])?;
+            st = i + 1;
+        }
+    }
+    if (st < text.len) { lines.push(text[st..])?; }
+    for (auto [i, ln] : lines) {
+        const auto at = str_find(ln, ": error: ");
+        if (at < 0) {
+            if (str_starts_with(ln, "error: ")) { out.push(Diag{ .path = root, .line = 1, .text = "", .col = -1, .msg = ln[7..] })?; }
+            continue;
+        }
+        const auto head = ln[0..at];
+        const auto colon = str_rfind_byte(head, ':');
+        if (colon < 0) { continue; }
+        const auto path = head[0..colon];
+        if (str_starts_with(path, "<")) { continue; }
+        auto d = Diag{ .path = path, .line = (parse_int(head[colon + 1..]) catch 1) as i64, .text = "", .col = -1, .msg = ln[at + 9..] };
+        if (i + 1 < lines.len) {
+            const auto sn = lines.get(i + 1);
+            if (sn.len >= 8 && sn[5..8] == " | " && is_digit(str_trim(sn[0..5])[0])) {
+                d.line = (parse_int(str_trim(sn[0..5])) catch 1) as i64;
+                d.text = sn[8..];
+                if (i + 2 < lines.len) {
+                    const auto cr = lines.get(i + 2);
+                    if (str_starts_with(cr, "      | ")) {
+                        const auto caret = str_rfind_byte(cr, '^');
+                        if (caret >= 8) { d.col = caret - 8; }
+                    }
+                }
+            }
+        }
+        out.push(d)?;
+    }
+    return out;
+}
+
+!str diag_json(Allocator a, Diag dg) {
+    auto from = 0;
+    auto to = 0;
+    if (dg.col >= 0) {
+        from = utf16_between(dg.text, 0, dg.col);
+        auto e = dg.col;
+        while (e < dg.text.len && (is_alnum(dg.text[e]) || dg.text[e] == '_' || dg.text[e] == '.')) { e += 1; }
+        if (e == dg.col && e < dg.text.len) { e += 1; }
+        to = utf16_between(dg.text, 0, e);
+        if (to <= from) { to = from + 1; }
+    } else {
+        to = 1000;
+    }
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("range")?;
+    w.obj()?;
+    w.key("start")?;
+    w.obj()?;
+    w.key("line")?;
+    w.int(max(dg.line - 1, 0))?;
+    w.key("character")?;
+    w.int(from)?;
+    w.end()?;
+    w.key("end")?;
+    w.obj()?;
+    w.key("line")?;
+    w.int(max(dg.line - 1, 0))?;
+    w.key("character")?;
+    w.int(to)?;
+    w.end()?;
+    w.end()?;
+    w.key("severity")?;
+    w.int(1)?;
+    w.key("source")?;
+    w.str("zark")?;
+    w.key("message")?;
+    w.str(dg.msg)?;
+    w.end()?;
+    return w.text();
+}
+
+void run_checks(Server* s) {
+    auto uris = List<str>::init(s.a);
+    for (auto u : s.dirty) { uris.push(u) catch return; }
+    s.dirty.len = 0;
+    for (auto u : uris) {
+        const auto d = s.docs.get(u) catch null;
+        if (d == null || !d.open) { continue; }
+        auto ar = Arena::init(c_allocator());
+        const auto a = ar.allocator();
+        check_doc(s, a, d) catch |e| {
+            eprintln("zark lsp: check failed: {e}");
+        };
+        ar.deinit();
+    }
+    for (auto u : uris) { s.a.free(u); }
+    uris.deinit();
+}
+
+!void check_doc(Server* s, Allocator a, Doc* d) {
+    const auto text = capture_check(s, a, d)?;
+    const auto diags = parse_diags(a, text, d.path)?;
+    auto paths = List<str>::init(a);
+    paths.push(d.path)?;
+    for (auto dg : diags) {
+        if (!contains_str(paths, dg.path)) { paths.push(dg.path)?; }
+    }
+    for (auto p : paths) {
+        auto w = new_jw(a);
+        w.arr()?;
+        for (auto dg : diags) {
+            if (dg.path == p) { w.raw(diag_json(a, dg)?)?; }
+        }
+        w.end()?;
+        s.publish(a, path_to_uri(a, p)?, w.text())?;
+    }
+    if (s.published.has(d.path)) {
+        const auto olds = s.published.get(d.path)?;
+        for (auto old : olds) {
+            if (!contains_str(paths, old)) { s.publish(a, path_to_uri(a, old)?, "[]")?; }
+            s.a.free(old);
+        }
+        olds.deinit();
+    }
+    auto keep = List<str>::init(s.a);
+    for (auto p : paths) { keep.push(s.a.dup(p)?)?; }
+    s.published.put(d.path, keep)?;
+}
+
+struct Node2 {
+    i64 kind;
+    str name;
+    i64 from;
+    i64 to;
+    i64 sel;
+    i64 sel_len;
+    List<Node2*> kids;
+}
+
+!Node2* node2(Allocator a, i64 kind, str name, i64 from, i64 to, i64 sel) {
+    const auto n = a.create<Node2>()?;
+    *n = Node2{ .kind = kind, .name = name, .from = from, .to = max(to, from), .sel = sel, .sel_len = name.len, .kids = List<Node2*>::init(a) };
+    return n;
+}
+
+!void render_node(JW* w, Allocator a, Doc* d, Node2* n) {
+    w.obj()?;
+    w.key("name")?;
+    w.str(n.name)?;
+    w.key("kind")?;
+    w.int(n.kind)?;
+    w.key("range")?;
+    auto rw = new_jw(a);
+    try_range(&rw, d.tx(), n.from, n.to)?;
+    w.raw(rw.text())?;
+    w.key("selectionRange")?;
+    auto sw = new_jw(a);
+    try_range(&sw, d.tx(), n.sel, n.sel + n.sel_len)?;
+    w.raw(sw.text())?;
+    if (n.kids.len > 0) {
+        w.key("children")?;
+        w.arr()?;
+        for (auto k : n.kids) { render_node(w, a, d, k)?; }
+        w.end()?;
+    }
+    w.end()?;
+}
+
+i64 line_start_off(Doc* d, i64 line) {
+    if (line < 1) { return 0; }
+    if (line > d.starts.len) { return d.text.len; }
+    return d.starts.get(line - 1);
+}
+
+!List<Node2*> build_symbols(Allocator a, Doc* d, List<Decl> decls) {
+    auto top = List<Node2*>::init(a);
+    auto owners = Map<Node2*>::init(a);
+    for (auto dc : decls) {
+        match dc.k {
+            .Struct => {
+                const auto sd = dc.s;
+                auto kind = 23;
+                if (sd.is_union) { kind = 23; }
+                const auto n = node2(a, kind, sd.name, line_start_off(d, sd.line), d.tx().line_end(d.tx().line_of(sd.name_off)), sd.name_off)?;
+                for (auto f : sd.fields) {
+                    const auto k = node2(a, 8, f.name, f.off, f.off + f.name.len, f.off)?;
+                    n.kids.push(k)?;
+                    n.to = max(n.to, k.to);
+                }
+                owners.put(sd.name, n)?;
+                top.push(n)?;
+            }
+            .Enum => {
+                const auto ed = dc.en;
+                const auto n = node2(a, 10, ed.name, line_start_off(d, ed.line), d.tx().line_end(d.tx().line_of(ed.name_off)), ed.name_off)?;
+                for (auto [i, v] : ed.variants) {
+                    const auto k = node2(a, 22, v, ed.variant_offs.get(i), ed.variant_offs.get(i) + v.len, ed.variant_offs.get(i))?;
+                    n.kids.push(k)?;
+                    n.to = max(n.to, k.to);
+                }
+                owners.put(ed.name, n)?;
+                top.push(n)?;
+            }
+            .Const => {
+                auto kind = 14;
+                if (dc.c.mutable) { kind = 13; }
+                top.push(node2(a, kind, dc.c.name, line_start_off(d, dc.c.line), dc.c.name_off + dc.c.name.len, dc.c.name_off)?)?;
+            }
+            .Alias => top.push(node2(a, 26, dc.path, line_start_off(d, dc.line), dc.name_off + dc.path.len, dc.name_off)?)?;
+            .Func => {
+                const auto f = dc.f;
+                auto name = f.name;
+                auto kind = 12;
+                if (f.is_test) {
+                    auto nb = List<u8>::init(a);
+                    sprint(&nb, "test \"{f.test_name}\"")?;
+                    name = nb.slice();
+                    kind = 24;
+                }
+                auto to = f.end_off + 1;
+                if (f.body == null) { to = f.name_off + f.name.len; }
+                auto sel_len = f.name.len;
+                if (f.is_test) { sel_len = 4; }
+                const auto n = node2(a, kind, name, line_start_off(d, f.line), to, f.name_off)?;
+                n.sel_len = sel_len;
+                if (f.receiver.len > 0) {
+                    n.kind = 6;
+                    if (owners.has(f.receiver)) {
+                        const auto o = owners.get(f.receiver)?;
+                        o.kids.push(n)?;
+                        o.to = max(o.to, n.to);
+                        continue;
+                    }
+                }
+                top.push(n)?;
+            }
+        }
+    }
+    return top;
+}
+
+!str document_symbols(Server* s, Allocator a, Doc* d) {
+    const auto saved = silence_begin();
+    auto ok = true;
+    auto decls = List<Decl>::init(a);
+    const auto toks = tokenize(a, d.text, d.path) catch {
+        ok = false;
+        List<Token>::init(a);
+    };
+    if (ok) {
+        auto p = new_parser(a, toks.slice(), d.path);
+        decls = p.parse_file() catch {
+            ok = false;
+            decls;
+        }
+    }
+    silence_end(saved);
+    if (!ok) {
+        if (d.last_syms.len == 0) { return "[]"; }
+        return d.last_syms;
+    }
+    const auto nodes = build_symbols(a, d, decls)?;
+    auto w = new_jw(a);
+    w.arr()?;
+    for (auto n : nodes) { render_node(&w, a, d, n)?; }
+    w.end()?;
+    if (d.last_syms.len > 0) { s.a.free(d.last_syms); }
+    d.last_syms = s.a.dup(w.text())?;
+    return w.text();
+}
+
+!Project* analysis_for(Server* s, Allocator a, Doc* d, i64 off) {
+    return analysis_with(s, a, d, d.text, off);
+}
+
+!Project* analysis_with(Server* s, Allocator a, Doc* d, str text, i64 off) {
+    const auto p = a.create<Project>()?;
+    auto ov = Map<str>::init(a);
+    for (auto e : s.docs.entries) {
+        if (e.used && e.value.open) { ov.put(e.value.path, e.value.text)?; }
+    }
+    ov.put(d.path, text)?;
+    *p = new_project(a, ov);
+    const auto saved = silence_begin();
+    analyze(p, d.path, d.path, off) catch {};
+    silence_end(saved);
+    return p;
+}
+
+i64 cursor_of(Doc* d, Json* params) {
+    const auto pos = jget(params, "position");
+    return d.tx().offset(jint(jget(pos, "line"), 0), jint(jget(pos, "character"), 0));
+}
+
+!void handle_completion(Server* s, Allocator a, Json* id, str method, Json* params) {
+    const auto d = s.doc_at(params);
+    if (d == null) {
+        s.reply(a, id, "null")?;
+        return;
+    }
+    const auto off = cursor_of(d, params);
+    if (method == "textDocument/signatureHelp") {
+        const auto p = analysis_for(s, a, d, off)?;
+        const auto saved = silence_begin();
+        const auto out = signature_help(a, p, d.path, d.text, off);
+        silence_end(saved);
+        s.reply(a, id, out?)?;
+        return;
+    }
+    auto ps = off;
+    while (ps > 0 && is_idc(d.text[ps - 1])) { ps -= 1; }
+    auto text = d.text;
+    auto at = off;
+    if (ps > 0 && d.text[ps - 1] == '.') {
+        auto b = List<u8>::init(a);
+        b.append(d.text[0..ps - 1])?;
+        b.append(d.text[off..])?;
+        text = b.slice();
+        at = ps - 1;
+    }
+    const auto p = analysis_with(s, a, d, text, at)?;
+    const auto saved = silence_begin();
+    const auto out = completion(a, p, d.path, d.text, off);
+    silence_end(saved);
+    s.reply(a, id, out?)?;
+}
+
+!bool handle_query(Server* s, Allocator a, Json* id, str method, Json* params) {
+    if (method == "textDocument/completion" || method == "textDocument/signatureHelp") {
+        handle_completion(s, a, id, method, params)?;
+        return true;
+    }
+    if (method == "workspace/symbol") {
+        s.reply(a, id, workspace_symbols(s, a, jstr(jget(params, "query"), ""))?)?;
+        return true;
+    }
+    if (method == "textDocument/codeAction") {
+        s.reply(a, id, code_actions(a, params)?)?;
+        return true;
+    }
+    if (method == "textDocument/references" || method == "textDocument/rename") {
+        const auto d = s.doc_at(params);
+        if (d == null) {
+            s.reply(a, id, "null")?;
+            return true;
+        }
+        const auto off = cursor_of(d, params);
+        if (method == "textDocument/references") { s.reply(a, id, refs_json(s, a, d, off, jbool(jget(jget(params, "context"), "includeDeclaration"), true))?)?; }
+        if (method == "textDocument/rename") { s.reply(a, id, rename_json(s, a, d, off, jstr(jget(params, "newName"), ""))?)?; }
+        return true;
+    }
+    if (method != "textDocument/hover" && method != "textDocument/definition" && method != "textDocument/references" && method != "textDocument/documentHighlight" && method != "textDocument/prepareRename" && method != "textDocument/rename") { return false; }
+    const auto d = s.doc_at(params);
+    if (d == null) {
+        s.reply(a, id, "null")?;
+        return true;
+    }
+    const auto off = cursor_of(d, params);
+    const auto p = analysis_for(s, a, d, off)?;
+    if (method == "textDocument/hover") { s.reply(a, id, hover(a, p, d.path, d.text, off)?)?; }
+    if (method == "textDocument/definition") { s.reply(a, id, definition(a, p, d.path, d.text, off)?)?; }
+    if (method == "textDocument/documentHighlight") { s.reply(a, id, highlights(a, p, d.path, d.text, off)?)?; }
+    if (method == "textDocument/prepareRename") { s.reply(a, id, prepare_rename(a, p, d.path, d.text, off)?)?; }
+    return true;
+}
+
+!void handle(Server* s, Allocator a, Json* msg) {
+    const auto method = jstr(jget(msg, "method"), "");
+    const auto id = jget(msg, "id");
+    const auto params = jget(msg, "params");
+    const auto is_req = id != null && jkind(id) != .Null;
+    if (method == "initialize") {
+        auto root = jstr(jget(params, "rootUri"), "");
+        const auto folders = jget(params, "workspaceFolders");
+        if (jlen(folders) > 0) { root = jstr(jget(jat(folders, 0), "uri"), root); }
+        if (root.len > 0) { s.root = uri_to_path(s.a, root)?; }
+        s.reply(a, id, capabilities(a)?)?;
+        return;
+    }
+    if (method == "shutdown") {
+        s.down = true;
+        s.reply(a, id, "null")?;
+        return;
+    }
+    if (method == "exit") {
+        exit(0);
+        return;
+    }
+    if (method == "textDocument/didOpen") {
+        const auto td = jget(params, "textDocument");
+        const auto uri = jstr(jget(td, "uri"), "");
+        s.set_doc(uri, jstr(jget(td, "text"), ""), jint(jget(td, "version"), 0))?;
+        s.mark_dirty(uri)?;
+        return;
+    }
+    if (method == "textDocument/didChange") {
+        const auto td = jget(params, "textDocument");
+        const auto uri = jstr(jget(td, "uri"), "");
+        const auto changes = jget(params, "contentChanges");
+        if (jlen(changes) > 0) {
+            const auto last = jat(changes, jlen(changes) - 1);
+            s.set_doc(uri, jstr(jget(last, "text"), ""), jint(jget(td, "version"), 0))?;
+            s.mark_dirty(uri)?;
+        }
+        return;
+    }
+    if (method == "textDocument/didSave") {
+        s.mark_dirty(jstr(jget(jget(params, "textDocument"), "uri"), ""))?;
+        return;
+    }
+    if (method == "textDocument/didClose") {
+        const auto uri = jstr(jget(jget(params, "textDocument"), "uri"), "");
+        const auto d = s.docs.get(uri) catch null;
+        if (d != null) { d.open = false; }
+        s.publish(a, uri, "[]")?;
+        return;
+    }
+    if (method == "textDocument/formatting") {
+        const auto d = s.doc_at(params);
+        if (d == null) {
+            s.reply(a, id, "[]")?;
+            return;
+        }
+        s.reply(a, id, format_doc(s, a, d)?)?;
+        return;
+    }
+    if (method == "textDocument/documentSymbol") {
+        const auto d = s.doc_at(params);
+        if (d == null) {
+            s.reply(a, id, "[]")?;
+            return;
+        }
+        s.reply(a, id, document_symbols(s, a, d)?)?;
+        return;
+    }
+    if (is_req && handle_query(s, a, id, method, params)?) { return; }
+    if (is_req) { s.fail(a, id, -32601, "method not found")?; }
+}
+
+i32 lsp_main() {
+    const auto a = c_allocator();
+    uri_map = Map<str>::init(a);
+    auto s = Server{
+        .a = a, .rd = new_reader(a) catch return 1, .out = fdopen(1, "wb"), .docs = Map<Doc*>::init(a), .dirty = List<str>::init(a),
+        .published = Map<List<str >>::init(a), .root = "", .down = false,
+    };
+    while (true) {
+        if (s.dirty.len > 0 && !s.rd.pending()) { run_checks(&s); }
+        auto ar = Arena::init(c_allocator());
+        const auto ta = ar.allocator();
+        const auto body = s.rd.message(ta) catch {
+            break;
+        };
+        const auto msg = json_parse(ta, body) catch {
+            ar.deinit();
+            continue;
+        };
+        handle(&s, ta, msg) catch |e| {
+            eprintln("zark lsp: {e}");
+            const auto rid = jget(msg, "id");
+            if (rid != null && jkind(rid) != .Null) { s.fail(ta, rid, -32603, "internal error") catch {} };
+        };
+        ar.deinit();
+    }
+    return 0;
+}
+
+extern void* popen(u8* cmd, u8* mode);
+extern i32 pclose(void* f);
+
+struct OccRef { str file; i64 off; str range; bool decl; }
+
+u8 lc(u8 c) {
+    if (c >= 'A' && c <= 'Z') { return c + 32; }
+    return c;
+}
+
+!List<str> list_workspace(Allocator a, str root) {
+    auto out = List<str>::init(a);
+    if (root.len == 0 || str_find_byte(root, '\'') >= 0) { return out; }
+    auto cmd = List<u8>::init(a);
+    sprint(&cmd, "find '{root}' -name '*.zk' -not -path '*/.zark-cache/*' -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -2000")?;
+    const auto f = popen(a.dupz(cmd.slice())?, "r");
+    if (f == null) { return out; }
+    auto buf = List<u8>::init(a);
+    u8[4096] chunk;
+    while (true) {
+        const auto n = fread(chunk.ptr, 1, 4096, f);
+        if (n == 0) { break; }
+        buf.append(chunk[0..n as i64])?;
+    }
+    _ = pclose(f);
+    auto st = 0;
+    const auto text = buf.slice();
+    for (auto [i, c] : text) {
+        if (c == '\n') {
+            if (i > st) { out.push(canonical(a, text[st..i])?)?; }
+            st = i + 1;
+        }
+    }
+    return out;
+}
+
+!List<str> file_imports(Allocator a, str path) {
+    auto out = List<str>::init(a);
+    const auto src = read_file(a, path) catch return out;
+    const auto toks = tokenize(a, src, path)?;
+    auto p = new_parser(a, toks.slice(), path);
+    const auto decls = p.parse_file()?;
+    for (auto d : decls) {
+        if (d.k == .Import) { out.push(canonical(a, join_path(a, dir_of(path), d.path)?)?)? };
+    }
+    return out;
+}
+
+!List<str> roots_for(Server* s, Allocator a, str target, str hint_dir) {
+    auto base = s.root;
+    if (base.len == 0) { base = hint_dir; }
+    const auto files = list_workspace(a, base)?;
+    auto imports = Map<List<str >>::init(a);
+    const auto saved = silence_begin();
+    auto tname = target;
+    const auto ts = str_rfind_byte(target, '/');
+    if (ts >= 0) { tname = target[ts + 1..]; }
+    for (auto f : files) {
+        const auto im = file_imports(a, f) catch {
+            const auto text = read_file(a, f) catch "";
+            if (str_find(text, tname) >= 0) { rename_blocked = true; }
+            List<str>::init(a);
+        };
+        imports.put(f, im)?;
+    }
+    silence_end(saved);
+    auto reach = List<str>::init(a);
+    reach.push(target)?;
+    auto changed = true;
+    while (changed) {
+        changed = false;
+        for (auto f : files) {
+            if (contains_str(reach, f)) { continue; }
+            const auto im = imports.get(f) catch {
+                continue;
+            };
+            for (auto x : im) {
+                if (contains_str(reach, x)) {
+                    reach.push(f)?;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    auto roots = List<str>::init(a);
+    for (auto f : reach) {
+        auto imported = false;
+        for (auto g : reach) {
+            if (g == f) { continue; }
+            const auto im = imports.get(g) catch {
+                continue;
+            };
+            if (contains_str(im, f)) { imported = true; }
+        }
+        if (!imported) { roots.push(f)?; }
+    }
+    if (roots.len == 0) { roots.push(target)?; }
+    return roots;
+}
+
+!void collect_refs(Allocator a, Project* p, str tfile, i64 toff, Map<bool>*seen, List<OccRef>*out) {
+    for (auto o : p.occs) {
+        if (o.sym.file != tfile || o.sym.off != toff || !p.by_path.has(o.file)) { continue; }
+        auto kb = List<u8>::init(a);
+        sprint(&kb, "{o.file}:{o.off}")?;
+        if (seen.has(kb.slice())) { continue; }
+        seen.put(kb.slice(), true)?;
+        auto rw = new_jw(a);
+        range_json(a, &rw, p, o.file, o.off, o.len)?;
+        out.push(OccRef{ .file = o.file, .off = o.off, .range = rw.text(), .decl = o.off == toff && o.file == tfile })?;
+    }
+}
+
+!List<OccRef> all_refs(Server* s, Allocator a, Doc* d, i64 off) {
+    auto out = List<OccRef>::init(a);
+    auto seen = Map<bool>::init(a);
+    const auto p = analysis_for(s, a, d, off)?;
+    const auto sym = sym_for(p, d.path, d.text, off);
+    if (sym == null || sym.file == "<std>" || sym.off < 0) { return out; }
+    collect_refs(a, p, sym.file, sym.off, &seen, &out)?;
+    if (sym.k == .Local || sym.k == .Param || sym.k == .TypeParam) { return out };
+    const auto roots = roots_for(s, a, sym.file, dir_of(d.path)) catch return out;
+    for (auto r : roots) {
+        if (r == d.path) { continue; }
+        auto ov = Map<str>::init(a);
+        for (auto e : s.docs.entries) {
+            if (e.used && e.value.open) { ov.put(e.value.path, e.value.text)?; }
+        }
+        const auto q = a.create<Project>()?;
+        *q = new_project(a, ov);
+        const auto saved = silence_begin();
+        analyze(q, r, r, -1) catch {};
+        silence_end(saved);
+        for (auto f : q.files) { if (!f.ok) { rename_blocked = true; } }
+        collect_refs(a, q, sym.file, sym.off, &seen, &out)?;
+    }
+    return out;
+}
+
+!str refs_json(Server* s, Allocator a, Doc* d, i64 off, bool with_decl) {
+    const auto refs = all_refs(s, a, d, off)?;
+    auto w = new_jw(a);
+    w.arr()?;
+    for (auto r : refs) {
+        if (r.decl && !with_decl) { continue; }
+        w.obj()?;
+        w.key("uri")?;
+        w.str(path_to_uri(a, r.file)?)?;
+        w.key("range")?;
+        w.raw(r.range)?;
+        w.end()?;
+    }
+    w.end()?;
+    return w.text();
+}
+
+!str rename_json(Server* s, Allocator a, Doc* d, i64 off, str new_name) {
+    if (!valid_ident(new_name)) { return "null"; }
+    rename_blocked = false;
+    const auto refs = all_refs(s, a, d, off)?;
+    if (refs.len == 0 || rename_blocked) { return "null"; }
+    auto files = List<str>::init(a);
+    for (auto r : refs) { if (!contains_str(files, r.file)) { files.push(r.file)?; } }
+    auto w = new_jw(a);
+    w.obj()?;
+    w.key("changes")?;
+    w.obj()?;
+    for (auto f : files) {
+        w.key(path_to_uri(a, f)?)?;
+        w.arr()?;
+        for (auto r : refs) {
+            if (r.file != f) { continue; }
+            w.obj()?;
+            w.key("range")?;
+            w.raw(r.range)?;
+            w.key("newText")?;
+            w.str(new_name)?;
+            w.end()?;
+        }
+        w.end()?;
+    }
+    w.end()?;
+    w.end()?;
+    return w.text();
+}
+
+i64 symbol_kind_of(SymK k) {
+    match k {
+        .Fn => return 12;
+        .Method => return 6;
+        .Struct, .Union => return 23;
+        .Enum => return 10;
+        .Const => return 14;
+        .Var => return 13;
+        .Alias => return 26;
+        .Field => return 8;
+        .Variant => return 22;
+    }
+    return 13;
+}
+
+!str workspace_symbols(Server* s, Allocator a, str query) {
+    const auto files = list_workspace(a, s.root)?;
+    auto w = new_jw(a);
+    w.arr()?;
+    auto count = 0;
+    auto q = List<u8>::init(a);
+    for (auto c : query) { q.push(lc(c))?; }
+    const auto saved = silence_begin();
+    for (auto f : files) {
+        if (count >= 200) { break; }
+        const auto src = read_file(a, f) catch {
+            continue;
+        };
+        const auto toks = tokenize(a, src, f) catch {
+            continue;
+        };
+        auto ps = new_parser(a, toks.slice(), f);
+        const auto decls = ps.parse_file() catch {
+            continue;
+        };
+        const auto tx = Text{ .text = src, .starts = compute_starts(a, src)? };
+        for (auto dc : decls) {
+            auto name = "";
+            auto off = 0;
+            auto kind = 13;
+            match dc.k {
+                .Func => {
+                    if (dc.f.is_test) { continue; }
+                    name = dc.f.name;
+                    off = dc.f.name_off;
+                    kind = 12;
+                    if (dc.f.receiver.len > 0) { kind = 6; }
+                }
+                .Struct => {
+                    name = dc.s.name;
+                    off = dc.s.name_off;
+                    kind = 23;
+                }
+                .Enum => {
+                    name = dc.en.name;
+                    off = dc.en.name_off;
+                    kind = 10;
+                }
+                .Const => {
+                    name = dc.c.name;
+                    off = dc.c.name_off;
+                    kind = 14;
+                }
+                .Alias => {
+                    name = dc.path;
+                    off = dc.name_off;
+                    kind = 26;
+                }
+                .Import => continue;
+            }
+            auto lower = List<u8>::init(a);
+            for (auto c : name) { lower.push(lc(c))?; }
+            if (q.len > 0 && str_find(lower.slice(), q.slice()) < 0) { continue; }
+            w.obj()?;
+            w.key("name")?;
+            w.str(name)?;
+            w.key("kind")?;
+            w.int(kind)?;
+            w.key("location")?;
+            w.obj()?;
+            w.key("uri")?;
+            w.str(path_to_uri(a, f)?)?;
+            w.key("range")?;
+            auto rw = new_jw(a);
+            try_range(&rw, tx, off, off + name.len)?;
+            w.raw(rw.text())?;
+            w.end()?;
+            w.end()?;
+            count += 1;
+        }
+    }
+    silence_end(saved);
+    w.end()?;
+    return w.text();
+}
+
+!str code_actions(Allocator a, Json* params) {
+    const auto uri = jstr(jget(jget(params, "textDocument"), "uri"), "");
+    const auto diags = jget(jget(params, "context"), "diagnostics");
+    auto w = new_jw(a);
+    w.arr()?;
+    for (auto i : 0..jlen(diags)) {
+        const auto dg = jat(diags, i);
+        const auto msg = jstr(jget(dg, "message"), "");
+        const auto at = str_find(msg, "(did you mean '");
+        if (at < 0) { continue; }
+        const auto rest = msg[at + 15..];
+        const auto q = str_find_byte(rest, '\'');
+        if (q <= 0) { continue; }
+        const auto fix = rest[0..q];
+        auto title = List<u8>::init(a);
+        sprint(&title, "Change to '{fix}'")?;
+        const auto r = jget(dg, "range");
+        if (jint(jget(jget(r, "end"), "character"), 0) >= 1000) { continue; }
+        w.obj()?;
+        w.key("title")?;
+        w.str(title.slice())?;
+        w.key("kind")?;
+        w.str("quickfix")?;
+        w.key("isPreferred")?;
+        w.bool(true)?;
+        w.key("edit")?;
+        w.obj()?;
+        w.key("changes")?;
+        w.obj()?;
+        w.key(uri)?;
+        w.arr()?;
+        w.obj()?;
+        w.key("range")?;
+        w.obj()?;
+        w.key("start")?;
+        w.obj()?;
+        w.key("line")?;
+        w.int(jint(jget(jget(r, "start"), "line"), 0))?;
+        w.key("character")?;
+        w.int(jint(jget(jget(r, "start"), "character"), 0))?;
+        w.end()?;
+        w.key("end")?;
+        w.obj()?;
+        w.key("line")?;
+        w.int(jint(jget(jget(r, "end"), "line"), 0))?;
+        w.key("character")?;
+        w.int(jint(jget(jget(r, "end"), "character"), 0))?;
+        w.end()?;
+        w.end()?;
+        w.key("newText")?;
+        w.str(fix)?;
+        w.end()?;
+        w.end()?;
+        w.end()?;
+        w.end()?;
+        w.end()?;
+    }
+    w.end()?;
+    return w.text();
+}

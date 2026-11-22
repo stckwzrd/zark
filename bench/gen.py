@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the same program in Vibe and C (N functions with loops, branches, arrays, calls)."""
+"""Generate the same program in Zark and C (N functions with loops, branches, arrays, calls)."""
 import sys
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 500
 v, c = [], ['#include <stdio.h>']
@@ -55,5 +55,5 @@ c.append(f"""int main(void) {{
     printf("total = %ld\\n", total);
     return 0;
 }}""")
-open("w.vibe", "w").write("\n".join(v) + "\n")
+open("w.zk", "w").write("\n".join(v) + "\n")
 open("w.c", "w").write("\n".join(c) + "\n")

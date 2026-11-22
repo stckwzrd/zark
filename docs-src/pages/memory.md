@@ -2,7 +2,7 @@
 title: Memory and allocators
 order: 20
 section: Memory and data
-description: The stack and the heap, the explicit Allocator, c_allocator, FixedBuf, Arena, create/destroy, your own allocator and the typical memory mistakes in Vibe
+description: The stack and the heap, the explicit Allocator, c_allocator, FixedBuf, Arena, create/destroy, your own allocator and the typical memory mistakes in Zark
 ---
 
 The main rule of the language: **nothing allocates memory by itself.** Not strings, not interpolation, not closures, not `println`. The heap appears only where you explicitly passed an **allocator**. So when you read code you always see who takes how much and where.
@@ -11,7 +11,7 @@ The main rule of the language: **nothing allocates memory by itself.** Not strin
 
 Ordinary variables, arrays and structs live on the **stack** of a function and disappear when it exits. For data that must outlive that, or whose size is not known in advance, you need the **heap**, and it is reached through an allocator.
 
-```vibe run
+```zark run
 void main() {
     i64[4] local;
     local[0] = 1;
@@ -25,7 +25,7 @@ A fixed-size array on the stack is the cheapest way to get memory. But the size 
 
 `Allocator` is a small struct of three fields: a context and two functions.
 
-```vibe
+```zark
 struct Allocator {
     void* ctx;
     fn(void*, u64, u64) -> void* alloc_fn;
@@ -56,7 +56,7 @@ Every allocation operation returns `!...`: when memory runs out, you get an ordi
 
 ### `alloc` and `free`
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     const auto xs = a.alloc<i64>(4)?;
@@ -76,7 +76,7 @@ The memory is zeroed, so you can read it without initializing it. The size of th
 
 For a single object, such as a list node:
 
-```vibe run
+```zark run
 struct Node {
     i64 val;
     Node* next;
@@ -97,7 +97,7 @@ struct Node {
 
 ### `dup`
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     u8[3] src = [104, 105, 33];
@@ -110,9 +110,9 @@ struct Node {
 
 ## The out-of-memory error
 
-In Vibe, running out of memory is not a catastrophe but a value that gets handled. This matters most for `FixedBuf`, whose memory is limited:
+In Zark, running out of memory is not a catastrophe but a value that gets handled. This matters most for `FixedBuf`, whose memory is limited:
 
-```vibe run
+```zark run
 void main() {
     u8[64] mem;
     auto fb = FixedBuf::init(mem[..]);
@@ -132,7 +132,7 @@ void main() {
 
 `FixedBuf` hands out memory from your array in ascending order. Individual pieces need not be freed: `free` returns memory only if it was the very last allocation, otherwise it does nothing. The whole buffer is returned with one call to `reset()`. The allocator keeps a pointer to `fb`, so the variable `fb` must live as long as you use the allocator.
 
-```vibe run
+```zark run
 !void main() {
     u8[256] mem;
     auto fb = FixedBuf::init(mem[..]);
@@ -155,7 +155,7 @@ Uses: embedded systems, handling a request "within a budget", functions that mus
 
 `Arena` takes large chunks from a parent allocator and hands small pieces out of them. The chunks are taken in portions of 64 KB. Individual `free`s do nothing, and `deinit()` frees **everything** at once. It is ideal for data with a common lifetime: parsing a file, handling one request, building a tree.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -175,11 +175,11 @@ Uses: embedded systems, handling a request "within a budget", functions that mus
 }
 ```
 
-There is no need to call `list.deinit()` or `a.free(w1)`: everything goes away with `arena.deinit()`. This is exactly how the Vibe compiler itself works: one arena per run.
+There is no need to call `list.deinit()` or `a.free(w1)`: everything goes away with `arena.deinit()`. This is exactly how the Zark compiler itself works: one arena per run.
 
 A typical pattern: the allocator is passed as a parameter.
 
-```vibe run
+```zark run
 struct Config {
     str name;
     List<i64> values;
@@ -205,7 +205,7 @@ The function `load` does not know which allocator it was given. The caller decid
 
 It is enough to fill in three fields. For example, a counter that counts allocations and hands the work to a parent:
 
-```vibe run
+```zark run
 struct Counting {
     i64 count;
     i64 bytes;
@@ -243,7 +243,7 @@ void count_free(void* ctx, void* p, u64 size) {
 
 A pointer to a local variable must not be returned:
 
-```vibe error
+```zark error
 i64* bad() {
     auto x = 5;
     return &x;
@@ -256,7 +256,7 @@ After `bad` exits the stack is overwritten and the pointer would "dangle", so th
 
 The rule: data that outlives a function must live in memory owned by the caller (a slice parameter, a pointer, an allocator).
 
-```vibe run
+```zark run
 void fill(i64[] out) {
     for (auto i : 0..out.len) { out[i] = i * i; }
 }
@@ -272,7 +272,7 @@ void main() {
 
 A parameter can be marked `move`: the function takes the value over, and the caller must not use that variable again. The standard library marks `free`, `destroy` and every `deinit`/`close`, so the most common memory bugs stop at compile time.
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto p = a.create<i64>() catch return;
@@ -284,7 +284,7 @@ void main() {
 
 The same applies to a double `free`, including the one hidden behind a `defer`, and to using a `List` after `deinit()`:
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto buf = a.alloc<u8>(16) catch return;
@@ -295,7 +295,7 @@ void main() {
 
 Assigning a new value brings the variable back to life. Branches are followed: a variable consumed on one path of an `if` cannot be used afterwards, and a variable consumed inside a loop must be reassigned or left with `break`/`return`.
 
-```vibe run
+```zark run
 void main() {
     const auto a = c_allocator();
     auto buf = a.alloc<u8>(16) catch return;
@@ -308,7 +308,7 @@ void main() {
 
 You can use `move` in your own code. On a parameter it goes before the type; on a method, after the parameter list:
 
-```vibe run
+```zark run
 struct Conn {
     i64 fd;
     void close() move { println("closed {this->fd}"); }
@@ -328,7 +328,7 @@ The check follows names, not memory. It sees `a.free(buf)` followed by `buf`, bu
 
 The compiler follows where a pointer or a slice comes from. A pointer into a local variable cannot leave the function, neither through `return` nor by being stored in a parameter:
 
-```vibe error
+```zark error
 i64* first_of() {
     i64[4] a;
     auto p = &a[1];
@@ -338,7 +338,7 @@ i64* first_of() {
 void main() { println(*first_of()); }
 ```
 
-```vibe error
+```zark error
 struct Slot { i64* p; }
 
 void put(Slot* out) {
@@ -354,7 +354,7 @@ void main() {
 
 A pointer or slice into a container is valid until the container changes. The methods that can move the memory (`push`, `append`, `insert`, `reserve`, `Map.put`, `remove`) are marked `invalidates`, and the methods that hand out a pointer into it (`at`, `slice`, `get_ptr`) are marked `borrows`. Using such a pointer after an invalidating call is an error, and so is using a slice after `free` of the buffer it came from:
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -367,7 +367,7 @@ void main() {
 
 Take the pointer again after the change and everything is fine:
 
-```vibe run
+```zark run
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -383,7 +383,7 @@ void main() {
 
 Changing a container while a loop walks over it is the same mistake in another costume: the loop keeps reading the old buffer. The compiler follows `for` loops too, and `this->items` counts as much as a local variable:
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();

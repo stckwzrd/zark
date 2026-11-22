@@ -1,6 +1,6 @@
-# Installing Vibe
+# Installing Zark
 
-Vibe builds from source with one command. The repository contains a bootstrap seed (the compiler's own LLVM IR), so the only compiler you need is clang.
+Zark builds from source with one command. The repository contains a bootstrap seed (the compiler's own LLVM IR), so the only compiler you need is clang.
 
 ```
 git clone https://github.com/stckwzrd/vibe.git
@@ -11,13 +11,13 @@ sh scripts/install-deps.sh
 ```
 
 - `scripts/install-deps.sh` installs the build tools with the package manager it finds (apt, dnf, pacman, apk, zypper, xbps). On macOS it asks for the Xcode command line tools if clang is missing.
-- `./bootstrap.sh` builds the compiler in stages, checks that it reproduces itself, runs the test suite and leaves the result in `build/vibe`. It takes a few minutes.
-- `./install.sh` copies `build/vibe` to `~/.local/bin` (set `PREFIX=/usr/local` to change that). Vibe is a single binary, the standard library is embedded.
+- `./bootstrap.sh` builds the compiler in stages, checks that it reproduces itself, runs the test suite and leaves the result in `build/zark`. It takes a few minutes.
+- `./install.sh` copies `build/zark` to `~/.local/bin` (set `PREFIX=/usr/local` to change that). Zark is a single binary, the standard library is embedded.
 
 Check it:
 
 ```
-vibe run examples/hello.vibe
+zark run examples/hello.zk
 ```
 
 ## What you need
@@ -42,7 +42,7 @@ vibe run examples/hello.vibe
 
 Windows without WSL is not supported: the runtime uses `fork`, `poll` and POSIX threads.
 
-The own native backend writes x86-64 ELF files, so it exists only on x86-64 Linux. On every other system Vibe uses clang to compile the LLVM IR, which is fully supported. `vibe build --native` on those systems prints an error.
+The own native backend writes x86-64 ELF files, so it exists only on x86-64 Linux. On every other system Zark uses clang to compile the LLVM IR, which is fully supported. `zark build --native` on those systems prints an error.
 
 On arm64 (Linux and macOS) passing structs by value to C functions is not supported yet: the compiler lowers extern calls with the x86-64 System V rules. Pass pointers instead. `tests/abi` runs only on x86-64.
 
@@ -141,6 +141,6 @@ docker run --rm -it -v "$PWD":/src -w /src debian:stable sh -c "sh scripts/insta
 - `cannot find crtbeginS.o` or `-lgcc` on Alpine: install `gcc`.
 - `ld: not found`: install binutils.
 - `error: the native backend only supports x86-64 Linux`: you passed `--native` on another system, drop the flag.
-- Programs print `fatal: ...` and a backtrace when they crash. Set `VIBE_CRASH_HANDLER=0` to get a plain core dump instead.
-- Do not share one `.vibe-cache` between different systems (for example a Docker bind mount used from Linux and macOS): delete it when you switch.
-- The compiler caches objects in `.vibe-cache` next to where you run it; delete the directory to start clean.
+- Programs print `fatal: ...` and a backtrace when they crash. Set `ZARK_CRASH_HANDLER=0` to get a plain core dump instead.
+- Do not share one `.zark-cache` between different systems (for example a Docker bind mount used from Linux and macOS): delete it when you switch.
+- The compiler caches objects in `.zark-cache` next to where you run it; delete the directory to start clean.

@@ -1,0 +1,111 @@
+{
+  "name": "Zark",
+  "scopeName": "source.zk",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#chars" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#test-block" },
+    { "include": "#keywords" },
+    { "include": "#builtins" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#enum-literal" },
+    { "include": "#calls" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.zk", "match": "//.*$" },
+        { "name": "comment.block.zk", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.zk",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.zk", "match": "\\\\(x[0-9a-fA-F]{2}|[ntr0e\\\\\"'{}])" },
+        { "name": "constant.character.escape.zk", "match": "\\{\\{|\\}\\}" },
+        {
+          "name": "meta.interpolation.zk",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.zk" } },
+          "endCaptures": { "0": { "name": "punctuation.section.embedded.end.zk" } },
+          "patterns": [
+            { "name": "constant.other.format-spec.zk", "match": ":[-+#0-9.a-zA-Z]*(?=\\})" },
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.zk",
+      "match": "'(\\\\.|[^'\\\\])'"
+    },
+    "numbers": {
+      "name": "constant.numeric.zk",
+      "match": "\\b(0x[0-9a-fA-F_]+|0b[01_]+|0o[0-7_]+|[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9]+)?)\\b"
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b([A-Za-z_][A-Za-z0-9_<>:*\\[\\]!?]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(",
+          "captures": { "2": { "name": "entity.name.function.zk" } }
+        },
+        {
+          "match": "\\b(struct|union|enum|type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "storage.type.zk" }, "2": { "name": "entity.name.type.zk" } }
+        }
+      ]
+    },
+    "test-block": {
+      "match": "^\\s*(test)\\s+(\"[^\"]*\")",
+      "captures": { "1": { "name": "keyword.other.test.zk" }, "2": { "name": "entity.name.function.test.zk" } }
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.zk", "match": "\\b(if|else|while|for|return|break|continue|match|defer|errdefer|catch|orelse|is)\\b" },
+        { "name": "keyword.operator.word.zk", "match": "\\b(as|sizeof|alignof)\\b" },
+        { "name": "keyword.operator.word.zk", "match": "\\bcomptime\\b" },
+        { "name": "storage.modifier.zk", "match": "\\bowned(?=\\s+struct\\b)" },
+        { "name": "storage.modifier.zk", "match": "\\bmove(?=\\s+[A-Za-z_])|\\b(move|borrows|invalidates)(?=\\s*\\{|\\s+(move|borrows|invalidates)\\b)" },
+        { "name": "storage.type.zk", "match": "\\b(fn|auto|const|static|template|struct|enum|union|type)\\b" },
+        { "name": "storage.modifier.zk", "match": "\\b(extern|export|volatile|packed)\\b" },
+        { "name": "keyword.control.import.zk", "match": "\\bimport\\b" },
+        { "name": "constant.language.zk", "match": "\\b(true|false|null|nullptr|this)\\b" },
+        { "name": "constant.other.error.zk", "match": "\\berror\\.[A-Za-z_][A-Za-z0-9_]*" }
+      ]
+    },
+    "builtins": {
+      "name": "support.function.builtin.zk",
+      "match": "\\b(print|println|eprint|eprintln|sprint|bprint|panic|assert|embed|asm)\\b(?=\\s*\\()"
+    },
+    "types": {
+      "patterns": [
+        { "name": "storage.type.primitive.zk", "match": "\\b(i8|i16|i32|i64|isize|u8|u16|u32|u64|usize|f32|f64|bool|void|str)\\b" },
+        { "name": "entity.name.type.zk", "match": "\\b[A-Z][A-Za-z0-9_]*[a-z][A-Za-z0-9_]*\\b|\\b[A-Z]\\b|\\b[A-Z][A-Z]\\b" }
+      ]
+    },
+    "constants": {
+      "name": "constant.other.zk",
+      "match": "\\b[A-Z][A-Z0-9_]{2,}\\b"
+    },
+    "enum-literal": {
+      "name": "constant.other.enum-member.zk",
+      "match": "(?<![A-Za-z0-9_\\)\\]])\\.[A-Za-z_][A-Za-z0-9_]*"
+    },
+    "calls": {
+      "name": "entity.name.function.call.zk",
+      "match": "\\b[a-z_][A-Za-z0-9_]*(?=\\s*(\\(|\\[[^\\]]*\\]\\s*\\())"
+    },
+    "operators": {
+      "name": "keyword.operator.zk",
+      "match": "=>|==|!=|<=|>=|&&|\\|\\||<<=?|>>=?|\\.\\.\\.|\\.\\.|[-+*/%&|^]=?|[~!<>=?]"
+    }
+  }
+}

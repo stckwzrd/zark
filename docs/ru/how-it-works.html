@@ -3,27 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Как всё устроено · Vibe</title>
-<meta name="description" content="Устройство компилятора Vibe: конвейер, бэкенды, самосборка, раскладка типов в памяти и планы развития">
+<title>Как всё устроено · Zark</title>
+<meta name="description" content="Устройство компилятора Zark: конвейер, бэкенды, самосборка, раскладка типов в памяти и планы развития">
 <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body class="">
-<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Vibe</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../how-it-works.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
+<header class="top"><button class="menu" aria-label="Меню">☰</button><a class="logo" href="index.html">Zark</a><div class="search"><input id="q" type="search" placeholder="Поиск по руководству (/)" autocomplete="off"><div id="results"></div></div><a class="lang" href="../how-it-works.html">English</a><button id="theme" aria-label="Сменить тему">◐</button></header>
 <div class="layout">
-<nav class="side"><a class="brand" href="index.html">Vibe</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="learn.html">Учим Vibe: путь от нуля до программы</a><a href="tour.html">Быстрый тур</a><a href="showcase.html">Витрина: многопоточный трассировщик лучей</a><a href="cpp-style.html">Vibe для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a><a href="comptime.html">Вычисления при компиляции</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="safety.html">Модель безопасности</a><a href="idioms.html">Пишем идиоматично на Vibe</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="debugging.html">Отладка и чтение ошибок</a><a href="how-it-works.html" class="current">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
+<nav class="side"><a class="brand" href="index.html">Zark</a><div class="group"><div class="group-title">Старт</div><a href="getting-started.html">Установка и первая программа</a><a href="learn.html">Учим Zark: путь от нуля до программы</a><a href="tour.html">Быстрый тур</a><a href="showcase.html">Витрина: многопоточный трассировщик лучей</a><a href="cpp-style.html">Zark для C++-программиста</a></div><div class="group"><div class="group-title">Язык</div><a href="lexical.html">Лексика</a><a href="types.html">Типы</a><a href="variables.html">Переменные и константы</a><a href="operators.html">Операторы и выражения</a><a href="control-flow.html">Управление потоком</a><a href="functions.html">Функции и замыкания</a><a href="structs-unions-enums.html">Структуры, union и enum</a><a href="errors-and-optionals.html">Ошибки и опциональные значения</a><a href="strings.html">Строки и форматирование</a><a href="modules.html">Модули и импорт</a><a href="comptime.html">Вычисления при компиляции</a></div><div class="group"><div class="group-title">Память и данные</div><a href="memory.html">Память и аллокаторы</a><a href="safety.html">Модель безопасности</a><a href="idioms.html">Пишем идиоматично на Zark</a><a href="collections.html">Коллекции: List, Map, Option</a></div><div class="group"><div class="group-title">Интероп и инструменты</div><a href="c-interop.html">Взаимодействие с C и C++</a><a href="drivers.html">Драйверы и низкоуровневый код</a><a href="testing.html">Тестирование</a><a href="tooling.html">Инструменты: fmt, lsp, флаги</a><a href="projects.html">Проекты и зависимости</a></div><div class="group"><div class="group-title">Справочник</div><a href="stdlib.html">Справочник стандартной библиотеки</a><a href="std-modules.html">Стандартные модули</a><a href="net-threads.html">Сеть и потоки</a><a href="cookbook.html">Рецепты и готовые программы</a><a href="gotchas.html">Ловушки и FAQ</a><a href="debugging.html">Отладка и чтение ошибок</a><a href="how-it-works.html" class="current">Как всё устроено</a><a href="cheatsheet.html">Шпаргалка</a></div></nav>
 <main><article>
 <h1>Как всё устроено</h1>
 <p>Эта страница для тех, кто хочет понимать, что происходит под капотом, или собирается править компилятор. Для написания программ она не обязательна.</p>
 <h2 id="конвейер"><a class="anchor" href="#конвейер">#</a>Конвейер</h2>
-<p>Компилятор — программа на самом Vibe, около 12 тысяч строк в каталоге <code>selfhost/</code>. Работает как конвейер:</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>исходник .vibe</span></span>
+<p>Компилятор — программа на самом Zark, около 12 тысяч строк в каталоге <code>selfhost/</code>. Работает как конвейер:</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>исходник .zk</span></span>
 <span class="line"><span>   │</span></span>
-<span class="line"><span>   ▼  lexer.vibe      токены</span></span>
-<span class="line"><span>   ▼  parser.vibe     рекурсивный спуск → дерево (ast.vibe), интерполяция строк разбирается здесь</span></span>
-<span class="line"><span>   ▼  loader.vibe     загрузка import, префиксы модулей (resolve.vibe)</span></span>
-<span class="line"><span>   ▼  gen*.vibe       проверка типов, мономорфизация дженериков, текст LLVM IR</span></span>
+<span class="line"><span>   ▼  lexer.zk      токены</span></span>
+<span class="line"><span>   ▼  parser.zk     рекурсивный спуск → дерево (ast.zk), интерполяция строк разбирается здесь</span></span>
+<span class="line"><span>   ▼  loader.zk     загрузка import, префиксы модулей (resolve.zk)</span></span>
+<span class="line"><span>   ▼  gen*.zk       проверка типов, мономорфизация дженериков, текст LLVM IR</span></span>
 <span class="line"><span>   │</span></span>
-<span class="line"><span>   ├── по умолчанию:  native.vibe + x64.vibe   IR → машинный код x86-64 → ELF .o</span></span>
+<span class="line"><span>   ├── по умолчанию:  native.zk + x64.zk   IR → машинный код x86-64 → ELF .o</span></span>
 <span class="line"><span>   └── -O / --release / --llvm:                IR → clang (LLVM) → .o</span></span>
 <span class="line"><span>   ▼</span></span>
 <span class="line"><span>линковка через clang (вместе с .c, .cpp, .o) → исполняемый файл</span></span></code></pre></div><p>Что делает каждый файл:</p>
@@ -32,68 +32,68 @@
 <th>Роль</th>
 </tr>
 </thead><tbody><tr>
-<td><code>lexer.vibe</code></td>
+<td><code>lexer.zk</code></td>
 <td>токены (см. <a href="lexical.html">лексику</a>)</td>
 </tr>
 <tr>
-<td><code>ast.vibe</code></td>
+<td><code>ast.zk</code></td>
 <td>«толстые» узлы дерева с тегом вида</td>
 </tr>
 <tr>
-<td><code>parser.vibe</code></td>
+<td><code>parser.zk</code></td>
 <td>разбор синтаксиса, разбор <code>&quot;{x}&quot;</code> на части</td>
 </tr>
 <tr>
-<td><code>gen.vibe</code></td>
+<td><code>gen.zk</code></td>
 <td>типы, инстанцирование дженериков, функции, диагностики</td>
 </tr>
 <tr>
-<td><code>gen_stmt.vibe</code></td>
+<td><code>gen_stmt.zk</code></td>
 <td>операторы, <code>defer</code>/<code>errdefer</code>, <code>match</code></td>
 </tr>
 <tr>
-<td><code>gen_expr.vibe</code></td>
+<td><code>gen_expr.zk</code></td>
 <td>выражения, адреса, операторы, приведения</td>
 </tr>
 <tr>
-<td><code>gen_call.vibe</code></td>
+<td><code>gen_call.zk</code></td>
 <td>вызовы, вывод параметров типа, методы, указатели на функции</td>
 </tr>
 <tr>
-<td><code>gen_fmt.vibe</code></td>
+<td><code>gen_fmt.zk</code></td>
 <td>сборка <code>Fmt</code> для вызовов с интерполяцией, <code>panic</code>, <code>assert</code>, <code>embed</code></td>
 </tr>
 <tr>
-<td><code>resolve.vibe</code>, <code>loader.vibe</code></td>
+<td><code>resolve.zk</code>, <code>loader.zk</code></td>
 <td>импорты и префиксы модулей</td>
 </tr>
 <tr>
-<td><code>native.vibe</code></td>
+<td><code>native.zk</code></td>
 <td>свой бэкенд: IR → x86-64 (System V ABI), распределение регистров</td>
 </tr>
 <tr>
-<td><code>x64.vibe</code></td>
+<td><code>x64.zk</code></td>
 <td>кодировщик инструкций и запись ELF64-объекта</td>
 </tr>
 <tr>
-<td><code>fmt.vibe</code></td>
-<td>форматтер <code>vibe fmt</code></td>
+<td><code>fmt.zk</code></td>
+<td>форматтер <code>zark fmt</code></td>
 </tr>
 <tr>
-<td><code>lsp.vibe</code>, <code>ide.vibe</code>, <code>analysis.vibe</code>, <code>json.vibe</code>, <code>textpos.vibe</code></td>
+<td><code>lsp.zk</code>, <code>ide.zk</code>, <code>analysis.zk</code>, <code>json.zk</code>, <code>textpos.zk</code></td>
 <td>языковой сервер</td>
 </tr>
 <tr>
-<td><code>diag.vibe</code></td>
+<td><code>diag.zk</code></td>
 <td>красивые сообщения об ошибках, «возможно, вы имели в виду»</td>
 </tr>
 <tr>
-<td><code>main.vibe</code></td>
+<td><code>main.zk</code></td>
 <td>драйвер командной строки</td>
 </tr>
 </tbody></table></div>
-<p>Посмотреть промежуточные результаты можно прямо из CLI: <code>vibe tokens file.vibe</code> (токены) и <code>vibe ir file.vibe</code> (LLVM IR). Подробнее — в <a href="tooling.html#промежуточные-представления">инструментах</a>.</p>
-<p>Прелюдия (<code>std/std.vibe</code>) вшита в компилятор через <code>embed</code>, поэтому <code>vibe</code> — один исполняемый файл без внешних данных.</p>
+<p>Посмотреть промежуточные результаты можно прямо из CLI: <code>zark tokens file.zk</code> (токены) и <code>zark ir file.zk</code> (LLVM IR). Подробнее — в <a href="tooling.html#промежуточные-представления">инструментах</a>.</p>
+<p>Прелюдия (<code>std/std.zk</code>) вшита в компилятор через <code>embed</code>, поэтому <code>zark</code> — один исполняемый файл без внешних данных.</p>
 <h2 id="два-бэкенда"><a class="anchor" href="#два-бэкенда">#</a>Два бэкенда</h2>
 <p><strong>Свой (по умолчанию).</strong> Парсит текстовый LLVM IR, который сгенерировал фронтенд, и превращает его в машинный код x86-64. Использует линейное распределение регистров (linear scan), слияние сравнения с ветвлением, константы в операндах, ленивую загрузку составных значений. Ни одной строки LLVM внутри нет. Назначение — быстрая сборка: типичный проект собирается за доли секунды.</p>
 <p><strong>LLVM (<code>-O</code>, <code>--release</code>, <code>--llvm</code>).</strong> Тот же IR отдаётся <code>clang</code>, который делает полную оптимизацию. Нужен для скорости в рабочих сборках.</p>
@@ -103,11 +103,11 @@
 <th>Время</th>
 </tr>
 </thead><tbody><tr>
-<td>vibe, свой бэкенд, безопасный режим (проверки границ, деления и переполнения)</td>
+<td>zark, свой бэкенд, безопасный режим (проверки границ, деления и переполнения)</td>
 <td>около 200 мс</td>
 </tr>
 <tr>
-<td>vibe, свой бэкенд, <code>--no-safety</code></td>
+<td>zark, свой бэкенд, <code>--no-safety</code></td>
 <td>около 135 мс</td>
 </tr>
 <tr>
@@ -131,12 +131,12 @@
 <td>560 мс</td>
 </tr>
 <tr>
-<td>Vibe <code>--release</code> (без проверок)</td>
+<td>Zark <code>--release</code> (без проверок)</td>
 <td>100 мс</td>
 <td>575 мс</td>
 </tr>
 <tr>
-<td>Vibe <code>-O</code> (все проверки включены)</td>
+<td>Zark <code>-O</code> (все проверки включены)</td>
 <td>170 мс</td>
 <td>540 мс</td>
 </tr>
@@ -146,7 +146,7 @@
 <td>780 мс</td>
 </tr>
 <tr>
-<td>Vibe, свой бэкенд (безопасный режим)</td>
+<td>Zark, свой бэкенд (безопасный режим)</td>
 <td>около 360 мс</td>
 <td>около 1210 мс</td>
 </tr>
@@ -154,9 +154,9 @@
 <p>То есть <code>--release</code> не уступает C, <code>-O</code> сохраняет все проверки за небольшую цену, а сборка по умолчанию выигрывает в скорости компиляции. Больше всего проверки стоят в своём бэкенде: он их не оптимизирует.</p>
 <h2 id="самосборка-и-неподвижная-точка"><a class="anchor" href="#самосборка-и-неподвижная-точка">#</a>Самосборка и неподвижная точка</h2>
 <p>Компилятор собирает сам себя. Чтобы начать с нуля, в репозитории лежит <strong>семя</strong>: LLVM IR самого компилятора (<code>bootstrap/seed.ll.gz</code>). <code>clang</code> превращает его в первый рабочий компилятор.</p>
-<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>семя (clang)  →  stage1 (Vibe, собран из семени)</span></span>
-<span class="line"><span>              →  stage2 (Vibe, собран stage1)</span></span>
-<span class="line"><span>              →  stage3 (Vibe, собран stage2)</span></span></code></pre></div><p>Проверка: <strong>stage2 и stage3 совпадают побайтно</strong> (неподвижная точка). То же делается для цепочки со своим бэкендом без LLVM (native2 == native3). Скрипт <code>bootstrap.sh</code> запускает всё, затем прогоняет набор тестов и кладёт результат в <code>build/vibe</code>.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span>семя (clang)  →  stage1 (Zark, собран из семени)</span></span>
+<span class="line"><span>              →  stage2 (Zark, собран stage1)</span></span>
+<span class="line"><span>              →  stage3 (Zark, собран stage2)</span></span></code></pre></div><p>Проверка: <strong>stage2 и stage3 совпадают побайтно</strong> (неподвижная точка). То же делается для цепочки со своим бэкендом без LLVM (native2 == native3). Скрипт <code>bootstrap.sh</code> запускает всё, затем прогоняет набор тестов и кладёт результат в <code>build/zark</code>.</p>
 <p>Следствие для разработки: новая возможность языка добавляется в два шага. Сначала компилятор учат ей, не используя её в своих исходниках, и обновляют семя (<code>tools/update-seed.sh</code>). Только потом её можно использовать в <code>selfhost/</code>: иначе старое семя не сможет собрать новый код.</p>
 <h2 id="раскладка-типов-в-памяти"><a class="anchor" href="#раскладка-типов-в-памяти">#</a>Раскладка типов в памяти</h2>
 <p>Принцип «что видите, то и лежит»:</p>
@@ -211,8 +211,8 @@
 </tbody></table></div>
 <p>Из этого следует, почему структуры можно передавать в C (по указателю), почему ничего не нужно «упаковывать» при вызове и почему <code>sizeof</code> предсказуем.</p>
 <h2 id="как-раскрывается-интерполяция"><a class="anchor" href="#как-раскрывается-интерполяция">#</a>Как раскрывается интерполяция</h2>
-<p>Компилятор не знает ни <code>print</code>, ни <code>println</code>. Он знает одно правило: если последний параметр вызываемой функции имеет тип <code>Fmt</code> (он объявлен в <code>std/std.vibe</code>), все оставшиеся аргументы и строки с <code>{...}</code> собираются в значение <code>Fmt</code>.</p>
-<p><code>Fmt</code> — это список кусков: литеральный текст, указатель на значение, функция, которая умеет печатать значение этого типа, и спецификация (<code>:08X</code>, <code>:.2</code> и т. п.). Функции печати для структур, enum, union и массивов компилятор порождает по типу как обычный код на Vibe. Для чисел, строк и указателей используются функции из прелюдии (<code>__fmt_int</code>, <code>__fmt_str</code> и другие).</p>
+<p>Компилятор не знает ни <code>print</code>, ни <code>println</code>. Он знает одно правило: если последний параметр вызываемой функции имеет тип <code>Fmt</code> (он объявлен в <code>std/std.zk</code>), все оставшиеся аргументы и строки с <code>{...}</code> собираются в значение <code>Fmt</code>.</p>
+<p><code>Fmt</code> — это список кусков: литеральный текст, указатель на значение, функция, которая умеет печатать значение этого типа, и спецификация (<code>:08X</code>, <code>:.2</code> и т. п.). Функции печати для структур, enum, union и массивов компилятор порождает по типу как обычный код на Zark. Для чисел, строк и указателей используются функции из прелюдии (<code>__fmt_int</code>, <code>__fmt_str</code> и другие).</p>
 <p>Всё лежит на стеке вызывающего, в куче ничего не выделяется. Поэтому интерполяция допустима там, где есть функция с параметром <code>Fmt</code>: <code>print</code>, <code>println</code>, <code>eprint</code>, <code>eprintln</code>, <code>panic</code>, <code>bprint</code>, <code>sprint</code> и ваша собственная.</p>
 <h2 id="как-работают-дженерики"><a class="anchor" href="#как-работают-дженерики">#</a>Как работают дженерики</h2>
 <p>Функции и структуры с параметрами типа <strong>мономорфизируются</strong>: для каждой комбинации аргументов компилятор создаёт отдельную копию. Поэтому нет накладных расходов во время работы, а тело дженерика проверяется при <strong>использовании</strong>. Ограничения (<code>T: Ord</code>) проверяются на вызове, до компиляции тела, чтобы сообщение было понятным.</p>
@@ -223,7 +223,7 @@
 <h2 id="ленивая-компиляция"><a class="anchor" href="#ленивая-компиляция">#</a>Ленивая компиляция</h2>
 <p>Компилируются только функции, <strong>достижимые из <code>main</code></strong>. Лишний импорт не раздувает файл, а ошибки в мёртвом коде не видны, пока его не вызовут (если это не дженерик — тогда ошибка проявится в первом использовании).</p>
 <h2 id="хранилище-сборки"><a class="anchor" href="#хранилище-сборки">#</a>Хранилище сборки</h2>
-<p>Промежуточные файлы лежат в <code>.vibe-cache/</code> рядом с местом запуска: <code>.o</code>, <code>.ll</code> и тестовые бинарники. Каталог можно удалять в любой момент.</p>
+<p>Промежуточные файлы лежат в <code>.zark-cache/</code> рядом с местом запуска: <code>.o</code>, <code>.ll</code> и тестовые бинарники. Каталог можно удалять в любой момент.</p>
 <h2 id="тесты-самого-компилятора"><a class="anchor" href="#тесты-самого-компилятора">#</a>Тесты самого компилятора</h2>
 <p>В <code>tests/</code>:</p>
 <ul>
@@ -237,7 +237,7 @@
 <p>Известные направления развития (подробнее в <code>ROADMAP.md</code>):</p>
 <ul>
 <li><strong>Качество кода бэкенда.</strong> Отладочные сборки примерно втрое медленнее gcc -O0. Дальше: SSA без <code>alloca</code> во фронтенде и внутреннее представление в памяти вместо текстового IR.</li>
-<li><strong>Свой компоновщик</strong> и среда выполнения без libc на системных вызовах Linux: чтобы чистые программы на Vibe собирались без внешних инструментов.</li>
+<li><strong>Свой компоновщик</strong> и среда выполнения без libc на системных вызовах Linux: чтобы чистые программы на Zark собирались без внешних инструментов.</li>
 <li><strong>Больше <code>comptime</code>:</strong> рефлексия по полям структур и генерация объявлений (выражения и статические проверки уже есть).</li>
 <li><strong><code>@cImport</code>:</strong> разбор C-заголовков и передача структур по значению через границу C.</li>
 <li><strong>Новые платформы:</strong> aarch64 и Windows.</li>

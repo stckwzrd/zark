@@ -1,0 +1,1123 @@
+// Code generator core: types, instantiation, emission helpers, functions.
+// Mirrors src/codegen.zig.
+
+import "parser.zk";
+
+enum TK { Int, Float, Bool, Void, Ptr, Slice, Array, Strct, Enm, Errun, ErrVal, Null, Func, Closure }
+
+struct Type {
+    TK k;
+    i64 bits;          // Int bits, Float bits
+    bool signed;
+    Type* elem;        // Ptr/Slice/Array elem, Errun inner
+    u64 len;           // Array length
+    StructInst* si;
+    EnumInfo* ei;
+    List<Type*> params; // Func
+    Type* ret;          // Func
+    bool vol;           // lives in volatile storage when reached through an lvalue
+    bool vec;           // Array: a SIMD vector
+}
+
+struct FieldInfo { str name; Type* ty; Expr* init; }
+
+struct StructInst {
+    StructDecl* decl;
+    List<Type*> args;
+    str llname;
+    str display;
+    List<FieldInfo> fields;
+    str names_global;
+    u64 payload_words;
+    bool explicit;
+    List<i64> llidx;
+}
+
+struct EnumInfo { EnumDecl* decl; str names_global; }
+
+struct Value { Type* ty; str v; }
+struct Addr { Type* ty; str v; bool imm; }
+struct Var { str ptr; Type* ty; bool mutable; }
+struct Defer { Stmt* stmt; bool is_err; }
+struct ColdIn { str pred; List<str> vals; }
+struct Cold { str helper; str label; i64 nlead; List<ColdIn> ins; }
+struct OwnedVar { str ptr; str name; str tname; i64 line; }
+struct Scope { Map<Var> vars; List<Defer> defers; List<OwnedVar> owned; }
+struct MoveRec { str ptr; str by; i64 line; i64 kind; str cont; str cname; }
+struct LoopEv { str ptr; }
+struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; str id; bool infinite; i64 nbrk; i64 ncont; List<MoveRec> brks; List<MoveRec> conts; List<MoveRec> bmust; List<MoveRec> cmust; List<LoopEv> evs; }
+
+type Env = Map<Type*>*;
+
+struct CapInfo { str name; Type* ty; bool mutable; }
+
+struct FnInst {
+    FnDecl* decl;
+    Env env;
+    str llname;
+    List<Type*> params;
+    Type* ret;
+    bool generated;
+    bool is_closure;
+    List<CapInfo> caps;
+    bool busy;
+}
+
+struct AsyncFn { Type* frame; Type* poll; Value cx; List<str> slots; List<str> resumes; str result; }
+
+struct Gen {
+    Allocator a;
+    bool safety;
+    bool fast;
+    bool fastmath;
+    bool ovf;
+    bool wrapping;
+    bool needs_llvm;
+    i64 rdepth;
+    i64 cdepth;
+    List<MoveRec> moved;
+    bool shared;
+    i64 nloop;
+    List<Cold> colds;
+    Map<Expr*> cts;
+    List<Expr*> ct_checks;
+    Map<CtVal*> ct_cache;
+    List<str> ct_extras;
+    str ct_key;
+    str ct_chain;
+    str ct_mode;
+    str ct_out;
+    str self_path;
+    i64 nct;
+    bool reinit;
+    Expr* bor_field;
+    str bor_ptr;
+    str bor_name;
+    i64 sdepth;
+
+    Map<FnDecl*> fns;
+    Map<FnDecl*> methods;
+    Map<StructDecl*> structs;
+    Map<EnumInfo*> enums;
+    Map<ConstDecl*> consts;
+    Map<TypeExpr*> aliases;
+    Map<Var> globals;
+    List<FnDecl*> fn_order;      // declaration order (deterministic output)
+    List<ConstDecl*> const_order;
+
+    Map<StructInst*> struct_insts;
+    Map<FnInst*> fn_insts;
+    List<FnInst*> pending;
+    Map<bool> declared;
+    Map<i64> errors;
+    List<str> error_names;
+    List<Value> pre_vals;
+    Map<i64> thunks;
+    Map<str> vtables;
+    Map<Type*> rtypes;
+
+    List<u8> types_out;
+    List<u8> globals_out;
+    List<u8> decls_out;
+    List<u8> funcs_out;
+    i64 nstr;
+
+    List<u8> body;
+    List<u8> allocas;
+    i64 ntmp;
+    i64 nlbl;
+    List<Scope> scopes;
+    List<Loop> loops;
+    FnInst* cur;
+    bool const_this;
+    bool in_cast;          // a literal under `as` may be truncated on purpose
+    bool freestanding;     // no libc: main does not call the runtime hook __rt_init
+    FnInst* rt_init;
+    Env env;
+    bool terminated;
+    str cur_label;
+    str file;
+    List<FnDecl*> tests;
+    str test_root;
+    bool test_mode;
+    i64 nclos;
+    i64 at_line;
+    i64 last_line;
+    bool dbg;
+    i64 at_off;
+    str pend_file;
+    i64 pend_line;
+    i64 pend_off;
+    bool has_pend;
+    AsyncFn* af;
+    Expr* await_at;
+    i64 edepth;
+    bool in_defer;
+
+    Type* t_i64;
+    Type* t_i32;
+    Type* t_u64;
+    Type* t_u8;
+    Type* t_f64;
+    Type* t_bool;
+    Type* t_void;
+    Type* t_str;
+    Type* t_errval;
+    Type* t_null;
+    Type* t_ptr_u8;
+
+    List<u8> sb() { return List<u8>::init(this->a); }
+
+    !Env new_env() {
+        const auto m = this->a.create<Map<Type*>> ()?;
+        *m = Map<Type*>::init(this->a);
+        return m;
+    }
+
+    !Env copy_env(Env e) {
+        const auto m = this->new_env()?;
+        for (auto en : e.entries) { if (en.used) { m.put(en.key, en.value)?; } }
+        return m;
+    }
+
+    !Type* mk(TK k) {
+        const auto t = this->a.create<Type>()?;
+        t.k = k;
+        return t;
+    }
+    !Type* mk_int(i64 bits, bool signed) {
+        const auto t = this->mk(.Int)?;
+        t.bits = bits;
+        t.signed = signed;
+        return t;
+    }
+    !Type* mk_elem(TK k, Type* elem) {
+        const auto t = this->mk(k)?;
+        t.elem = elem;
+        return t;
+    }
+
+    void err(i64 line) {
+        eprint("{this->file}:{line}: error: ");
+        this->pend_file = this->file;
+        this->pend_line = line;
+        this->pend_off = -1;
+        if (line == this->at_line) { this->pend_off = this->at_off; }
+        this->has_pend = true;
+    }
+
+    str hint(str name, List<str> cands) {
+        const auto c = closest(name, cands);
+        if (c.len == 0) { return ""; }
+        auto b = this->sb();
+        sprint(&b, " (did you mean '{c}'?)") catch return "";
+        return b.slice();
+    }
+
+    List<str> visible_names() {
+        auto out = List<str>::init(this->a);
+        for (auto sc : this->scopes) {
+            for (auto e : sc.vars.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        }
+        for (auto e : this->globals.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        for (auto e : this->fns.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        for (auto e : this->consts.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        return out;
+    }
+
+    List<str> var_names() {
+        auto out = List<str>::init(this->a);
+        for (auto sc : this->scopes) {
+            for (auto e : sc.vars.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        }
+        for (auto e : this->globals.entries) { if (e.used) { out.push(e.key) catch return out; } }
+        return out;
+    }
+
+    List<str> field_names(StructInst* si) {
+        auto out = List<str>::init(this->a);
+        for (auto f : si.fields) { out.push(f.name) catch return out; }
+        return out;
+    }
+
+    void flush_diag() {
+        if (!this->has_pend) { return; }
+        this->has_pend = false;
+        show_source(this->pend_file, this->pend_line, this->pend_off);
+    }
+
+    // ------------------------------------------------------------------ registration
+    !void add_decls(List<Decl> decls, str file) {
+        this->file = file;
+        for (auto d : decls) {
+            match d.k {
+                .Func => {
+                    const auto f = d.f;
+                    if (f.is_test) {
+                        if (file == this->test_root) {
+                            auto nb = this->sb();
+                            sprint(&nb, "__test_{this->tests.len}")?;
+                            f.name = nb.slice();
+                            this->tests.push(f)?;
+                        }
+                        continue;
+                    }
+                    this->check_constraint_names(f.name, f.constraints, f.line)?;
+                    this->check_generic_body(f)?;
+                    if (f.receiver.len > 0) {
+                        auto kb = this->sb();
+                        sprint(&kb, "{f.receiver}.{f.name}")?;
+                        const auto key = kb.slice();
+                        if (this->methods.has(key)) { this->err(f.line); eprintln("duplicate method '{key}'"); return error.CompileFailed; }
+                        this->methods.put(key, f)?;
+                    } else {
+                        if (this->fns.has(f.name)) {
+                            const auto old = this->fns.get(f.name)?;
+                            if (old.is_extern && f.is_extern) { continue; }
+                            if (old.is_extern && f.is_export && f.body != null) {
+                                this->fns.put(f.name, f)?;
+                                this->fn_order.push(f)?;
+                                continue;
+                            }
+                            this->err(f.line); eprintln("duplicate function '{f.name}'"); return error.CompileFailed;
+                        }
+                        this->fns.put(f.name, f)?;
+                        this->fn_order.push(f)?;
+                    }
+                }
+                .Struct => {
+                    this->check_constraint_names(d.s.name, d.s.constraints, d.s.line)?;
+                    if (this->structs.has(d.s.name)) { this->err(d.s.line); eprintln("duplicate struct '{d.s.name}'"); return error.CompileFailed; }
+                    this->structs.put(d.s.name, d.s)?;
+                }
+                .Enum => {
+                    const auto e = d.en;
+                    const auto info = this->a.create<EnumInfo>()?;
+                    auto nb = this->sb();
+                    sprint(&nb, "@enum.{e.name}.names")?;
+                    info.decl = e;
+                    info.names_global = nb.slice();
+                    this->enums.put(e.name, info)?;
+                    auto refs = this->sb();
+                    for (auto [i, v] : e.variants) {
+                        const auto s = this->str_global(v)?;
+                        if (i > 0) { refs.append(", ")?; }
+                        sprint(&refs, "ptr {s}")?;
+                    }
+                    sprint(&this->globals_out, "{info.names_global} = private constant [{e.variants.len} x ptr] [{refs.slice()}]\n")?;
+                }
+                .Const => {
+                    this->consts.put(d.c.name, d.c)?;
+                    this->const_order.push(d.c)?;
+                }
+                .Alias => {
+                    if (this->aliases.has(d.path) || this->structs.has(d.path)) { this->err(d.line); eprintln("duplicate type name '{d.path}'"); return error.CompileFailed; }
+                    this->aliases.put(d.path, d.ty)?;
+                }
+                .Import => {}
+            }
+        }
+    }
+
+    !void emit_global_var(ConstDecl* c) {
+        Type* ty = null;
+        if (c.ty != null) {
+            ty = this->resolve_type(c.ty, this->env)?;
+        } else if (c.value.k == .FloatLit) {
+            ty = this->t_f64;
+        } else if (c.value.k == .BoolLit) {
+            ty = this->t_bool;
+        } else if (c.value.k == .StrLit) {
+            ty = this->t_str;
+        } else {
+            ty = this->t_i64;
+        }
+        auto init = "zeroinitializer";
+        if (c.value != null && c.value.k == .StrLit && is_str(ty)) {
+            const auto gs = this->str_global(c.value.name)?;
+            auto ib = this->sb();
+            sprint(&ib, "{{ ptr {gs}, i64 {c.value.name.len} }}")?;
+            init = ib.slice();
+        } else if (c.value != null && c.value.k == .StrLit) {
+            this->err(c.line); eprintln("a string literal cannot initialize a global of type '{this->type_name(ty)?}'");
+            return error.CompileFailed;
+        } else if (ty.k == .Int) {
+            auto b = this->sb();
+            sprint(&b, "{this->eval_const(c.value)?}")?;
+            init = b.slice();
+        } else if (ty.k == .Bool) {
+            init = "false";
+            if (c.value.k == .BoolLit && c.value.bval) { init = "true"; }
+        } else if (ty.k == .Float) {
+            auto f = 0.0;
+            if (c.value.k == .FloatLit) { f = c.value.fval } else { f = this->eval_const(c.value)? as f64; }
+            init = this->float_const(f, ty.bits)?;
+        }
+        auto nb = this->sb();
+        sprint(&nb, "@g.{c.name}")?;
+        const auto name = nb.slice();
+        auto want = c.align as u64;
+        const auto gal = this->align_of(ty)?;
+        if (gal > this->ll_align(ty)? || gal > 8) { want = max(want, gal); }
+        if (want > 0) {
+            sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}, align {want}\n")?;
+        } else {
+            sprint(&this->globals_out, "{name} = global {this->llty(ty)?} {init}\n")?;
+        }
+        this->globals.put(c.name, Var{ .ptr = name, .ty = ty, .mutable = true })?;
+    }
+
+    // ------------------------------------------------------------------ emission helpers
+    !str str_global(str bytes) {
+        this->nstr += 1;
+        auto nb = this->sb();
+        sprint(&nb, "@.str.{this->nstr}")?;
+        const auto name = nb.slice();
+        sprint(&this->globals_out, "{name} = private unnamed_addr constant [{bytes.len + 1} x i8] c\"")?;
+        const auto w = &this->globals_out;
+        for (auto c : bytes) {
+            if (c >= 0x20 && c < 0x7f && c != '"' && c != '\\') { w.push(c)?; } else { sprint(w, "\\{c:02X}")?; }
+        }
+        w.append("\\00\"\n")?;
+        return name;
+    }
+
+    !str float_const(f64 f, i64 bits) {
+        auto v = f;
+        if (bits == 32) { v = (f as f32) as f64; }
+        auto b = this->sb();
+        sprint(&b, "0x{bits_f64(v):016X}")?;
+        return b.slice();
+    }
+
+    !str tmp() {
+        this->ntmp += 1;
+        auto b = this->sb();
+        sprint(&b, "%t{this->ntmp}")?;
+        return b.slice();
+    }
+
+    !str new_label(str base) {
+        this->nlbl += 1;
+        auto b = this->sb();
+        sprint(&b, "{base}{this->nlbl}")?;
+        return b.slice();
+    }
+
+    /// the body buffer, opening a fresh (dead) block if the current one is terminated
+    !List<u8>*ins() {
+        if (this->terminated) {
+            const auto l = this->new_label("dead")?;
+            this->label(l)?;
+        }
+        return &this->body;
+    }
+
+    !void label(str name) {
+        if (!this->terminated) { sprint(&this->body, "  br label %{name}\n")?; }
+        sprint(&this->body, "{name}:\n")?;
+        this->last_line = 0;
+        this->cur_label = name;
+        this->terminated = false;
+    }
+
+    !void br(str l) {
+        sprint(this->ins()?, "  br label %{l}\n")?;
+        this->terminated = true;
+    }
+
+    !str clean(str s) {
+        auto b = this->sb();
+        for (auto c : s) {
+            if (c == ' ' || c == ',' || c == '{' || c == '}' || c == '[' || c == ']' || c == ':' || c == '@' || c == '=') { b.push('_')?; } else { b.push(c)?; }
+        }
+        return b.slice();
+    }
+
+    !str type_desc(Type* t) {
+        auto b = this->sb();
+        match t.k {
+            .Int => {
+                if (t.signed) { sprint(&b, "i{t.bits}")?; } else { sprint(&b, "u{t.bits}")?; }
+            }
+            .Float => sprint(&b, "f{t.bits}")?;
+            .Bool => b.append("bool")?;
+            .Ptr, .Func => b.append("ptr")?;
+            .Enm => b.append("u32")?;
+            .Array => sprint(&b, "A{t.len}[{this->type_desc(t.elem)?}]")?;
+            .Slice => sprint(&b, "S{{str,16:ptr@0=ptr,len@8=i64}}")?;
+            .Strct => {
+                if (t.si.decl.is_union || t.si.decl.is_iface) { return "-"; }
+                sprint(&b, "S{{{this->clean(this->type_name(t)?)?},{this->size_of(t)?}")?;
+                u64 off = 0;
+                auto sep = ":";
+                for (auto f : t.si.fields) {
+                    if (!t.si.decl.packed) {
+                        const auto al = this->align_of(f.ty)?;
+                        off = (off + al - 1) / al * al;
+                    }
+                    sprint(&b, "{sep}{this->clean(f.name)?}@{off}={this->type_desc(f.ty)?}")?;
+                    sep = ",";
+                    off += this->size_of(f.ty)?;
+                }
+                b.push('}')?;
+            }
+            _ => return "-";
+        }
+        return b.slice();
+    }
+
+    !str alloca(Type* ty, str hint) {
+        this->ntmp += 1;
+        auto b = this->sb();
+        sprint(&b, "%v.{hint}.{this->ntmp}")?;
+        const auto name = b.slice();
+        if (this->af != null) {
+            this->af.frame.si.fields.push(FieldInfo{ .name = name[1..], .ty = ty })?;
+            this->af.slots.push(name)?;
+            return name;
+        }
+        const auto al = this->align_of(ty)?;
+        if (al > this->ll_align(ty)? || al > 8) {
+            if (al > 16) { this->needs_llvm = true; }
+            sprint(&this->allocas, "  {name} = alloca {this->llty(ty)?}, align {al}\n")?;
+        } else {
+            sprint(&this->allocas, "  {name} = alloca {this->llty(ty)?}\n")?;
+        }
+        return name;
+    }
+
+    !Value load(Type* ty, str ptr) {
+        const auto t = this->tmp()?;
+        if (ty.vol) {
+            sprint(this->ins()?, "  {t} = load volatile {this->llty(ty)?}, ptr {ptr}\n")?;
+            const auto plain = this->a.create<Type>()?;
+            *plain = *ty;
+            plain.vol = false;
+            return Value{ .ty = plain, .v = t };
+        }
+        const auto ua = this->vec_access_align(ty)?;
+        if (ua > 0) {
+            sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}, align {ua}\n")?;
+            return Value{ .ty = ty, .v = t };
+        }
+        sprint(this->ins()?, "  {t} = load {this->llty(ty)?}, ptr {ptr}\n")?;
+        return Value{ .ty = ty, .v = t };
+    }
+
+    !void store_to(Value v, Addr a) {
+        if (v.ty.k == .Void) { return };
+        if (a.ty.vol) {
+            sprint(this->ins()?, "  store volatile {this->llty(v.ty)?} {v.v}, ptr {a.v}\n")?;
+            return;
+        }
+        this->store(v, a.v)?;
+    }
+
+    !void store(Value v, str ptr) {
+        if (v.ty.k == .Void) { return };
+        const auto ua = this->vec_access_align(v.ty)?;
+        if (ua > 0) {
+            sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}, align {ua}\n")?;
+            return;
+        }
+        sprint(this->ins()?, "  store {this->llty(v.ty)?} {v.v}, ptr {ptr}\n")?;
+    }
+
+    !void zero_fill(Type* ty, str ptr) {
+        if (has_defaults(ty)) {
+            this->store(this->default_value(ty, 0)?, ptr)?;
+            return;
+        }
+        if (ty.k == .Array || ty.k == .Strct) {
+            this->declare("llvm.memset.p0.i64", "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)")?;
+            const auto gp = this->tmp()?;
+            sprint(this->ins()?, "  {gp} = getelementptr {this->llty(ty)?}, ptr null, i32 1\n")?;
+            const auto sz = this->tmp()?;
+            sprint(this->ins()?, "  {sz} = ptrtoint ptr {gp} to i64\n")?;
+            sprint(this->ins()?, "  call void @llvm.memset.p0.i64(ptr {ptr}, i8 0, i64 {sz}, i1 false)\n")?;
+            return;
+        }
+        sprint(this->ins()?, "  store {this->llty(ty)?} zeroinitializer, ptr {ptr}\n")?;
+    }
+
+    i64 fidx(Type* t, i64 idx) {
+        if (t.k == .Strct && !t.si.decl.is_union && t.si.explicit) { return t.si.llidx.get(idx); }
+        return idx;
+    }
+
+    bool has_vec(Type* t) {
+        if (t.k == .Array) { return t.vec || this->has_vec(t.elem); }
+        if (t.k == .Strct && !t.si.decl.is_union) {
+            for (auto f : t.si.fields) { if (this->has_vec(f.ty)) { return true; } }
+        }
+        return false;
+    }
+
+    !u64 vec_access_align(Type* t) {
+        if (t.k == .Array && t.vec) { return this->size_of(t.elem); }
+        if (this->has_vec(t)) { return 4; }
+        return 0;
+    }
+
+    !Value extract(Value agg, i64 idx, Type* ty) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = extractvalue {this->llty(agg.ty)?} {agg.v}, {this->fidx(agg.ty, idx)}\n")?;
+        return Value{ .ty = ty, .v = t };
+    }
+
+    !str insert(Type* agg_ty, str agg, Value v, i64 idx) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = insertvalue {this->llty(agg_ty)?} {agg}, {this->llty(v.ty)?} {v.v}, {this->fidx(agg_ty, idx)}\n")?;
+        return t;
+    }
+
+    !str gep_field(Type* agg_ty, str ptr, i64 idx) {
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = getelementptr {this->llty(agg_ty)?}, ptr {ptr}, i32 0, i32 {this->fidx(agg_ty, idx)}\n")?;
+        return t;
+    }
+
+    !void declare(str name, str text) {
+        if (this->declared.has(name)) { return; }
+        this->declared.put(name, true)?;
+        sprint(&this->decls_out, "{text}\n")?;
+    }
+
+    !i64 error_id(str name) {
+        if (this->errors.has(name)) { return this->errors.get(name); }
+        const auto id = this->error_names.len;
+        this->error_names.push(name)?;
+        this->errors.put(name, id)?;
+        return id;
+    }
+
+    !str num(i64 n) {
+        auto b = this->sb();
+        sprint(&b, "{n}")?;
+        return b.slice();
+    }
+
+    // ------------------------------------------------------------------ scopes
+    !void push_scope() {
+        this->scopes.push(Scope{ .vars = Map<Var>::init(this->a), .defers = List<Defer>::init(this->a), .owned = List<OwnedVar>::init(this->a) })?;
+    }
+
+    !void pop_scope() {
+        const auto idx = this->scopes.len - 1;
+        if (!this->terminated) { this->run_defers(idx, idx, false, true)?; }
+        this->prune_scope(idx);
+        this->scopes.len -= 1;
+    }
+
+    /// run defers of scopes[hi] down to scopes[lo], innermost first
+    !void run_defers(i64 hi, i64 lo, bool is_err, bool keep) {
+        auto any = false;
+        for (auto k : lo..hi + 1) { if (this->scopes.items[k].defers.len > 0) { any = true; } }
+        if (!any) {
+            this->check_owned(hi, lo)?;
+            return;
+        }
+        const auto saved_moved = this->snap();
+        auto i = hi + 1;
+        while (i > lo) {
+            i -= 1;
+            auto j = this->scopes.items[i].defers.len;
+            while (j > 0) {
+                j -= 1;
+                const auto d = this->scopes.items[i].defers.get(j);
+                if (d.is_err && !is_err) { continue; }
+                const auto was = this->in_defer;
+                this->in_defer = true;
+                this->push_scope()?;
+                this->gen_stmt(d.stmt)?;
+                this->pop_scope()?;
+                this->in_defer = was;
+            }
+        }
+        this->check_owned(hi, lo)?;
+        if (!keep) { this->restore_state(saved_moved); }
+    }
+
+    bool has_err_defers() {
+        for (auto sc : this->scopes) {
+            for (auto d : sc.defers) { if (d.is_err) { return true; } }
+        }
+        return false;
+    }
+
+    !void declare_var(str name, Var v, i64 line) {
+        const auto sc = &this->scopes.items[this->scopes.len - 1];
+        if (sc.vars.has(name)) { this->err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed; }
+        sc.vars.put(name, v)?;
+        if (this->dbg && v.ptr.len > 3 && v.ptr[1] == 'v' && v.ptr[2] == '.') {
+            sprint(&this->allocas, "  ;@D {name} {v.ptr} {this->type_desc(v.ty)?}\n")?;
+        }
+    }
+
+    !Var lookup_var(str name) {
+        auto i = this->scopes.len;
+        while (i > 0) {
+            i -= 1;
+            const auto sc = &this->scopes.items[i];
+            if (sc.vars.has(name)) { return sc.vars.get(name); }
+        }
+        return this->globals.get(name);
+    }
+
+    bool has_var(str name) {
+        auto i = this->scopes.len;
+        while (i > 0) {
+            i -= 1;
+            if (this->scopes.items[i].vars.has(name)) { return true; }
+        }
+        return this->globals.has(name);
+    }
+
+    // ------------------------------------------------------------------ functions
+    !FnInst* inst_fn(FnDecl* decl, Env env, List<Type*> type_args) {
+        auto name = this->sb();
+        if (decl.is_extern && decl.link_name.len > 0) {
+            name.append(decl.link_name)?;
+        } else if (decl.is_extern || decl.is_export) {
+            name.append(decl.name)?;
+        } else {
+            name.append("vb.")?;
+            if (decl.receiver.len > 0) {
+                name.append(this->mangle(env.get("Self")?)?)?;
+                name.append(".")?;
+            }
+            name.append(decl.name)?;
+            for (auto x : type_args) { sprint(&name, ".{this->mangle(x)?}")?; }
+        }
+        const auto key = name.slice();
+        if (this->fn_insts.has(key)) {
+            const auto old = this->fn_insts.get(key)?;
+            if (old.busy) {
+                this->err(this->at_line);
+                if (this->cur != null && this->cur.decl != decl) {
+                    eprintln("recursive async functions: '{this->cur.decl.name}' calls '{decl.name}', which is already being built, so a frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame");
+                    return error.CompileFailed;
+                }
+                eprintln("async function '{decl.name}' calls itself, so its frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame");
+                return error.CompileFailed;
+            }
+            return old;
+        }
+        if (key.len > 400) {
+            this->err(decl.line); eprintln("'{decl.name}' is instantiated recursively with ever larger types");
+            return error.CompileFailed;
+        }
+
+        const auto saved_file = this->file;
+        this->file = decl.file;
+        defer this->file = saved_file;
+        auto params = List<Type*>::init(this->a);
+        for (auto p : decl.params) { params.push(this->resolve_type(p.ty, env)?)?; }
+        auto ret = this->t_void;
+        if (decl.ret != null) { ret = this->resolve_type(decl.ret, env)?; }
+        if (decl.is_async) { return this->inst_async(decl, env, key, params, ret); }
+        const auto fi = this->a.create<FnInst>()?;
+        *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };
+        this->fn_insts.put(key, fi)?;
+        if (decl.is_extern) {
+            auto txt = this->sb();
+            auto sret = false;
+            if (!decl.variadic && is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
+            if (decl.variadic) {
+                sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+            } else {
+                sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
+            }
+            if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; }
+            auto cm = List<i64>::init(this->a);
+            if (!decl.variadic) { cm = this->c_modes(params, ret)?; }
+            for (auto [i, p] : params) {
+                if (i > 0 || sret) { txt.append(", ")?; }
+                auto mode = 0;
+                if (i < cm.len) { mode = cm.get(i); }
+                txt.append(this->c_param_ty(p, mode)?)?;
+            }
+            if (decl.variadic) {
+                if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
+            }
+            txt.append(")")?;
+            this->declare(key, txt.slice())?;
+        } else {
+            this->pending.push(fi)?;
+        }
+        return fi;
+    }
+
+    List<Type*> no_types() { return List<Type*>::init(this->a); }
+
+    !void generate_check(str root) {
+        for (auto c : this->const_order) {
+            if (c.mutable) { this->emit_global_var(c) catch this->flush_diag(); }
+        }
+        for (auto f : this->fn_order) {
+            if (f.file != root || f.type_params.len > 0 || f.is_extern || f.body == null) { continue; }
+            _ = this->inst_fn(f, this->new_env()?, this->no_types()) catch {
+                this->flush_diag();
+                continue;
+            }
+        }
+        for (auto f : this->tests) {
+            _ = this->inst_fn(f, this->new_env()?, this->no_types()) catch {
+                this->flush_diag();
+                continue;
+            }
+        }
+        auto ms = List<FnDecl*>::init(this->a);
+        for (auto e : this->methods.entries) { if (e.used) { ms.push(e.value)?; } }
+        for (auto m : ms) {
+            if (m.file != root || m.type_params.len > 0 || m.receiver_params.len > 0 || m.body == null) { continue; }
+            const auto te = this->a.create<TypeExpr>()?;
+            te.k = .Name;
+            te.name = m.receiver;
+            te.args = List<TypeExpr*>::init(this->a);
+            const auto t = this->resolve_type(te, this->new_env()?) catch {
+                this->flush_diag();
+                continue;
+            };
+            const auto env = this->recv_env(m, t) catch {
+                this->flush_diag();
+                continue;
+            };
+            _ = this->inst_fn(m, env, this->no_types()) catch {
+                this->flush_diag();
+                continue;
+            }
+        }
+        while (this->pending.len > 0) {
+            const auto fi = this->pending.pop()?;
+            if (fi.generated) { continue; }
+            fi.generated = true;
+            this->gen_function(fi) catch this->flush_diag();
+        }
+    }
+
+    !void generate() {
+        if (this->ct_key.len > 0) { this->install_ct_main()?; } else { for (auto c : this->ct_checks) { this->ct_check(c)?; } }
+        for (auto c : this->const_order) { if (c.mutable) { this->emit_global_var(c)?; } }
+        FnInst* main_inst = null;
+        auto test_insts = List<FnInst*>::init(this->a);
+        if (this->test_mode) {
+            for (auto f : this->tests) { test_insts.push(this->inst_fn(f, this->new_env()?, this->no_types())?)?; }
+        } else if (this->fns.has("main")) {
+            const auto m = this->fns.get("main")?;
+            if (m.type_params.len > 0 || m.params.len > 0) { this->err(m.line); eprintln("main takes no parameters"); return error.CompileFailed; }
+            main_inst = this->inst_fn(m, this->new_env()?, this->no_types())?;
+        }
+        for (auto f : this->fn_order) { if (f.is_export) { _ = this->inst_fn(f, this->new_env()?, this->no_types())?; } }
+        if (!this->freestanding && (main_inst != null || this->test_mode) && this->fns.has("__rt_init")) {
+            this->rt_init = this->inst_fn(this->fns.get("__rt_init")?, this->new_env()?, this->no_types())?;
+        }
+        auto nerr = 0;
+        auto next = 0;
+        while (next < this->pending.len && nerr < 10) {
+            const auto fi = this->pending.get(next);
+            next += 1;
+            if (fi.generated) { continue; }
+            fi.generated = true;
+            this->gen_function(fi) catch {
+                this->flush_diag();
+                nerr += 1;
+            };
+        }
+        if (nerr > 0) { return error.CompileFailed; }
+        if (this->test_mode) {
+            this->gen_test_main(test_insts)?;
+        } else if (main_inst != null) {
+            this->gen_main_wrapper(main_inst)?;
+        }
+        auto refs = this->sb();
+        for (auto [i, n] : this->error_names) {
+            const auto s = this->str_global(n)?;
+            if (i > 0) { refs.append(", ")?; }
+            sprint(&refs, "ptr {s}")?;
+        }
+        sprint(&this->globals_out, "@__zark_errnames = private constant [{this->error_names.len} x ptr] [{refs.slice()}]\n")?;
+        auto lens = this->sb();
+        for (auto [i, n] : this->error_names) {
+            if (i > 0) { lens.append(", ")?; }
+            sprint(&lens, "i64 {n.len}")?;
+        }
+        sprint(&this->globals_out, "@__zark_errlens = private constant [{this->error_names.len} x i64] [{lens.slice()}]\n")?;
+    }
+
+    !void output(List<u8>*out) {
+        out.append("; generated by zark (self-hosted)\n")?;
+        out.append(this->types_out.slice())?;
+        out.append("\n")?;
+        out.append(this->globals_out.slice())?;
+        out.append("\n")?;
+        out.append(this->decls_out.slice())?;
+        out.append("\n")?;
+        out.append(this->funcs_out.slice())?;
+        if (this->safety) { out.append("\nattributes #0 = {{ null_pointer_is_valid }}\n")?; }
+    }
+
+    !void gen_test_main(List<FnInst*> insts) {
+        const auto w = &this->funcs_out;
+        this->declare("atoi", "declare i32 @atoi(ptr)")?;
+        this->declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?;
+        this->declare("fflush", "declare i32 @fflush(ptr)")?;
+        const auto f = this->str_global("error: %s\n")?;
+        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?;
+        if (this->rt_init != null) { sprint(w, "  call void @{this->rt_init.llname}()\n")?; }
+        w.append("  %has = icmp sgt i32 %argc, 1\n  br i1 %has, label %go, label %none\nnone:\n  ret i32 2\ngo:\n")?;
+        w.append("  %ap = getelementptr ptr, ptr %argv, i64 1\n  %as = load ptr, ptr %ap\n  %i = call i32 @atoi(ptr %as)\n  br label %c0\n")?;
+        for (auto [k, fi] : insts) {
+            sprint(w, "c{k}:\n  %k{k} = icmp eq i32 %i, {k}\n  br i1 %k{k}, label %t{k}, label %c{k + 1}\n")?;
+            sprint(w, "t{k}:\n  %r{k} = call {{ i32 }} @{fi.llname}()\n  %g{k} = extractvalue {{ i32 }} %r{k}, 0\n")?;
+            sprint(w, "  %b{k} = icmp ne i32 %g{k}, 0\n  br i1 %b{k}, label %e{k}, label %o{k}\no{k}:\n  ret i32 0\ne{k}:\n  call i32 @fflush(ptr null)\n")?;
+            sprint(w, "  %np{k} = getelementptr ptr, ptr @__zark_errnames, i32 %g{k}\n  %n{k} = load ptr, ptr %np{k}\n")?;
+            sprint(w, "  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n{k})\n  ret i32 1\n")?;
+        }
+        sprint(w, "c{insts.len}:\n  ret i32 2\n}}\n")?;
+    }
+
+    !void gen_main_wrapper(FnInst* mi) {
+        const auto w = &this->funcs_out;
+        w.append("define i32 @main(i32 %argc, ptr %argv) {{\nentry:\n")?;
+        if (this->globals.has("__argc")) {
+            w.append("  %argc64 = sext i32 %argc to i64\n  store i64 %argc64, ptr @g.__argc\n  store ptr %argv, ptr @g.__argv\n")?;
+        }
+        if (this->rt_init != null) { sprint(w, "  call void @{this->rt_init.llname}()\n")?; }
+        const auto rt = mi.ret;
+        if (rt.k == .Void) {
+            sprint(w, "  call void @{mi.llname}()\n  ret i32 0\n")?;
+        } else if (rt.k == .Int) {
+            sprint(w, "  %r = call {this->llty(rt)?} @{mi.llname}()\n")?;
+            if (rt.bits == 32) {
+                w.append("  ret i32 %r\n")?;
+            } else if (rt.bits > 32) {
+                w.append("  %r2 = trunc i64 %r to i32\n  ret i32 %r2\n")?;
+            } else {
+                sprint(w, "  %r2 = zext i{rt.bits} %r to i32\n  ret i32 %r2\n")?;
+            }
+        } else if (rt.k == .Errun && rt.elem.k == .Void) {
+            this->declare("dprintf", "declare i32 @dprintf(i32, ptr, ...)")?;
+            this->declare("fflush", "declare i32 @fflush(ptr)")?;
+            const auto f = this->str_global("error: %s\n")?;
+            sprint(w, "  %r = call {{ i32 }} @{mi.llname}()\n  %tag = extractvalue {{ i32 }} %r, 0\n  %bad = icmp ne i32 %tag, 0\n  br i1 %bad, label %err, label %ok\nok:\n  ret i32 0\nerr:\n  call i32 @fflush(ptr null)\n")?;
+            sprint(w, "  %np = getelementptr ptr, ptr @__zark_errnames, i32 %tag\n  %n = load ptr, ptr %np\n  call i32 (i32, ptr, ...) @dprintf(i32 2, ptr {f}, ptr %n)\n  ret i32 1\n")?;
+        } else {
+            this->err(mi.decl.line); eprintln("main must return void, an integer, or !void");
+            return error.CompileFailed;
+        }
+        w.append("}\n")?;
+    }
+
+    !void gen_function(FnInst* fi) {
+        const auto decl = fi.decl;
+        this->file = decl.file;
+        this->dbg = decl.file.len > 0 && decl.file[0] != '<';
+        this->last_line = 0;
+        this->body = this->sb();
+        this->allocas = this->sb();
+        this->scopes = List<Scope>::init(this->a);
+        this->loops = List<Loop>::init(this->a);
+        this->moved = List<MoveRec>::init(this->a);
+        this->colds = List<Cold>::init(this->a);
+        this->reinit = false;
+        this->shared = false;
+        this->nloop = 0;
+        this->ntmp = 0;
+        this->nlbl = 0;
+        this->terminated = false;
+        this->cur_label = "entry";
+        this->cur = fi;
+        this->const_this = fi.decl.is_const;
+        this->env = fi.env;
+
+        this->push_scope()?;
+        auto hdr = this->sb();
+        auto linkage = "internal ";
+        if (decl.is_export || fi.llname == "vb.main") { linkage = ""; }
+        sprint(&hdr, "define {linkage}{this->llty(fi.ret)?} @{fi.llname}(")?;
+        if (fi.is_closure) { hdr.append("ptr %ctx")?; }
+        for (auto [i, p] : decl.params) {
+            const auto pt = fi.params.get(i);
+            if (i > 0 || fi.is_closure) { hdr.append(", ")?; }
+            sprint(&hdr, "{this->llty(pt)?} %a.{i}")?;
+            const auto slot = this->alloca(pt, p.name)?;
+            auto an = this->sb();
+            sprint(&an, "%a.{i}")?;
+            this->store(Value{ .ty = pt, .v = an.slice() }, slot)?;
+            this->declare_var(p.name, Var{ .ptr = slot, .ty = pt, .mutable = p.mutable }, decl.line)?;
+        }
+        if (this->safety) { hdr.append(") #0 {{\n")?; } else { hdr.append(") {{\n")?; }
+        for (auto [i, cap] : fi.caps) {
+            const auto cp = this->tmp()?;
+            sprint(this->ins()?, "  {cp} = getelementptr ptr, ptr %ctx, i64 {i}\n")?;
+            const auto pv = this->load(this->t_ptr_u8, cp)?;
+            this->declare_var(cap.name, Var{ .ptr = pv.v, .ty = cap.ty, .mutable = cap.mutable }, decl.line)?;
+        }
+
+        this->gen_stmt(decl.body)?;
+        if (!this->terminated) {
+            this->run_defers(this->scopes.len - 1, 0, false, false)?;
+            if (fi.ret.k == .Void) {
+                sprint(this->ins()?, "  ret void\n")?;
+            } else if (fi.ret.k == .Errun && fi.ret.elem.k == .Void) {
+                sprint(this->ins()?, "  ret {{ i32 }} zeroinitializer\n")?;
+            } else {
+                if (!always_returns(decl.body)) {
+                    this->err(decl.line);
+                    eprintln("function '{decl.name}' does not return a value on every path; add a 'return' at the end");
+                    return error.CompileFailed;
+                }
+                sprint(this->ins()?, "  unreachable\n")?;
+            }
+            this->terminated = true;
+        }
+        this->scopes.len -= 1;
+
+        const auto w = &this->funcs_out;
+        w.append(hdr.slice())?;
+        w.append("entry:\n")?;
+        if (this->dbg) { sprint(w, "  ;@F {decl.file}\n  ;@L {decl.line}\n")?; }
+        w.append(this->allocas.slice())?;
+        w.append(this->body.slice())?;
+        this->emit_colds(w)?;
+        w.append("}\n\n")?;
+    }
+}
+
+!Gen* new_gen(Allocator a, bool safety) {
+    const auto g = a.create<Gen>()?;
+    g.a = a;
+    g.safety = safety;
+    g.fns = Map<FnDecl*>::init(a);
+    g.methods = Map<FnDecl*>::init(a);
+    g.structs = Map<StructDecl*>::init(a);
+    g.enums = Map<EnumInfo*>::init(a);
+    g.consts = Map<ConstDecl*>::init(a);
+    g.aliases = Map<TypeExpr*>::init(a);
+    g.globals = Map<Var>::init(a);
+    g.fn_order = List<FnDecl*>::init(a);
+    g.const_order = List<ConstDecl*>::init(a);
+    g.struct_insts = Map<StructInst*>::init(a);
+    g.fn_insts = Map<FnInst*>::init(a);
+    g.pending = List<FnInst*>::init(a);
+    g.tests = List<FnDecl*>::init(a);
+    g.declared = Map<bool>::init(a);
+    g.errors = Map<i64>::init(a);
+    g.error_names = List<str>::init(a);
+    g.pre_vals = List<Value>::init(a);
+    g.thunks = Map<i64>::init(a);
+    g.vtables = Map<str>::init(a);
+    g.rtypes = Map<Type*>::init(a);
+    g.types_out = List<u8>::init(a);
+    g.globals_out = List<u8>::init(a);
+    g.decls_out = List<u8>::init(a);
+    g.funcs_out = List<u8>::init(a);
+    g.body = List<u8>::init(a);
+    g.allocas = List<u8>::init(a);
+    g.cts = Map<Expr*>::init(a);
+    g.moved = List<MoveRec>::init(a);
+    g.colds = List<Cold>::init(a);
+    g.ct_checks = List<Expr*>::init(a);
+    g.ct_cache = Map<CtVal*>::init(a);
+    g.ct_extras = List<str>::init(a);
+    g.scopes = List<Scope>::init(a);
+    g.loops = List<Loop>::init(a);
+    g.env = g.new_env()?;
+    g.cur_label = "entry";
+    g.t_i64 = g.mk_int(64, true)?;
+    g.t_i32 = g.mk_int(32, true)?;
+    g.t_u64 = g.mk_int(64, false)?;
+    g.t_u8 = g.mk_int(8, false)?;
+    g.t_f64 = g.mk(.Float)?;
+    g.t_f64.bits = 64;
+    g.t_bool = g.mk(.Bool)?;
+    g.t_void = g.mk(.Void)?;
+    g.t_str = g.mk_elem(.Slice, g.t_u8)?;
+    g.t_errval = g.mk(.ErrVal)?;
+    g.t_null = g.mk(.Null)?;
+    g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?;
+    g.error_names.push("ok")?;
+    return g;
+}
+
+// ------------------------------------------------------------------ control flow
+
+// true when control can never fall off the end of `s`
+bool always_returns(Stmt* s) {
+    if (s == null) { return false; }
+    match s.k {
+        .Ret => return true;
+        .Block => {
+            for (auto x : s.stmts) { if (always_returns(x)) { return true; } }
+            return false;
+        }
+        .If => return s.els != null && always_returns(s.body) && always_returns(s.els);
+        .While => return s.e.k == .BoolLit && s.e.bval && !breaks_out(s.body, s.label, 0);
+        .Match => {
+            if (s.arms.len == 0) { return false; }
+            auto wild = false;
+            for (auto arm : s.arms) {
+                if (arm.pats.len == 0) { wild = true; }
+                if (!always_returns(arm.body)) { return false; }
+            }
+            return wild;
+        }
+        .ExprS => return s.e.k == .Call && s.e.l.k == .Ident && s.e.l.name == "panic";
+    }
+    return false;
+}
+
+// true when `s` contains a break that leaves the loop at nesting `depth` 0 (or labeled `lbl`)
+bool breaks_out(Stmt* s, str lbl, i64 depth) {
+    if (s == null) { return false; }
+    match s.k {
+        .Brk => return (s.label.len == 0 && depth == 0) || (s.label.len > 0 && s.label == lbl);
+        .Block => {
+            for (auto x : s.stmts) { if (breaks_out(x, lbl, depth)) { return true; } }
+            return false;
+        }
+        .If => return breaks_out(s.body, lbl, depth) || breaks_out(s.els, lbl, depth);
+        .While, .ForRange, .ForEach => return breaks_out(s.body, lbl, depth + 1);
+        .Match => {
+            for (auto arm : s.arms) { if (breaks_out(arm.body, lbl, depth)) { return true; } }
+            return false;
+        }
+    }
+    return false;
+}
+
+// ------------------------------------------------------------------ type predicates
+
+bool type_eq(Type* a, Type* b) {
+    if (a == b) { return true; }
+    if (a.k != b.k) { return false; }
+    match a.k {
+        .Int => return a.bits == b.bits && a.signed == b.signed;
+        .Float => return a.bits == b.bits;
+        .Ptr, .Slice, .Errun => return type_eq(a.elem, b.elem);
+        .Array => return a.len == b.len && a.vec == b.vec && type_eq(a.elem, b.elem);
+        .Strct => return a.si == b.si;
+        .Enm => return a.ei == b.ei;
+        .Func, .Closure => {
+            if (a.params.len != b.params.len || !type_eq(a.ret, b.ret)) { return false; }
+            for (auto i : 0..a.params.len) { if (!type_eq(a.params.get(i), b.params.get(i))) { return false; } }
+            return true;
+        }
+    }
+    return true;
+}
+
+bool is_str(Type* t) { return t.k == .Slice && t.elem.k == .Int && t.elem.bits == 8 && !t.elem.signed; }
+bool is_union(Type* t) { return t.k == .Strct && t.si.decl.is_union; }
+
+i64 field_index(StructInst* si, str name) {
+    for (auto [i, f] : si.fields) { if (f.name == name) { return i; } }
+    return -1;
+}
+
+bool contains_str(List<str> list, str s) {
+    for (auto x : list) { if (x == s) { return true; } }
+    return false;
+}

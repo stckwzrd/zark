@@ -2,10 +2,10 @@
 title: Коллекции: List, Map, Option
 order: 21
 section: Память и данные
-description: Динамический массив List<T>, хеш-таблица Map<V>, Option<T>, сортировка и вспомогательные функции стандартной библиотеки Vibe
+description: Динамический массив List<T>, хеш-таблица Map<V>, Option<T>, сортировка и вспомогательные функции стандартной библиотеки Zark
 ---
 
-Контейнеры в Vibe — обычные дженерик-структуры, написанные на самом Vibe (исходник — `src/std.vibe`, он подключается автоматически). Магии в них нет, и они подчиняются главному правилу: **память берут только через явный аллокатор**.
+Контейнеры в Zark — обычные дженерик-структуры, написанные на самом Zark (исходник — `src/std.zk`, он подключается автоматически). Магии в них нет, и они подчиняются главному правилу: **память берут только через явный аллокатор**.
 
 Какой контейнер выбрать:
 
@@ -18,7 +18,7 @@ description: Динамический массив List<T>, хеш-таблиц�
 
 ## `List<T>` — динамический массив
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -38,7 +38,7 @@ description: Динамический массив List<T>, хеш-таблиц�
 
 ### Структура списка
 
-```vibe
+```zark
 struct List<T> {
     T[] items;   // выделенный буфер, items.len — ёмкость
     i64 len;     // сколько элементов реально лежит
@@ -68,7 +68,7 @@ struct List<T> {
 | `sort()` | сортирует на месте (нужны `<`, `>`) |
 | `!void reserve(n)` | заранее выделяет ёмкость |
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -98,7 +98,7 @@ struct List<T> {
 
 `for` умеет перебирать всё, у чего есть `slice()`, поэтому список идёт прямо в цикл:
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -117,7 +117,7 @@ struct List<T> {
 
 `get` возвращает **копию**. Чтобы менять элементы структур, берите указатель на элемент:
 
-```vibe run
+```zark run
 struct Player { str name; i64 score; }
 
 !void main() {
@@ -145,7 +145,7 @@ struct Player { str name; i64 score; }
 
 Стек — это `push` + `pop`:
 
-```vibe run
+```zark run
 !void main() {
     auto st = List<i64>::init(c_allocator());
     defer st.deinit();
@@ -162,7 +162,7 @@ struct Player { str name; i64 score; }
 
 ### Список в списке
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -184,7 +184,7 @@ struct Player { str name; i64 score; }
 
 Ключ — всегда `str`, значение — любой тип `V`.
 
-```vibe run
+```zark run
 !void main() {
     auto m = Map<i64>::init(c_allocator());
     defer m.deinit();
@@ -216,7 +216,7 @@ struct Player { str name; i64 score; }
 
 Специального итератора нет, но таблица — это массив записей `entries`, и занятые записи помечены `used`:
 
-```vibe run
+```zark run
 !void main() {
     auto m = Map<i64>::init(c_allocator());
     defer m.deinit();
@@ -244,7 +244,7 @@ struct Player { str name; i64 score; }
 
 Типичная задача: посчитать, сколько раз встретилось каждое слово.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -269,7 +269,7 @@ struct Player { str name; i64 score; }
 
 ### Значения-структуры
 
-```vibe run
+```zark run
 struct Stat { i64 count; i64 sum; }
 
 !void main() {
@@ -285,7 +285,7 @@ struct Stat { i64 count; i64 sum; }
 
 `?T` — запись для `Option<T>`: union с вариантами `Some: T` и `None`. Подробно — в [ошибках и опциональных значениях](errors-and-optionals.md#опциональные-значения-t).
 
-```vibe run
+```zark run
 void main() {
     const ?i64 a = .Some(5);
     const ?i64 b = .None;
@@ -303,7 +303,7 @@ void main() {
 | `abs(x)` | модуль числа |
 | `swap(&a, &b)` | меняет два значения местами |
 
-```vibe run
+```zark run
 void main() {
     auto xs = [5, 2, 9, 1];
     sort(xs[..]);
@@ -323,7 +323,7 @@ void main() {
 
 ### Сортировка по ключу
 
-```vibe run
+```zark run
 struct P { str name; i64 age; }
 
 void sort_by_age(P[] ps) {
@@ -347,7 +347,7 @@ void main() {
 
 Если размер заранее известен, список не нужен. Массив на стеке быстрее, ничего не выделяет и не требует `deinit`:
 
-```vibe run
+```zark run
 void main() {
     i64[3][3] grid;
     for (auto r : 0..3) {
@@ -362,7 +362,7 @@ void main() {
 
 Функции принимают **срез**, поэтому одна и та же функция работает и с массивом, и со списком (`xs.slice()`):
 
-```vibe run
+```zark run
 i64 total(i64[] xs) {
     auto t = 0;
     for (auto x : xs) { t += x; }

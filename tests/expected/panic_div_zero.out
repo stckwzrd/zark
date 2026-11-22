@@ -1,1 +1,1 @@
-panic: division by zero at tests/panics/div_zero.vibe:2
+panic: division by zero at tests/panics/div_zero.zk:2

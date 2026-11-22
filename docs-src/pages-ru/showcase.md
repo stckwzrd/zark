@@ -5,12 +5,12 @@ section: Старт
 description: Одна большая программа, где вместе работают интерфейсы, SIMD, потоки, JSON, union, дженерики, операторы, замыкания, ошибки и тесты
 ---
 
-Здесь разобран `examples/showcase/`: небольшой трассировщик лучей на Vibe. Он читает сцену из JSON, рисует её на нескольких потоках и печатает картинку символами. Эту же программу использует тестовый набор компилятора: вывод проверяется на каждом бэкенде.
+Здесь разобран `examples/showcase/`: небольшой трассировщик лучей на Zark. Он читает сцену из JSON, рисует её на нескольких потоках и печатает картинку символами. Эту же программу использует тестовый набор компилятора: вывод проверяется на каждом бэкенде.
 
 ```sh
-vibe run examples/showcase/main.vibe
-vibe run examples/showcase/main.vibe -- --ppm scene.ppm
-vibe test examples/showcase/main.vibe
+zark run examples/showcase/main.zk
+zark run examples/showcase/main.zk -- --ppm scene.ppm
+zark test examples/showcase/main.zk
 ```
 
 Программа собирается через LLVM автоматически, потому что использует SIMD-векторы.
@@ -19,14 +19,14 @@ vibe test examples/showcase/main.vibe
 
 | Файл | Что показывает |
 |---|---|
-| `vec.vibe` | структура `Vec3` поверх SIMD-вектора `f32x4`, перегрузка операторов (`+ - *` и унарный `-`), конструктор, `const`-методы, дженерик `clamp<T: Ord>` и блоки `test` |
-| `scene.vibe` | `interface Shape`, которую две структуры реализуют без всяких объявлений, `union Material` с данными, опциональные `?Hit`, загрузка сцены модулем `std/json` и ошибки `!T` |
-| `render.vibe` | дженерик `Grid<T>`, `match` по union, рекурсия для отражений, рабочие потоки с атомарным счётчиком строк и `WaitGroup`, замыкание с явным захватом и заворачивающий оператор `*%` в контрольной сумме |
-| `main.vibe` | `Arena` с `defer`, `embed` файла сцены, `Writer` поверх `print`, обработка ошибок через `catch`, аргументы командной строки и тесты всего конвейера |
+| `vec.zk` | структура `Vec3` поверх SIMD-вектора `f32x4`, перегрузка операторов (`+ - *` и унарный `-`), конструктор, `const`-методы, дженерик `clamp<T: Ord>` и блоки `test` |
+| `scene.zk` | `interface Shape`, которую две структуры реализуют без всяких объявлений, `union Material` с данными, опциональные `?Hit`, загрузка сцены модулем `std/json` и ошибки `!T` |
+| `render.zk` | дженерик `Grid<T>`, `match` по union, рекурсия для отражений, рабочие потоки с атомарным счётчиком строк и `WaitGroup`, замыкание с явным захватом и заворачивающий оператор `*%` в контрольной сумме |
+| `main.zk` | `Arena` с `defer`, `embed` файла сцены, `Writer` поверх `print`, обработка ошибок через `catch`, аргументы командной строки и тесты всего конвейера |
 
 ## Вектор на SIMD
 
-```vibe
+```zark
 struct Vec3 {
     f32x4 v;
 
@@ -46,7 +46,7 @@ struct Vec3 {
 
 ## Фигуры без наследования
 
-```vibe
+```zark
 interface Shape {
     ?Hit intersect(Ray r);
 }
@@ -64,7 +64,7 @@ struct Sphere {
 
 ## Union с данными
 
-```vibe
+```zark
 union Material {
     Vec3 Diffuse;
     Vec3 Mirror;
@@ -82,7 +82,7 @@ match hit.mat {
 
 Чтение сцены возвращает `!Scene`. Отсутствующее поле, вектор неверной длины, неизвестная фигура и неверный JSON — каждое становится ошибкой, которую вызывающий может напечатать или проверить в тесте:
 
-```vibe
+```zark
 !Material read_material(json::Value* m) {
     const auto kind = m.get("kind").as_str()?;
     const auto color = read_vec(m.get("color"))?;
@@ -95,7 +95,7 @@ match hit.mat {
 
 ## Потоки без скрытых выделений
 
-```vibe
+```zark
 !void render(Scene* sc, Grid<Vec3>* img, i64 workers) {
     auto next_row = thread::AtomicI64{};
     auto wg = thread::WaitGroup{};

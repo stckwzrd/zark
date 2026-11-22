@@ -2,10 +2,10 @@
 title: "Collections: List, Map, Option"
 order: 21
 section: Memory and data
-description: The dynamic array List<T>, the hash table Map<V>, Option<T>, sorting and the helper functions of the Vibe standard library
+description: The dynamic array List<T>, the hash table Map<V>, Option<T>, sorting and the helper functions of the Zark standard library
 ---
 
-Containers in Vibe are ordinary generic structs written in Vibe itself (the source is `std/std.vibe`, which is included automatically). There is no magic in them, and they obey the main rule: **memory is taken only through an explicit allocator**.
+Containers in Zark are ordinary generic structs written in Zark itself (the source is `std/std.zk`, which is included automatically). There is no magic in them, and they obey the main rule: **memory is taken only through an explicit allocator**.
 
 Which container to choose:
 
@@ -18,7 +18,7 @@ Which container to choose:
 
 ## `List<T>`: a dynamic array
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -38,7 +38,7 @@ Three rules:
 
 ### The structure of a list
 
-```vibe
+```zark
 struct List<T> {
     T[] items;   // the allocated buffer, items.len is the capacity
     i64 len;     // how many elements are actually there
@@ -68,7 +68,7 @@ So `xs.len` is the number of elements, and `xs.items.len` is the capacity. The b
 | `sort()` | sorts in place (needs `<`, `>`) |
 | `!void reserve(n)` | allocates capacity in advance |
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -98,7 +98,7 @@ So `xs.len` is the number of elements, and `xs.items.len` is the capacity. The b
 
 `for` can iterate over anything that has `slice()`, so a list goes straight into a loop:
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -117,7 +117,7 @@ So `xs.len` is the number of elements, and `xs.items.len` is the capacity. The b
 
 `get` returns a **copy**. To change the elements of structs, take a pointer to the element:
 
-```vibe run
+```zark run
 struct Player { str name; i64 score; }
 
 !void main() {
@@ -145,7 +145,7 @@ struct Player { str name; i64 score; }
 
 A stack is `push` + `pop`:
 
-```vibe run
+```zark run
 !void main() {
     auto st = List<i64>::init(c_allocator());
     defer st.deinit();
@@ -162,7 +162,7 @@ A slice of a list (`xs.slice()`) can be sliced further too (`xs.slice()[1..3]`),
 
 ### A list in a list
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -184,7 +184,7 @@ Here the arena frees everything at once, so the nested lists do not need `deinit
 
 The key is always a `str`, and the value is any type `V`.
 
-```vibe run
+```zark run
 !void main() {
     auto m = Map<i64>::init(c_allocator());
     defer m.deinit();
@@ -216,7 +216,7 @@ You cannot delete keys (there is no `remove` method). `get` returns a copy of th
 
 There is no special iterator, but the table is an array of records `entries`, and the occupied records are marked `used`:
 
-```vibe run
+```zark run
 !void main() {
     auto m = Map<i64>::init(c_allocator());
     defer m.deinit();
@@ -244,7 +244,7 @@ The order of traversal is the order of the hash table's slots, not the order of 
 
 A typical task: count how many times each word occurs.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -269,7 +269,7 @@ The keys here are slices of `text`, and `text` is a literal that lives for the w
 
 ### Struct values
 
-```vibe run
+```zark run
 struct Stat { i64 count; i64 sum; }
 
 !void main() {
@@ -285,7 +285,7 @@ struct Stat { i64 count; i64 sum; }
 
 `?T` is the notation for `Option<T>`: a union with the variants `Some: T` and `None`. Described in detail in [errors and optional values](errors-and-optionals.md#optional-values-t).
 
-```vibe run
+```zark run
 void main() {
     const ?i64 a = .Some(5);
     const ?i64 b = .None;
@@ -303,7 +303,7 @@ void main() {
 | `abs(x)` | the absolute value of a number |
 | `swap(&a, &b)` | swaps two values |
 
-```vibe run
+```zark run
 void main() {
     auto xs = [5, 2, 9, 1];
     sort(xs[..]);
@@ -323,7 +323,7 @@ void main() {
 
 ### Sorting by a key
 
-```vibe run
+```zark run
 struct P { str name; i64 age; }
 
 void sort_by_age(P[] ps) {
@@ -347,7 +347,7 @@ void main() {
 
 If the size is known in advance, you do not need a list. An array on the stack is faster, allocates nothing and needs no `deinit`:
 
-```vibe run
+```zark run
 void main() {
     i64[3][3] grid;
     for (auto r : 0..3) {
@@ -362,7 +362,7 @@ void main() {
 
 Functions take a **slice**, so the same function works with an array and with a list (`xs.slice()`):
 
-```vibe run
+```zark run
 i64 total(i64[] xs) {
     auto t = 0;
     for (auto x : xs) { t += x; }

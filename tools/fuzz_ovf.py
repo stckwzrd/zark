@@ -72,13 +72,13 @@ def expected(t, op, a, b):
     return str(r) if lo <= r <= hi else None
 
 
-def build(vibe, src, exe, flags):
-    p = subprocess.run([vibe, "build", src, "-o", exe] + flags, capture_output=True, text=True, timeout=300)
+def build(zark, src, exe, flags):
+    p = subprocess.run([zark, "build", src, "-o", exe] + flags, capture_output=True, text=True, timeout=300)
     return p.returncode, p.stdout + p.stderr
 
 
 def main():
-    vibe = os.environ.get("VIBE", "build/vibe")
+    zark = os.environ.get("ZARK", "build/zark")
     only = sys.argv[1:] or INTS
     bad = 0
     total = 0
@@ -87,11 +87,11 @@ def main():
         pl = pool(t)
         pairs = cases(list(itertools.product(pl, pl)))
         for op in ("+", "-", "*", "/", "%"):
-            src = os.path.join(d, f"o_{t}.vibe")
+            src = os.path.join(d, f"o_{t}.zk")
             open(src, "w").write(program(t, op, pairs))
             for name, flags in (("native", []), ("llvm", ["--llvm"]), ("O2", ["-O"])):
                 exe = os.path.join(d, f"o_{t}_{name}")
-                code, out = build(vibe, src, exe, flags)
+                code, out = build(zark, src, exe, flags)
                 if code != 0:
                     print(f"{t} {op} {name}: build failed: {out[:300]}")
                     bad += 1

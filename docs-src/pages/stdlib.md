@@ -2,10 +2,10 @@
 title: Standard library reference
 order: 40
 section: Reference
-description: All the functions and types of the Vibe prelude: output, strings, numbers, allocators, List, Map, Option, files, processes, time and math
+description: All the functions and types of the Zark prelude: output, strings, numbers, allocators, List, Map, Option, files, processes, time and math
 ---
 
-The standard library is a single file, `std/std.vibe`, written in Vibe itself. It is attached to every program **automatically** (the prelude). Nothing needs to be imported.
+The standard library is a single file, `std/std.zk`, written in Zark itself. It is attached to every program **automatically** (the prelude). Nothing needs to be imported.
 
 The names from the prelude share a namespace with yours: you cannot declare your own function named `min`, `max`, `abs`, `sort`, `swap`, `run`, `env`, `cstr`, `arg` and so on; you will get the error "duplicate function".
 
@@ -31,7 +31,7 @@ These are **built-in** functions of the compiler. The format is `println("x = {x
 
 ## Allocators
 
-```vibe
+```zark
 struct Allocator {
     void* ctx;
     fn(void*, u64, u64) -> void* alloc_fn;
@@ -117,7 +117,7 @@ Keys are not copied.
 
 ## `Option<T>`
 
-```vibe
+```zark
 union Option<T> {
     T Some;
     None;
@@ -144,7 +144,7 @@ union Option<T> {
 | `floor`, `ceil`, `fabs` | round down, round up, absolute value |
 | `PI` | 3.141592653589793 |
 
-```vibe run
+```zark run
 void main() {
     println(sqrt(16.0), sin(0.0), cos(0.0), floor(2.7), ceil(2.1), fabs(-3.0));
     println(exp(0.0), log(1.0), pow(2.0, 10.0), PI);
@@ -175,7 +175,7 @@ void main() {
 | `u64 bits_f64(x)` | the bits of a number |
 | `f64 f64_from_bits(x)` | a number from bits |
 
-```vibe run
+```zark run
 void main() {
     println(parse_int(" -42 ") catch 0);
     println(parse_int("4x") catch -1);
@@ -198,7 +198,7 @@ void main() {
 
 The result of `read_file` is allocated through `a`: free it (or use an arena).
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     write_file("demo.txt", "line 1\nline 2\n")?;
@@ -232,7 +232,7 @@ The result of `read_file` is allocated through `a`: free it (or use an arena).
 | `str arg(i)` | an argument by number; `arg(0)` is the program path |
 | `void exit(i32 code)` | ends the program |
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     const auto code = run(a, ["/bin/echo", "hi", "there"])?;
@@ -244,7 +244,7 @@ The result of `read_file` is allocated through `a`: free it (or use an arena).
 }
 ```
 
-Program arguments with `vibe run` go after `--`: `vibe run main.vibe -- a b`.
+Program arguments with `zark run` go after `--`: `zark run main.zk -- a b`.
 
 ## Time and random numbers
 
@@ -257,7 +257,7 @@ Program arguments with `vibe run` go after `--`: `vibe run main.vibe -- a b`.
 
 Measuring time:
 
-```vibe run
+```zark run
 void main() {
     const auto t0 = now_ns();
     auto s = 0;
@@ -271,7 +271,7 @@ void main() {
 
 A hash table with keys of any type that can be printed and compared with `==`: integers, `str`, enums, and structs with an `operator==` that compares all fields. The hash is computed from the value itself (`hash_of`), so nothing has to be declared. Keys are not copied.
 
-```vibe run
+```zark run
 enum Color { Red, Green }
 
 !void main() {
@@ -321,10 +321,10 @@ All of these return slices of the input or take an `Allocator` for a new string.
 
 UTF-8: `utf8_len(s)` counts code points, `utf8_valid(s)`, `utf8_decode(s, i)` gives a `Rune{ code, size }`, `utf8_encode(buf, cp)`, and `utf8_runes(s)` iterates (`it.code`, `it.at`).
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
-    auto it = str_split("name=Vibe;year=2026", ";");
+    auto it = str_split("name=Zark;year=2026", ";");
     while (it.next()) {
         const auto eq = str_find_byte(it.part, '=');
         println(it.part[0..eq], "->", it.part[eq + 1..]);
@@ -337,7 +337,7 @@ UTF-8: `utf8_len(s)` counts code points, `utf8_valid(s)`, `utf8_decode(s, i)` gi
 
 `!void sort_by(a, T[] s, fn(T, T) -> bool less)` sorts any slice with your comparison. It is stable (equal elements keep their order) and needs an allocator for a temporary buffer.
 
-```vibe run
+```zark run
 struct User { str name; i64 age; }
 bool by_age(User x, User y) { return x.age < y.age; }
 
@@ -359,7 +359,7 @@ An allocator for finding memory bugs in tests and debug builds. Every block gets
 - `fail_after_n(n)` makes the allocation after `n` successful ones fail, to test out-of-memory paths;
 - `trap_id = k` stops in the debugger where block `#k` is allocated.
 
-```vibe run
+```zark run
 !void main() {
     auto dbg = DebugAllocator::init();
     {
@@ -384,11 +384,11 @@ backtrace:
   #0 0x2187 in ./app
   #1 0x13ad in ./app
 where (addr2line):
-vb.get at /home/me/app.vibe:3
-vb.main at /home/me/app.vibe:7
+vb.get at /home/me/app.zk:3
+vb.main at /home/me/app.zk:7
 ```
 
-The causes it tells apart: null pointer, stack overflow (endless recursion), integer division by zero, use after free and out-of-bounds access in a `DebugAllocator` block. The source lines come from `addr2line` (binutils), when it is installed. `VIBE_CRASH_HANDLER=0` turns the handler off (for core dumps).
+The causes it tells apart: null pointer, stack overflow (endless recursion), integer division by zero, use after free and out-of-bounds access in a `DebugAllocator` block. The source lines come from `addr2line` (binutils), when it is installed. `ZARK_CRASH_HANDLER=0` turns the handler off (for core dumps).
 
 ## libc functions available without a declaration
 

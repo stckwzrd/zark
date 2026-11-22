@@ -2,10 +2,10 @@
 title: Ошибки и опциональные значения
 order: 17
 section: Язык
-description: Тип !T, error.Имя, ?, catch, errdefer, тип ?T и orelse в Vibe с разбором типичных шаблонов
+description: Тип !T, error.Имя, ?, catch, errdefer, тип ?T и orelse в Zark с разбором типичных шаблонов
 ---
 
-В Vibe нет исключений. Ошибка — обычное значение, которое функция возвращает рядом с результатом. Всё видно в сигнатуре и в месте вызова.
+В Zark нет исключений. Ошибка — обычное значение, которое функция возвращает рядом с результатом. Всё видно в сигнатуре и в месте вызова.
 
 Для двух разных ситуаций есть два типа:
 
@@ -18,7 +18,7 @@ description: Тип !T, error.Имя, ?, catch, errdefer, тип ?T и orelse в
 
 Функция объявляет, что может завершиться ошибкой, добавив `!` перед типом результата. Вернуть ошибку — `return error.Имя`.
 
-```vibe run
+```zark run
 !i64 safe_div(i64 a, i64 b) {
     if (b == 0) { return error.DivByZero; }
     return a / b;
@@ -36,7 +36,7 @@ void main() {
 
 Если результат не нужен, а ошибка возможна, пишите `!void`:
 
-```vibe run
+```zark run
 !void check(i64 n) {
     if (n < 0) { return error.Negative; }
 }
@@ -49,7 +49,7 @@ void main() {
 
 Значение `!T` можно положить в переменную и напечатать. Оно печатается как значение или как `error.Имя`:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return n;
@@ -64,7 +64,7 @@ void main() {
 
 Использовать такое значение как обычное число нельзя, оно должно быть сначала «распаковано»:
 
-```vibe error
+```zark error
 !i64 f() { return 1; }
 
 void main() {
@@ -76,7 +76,7 @@ void main() {
 
 Если вызвать функцию с `!T` и ничего не сделать с результатом, это ошибка компиляции. Забыть про отказ нельзя:
 
-```vibe error
+```zark error
 !i64 f() { return 1; }
 
 void main() {
@@ -91,7 +91,7 @@ void main() {
 
 `выражение?` — если внутри ошибка, функция **немедленно возвращает её же** вызывающему (выполнив `defer` и `errdefer`). Если значение — оно извлекается.
 
-```vibe run
+```zark run
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -112,7 +112,7 @@ void main() {
 
 `?` можно ставить только в функции, которая сама возвращает `!T`. Иначе непонятно, куда пробрасывать:
 
-```vibe error
+```zark error
 !i64 f() { return 1; }
 i64 g() { return f()?; }
 
@@ -127,7 +127,7 @@ void main() {
 
 Если `main` возвращает `!void`, непойманная ошибка завершает программу кодом 1 и печатает `error: Имя`:
 
-```vibe run exit
+```zark run exit
 !void load() {
     return error.FileMissing;
 }
@@ -143,7 +143,7 @@ void main() {
 
 `выражение catch запасное` — результат успешного выражения, а при ошибке — `запасное`.
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return n * 10;
@@ -159,7 +159,7 @@ void main() {
 
 `catch |e| { ... }` даёт доступ к ошибке. Блок должен **дать значение** (последнее выражение блока) или **выйти** из функции/цикла через `return`, `break`, `continue`, `panic`.
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     if (n < 0) { return error.Negative; }
@@ -177,7 +177,7 @@ void main() {
 
 Выбрать значение по виду ошибки можно через сравнение. `if` — оператор, поэтому значение заводится заранее:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return error.Other;
@@ -204,7 +204,7 @@ void main() {
 
 Блок, который не даёт значения, — ошибка. Последним должно стоять выражение:
 
-```vibe error
+```zark error
 !i64 f() { return error.X; }
 
 void main() {
@@ -218,7 +218,7 @@ void main() {
 
 В ветке `catch` можно выйти из текущей функции или цикла:
 
-```vibe run
+```zark run
 !i64 f(i64 n) {
     if (n == 0) { return error.Zero; }
     return n;
@@ -242,7 +242,7 @@ void main() {
 
 Если выражение ничего не возвращает, после `catch` стоит просто действие:
 
-```vibe run
+```zark run
 !void f() { return error.Boom; }
 
 void main() {
@@ -254,7 +254,7 @@ void main() {
 
 ### Сознательно отбросить: `_ =`
 
-```vibe run
+```zark run
 !i64 risky() { return error.Fail; }
 
 void main() {
@@ -269,7 +269,7 @@ void main() {
 
 `errdefer` выполняется только тогда, когда функция выходит **с ошибкой**. Он нужен для отката частично созданного состояния. Обычный `defer` выполняется всегда (см. [управление потоком](control-flow.md#defer-и-errdefer)).
 
-```vibe run
+```zark run
 !i64 make(i64 n) {
     errdefer println("откат: make({n}) не удался");
     defer println("в любом случае: закончили make({n})");
@@ -285,7 +285,7 @@ void main() {
 
 Правило работает и для ошибки, пришедшей через `?`, и для `return g()`, который оказался ошибкой:
 
-```vibe run
+```zark run
 !void inner() { return error.OutOfRange; }
 
 !void outer() {
@@ -320,7 +320,7 @@ void main() {
 
 Полная таблица — в [справочнике](stdlib.md).
 
-```vibe run
+```zark run
 void main() {
     println(parse_int("42") catch -1);
     const auto e = parse_int("abc") catch |e| {
@@ -337,7 +337,7 @@ void main() {
 
 В `?T` неявно превращаются значение `T` и `null`:
 
-```vibe run
+```zark run
 ?i64 find(i64[] xs, i64 want) {
     for (auto [i, x] : xs) {
         if (x == want) { return i; }
@@ -357,7 +357,7 @@ void main() {
 
 `a orelse b` — значение `a`, а если оно пустое, то `b`. Правая часть может быть выходом: `return`, `break`, `continue`.
 
-```vibe run
+```zark run
 ?i64 find(i64[] xs, i64 want) {
     for (auto [i, x] : xs) {
         if (x == want) { return i; }
@@ -386,7 +386,7 @@ void main() {
 
 ### Проверка и разбор
 
-```vibe run
+```zark run
 ?i64 pick(i64 n) {
     if (n > 0) { return n; }
     return null;
@@ -413,7 +413,7 @@ void main() {
 
 Для «указатель, который может отсутствовать» используйте `?T*`. Сравнивать значение типа `?T` с `null` напрямую (`x == null`) нельзя: используйте `orelse`, `is .None` или `match`.
 
-```vibe run
+```zark run
 struct Node { i64 v; }
 
 ?Node* find(Node[] xs, i64 v) {
@@ -438,7 +438,7 @@ void main() {
 
 Операция, которая может сломаться и ещё вернуть «ничего»: `!?T`. Сначала разворачивается `!`, потом `?`:
 
-```vibe run
+```zark run
 !?i64 lookup(str key) {
     if (key.len == 0) { return error.EmptyKey; }
     if (key == "a") { return 1; }
@@ -464,7 +464,7 @@ void main() {
 
 Для ошибок программиста (нарушенный инвариант) есть `panic("сообщение")` и `assert(условие)`: они печатают место и завершают программу с кодом 1. Они не заменяют `!T`.
 
-```vibe run panic
+```zark run panic
 void main() {
     const auto n = 3;
     assert(n > 0);

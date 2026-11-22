@@ -2,7 +2,7 @@
 title: Быстрый тур
 order: 2
 section: Старт
-description: Весь язык Vibe на одной странице: короткие программы с настоящим выводом
+description: Весь язык Zark на одной странице: короткие программы с настоящим выводом
 ---
 
 Эта страница показывает всё основное за один присест. Подробности каждой темы — на отдельных страницах, ссылки в конце разделов.
@@ -11,7 +11,7 @@ description: Весь язык Vibe на одной странице: корот
 
 Переменные изменяемы по умолчанию, `const` делает их неизменяемыми. Вместо типа можно написать `auto`: он выводится из значения.
 
-```vibe run fragment
+```zark run fragment
 const auto a = 10;
 auto b = 20;
 b += a;
@@ -21,7 +21,7 @@ println("a = {a}, b = {b}, pi = {pi}");
 
 Попытка изменить `const`-переменную не компилируется:
 
-```vibe error fragment
+```zark error fragment
 const auto a = 10;
 a = 11;
 ```
@@ -32,7 +32,7 @@ a = 11;
 
 Целые и дробные типы называются как в Rust: `i8..i64`, `u8..u64`, `f32`, `f64`. Неявно расширять можно только без потерь, остальное — через `as`.
 
-```vibe run fragment
+```zark run fragment
 const i32 small = 1000;
 const i64 big = small;
 const auto back = big as i32;
@@ -43,7 +43,7 @@ println(big, back, f, t);
 
 Сужение без `as` не компилируется:
 
-```vibe error fragment
+```zark error fragment
 const i64 big = 1000;
 const i32 small = big;
 ```
@@ -54,8 +54,8 @@ const i32 small = big;
 
 `str` — это срез байтов. Внутри `"..."` в фигурных скобках можно писать любое выражение, после двоеточия — формат.
 
-```vibe run fragment
-const auto name = "Vibe";
+```zark run fragment
+const auto name = "Zark";
 const auto n = 255;
 println("{name} has {name.len} letters");
 println("hex {n:x}, padded {n:08X}, width [{n:6}] [{n:-6}]");
@@ -66,7 +66,7 @@ println("pi ~ {3.14159265:.3}");
 
 ## Управление потоком
 
-```vibe run fragment
+```zark run fragment
 for (auto i : 1..6) {
     if (i % 2 == 0) {
         println("{i} чётное");
@@ -85,7 +85,7 @@ println("n = {n}");
 
 ## Функции
 
-```vibe run
+```zark run
 i64 square(i64 x) {
     return x * x;
 }
@@ -95,7 +95,7 @@ void greet(str name) {
 }
 
 void main() {
-    greet("Vibe");
+    greet("Zark");
     println(square(12));
 }
 ```
@@ -104,7 +104,7 @@ void main() {
 
 ## Структуры и методы
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -128,7 +128,7 @@ void main() {
 
 ## Enum, union и match
 
-```vibe run
+```zark run
 enum Color { Red, Green, Blue }
 
 union Shape {
@@ -163,7 +163,7 @@ void main() {
 
 Ошибка — значение. Функция, которая может завершиться ошибкой, возвращает `!T`. Оператор `?` пробрасывает ошибку вверх, `catch` — обрабатывает.
 
-```vibe run exit
+```zark run exit
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -186,7 +186,7 @@ void main() {
 
 `?T` — значение или ничего. `orelse` подставляет запасное.
 
-```vibe run
+```zark run
 ?i64 find(i64[] items, i64 want) {
     for (auto [i, x] : items) {
         if (x == want) { return i; }
@@ -205,7 +205,7 @@ void main() {
 
 Ничто не выделяет память само. Куча — только через аллокатор, который вы передаёте явно.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -221,7 +221,7 @@ void main() {
 
 ## Дженерики
 
-```vibe run
+```zark run
 template<T: Ord> T largest(T a, T b) {
     if (a > b) { return a; }
     return b;
@@ -240,7 +240,7 @@ void main() {
 
 Замыкание явно перечисляет, какие переменные оно использует. Контекст живёт на стеке, ничего не выделяется.
 
-```vibe run
+```zark run
 i64 apply(fn[](i64) -> i64 f, i64 x) {
     return f(x);
 }
@@ -258,7 +258,7 @@ void main() {
 
 ## Тесты
 
-```vibe test
+```zark test
 i64 add(i64 a, i64 b) { return a + b; }
 
 test "складывает" {
@@ -276,14 +276,14 @@ test "ноль нейтрален" {
 
 Файл подключается через `import`. С `as` его имена получают префикс:
 
-```vibe file=geometry.vibe
+```zark file=geometry.zk
 struct Rect { i64 w; i64 h; }
 
 i64 area(Rect r) { return r.w * r.h; }
 ```
 
-```vibe run
-import "geometry.vibe" as geo;
+```zark run
+import "geometry.zk" as geo;
 
 void main() {
     const auto r = geo::Rect{ .w = 3, .h = 4 };
@@ -295,7 +295,7 @@ void main() {
 
 ## Вызов C
 
-```vibe run
+```zark run
 extern i32 atoi(u8* s);
 
 void main() {
@@ -307,7 +307,7 @@ void main() {
 
 ## Куда дальше
 
-- Пришли из C++? Отличия собраны на странице [Vibe для C++-программиста](cpp-style.md).
+- Пришли из C++? Отличия собраны на странице [Zark для C++-программиста](cpp-style.md).
 - Углубляться в порядке страниц раздела «Язык»: [лексика](lexical.md), [типы](types.md) и далее.
 - Посмотреть готовые программы: [рецепты](cookbook.md).
 - Если что-то ведёт себя неожиданно: [ловушки и FAQ](gotchas.md).

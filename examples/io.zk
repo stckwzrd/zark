@@ -1,0 +1,16 @@
+!void main() {
+    const auto a = c_allocator();
+    auto out = List<u8>::init(a);
+    defer out.deinit();
+    for (auto i : 0..3) { sprint(&out, "line {i}: {i * i}\n")?; }
+    sprint(&out, "pi={PI} ok={true}\n")?;
+    write_file(".zark-cache/zark_io.txt", out.slice())?;
+    const auto back = read_file(a, ".zark-cache/zark_io.txt")?;
+    defer a.free(back);
+    print(back);
+    println("exists: {file_exists(".zark-cache/zark_io.txt")} {file_exists("/nope")}");
+    const auto code = run(a, ["sh", "-c", "echo hello from child; exit 3"])?;
+    println("child exit = {code}");
+    const auto missing = read_file(a, "/nope/x") catch |e| { println("read missing: {e}"); ""; };
+    println(missing.len, "\x41\x42");
+}

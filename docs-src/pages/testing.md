@@ -2,14 +2,14 @@
 title: Testing
 order: 31
 section: Interop and tools
-description: test blocks, assert, vibe test, how to test errors and memory, and organizing tests in Vibe
+description: test blocks, assert, zark test, how to test errors and memory, and organizing tests in Zark
 ---
 
-Tests are built into the language: a special `test` block is written next to the code, and the command `vibe test` runs them. No separate libraries or configuration files are needed.
+Tests are built into the language: a special `test` block is written next to the code, and the command `zark test` runs them. No separate libraries or configuration files are needed.
 
 ## The first test
 
-```vibe test
+```zark test
 i64 add(i64 a, i64 b) {
     return a + b;
 }
@@ -26,14 +26,14 @@ test "zero is neutral" {
 Run it with the command:
 
 ```sh
-vibe test main.vibe
+zark test main.zk
 ```
 
 `test "name" { ... }` is a top-level declaration. Inside is ordinary code. A test is a function that returns `!void`, so `?` works in it.
 
 A test **passes** if the block reaches its end. It **fails** if an `assert` or `panic` fires, or if `?` receives an error.
 
-## What `vibe test` does
+## What `zark test` does
 
 1. Compiles the file with all the `test` blocks (and with all its imports).
 2. Runs each test **in a separate process**. The failure of one (even a crash) does not break the others.
@@ -41,11 +41,11 @@ A test **passes** if the block reaches its end. It **fails** if an `assert` or `
 4. For failed tests, shows everything they printed.
 5. Returns exit code 0 if nothing failed, and 1 if something did.
 
-`test` blocks are **ignored** by `vibe run` and `vibe build`. A file with tests remains an ordinary program.
+`test` blocks are **ignored** by `zark run` and `zark build`. A file with tests remains an ordinary program.
 
 ## What failures look like
 
-```vibe test fails
+```zark test fails
 i64 add(i64 a, i64 b) { return a + b; }
 !i64 parse(str s) { return parse_int(s); }
 
@@ -84,7 +84,7 @@ The output of **passed** tests is hidden: it is needed only when something is br
 
 `assert(condition)` checks a `bool`. If the condition is false, the program ends with a message and a location. It works not only in tests but in ordinary code too:
 
-```vibe run panic
+```zark run panic
 void main() {
     const auto xs = [1, 2, 3];
     assert(xs.len == 3);
@@ -96,7 +96,7 @@ void main() {
 
 `assert` has no separate message. If you need context, use `panic` with a format:
 
-```vibe run panic
+```zark run panic
 void main() {
     const auto got = 41;
     if (got != 42) {
@@ -109,7 +109,7 @@ void main() {
 
 An expected error is checked with `catch`:
 
-```vibe test
+```zark test
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -143,7 +143,7 @@ The pattern is this: `catch |e|` checks the error and leaves the test through `r
 
 Tests can allocate memory like ordinary code. Create an allocator inside the test and free through `defer`:
 
-```vibe test
+```zark test
 test "list" {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -182,7 +182,7 @@ Tests are usually written **in the same file**, under the code they check: then 
 
 If there are many tests, create a separate file and import the module:
 
-```vibe file=mathx.vibe
+```zark file=mathx.zk
 i64 clamp(i64 x, i64 lo, i64 hi) {
     if (x < lo) { return lo; }
     if (x > hi) { return hi; }
@@ -190,8 +190,8 @@ i64 clamp(i64 x, i64 lo, i64 hi) {
 }
 ```
 
-```vibe test
-import "mathx.vibe" as m;
+```zark test
+import "mathx.zk" as m;
 
 test "clamp inside the range" {
     assert(m::clamp(5, 0, 10) == 5);
@@ -214,8 +214,8 @@ If a file has no `test` blocks at all, the command reports `0 passed, 0 failed` 
 ## Running from an editor and in CI
 
 - In VS Code / code-oss the extension shows a run button above every `test` (see [tooling](tooling.md#language-server-and-editor)).
-- In CI one command is enough: `vibe test main.vibe`. Exit code 1 means a failure.
-- The optimization mode can be switched: `vibe test main.vibe -O` runs the same tests through LLVM `-O2`. Useful for making sure optimizations do not change the behavior.
+- In CI one command is enough: `zark test main.zk`. Exit code 1 means a failure.
+- The optimization mode can be switched: `zark test main.zk -O` runs the same tests through LLVM `-O2`. Useful for making sure optimizations do not change the behavior.
 
 ## What next
 
