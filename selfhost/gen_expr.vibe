@@ -61,6 +61,8 @@ bool can_coerce(Type* from, Type* to) {
     const auto saved_off = this->at_off;
     this->at_line = e.line;
     this->at_off = e.off;
+    this->edepth += 1;
+    defer this->edepth -= 1;
     const auto v = this->gen_expr_at(e, expected)?;
     this->at_line = saved_line;
     this->at_off = saved_off;

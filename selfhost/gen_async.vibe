@@ -7,6 +7,11 @@ Expr* await_of(Expr* e) {
     return null;
 }
 
+void Gen::set_await(Expr* e) {
+    this->await_at = null;
+    if (this->edepth == 0) { this->await_at = await_of(e); }
+}
+
 !TypeExpr* Gen::ptr_te(str name) {
     const auto n = this->a.create<TypeExpr>()?;
     n.k = .Name;
@@ -134,6 +139,7 @@ Expr* await_of(Expr* e) {
         this->in_cast = s.in_cast;
         this->af = s.af;
         this->await_at = s.await_at;
+        this->edepth = s.edepth;
         this->in_defer = s.in_defer;
         fi.busy = false;
     }
@@ -163,6 +169,7 @@ Expr* await_of(Expr* e) {
     this->bor_field = null;
     this->in_cast = false;
     this->await_at = null;
+    this->edepth = 0;
     this->in_defer = false;
     const auto af = this->a.create<AsyncFn>()?;
     *af = AsyncFn{ .frame = ft, .poll = pi.ret, .cx = Value{ .ty = pi.params.get(1), .v = "%a.1" }, .slots = List<str>::init(this->a), .resumes = List<str>::init(this->a) };
