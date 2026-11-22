@@ -72,6 +72,14 @@ The compiler learns the names `async`/`await` (keywords), `Poll` and `Context` (
 
 Each step ends green: both fixed points, `tests/run.sh`, CI on all systems. New syntax goes through the two-step seed rule from CLAUDE.md (teach the compiler first, update the seed, only then use it in `selfhost/`; the compiler itself does not need to use `async`).
 
+## Calls made while writing this down (builder: change them only with a reason)
+
+1. Frame size. `gen` already keeps a `pending` list of function bodies and prints all type definitions first (`types_out`). When a call site needs the frame type of an async function (`alloca`, `sizeof`, a field of a parent frame), `gen` generates that function's body at that moment, nested, with its state saved and restored, and completes the frame struct afterwards. A cycle (mutual or self recursion) is the "contains itself" error. This is "extend gen", not a separate type-inference pre-pass. All allocas of an async body go into the frame, including compiler temporaries (match slots, loop iterators).
+2. Recognizing a future. `await e` does a structural check: the type of `e` has a method `poll(Context*)` returning `Poll<T>`, the same way `fmt` and iteration are found by method name today. `Poll<T>` and `Context` are declared in the prelude (`std/std.vibe`, a few lines), so the compiler can name them without module prefixes. Generic code is checked at instantiation, like other templates.
+3. Erased tasks. `spawn<F>(F fut)` is generic: instantiating it generates a thunk `bool poll_thunk(void* frame, Context* cx)` that polls `F` and, on `Ready(v)`, stores `v` in the result slot that lives in the task memory next to the frame. The executor only sees a task header `{ frame, poll_thunk, state }`, so it needs plain function pointers, not closures. The generated `poll` of a frame is an ordinary function that can be addressed.
+4. "Started" and "must not move". The compiler enforces only what it can see: `await` and `spawn` consume the future by `move` (a name used twice is the existing double-move error). Hand-written leaf futures polled through `&f` are library code and documented. At an `await`, any outstanding pointer into a `List` or `Map` that is used later is an error, as if the await were a call that invalidates everything, because another task may run meanwhile. A future that never completes is accepted silently and its `defer`s do not run; this is documented, with `cancel()` as a later addition.
+5. macOS is LLVM-only, so "both backends" is tested on Linux and the reactor on macOS is tested through CI with the LLVM backend.
+
 ## Constraints
 
 - No new IR instructions; native backend limits (no `switch`, alignment up to 16) apply.
