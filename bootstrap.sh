@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi; }
 
 echo "== seed: bootstrap/seed.ll.gz -> stage1 (clang)"
 gzip -dc bootstrap/seed.ll.gz > build/seed.ll
@@ -17,7 +18,7 @@ build/stage2 build selfhost/main.vibe --release -o build/stage3
 build/stage2 ir selfhost/main.vibe > build/stage2.ll
 build/stage3 ir selfhost/main.vibe > build/stage3.ll
 if cmp -s build/stage2.ll build/stage3.ll && cmp -s build/stage2 build/stage3; then
-  echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines of IR, sha256 $(sha256sum build/stage2 | cut -c1-16))"
+  echo "== fixed point reached: stage2 == stage3 ($(wc -l < build/stage2.ll) lines of IR, sha256 $(sha build/stage2 | cut -c1-16))"
 else
   echo "!! stage2 and stage3 differ"; exit 1
 fi
