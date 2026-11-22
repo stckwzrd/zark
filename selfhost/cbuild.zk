@@ -1,0 +1,47 @@
+bool is_compile_flag(str x) {
+    if (str_starts_with(x, "-Wl,")) { return false; }
+    return str_starts_with(x, "-I") || x == "-isystem" || str_starts_with(x, "-D") || str_starts_with(x, "-U") || str_starts_with(x, "-std=") || x == "-include" || str_starts_with(x, "-f") || str_starts_with(x, "-W") || x == "-pthread";
+}
+
+bool is_link_arg(str x) {
+    return str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L") || str_starts_with(x, "-Wl,") || str_starts_with(x, "-T") || x == "-nostdlib" || x == "-static";
+}
+
+struct CSplit {
+    List<str> flags;
+    List<str> sources;
+    List<str> link;
+}
+
+!CSplit split_extras(Allocator a, List<str> extras) {
+    auto s = CSplit{ .flags = List<str>::init(a), .sources = List<str>::init(a), .link = List<str>::init(a) };
+    for (auto x : extras) {
+        if (is_link_arg(x)) {
+            s.link.push(x)?;
+        } else if (is_compile_flag(x)) {
+            s.flags.push(x)?;
+        } else {
+            s.sources.push(x)?;
+        }
+    }
+    return s;
+}
+
+!List<str> compile_sources(Allocator a, str cache, CSplit* s, str olevel, bool* needs_cxx) {
+    auto objs = List<str>::init(a);
+    for (auto x : s->sources) {
+        const auto is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx");
+        if (is_cpp) { *needs_cxx = true; }
+        auto ob = List<u8>::init(a);
+        sprint(&ob, "{cache}/{base_of(x)}.o")?;
+        auto cmd = List<str>::init(a);
+        if (is_cpp) { cmd.push("clang++")?; } else { cmd.push("clang")?; }
+        cmd.append([olevel, "-c", x])?;
+        cmd.append(s->flags.slice())?;
+        cmd.append(["-o", ob.slice()])?;
+        const auto code = run(a, cmd.slice())?;
+        if (code != 0) { return error.CompileFailed; }
+        objs.push(ob.slice())?;
+    }
+    return objs;
+}
