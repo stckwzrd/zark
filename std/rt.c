@@ -21,12 +21,14 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
-#include <ucontext.h>
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #include <execinfo.h>
-#elif defined(__GLIBC__)
+#else
+#include <ucontext.h>
+#if defined(__GLIBC__)
 #include <execinfo.h>
+#endif
 #endif
 
 typedef struct { int64_t sec, nsec; } vtimespec;
