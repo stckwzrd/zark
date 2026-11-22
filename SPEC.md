@@ -1,4 +1,4 @@
-# Vibe language spec (v0.4)
+# Zark language spec (v0.4)
 
 This file is the contract for the self-hosted compiler: anything written here must behave the same in both compilers.
 
@@ -47,9 +47,9 @@ Integer literals take their type from context and default to `i64`. Float litera
 
 ## 3. Declarations
 
-```vibe
-import "path.vibe";                    // relative to the current file, loaded once
-import "net.vibe" as net;              // namespaced: net::connect(...), net::Conn{ ... }
+```zark
+import "path.zk";                    // relative to the current file, loaded once
+import "net.zk" as net;              // namespaced: net::connect(...), net::Conn{ ... }
 type Bytes = u8[];                     // type alias (any type expression)
 const auto N = 4 * 2;                  // compile-time constant (inlined)
 i64 counter = 0;                       // global variable, constant initializer
@@ -72,15 +72,15 @@ Only reachable functions are compiled. Generic code is type-checked when it is i
 
 ### Modules
 
-`import "file.vibe" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. An `extern` gets the prefix too but links to the same C symbol; `export` names stay global. Rules, all checked by the compiler:
+`import "file.zk" as name;` loads the file once and gives every declaration in it (functions, structs, unions, enums, constants, globals, type aliases) the prefix `name::`. Inside the file its own names keep working unprefixed. An `extern` gets the prefix too but links to the same C symbol; `export` names stay global. Rules, all checked by the compiler:
 
 - A file is loaded once; it may be imported under several names, which all refer to it. A name belongs to one file, and a file imported with a name somewhere cannot also be imported plainly.
-- A plain `import "file.vibe"` still puts everything in the global namespace.
+- A plain `import "file.zk"` still puts everything in the global namespace.
 - The alias is reserved in the importing file: `net::x` always means the module member.
 
 ### Tests
 
-`test "name" { ... }` at the top level declares a test: a function returning `!void`. `vibe test file.vibe` runs the tests of that file, each in its own process, and prints the output of the failed ones. `assert` and `?` fail a test. Tests are ignored by `run` and `build`.
+`test "name" { ... }` at the top level declares a test: a function returning `!void`. `zark test file.zk` runs the tests of that file, each in its own process, and prints the output of the failed ones. `assert` and `?` fail a test. Tests are ignored by `run` and `build`.
 
 ## 4. Statements
 
@@ -110,7 +110,7 @@ Precedence, lowest to highest:
 
 ### Errors
 
-```vibe
+```zark
 !i64 f() { if (bad) { return error.Bad; } return 1; }
 auto a = f()?;                          // on error: run errdefers + defers, return the error
 auto b = f() catch 0;                   // default value
@@ -122,7 +122,7 @@ Ignoring an error union is a compile error. `errdefer` runs on every error retur
 
 ### match
 
-```vibe
+```zark
 match v {
     1, 2 => stmt;                  // ints, enums, str: equality
     .Circle(r) => { ... }          // unions: binds the payload (read-only)
@@ -135,7 +135,7 @@ Arms are tested top to bottom, there is no fall-through, and a `match` is not re
 
 ## 6. Builtins and formatting
 
-The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`), `async` and `await` (syntax only), the prelude types `Poll` and `Context` (the types used by the generated `poll` of an async function, see section 7b), the method name `poll` and the variant names `Ready` and `Pending` of `Poll` (used by `await`, the generated `poll` and the inference of section 7b) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`, `__rt_init` (called first by `main` and by the test runner unless `--freestanding`; the prelude uses it to install the crash handler). Everything else is ordinary code in `std/std.vibe`.
+The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`), `async` and `await` (syntax only), the prelude types `Poll` and `Context` (the types used by the generated `poll` of an async function, see section 7b), the method name `poll` and the variant names `Ready` and `Pending` of `Poll` (used by `await`, the generated `poll` and the inference of section 7b) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`, `__rt_init` (called first by `main` and by the test runner unless `--freestanding`; the prelude uses it to install the crash handler). Everything else is ordinary code in `std/std.zk`.
 
 | Builtin | Notes |
 |---|---|
@@ -147,7 +147,7 @@ The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic
 
 A call whose callee has a last parameter of type `Fmt` receives **all remaining arguments** as one `Fmt` value: a string literal is parsed for `{expr}` / `{expr:spec}` holes, every other expression becomes one hole, and the pieces are joined by single spaces. A `Fmt` lives on the stack of the caller (no heap, no `printf`); it is only built at call sites. An interpolated string anywhere else is a compile error. If the only remaining argument already is a `Fmt`, it is passed through.
 
-The std defines, in plain Vibe: `print`, `println`, `eprint`, `eprintln`, `!str bprint(u8[] buf, Fmt f)` (`error.NoSpace` if it does not fit, one byte is kept for a NUL), `!void sprint(List<u8>* out, Fmt f)`, and `Writer { ctx, write_fn }`. Your own functions can take a `Fmt` too. Arguments are evaluated before the fixed arguments of the same call.
+The std defines, in plain Zark: `print`, `println`, `eprint`, `eprintln`, `!str bprint(u8[] buf, Fmt f)` (`error.NoSpace` if it does not fit, one byte is kept for a NUL), `!void sprint(List<u8>* out, Fmt f)`, and `Writer { ctx, write_fn }`. Your own functions can take a `Fmt` too. Arguments are evaluated before the fixed arguments of the same call.
 
 Each hole is formatted by a generated thunk that calls the std hooks `__fmt_int`, `__fmt_uint`, `__fmt_float`, `__fmt_bool`, `__fmt_str`, `__fmt_ptr`, `__fmt_lit`. A struct, union or enum that has a method `!void fmt(Writer* w, str spec)` is formatted by it; otherwise the compiler derives the output below.
 
@@ -178,7 +178,7 @@ Formatting: ints in decimal, floats with `%g` (through libc `snprintf`), `bool` 
 
 ## 7. Memory
 
-```vibe
+```zark
 struct Allocator {
     void* ctx;
     fn(void*, u64, u64) -> void* alloc_fn;   // (ctx, size, align) -> zeroed memory or null
@@ -212,7 +212,7 @@ A struct declared `owned struct S { ... }` is a resource that must be consumed. 
 
 `async` is a contextual modifier written before the return type of a function, a method or a generic function: `async i64 f(i64 a)`, `async !str fetch(Conn* c)`, `static async i64 make()`, `template<T> async T id(T v)`. `await` is a contextual prefix operator. Both words stay ordinary identifiers elsewhere. `async` on an `extern` or `export` function is an error.
 
-```vibe
+```zark
 async !str fetch(Conn* c, str path) {
     c.write_all("GET {path}\n")?;
     auto line = await c.read_line();
@@ -243,7 +243,7 @@ Anything else is rejected with "bind the result to a variable first": an argumen
 
 **Cancellation.** There are no destructors: a frame that is dropped while suspended does not run its `defer`s and its awaited child frames are not finished. Pending I/O that belongs to a dropped future has to be disarmed with its `cancel()` (`Readable`, `Writable`, `Accept`, `Read`, `Write`). Without it the registration stays with the executor until the task ends (for the future passed to `block_on`, until `block_on` returns): when the descriptor becomes ready, the task is woken once more and the descriptor is then left out of the poller, so the executor does not spin, but the registration still counts as pending I/O, so a task that then waits for something that never comes blocks the executor instead of getting `error.Deadlock`. `cancel()` only disarms the registration its own future made: if another future armed the same descriptor and direction after it, that one stays armed.
 
-**The library (`std/async`).** The module is plain Vibe plus a small poller in `std/rt.c` (`vrt_poller_*`: epoll on Linux, kqueue on macOS; there is no Windows reactor). It is single-threaded and uses the `Allocator` given to the executor, nothing else allocates.
+**The library (`std/async`).** The module is plain Zark plus a small poller in `std/rt.c` (`vrt_poller_*`: epoll on Linux, kqueue on macOS; there is no Windows reactor). It is single-threaded and uses the `Allocator` given to the executor, nothing else allocates.
 - `Executor::init(a)` / `deinit()` (an `owned` struct). Tasks keep a pointer to it, so it must not move after the first `spawn`.
 - `ex.spawn(fut)` takes a future by `move`, puts it in memory from the executor's allocator and returns `JoinHandle<T>`; spawned tasks run while some `block_on` is running. `ex.block_on(&fut)` polls a future and the executor until the future is ready, and returns `error.Deadlock` if nothing can make progress. `JoinHandle<T>` has `done()`, `take()`, `detach()` and is itself a future (`await h`). A handle is used up once its result was taken (by `take()`, by awaiting it or by `block_on(&h)`) or it was detached; any later use of it or of a copy of it panics, and so does `take()` before `done()`.
 - The result type of `spawn` and `block_on` is inferred: when a call to a generic function leaves exactly one type parameter unknown and exactly one of the known type arguments is a struct whose `poll` returns `Poll<X>`, the unknown parameter becomes `X`. So `auto h = ex.spawn(chain())?;` and `auto r = ex.block_on(&f)?;` need no annotation, for async frames and hand-written futures alike. An annotation such as `async::JoinHandle<i64> h = ex.spawn(f)?;` or `i64 r = ex.block_on(&f)?;` still works and is checked; explicit type arguments (`ex.block_on<Countdown, i64>(&f)`) are needed only when the future's `poll` is itself generic. For a future whose result is itself an error union `!X`, the inferred result of `block_on` is `!!X` (unwrap both with `??`), while the annotation `X r = ex.block_on(&f)?;` merges the two.
@@ -257,7 +257,7 @@ Anything else is rejected with "bind the result to a variable first": an argumen
 - `void*` is C's `void*`. String literals pass as `u8*` (they are NUL-terminated). Any other `str` must be passed as `s.ptr` explicitly.
 - C varargs follow the usual promotions; slices are rejected.
 - Structs (and slices) are passed to and returned from `extern` functions by value following the System V x86-64 ABI: up to 16 bytes in registers by eightbyte class (INTEGER or SSE), larger or when the registers run out on the stack (`byval`), large results through a hidden pointer (`sret`). `export` functions and function pointers called from C take aggregates by pointer.
-- `vibe run main.vibe x.c y.cpp lib.o -lfoo` compiles and links everything, using `clang++` if C++ is present.
+- `zark run main.zk x.c y.cpp lib.o -lfoo` compiles and links everything, using `clang++` if C++ is present.
 
 ## 9. System (prelude)
 

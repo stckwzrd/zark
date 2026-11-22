@@ -1,11 +1,11 @@
-# Vibe 🌊
+# Zark
 
-**Self-hosted, with its own x86-64 backend.** The compiler is written in Vibe (`selfhost/`) and builds itself (see [BOOTSTRAP.md](BOOTSTRAP.md)). Debug builds use our own machine-code generator and ELF writer, with no LLVM involved; `--release` uses LLVM -O2.
+**Self-hosted, with its own x86-64 backend.** The compiler is written in Zark (`selfhost/`) and builds itself (see [BOOTSTRAP.md](BOOTSTRAP.md)). Debug builds use our own machine-code generator and ELF writer, with no LLVM involved; `--release` uses LLVM -O2.
 
 | 10k-line program → executable | time |
 |---|---|
-| **vibe** (native backend, safe mode) | **~200 ms** |
-| vibe, `--no-safety` | ~135 ms |
+| **zark** (native backend, safe mode) | **~200 ms** |
+| zark, `--no-safety` | ~135 ms |
 | clang -O0 | ~315 ms |
 | gcc -O0 | ~710 ms |
 
@@ -13,7 +13,7 @@
 
 A small systems language in the spirit of Zig, with less ceremony: native speed via LLVM, no hidden allocations (explicit `Allocator`), error unions with `?`, `defer`/`errdefer`, generics, tagged unions + `match`, function pointers, string interpolation without allocation, and direct C/C++ linking.
 
-```vibe
+```zark
 struct Point {
     f64 x;
     f64 y;
@@ -46,15 +46,15 @@ struct Point {
 Requirements: clang (tested with clang 18). Builds on Linux (glibc and musl, x86-64 and arm64), macOS and Windows through WSL2: see [INSTALL.md](INSTALL.md) ([по-русски](INSTALL.ru.md)).
 
 ```sh
-./bootstrap.sh                            # seed -> self-hosted build/vibe (+ tests)
-build/vibe run examples/hello.vibe
-vibe build examples/bench.vibe --release -o bench
-vibe run main.vibe lib.c engine.cpp       # link C/C++ sources directly
-vibe ir  main.vibe                        # print LLVM IR
-vibe test main.vibe                       # run the `test "name" { ... }` blocks
-vibe fmt main.vibe                        # format in place (--check to only report)
-vibe new app && cd app && vibe run        # a project with vibe.toml
-VIBE=build/vibe tests/run.sh              # test suite
+./bootstrap.sh                            # seed -> self-hosted build/zark (+ tests)
+build/zark run examples/hello.zk
+zark build examples/bench.zk --release -o bench
+zark run main.zk lib.c engine.cpp       # link C/C++ sources directly
+zark ir  main.zk                        # print LLVM IR
+zark test main.zk                       # run the `test "name" { ... }` blocks
+zark fmt main.zk                        # format in place (--check to only report)
+zark new app && cd app && zark run        # a project with zark.toml
+ZARK=build/zark tests/run.sh              # test suite
 ```
 
 | Flag | Meaning |
@@ -69,19 +69,19 @@ VIBE=build/vibe tests/run.sh              # test suite
 | `--check-overflow` | checks `+`, `-` and `*` for overflow even with `--release` (a safe build always checks your code; the prelude is not checked) |
 | `--fast` | `--release` plus `nsw` on signed arithmetic (signed overflow is undefined, as in C++) |
 | `-o out` | output binary |
-| `-- a b` | arguments for `vibe run` |
+| `-- a b` | arguments for `zark run` |
 
-The native backend compiles functions on several threads (up to 8, one per CPU). `VIBE_JOBS=1` forces one thread, `VIBE_JOBS=N` sets the count; the output is the same byte for byte.
+The native backend compiles functions on several threads (up to 8, one per CPU). `ZARK_JOBS=1` forces one thread, `ZARK_JOBS=N` sets the count; the output is the same byte for byte.
 
 ## Editor support
 
-`vibe lsp` is a language server over stdio, built on the compiler frontend: compiler errors as you type (also in unsaved buffers), hover, completion (members, modules, enum variants, struct literal fields, types), signature help, go to definition (also into imported files), references and rename across the workspace, outline, workspace symbols, highlights, format, and quick fixes for "did you mean". Any LSP client can use it.
+`zark lsp` is a language server over stdio, built on the compiler frontend: compiler errors as you type (also in unsaved buffers), hover, completion (members, modules, enum variants, struct literal fields, types), signature help, go to definition (also into imported files), references and rename across the workspace, outline, workspace symbols, highlights, format, and quick fixes for "did you mean". Any LSP client can use it.
 
-`editors/vscode` is a VS Code / code-oss extension that starts the server and adds highlighting, snippets and run/test buttons. Build and install it with `cd editors/vscode && npm install && python3 pack.py out.vsix && code-oss --install-extension out.vsix`. It calls `vibe` from `PATH` (or `~/.local/bin/vibe`); change that with the `vibe.path` setting.
+`editors/vscode` is a VS Code / code-oss extension that starts the server and adds highlighting, snippets and run/test buttons. Build and install it with `cd editors/vscode && npm install && python3 pack.py out.vsix && code-oss --install-extension out.vsix`. It calls `zark` from `PATH` (or `~/.local/bin/zark`); change that with the `zark.path` setting.
 
 ## How it differs from Zig
 
-| | Zig | Vibe |
+| | Zig | Zark |
 |---|---|---|
 | Declarations | `const x: i32 = 5;` | `const i32 x = 5;`, C++-style: type first, `auto`, mutable by default |
 | Error propagation | `try f()` | `f()?` |
@@ -102,7 +102,7 @@ The native backend compiles functions on several threads (up to 8, one per CPU).
 
 **Control flow:** `if/else`, `while`, `for (auto i : 0..n)`, `for (auto x : slice)`, `for (auto [i, x] : list)`, `break/continue`, and `match`:
 
-```vibe
+```zark
 match dir {
     .North => println("up");
     .East, .West => println("sideways");
@@ -124,19 +124,19 @@ match dir {
 
 ### C / C++ interop
 
-```vibe
+```zark
 extern i64 c_gcd(i64 a, i64 b);            // call C
-export i64 vibe_square(i64 x) { return x * x; }  // C calls Vibe under its own name
+export i64 zark_square(i64 x) { return x * x; }  // C calls Zark under its own name
 struct Vec3 { f64 x; f64 y; f64 z; }         // C-compatible layout
 extern f64 vec3_dot(Vec3* a, Vec3* b);
 ```
-`vibe run main.vibe mathlib.c engine.cpp` compiles everything and links with `clang++` automatically. C++ is reached through an `extern "C"` facade: see `examples/interop/`. String literals pass as `const char*` directly.
+`zark run main.zk mathlib.c engine.cpp` compiles everything and links with `clang++` automatically. C++ is reached through an `extern "C"` facade: see `examples/interop/`. String literals pass as `const char*` directly.
 
 ## Drivers and bare metal
 
-`volatile` registers and fields, `packed struct`, `Port`, `Cpu`, `Bits`, `Atomic` and `Spinlock` in the prelude, inline `asm<T>("...", "...", args)`, and `--freestanding` builds without libc. The same code runs on the native and the LLVM backend. `examples/baremetal/` is an x86-64 kernel written in Vibe that boots in QEMU (`examples/baremetal/run.sh`): serial output through `Fmt`, an IDT built from a `packed struct`, an exception handled in Vibe.
+`volatile` registers and fields, `packed struct`, `Port`, `Cpu`, `Bits`, `Atomic` and `Spinlock` in the prelude, inline `asm<T>("...", "...", args)`, and `--freestanding` builds without libc. The same code runs on the native and the LLVM backend. `examples/baremetal/` is an x86-64 kernel written in Zark that boots in QEMU (`examples/baremetal/run.sh`): serial output through `Fmt`, an IDT built from a `packed struct`, an exception handled in Zark.
 
-```vibe
+```zark
 packed struct Descriptor { u64 addr; u32 len; u16 flags; u16 next; }
 struct Uart { volatile u32 data; volatile u32 status; }
 
@@ -148,7 +148,7 @@ void send(Uart* u, u8 byte) {
 
 ## Memory: no hidden allocations
 
-```vibe
+```zark
 u8[1024] mem;
 auto fb = FixedBuf::init(mem[..]);       // bump allocator over a stack buffer, no heap
 auto xs = List<i32>::init(fb.allocator());
@@ -157,7 +157,7 @@ u8[64] line;
 const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own buffer
 ```
 
-## Standard library (auto-imported prelude, `std/std.vibe`)
+## Standard library (auto-imported prelude, `std/std.zk`)
 
 - `Allocator` (ctx + 2 function pointers), `c_allocator()`, `FixedBuf`: `alloc<T>, free, create<T>, destroy, dup`
 - `List<T>`: `init(a), deinit, reserve, push, append, pop, last, get, set, slice, sort, reverse, contains, clear`
@@ -173,13 +173,13 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 `std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`), `std/async` (a single-threaded executor with timers and TCP on epoll or kqueue). See the guide page "Standard modules".
 
-A file that starts with `#!/usr/bin/env -S vibe run` can be run directly as a script; the arguments after it go to the program.
+A file that starts with `#!/usr/bin/env -S zark run` can be run directly as a script; the arguments after it go to the program.
 
 ### Async
 
 `async` functions compile to state machines. Calling one returns its frame by value, so its size is known (`sizeof(f)`) and you decide where it lives; nothing is allocated. `await` suspends the function until the awaited future is ready. A future is any struct with `Poll<T> poll(Context* cx)`, and `std/async` runs them with an `Executor` (`block_on`, `spawn`, `Sleep`, `TcpListener`, `TcpStream`).
 
-```vibe
+```zark
 async i64 add(i64 a, i64 b) { return a + b; }
 
 async i64 chain() {
@@ -189,25 +189,25 @@ async i64 chain() {
 }
 ```
 
-`await` is only allowed where nothing else is half-evaluated (a statement, an initializer, `v = await f();`, `return await f();`, an `if`/`while`/`match` condition), and the ownership checks apply across it. See SPEC.md section 7b. `examples/async_echo.vibe` is an echo server written with `async`/`await`: a server task spawns one task per accepted connection, and three clients collect their replies through `JoinHandle`s. `tests/edge/async_basic.vibe` shows more of the syntax.
+`await` is only allowed where nothing else is half-evaluated (a statement, an initializer, `v = await f();`, `return await f();`, an `if`/`while`/`match` condition), and the ownership checks apply across it. See SPEC.md section 7b. `examples/async_echo.zk` is an echo server written with `async`/`await`: a server task spawns one task per accepted connection, and three clients collect their replies through `JoinHandle`s. `tests/edge/async_basic.zk` shows more of the syntax.
 
 ### Projects
 
-`vibe new hello` creates a project with a `vibe.toml`; inside it `vibe run`, `vibe build` and `vibe test` need no file name. The manifest lists C sources, libraries, default flags, and dependencies by path or git (`utils = { path = "../utils" }`, then `import "utils" as u;`).
+`zark new hello` creates a project with a `zark.toml`; inside it `zark run`, `zark build` and `zark test` need no file name. The manifest lists C sources, libraries, default flags, and dependencies by path or git (`utils = { path = "../utils" }`, then `import "utils" as u;`).
 
 The full language description is in [SPEC.md](SPEC.md).
 
 ## Performance
 
-`examples/bench.vibe` (recursive fib(38) + a sieve up to 50M), clang 18, on one machine:
+`examples/bench.zk` (recursive fib(38) + a sieve up to 50M), clang 18, on one machine:
 
 | | fib(38) | sieve 50M |
 |---|---|---|
 | C (`clang -O2`) | 90 ms | 560 ms |
-| Vibe (`--release`, no checks) | 100 ms | 575 ms |
-| Vibe (`-O`, all safety checks on) | 170 ms | 540 ms |
+| Zark (`--release`, no checks) | 100 ms | 575 ms |
+| Zark (`-O`, all safety checks on) | 170 ms | 540 ms |
 | C (`clang -O0`) | 250 ms | 780 ms |
-| Vibe, own backend (safe mode) | 360 ms | 1210 ms |
+| Zark, own backend (safe mode) | 360 ms | 1210 ms |
 
 The full build of the example, compilation plus linking, takes about 80 ms.
 
@@ -216,12 +216,12 @@ The full build of the example, compilation plus linking, takes about 80 ms.
 The self-hosted compiler lives in `selfhost/` (see BOOTSTRAP.md). It is built from a committed seed (`bootstrap/seed.ll.gz`), so only clang is needed:
 
 ```
-selfhost/lexer.vibe    tokens
-selfhost/parser.vibe   recursive descent → AST; string interpolation parsed into sub-expressions
-selfhost/gen*.vibe     type checking + monomorphization + LLVM IR (text), one pass
-selfhost/native.vibe   own x86-64 backend, x64.vibe encoder + ELF writer
-selfhost/main.vibe     driver: imports, IR → backend, linking .c/.cpp/.o
-std/std.vibe           prelude written in Vibe itself (List, Map, Arena, runtime helpers)
+selfhost/lexer.zk    tokens
+selfhost/parser.zk   recursive descent → AST; string interpolation parsed into sub-expressions
+selfhost/gen*.zk     type checking + monomorphization + LLVM IR (text), one pass
+selfhost/native.zk   own x86-64 backend, x64.zk encoder + ELF writer
+selfhost/main.zk     driver: imports, IR → backend, linking .c/.cpp/.o
+std/std.zk           prelude written in Zark itself (List, Map, Arena, runtime helpers)
 ```
 The compiler emits textual LLVM IR and calls `clang`, with no linking against libLLVM. Locals become `alloca`s, which LLVM promotes to registers at `-O2`.
 
@@ -230,9 +230,9 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [x] v0.2: no hidden allocations, `Allocator`, `*void`, function pointers, tagged unions, `..` in literals, `alignof`, errdefer on runtime errors
 - [x] v0.3: files, processes, `sprint`, format specs, `type` aliases, `Arena`; self-hosted lexer
 - [x] **v0.5: own x86-64 backend + ELF writer** (default); the native-built compiler reaches its own fixed point. Next steps: [ROADMAP.md](ROADMAP.md)
-- [x] **v0.4: self-hosted.** The compiler is written in Vibe and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
+- [x] **v0.4: self-hosted.** The compiler is written in Zark and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
 - [ ] `comptime` blocks, `inline for`
 - [x] passing structs by value across the C ABI (`extern`)
 - [ ] `@cImport` via libclang
 - [x] `async`/`await` as state machines with a single-threaded executor (`std/async`); a multi-threaded executor and `join`/`select` are not done
-- [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `vibe test`, `vibe fmt`
+- [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `zark test`, `zark fmt`

@@ -7,7 +7,7 @@ description: std/thread (потоки, Mutex, Channel, parallel_for), std/net (T
 
 ## `std/thread`
 
-```vibe run
+```zark run
 import "std/thread" as thread;
 
 !void main() {
@@ -31,7 +31,7 @@ import "std/thread" as thread;
 
 Компилятор проверяет ту часть этого правила, которую видит. `Thread` в переменной должен быть присоединён (`join`), отсоединён или передан дальше на **каждом** пути выхода из функции, включая путь, по которому идёт неудавшийся `?`. Поток, брошенный на месте, отклоняется, как и возврат потока, чьё замыкание захватило локальную переменную функции:
 
-```vibe error
+```zark error
 import "std/thread" as thread;
 
 !void work() { }
@@ -46,7 +46,7 @@ import "std/thread" as thread;
 
 Если `work()` вернёт ошибку, `main` завершится, пока поток ещё использует `hits`. Исправление такое же, как для памяти: поставьте очистку рядом с созданием. `defer` срабатывает при любом выходе, `errdefer` — только при неудачных, так что на нормальном пути можно присоединить поток там, где удобно:
 
-```vibe run
+```zark run
 import "std/thread" as thread;
 
 !void work() { }
@@ -76,7 +76,7 @@ import "std/thread" as thread;
 
 `parallel_for(n, threads, body)` вызывает `body(i)` для каждого `i` из `0..n`, разделяя работу на `threads` потоков (0 — по одному на ядро), и возвращается, когда всё готово. Блокировки, каналы и `WaitGroup` нельзя копировать после начала работы: передавайте их через указатель (канал поэтому создаётся в куче).
 
-```vibe run
+```zark run
 import "std/thread" as thread;
 
 !void main() {
@@ -100,7 +100,7 @@ import "std/thread" as thread;
 
 ## `std/net`
 
-```vibe run
+```zark run
 import "std/net" as net;
 import "std/thread" as thread;
 
@@ -118,7 +118,7 @@ import "std/thread" as thread;
     errdefer { l.close(); server.join(); }
 
     auto c = net::connect_to("localhost", port)?;
-    c.write_all("Vibe\n")?;
+    c.write_all("Zark\n")?;
     u8[256] buf;
     auto r = net::Reader::init(&c, buf[..]);
     println(r.read_line()?);
@@ -137,7 +137,7 @@ import "std/thread" as thread;
 
 Клиент говорит на HTTP/1.1 по `http://` и `https://`. Для HTTPS используется системная библиотека OpenSSL (`libssl.so.3`), она загружается при первом обращении, так что дополнительные флаги линковки не нужны; сертификаты и имена хостов проверяются по системному хранилищу.
 
-```vibe fragment
+```zark fragment
 import "std/http" as http;
 
 !void main() {
@@ -162,7 +162,7 @@ import "std/http" as http;
 
 Сервер выполняет обработчик в пуле потоков, держит соединения keep-alive и даёт каждому запросу свою арену:
 
-```vibe run
+```zark run
 import "std/http" as http;
 import "std/thread" as thread;
 

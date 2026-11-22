@@ -9,7 +9,7 @@ Most of the time with a new language goes into reading what it tells you. This p
 
 ## How an error message is built
 
-```vibe error
+```zark error
 void main() {
     const auto total = 10;
     println(totl);
@@ -27,7 +27,7 @@ Read the first message first. The compiler stops a function at its first problem
 
 A type does not fit. The compiler does not narrow or change sign by itself:
 
-```vibe error
+```zark error
 void main() {
     const i64 big = 1000;
     const i32 small = big;
@@ -39,7 +39,7 @@ Fix: write `big as i32` if losing bits is acceptable, or use the wider type.
 
 A function does not always return:
 
-```vibe error
+```zark error
 i64 sign(i64 x) {
     if (x < 0) { return -1; }
     if (x > 0) { return 1; }
@@ -52,7 +52,7 @@ Fix: add the `return 0;` for the remaining case.
 
 A forgotten error:
 
-```vibe error
+```zark error
 !i64 parse(str s) { return parse_int(s); }
 
 void main() {
@@ -64,7 +64,7 @@ Fix: `parse("12")?` in a function that returns `!T`, `catch` with a fallback, or
 
 A `match` that is missing a case:
 
-```vibe error
+```zark error
 enum Dir { North, South, East, West }
 
 str name(Dir d) {
@@ -82,7 +82,7 @@ Fix: add `.West` (this is the check that makes adding a variant safe).
 
 A struct that does not satisfy an interface:
 
-```vibe error
+```zark error
 interface Shape { f64 area(); f64 perimeter(); }
 
 struct Square {
@@ -101,7 +101,7 @@ Fix: implement the missing method.
 
 A string with braces:
 
-```vibe error
+```zark error
 void main() {
     println("{"a": 1, "b": 2}");
 }
@@ -113,7 +113,7 @@ Fix: a literal brace is written twice, `"{{\"a\": 1, \"b\": 2}}"`. Interpolation
 
 These come from the checks described in [the safety model](safety.md). They always name two lines: where the thing stopped being valid, and where you used it.
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto buf = a.alloc<u8>(16) catch return;
@@ -124,7 +124,7 @@ void main() {
 
 `'buf' is used after 'free' consumed it`: the line above is the `free`. Either remove the later use, move the `free` to after the last use, or give the variable a new value first.
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -137,7 +137,7 @@ void main() {
 
 `'view' points into 'l', and 'push' ... may have moved or freed that memory`: take `view` again after the `push`.
 
-```vibe error
+```zark error
 i64* make() {
     i64 local = 5;
     return &local;
@@ -163,9 +163,9 @@ A panic is a bug in the program. The message has the reason and the place:
 Run the failing case again under `-g` and `gdb` to see the variables.
 
 ```text
-$ vibe build -g crash.vibe -o crash
+$ zark build -g crash.zk -o crash
 $ gdb ./crash
-(gdb) break crash.vibe:12
+(gdb) break crash.zk:12
 (gdb) run
 (gdb) print total
 (gdb) bt
@@ -176,9 +176,9 @@ $ gdb ./crash
 ## The program is wrong but nothing fails
 
 1. **Print the data.** `println` prints a struct with its field names and a slice with its elements. Print before and after the step you suspect.
-2. **Write a test that fails.** Put the smallest input that shows the problem in a `test` block, run `vibe test file.vibe`, and fix until it is green. The test stays as protection.
+2. **Write a test that fails.** Put the smallest input that shows the problem in a `test` block, run `zark test file.zk`, and fix until it is green. The test stays as protection.
 3. **Shrink the input.** Remove code and data until the problem is still there and nothing else is. The cause is usually visible at that point.
-4. **Ask a different backend.** `vibe run file.vibe`, then `vibe run file.vibe --llvm` and `-O`. In the safe mode all of them must print the same. If they do not, you have found a compiler bug; save the file.
+4. **Ask a different backend.** `zark run file.zk`, then `zark run file.zk --llvm` and `-O`. In the safe mode all of them must print the same. If they do not, you have found a compiler bug; save the file.
 
 ## Memory problems
 
@@ -191,7 +191,7 @@ If the program crashes with a segmentation fault, or a result changes from run t
 ## When it is slow
 
 ```text
-$ vibe run app.vibe --time
+$ zark run app.zk --time
 time: frontend 12.0 ms, native backend 4.1 ms, link 18.3 ms
 ```
 
@@ -201,9 +201,9 @@ That is the compiler's time. For the program's own, build with `-O` (optimized a
 
 | Command | Shows |
 |---|---|
-| `vibe tokens file.vibe` | the tokens after the lexer |
-| `vibe ir file.vibe` | the LLVM IR that the compiler generates |
-| `vibe fmt file.vibe` | nothing: it rewrites the file with the standard formatting (use `--check` to only test) |
+| `zark tokens file.zk` | the tokens after the lexer |
+| `zark ir file.zk` | the LLVM IR that the compiler generates |
+| `zark fmt file.zk` | nothing: it rewrites the file with the standard formatting (use `--check` to only test) |
 
 When you report a compiler bug, include the smallest file that shows it, the command you ran, and the output.
 

@@ -303,7 +303,7 @@
 41 .lbracket [
 41 .str_lit zig
 41 .comma ,
-41 .str_lit vibe
+41 .str_lit zark
 41 .comma ,
 41 .str_lit c++
 41 .rbracket ]

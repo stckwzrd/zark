@@ -1,1 +1,1 @@
-panic: index -1 out of bounds (len 3) at tests/panics/index_neg.vibe:2
+panic: index -1 out of bounds (len 3) at tests/panics/index_neg.zk:2

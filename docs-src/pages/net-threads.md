@@ -7,7 +7,7 @@ description: std/thread (threads, Mutex, Channel, parallel_for), std/net (TCP) a
 
 ## `std/thread`
 
-```vibe run
+```zark run
 import "std/thread" as thread;
 
 !void main() {
@@ -31,7 +31,7 @@ import "std/thread" as thread;
 
 The compiler checks the part of this rule that it can see. A `Thread` in a variable has to be joined (or detached, or handed on to something else) on **every** path out of the function, including the path that a `?` takes when it fails. A thread that is dropped on the spot is refused, and so is returning a thread whose closure captured a local variable of the function:
 
-```vibe error
+```zark error
 import "std/thread" as thread;
 
 !void work() { }
@@ -46,7 +46,7 @@ import "std/thread" as thread;
 
 If `work()` fails, `main` would return while the thread still uses `hits`. The fix is the same as for memory: put the cleanup next to the creation. `defer` runs on every way out; `errdefer` only on the failing ones, so the normal path can still join where it wants to:
 
-```vibe run
+```zark run
 import "std/thread" as thread;
 
 !void work() { }
@@ -76,7 +76,7 @@ What the compiler does not see: threads kept in a list or an array (join them in
 
 `parallel_for(n, threads, body)` calls `body(i)` for every `i` in `0..n`, split over `threads` threads (0 means one per CPU), and returns when all are done. Locks, channels and wait groups must not be copied once used: share them through a pointer (a channel is created on the heap for that reason).
 
-```vibe run
+```zark run
 import "std/thread" as thread;
 
 !void main() {
@@ -100,7 +100,7 @@ import "std/thread" as thread;
 
 ## `std/net`
 
-```vibe run
+```zark run
 import "std/net" as net;
 import "std/thread" as thread;
 
@@ -118,7 +118,7 @@ import "std/thread" as thread;
     errdefer { l.close(); server.join(); }
 
     auto c = net::connect_to("localhost", port)?;
-    c.write_all("Vibe\n")?;
+    c.write_all("Zark\n")?;
     u8[256] buf;
     auto r = net::Reader::init(&c, buf[..]);
     println(r.read_line()?);
@@ -137,7 +137,7 @@ import "std/thread" as thread;
 
 The client speaks HTTP/1.1 over `http://` and `https://`. HTTPS uses the system's OpenSSL library (`libssl.so.3`), loaded the first time it is needed, so programs need no extra link flags; certificates and host names are checked against the system store.
 
-```vibe fragment
+```zark fragment
 import "std/http" as http;
 
 !void main() {
@@ -162,7 +162,7 @@ import "std/http" as http;
 
 The server runs a handler on a pool of threads, keeps connections alive and gives every request its own arena:
 
-```vibe run
+```zark run
 import "std/http" as http;
 import "std/thread" as thread;
 

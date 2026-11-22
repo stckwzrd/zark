@@ -216,7 +216,7 @@
 32 .dot .
 32 .ident second
 32 .eq =
-32 .str_lit vibe
+32 .str_lit zark
 32 .rbrace }
 32 .semi ;
 33 .ident println

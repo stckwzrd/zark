@@ -1,0 +1,612 @@
+// Statements: let/assign/if/loops/defer/match/return.
+
+import "sema_iface.zk";
+import "gen_move.zk";
+
+struct UPat { i64 idx; str bind; }
+struct MatchRes { Type* ty; str slot; }
+
+!void Gen::gen_stmt(Stmt* s) {
+    const auto saved_line = this->at_line;
+    const auto saved_off = this->at_off;
+    this->at_line = s.line;
+    this->at_off = s.off;
+    if (this->dbg && s.k != .Block && s.line != this->last_line && !this->terminated) {
+        sprint(&this->body, "  ;@L {s.line}\n")?;
+        this->last_line = s.line;
+    }
+    this->gen_stmt_at(s)?;
+    this->at_line = saved_line;
+    this->at_off = saved_off;
+}
+
+!void Gen::gen_stmt_at(Stmt* s) {
+    match s.k {
+        .Block => {
+            this->push_scope()?;
+            for (auto st : s.stmts) { this->gen_stmt(st)?; }
+            this->pop_scope()?;
+        }
+        .Let => {
+            Type* ty = null;
+            if (s.ty != null) { ty = this->resolve_type_at(s.ty, s.line)?; }
+            auto has_val = false;
+            auto val = Value{ .ty = null, .v = "" };
+            if (s.e != null) {
+                this->bor_field = null;
+                this->set_await(s.e);
+                auto v = this->gen_expr(s.e, ty)?;
+                if (ty != null) { v = this->coerce(v, ty, s.line)?; }
+                val = v;
+                has_val = true;
+                if (ty == null) { ty = v.ty; }
+            }
+            if (ty.k == .Void) { this->err(s.line); eprintln("cannot declare variable '{s.name}' of type void"); return error.CompileFailed };
+            if (ty.k == .Null) { this->err(s.line); eprintln("cannot infer type of '{s.name}' from null; add a type"); return error.CompileFailed };
+            const auto slot = this->alloca(ty, s.name)?;
+            if (has_val) { this->store(val, slot)?; } else { this->zero_fill(ty, slot)?; }
+            this->declare_var(s.name, Var{ .ptr = slot, .ty = ty, .mutable = s.mutable }, s.line)?;
+            if (has_val) {
+                this->set_origin(slot, s.name, s.e, s.line)?;
+                if (s.e.k != .StructLit) {
+                    this->register_owned(slot, s.name, ty, s.line)?;
+                    if (is_owned(ty)) { this->taint_owned(slot, s.e, s.line)?; }
+                }
+            }
+        }
+        .Assign => {
+            if (s.e2.k == .Ident && s.e2.name == "_") {
+                const auto dv = this->gen_expr(s.e, null)?;
+                this->check_dropped(dv.ty, s.line)?;
+                return;
+            }
+            const auto plain_local = s.op == .eq && s.e2.k == .Ident && this->local_ptr(s.e2.name).len > 0;
+            this->reinit = plain_local;
+            const auto addr = this->gen_addr(s.e2) catch |e| {
+                this->reinit = false;
+                return e;
+            };
+            this->reinit = false;
+            if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
+            if (s.op == .eq) {
+                this->bor_field = null;
+                if (s.e2.k == .Ident) { this->set_await(s.e); }
+                const auto v = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
+                this->check_store_escape(s.e2, s.e, s.line)?;
+                if (plain_local) { this->check_overwrite(s.e2.name, s.line)?; }
+                this->store_to(v, addr)?;
+                if (plain_local) {
+                    const auto tp = this->local_ptr(s.e2.name);
+                    this->set_origin(tp, s.e2.name, s.e, s.line)?;
+                    this->note_reinit(tp)?;
+                }
+            } else {
+                const auto cur = this->load(addr.ty, addr.v)?;
+                const auto rhs = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
+                Tag op = .percent;
+                match s.op {
+                    .plus_eq => op = .plus;
+                    .minus_eq => op = .minus;
+                    .star_eq => op = .star;
+                    .slash_eq => op = .slash;
+                    .pipe_eq => op = .pipe;
+                    .amp_eq => op = .amp;
+                    .caret_eq => op = .caret;
+                    .shl_eq => op = .shl;
+                    .shr_eq => op = .shr;
+                }
+                const auto r = this->arith(op, cur, rhs, s.line)?;
+                this->store_to(r, addr)?;
+            }
+        }
+        .ExprS => {
+            this->set_await(s.e);
+            const auto v = this->gen_expr(s.e, null)?;
+            this->check_dropped(v.ty, s.line)?;
+            if (v.ty.k == .Errun) { this->err(s.line); eprintln("error union is ignored; handle it with '?' or 'catch'"); return error.CompileFailed };
+        }
+        .If => {
+            this->set_await(s.e);
+            const auto c = this->gen_cond(s.e)?;
+            const auto lt = this->new_label("then")?;
+            const auto le = this->new_label("else")?;
+            const auto lend = this->new_label("endif")?;
+            auto target = lend;
+            if (s.els != null) { target = le; }
+            sprint(this->ins()?, "  br i1 {c.v}, label %{lt}, label %{target}\n")?;
+            this->terminated = true;
+            auto jn = this->join_begin()?;
+            this->label(lt)?;
+            this->gen_stmt(s.body)?;
+            this->join_end(&jn)?;
+            if (!this->terminated) { this->br(lend)?; }
+            if (s.els != null) {
+                this->label(le)?;
+                this->join_arm(&jn)?;
+                this->gen_stmt(s.els)?;
+                this->join_end(&jn)?;
+                if (!this->terminated) { this->br(lend)?; }
+            }
+            this->join_finish(&jn, s.els == null)?;
+            this->label(lend)?;
+            if (!jn.any) {
+                sprint(this->ins()?, "  unreachable\n")?;
+                this->terminated = true;
+            }
+        }
+        .While => {
+            const auto lc = this->new_label("wcond")?;
+            const auto lb = this->new_label("wbody")?;
+            const auto le = this->new_label("wend")?;
+            const auto md = this->scopes.len;
+            const auto s0 = this->snap();
+            const auto infinite = s.e.k == .BoolLit && s.e.bval;
+            this->loops.push(this->loop_new(le, lc, this->scopes.len, s.label, md, infinite)?)?;
+            this->label(lc)?;
+            this->set_await(s.e);
+            const auto c = this->gen_cond(s.e)?;
+            sprint(this->ins()?, "  br i1 {c.v}, label %{lb}, label %{le}\n")?;
+            this->terminated = true;
+            this->label(lb)?;
+            this->gen_stmt(s.body)?;
+            const auto lp2 = this->loops.get(this->loops.len - 1);
+            this->loop_end(lp2, s0)?;
+            this->loops.len -= 1;
+            if (!this->terminated) { this->br(lc)?; }
+            this->label(le)?;
+            if (infinite && lp2.nbrk == 0) {
+                sprint(this->ins()?, "  unreachable\n")?;
+                this->terminated = true;
+            }
+        }
+        .ForRange => {
+            const auto md = this->scopes.len;
+            const auto s0 = this->snap();
+            this->push_scope()?;
+            auto lo = Value{ .ty = null, .v = "" };
+            auto hi = Value{ .ty = null, .v = "" };
+            if (is_literal(s.e) && !is_literal(s.e2)) {
+                hi = this->gen_expr(s.e2, null)?;
+                lo = this->coerce(this->gen_expr(s.e, hi.ty)?, hi.ty, s.line)?;
+            } else {
+                lo = this->gen_expr(s.e, null)?;
+                hi = this->coerce(this->gen_expr(s.e2, lo.ty)?, lo.ty, s.line)?;
+            }
+            if (lo.ty.k != .Int) { this->err(s.line); eprintln("range bounds must be integers"); return error.CompileFailed };
+            const auto lty = this->llty(lo.ty)?;
+            const auto it = this->alloca(lo.ty, s.name)?;
+            this->store(lo, it)?;
+            auto hslot = "";
+            if (this->af != null) { hslot = this->spill(hi)?.v; }
+            const auto lc = this->new_label("fcond")?;
+            const auto lb = this->new_label("fbody")?;
+            const auto lstep = this->new_label("fstep")?;
+            const auto le = this->new_label("fend")?;
+            this->label(lc)?;
+            const auto cur = this->load(lo.ty, it)?;
+            auto hv = hi.v;
+            if (hslot.len > 0) { hv = this->load(hi.ty, hslot)?.v; }
+            const auto c = this->tmp()?;
+            auto pred = "ult";
+            if (lo.ty.signed) { pred = "slt"; }
+            sprint(this->ins()?, "  {c} = icmp {pred} {lty} {cur.v}, {hv}\n")?;
+            sprint(this->ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?;
+            this->terminated = true;
+            this->label(lb)?;
+            this->push_scope()?;
+            const auto slot = this->alloca(lo.ty, s.name)?;
+            this->store(cur, slot)?;
+            this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
+            this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?)?;
+            this->gen_stmt(s.body)?;
+            this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
+            this->loops.len -= 1;
+            this->pop_scope()?;
+            this->label(lstep)?;
+            const auto cur2 = this->load(lo.ty, it)?;
+            const auto nx = this->tmp()?;
+            sprint(this->ins()?, "  {nx} = add {lty} {cur2.v}, 1\n")?;
+            this->store(Value{ .ty = lo.ty, .v = nx }, it)?;
+            this->br(lc)?;
+            this->label(le)?;
+            this->pop_scope()?;
+        }
+        .ForEach => this->gen_for_each(s)?;
+        .Ret => this->gen_return(s.line, s.e)?;
+        .Brk, .Cont => {
+            if (this->loops.len == 0) { this->err(s.line); eprintln("break/continue outside of a loop"); return error.CompileFailed; }
+            auto li = this->loops.len - 1;
+            if (s.label.len > 0) {
+                while (li >= 0 && this->loops.get(li).label != s.label) { li -= 1; }
+                if (li < 0) { this->err(s.line); eprintln("no loop labeled '{s.label}'"); return error.CompileFailed; }
+            }
+            const auto lp = this->loops.get(li);
+            if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false, true)?; }
+            this->loop_edge(li, s.k == .Brk)?;
+            if (s.k == .Brk) { this->br(lp.brk)? } else { this->br(lp.cont)?; }
+        }
+        .Defer => {
+            const auto sc = &this->scopes.items[this->scopes.len - 1];
+            sc.defers.push(Defer{ .stmt = s.body, .is_err = s.is_err })?;
+        }
+        .Match => {
+            this->set_await(s.e);
+            const auto v = this->gen_expr(s.e, null)?;
+            this->gen_match(v, s.arms, null)?;
+        }
+    }
+}
+
+!void Gen::gen_match(Value v, List<MatchArm> arms, MatchRes* res) {
+    if (is_union(v.ty)) {
+        this->gen_union_match(v, arms, res)?;
+        return;
+    }
+    const auto lend = this->new_label("mend")?;
+    auto jn = this->join_begin()?;
+    auto wild = false;
+    for (auto arm : arms) {
+        const auto lbody = this->new_label("arm")?;
+        const auto lnext = this->new_label("next")?;
+        if (arm.pats.len == 0) {
+            wild = true;
+            this->br(lbody)?;
+        } else {
+            for (auto [pi, pat] : arm.pats) {
+                const auto pv = this->coerce(this->gen_expr(pat, v.ty)?, v.ty, pat.line)?;
+                const auto c = this->compare(.eqeq, v, pv, pat.line)?;
+                auto lalt = lnext;
+                if (pi + 1 < arm.pats.len) { lalt = this->new_label("alt")?; }
+                sprint(this->ins()?, "  br i1 {c.v}, label %{lbody}, label %{lalt}\n")?;
+                this->terminated = true;
+                if (pi + 1 < arm.pats.len) { this->label(lalt)?; }
+            }
+        }
+        this->label(lbody)?;
+        this->join_arm(&jn)?;
+        this->push_scope()?;
+        this->gen_arm(arm.body, res)?;
+        this->pop_scope()?;
+        this->join_end(&jn)?;
+        if (!this->terminated) { this->br(lend)?; }
+        this->label(lnext)?;
+    }
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
+    this->end_match(lend, res)?;
+    if (!jn.any) {
+        sprint(this->ins()?, "  unreachable\n")?;
+        this->terminated = true;
+    }
+}
+
+!void Gen::end_match(str lend, MatchRes* res) {
+    if (res != null) {
+        sprint(this->ins()?, "  unreachable\n")?;
+        this->terminated = true;
+    }
+    this->label(lend)?;
+}
+
+!void Gen::gen_arm(Stmt* body, MatchRes* res) {
+    if (res == null) {
+        this->gen_stmt(body)?;
+        return;
+    }
+    const auto n = body.stmts.len;
+    if (body.k == .Block && n > 0) {
+        this->push_scope()?;
+        for (auto i : 0..n - 1) { this->gen_stmt(body.stmts.get(i))?; }
+        if (!this->terminated) { this->arm_tail(body.stmts.get(n - 1), res)?; }
+        this->pop_scope()?;
+        return;
+    }
+    this->arm_tail(body, res)?;
+}
+
+!void Gen::arm_tail(Stmt* s, MatchRes* res) {
+    if (s.k == .ExprS) {
+        this->arm_value(s.e, s.line, res)?;
+        return;
+    }
+    if (s.k == .Match) {
+        const auto v = this->gen_expr(s.e, null)?;
+        this->check_exhaustive(v, s.arms, s.line)?;
+        this->gen_match(v, s.arms, res)?;
+        return;
+    }
+    this->gen_stmt(s)?;
+    if (!this->terminated) { this->err(s.line); eprintln("a match arm in an expression must produce a value or leave (return/break/continue)"); return error.CompileFailed; }
+}
+
+!void Gen::arm_value(Expr* e, i64 line, MatchRes* res) {
+    auto v = this->gen_expr(e, res.ty)?;
+    if (res.ty == null) {
+        if (v.ty.k == .Void) { this->err(line); eprintln("a match arm in an expression must produce a value"); return error.CompileFailed };
+        res.ty = v.ty;
+        res.slot = this->alloca(v.ty, "m")?;
+    } else {
+        v = this->coerce(v, res.ty, line)?;
+    }
+    this->store(v, res.slot)?;
+}
+
+str Gen::missing_variant(Value v, List<MatchArm> arms) {
+    for (auto arm : arms) { if (arm.pats.len == 0) { return ""; } }
+    if (v.ty.k == .Bool) {
+        auto seen_true = false;
+        auto seen_false = false;
+        for (auto arm : arms) {
+            for (auto pat : arm.pats) {
+                if (pat.k == .BoolLit && pat.bval) { seen_true = true; }
+                if (pat.k == .BoolLit && !pat.bval) { seen_false = true; }
+            }
+        }
+        if (seen_true && seen_false) { return ""; }
+    }
+    auto names = List<str>::init(this->a);
+    for (auto arm : arms) {
+        for (auto pat : arm.pats) {
+            auto head = pat;
+            if (pat.k == .Call) { head = pat.l };
+            names.push(head.name) catch {};
+        }
+    }
+    auto all = List<str>::init(this->a);
+    if (v.ty.k == .Enm) {
+        all = v.ty.ei.decl.variants;
+    } else if (is_union(v.ty)) {
+        all = this->field_names(v.ty.si);
+    } else {
+        return "?";
+    }
+    for (auto name : all) {
+        if (!contains_str(names, name)) { return name; }
+    }
+    return "";
+}
+
+bool Gen::match_covers(Value v, List<MatchArm> arms) {
+    return this->missing_variant(v, arms).len == 0;
+}
+
+!void Gen::check_exhaustive(Value v, List<MatchArm> arms, i64 line) {
+    const auto m = this->missing_variant(v, arms);
+    if (m.len == 0) { return; }
+    this->err(line);
+    if (m == "?") {
+        eprintln("a match expression on '{this->type_name(v.ty)?}' needs a '_' arm");
+    } else {
+        eprintln("match is not exhaustive: missing '.{m}' (add the arm or a '_' arm)");
+    }
+    return error.CompileFailed;
+}
+
+!Value Gen::gen_match_expr(Expr* e, Type* expected) {
+    const auto v = this->gen_expr(e.l, null)?;
+    this->check_exhaustive(v, e.arms, e.line)?;
+    auto res = MatchRes{ .ty = null, .slot = "" };
+    if (expected != null && expected.k != .Void && expected.k != .Null) {
+        res.ty = expected;
+        res.slot = this->alloca(expected, "m")?;
+    }
+    this->gen_match(v, e.arms, &res)?;
+    if (res.ty == null) { this->err(e.line); eprintln("no arm of this match produces a value"); return error.CompileFailed; }
+    return this->load(res.ty, res.slot);
+}
+
+!UPat Gen::union_pattern(Expr* pat, Type* t) {
+    const auto si = t.si;
+    auto name = "";
+    auto bind = "";
+    auto head = pat;
+    if (pat.k == .Call) {
+        if (pat.args.len != 1 || pat.args.get(0).k != .Ident) { this->err(pat.line); eprintln("union pattern takes one binding name: .Variant(x)"); return error.CompileFailed };
+        bind = pat.args.get(0).name;
+        head = pat.l;
+    }
+    if (head.k == .EnumLit || head.k == .Field) {
+        name = head.name;
+    } else {
+        this->err(pat.line); eprintln("expected a union pattern like .Variant or .Variant(x)");
+        return error.CompileFailed;
+    }
+    const auto idx = field_index(si, name);
+    if (idx < 0) { this->err(pat.line); eprintln("union '{si.display}' has no variant '{name}'{this->hint(name, this->field_names(si))}"); return error.CompileFailed; }
+    if (bind.len > 0 && si.fields.get(idx).ty.k == .Void) { this->err(pat.line); eprintln("variant '{name}' has no payload to bind"); return error.CompileFailed };
+    if (bind == "_") { bind = ""; }
+    return UPat{ .idx = idx, .bind = bind };
+}
+
+!void Gen::gen_union_match(Value v, List<MatchArm> arms, MatchRes* res) {
+    const auto slot = this->spill(v)?.v;
+    const auto tp = this->gep_field(v.ty, slot, 0)?;
+    const auto tag = this->load(this->t_i32, tp)?;
+    const auto pp = this->gep_field(v.ty, slot, 1)?;
+    const auto lend = this->new_label("mend")?;
+    auto jn = this->join_begin()?;
+    auto wild = false;
+    for (auto arm : arms) {
+        const auto lbody = this->new_label("arm")?;
+        const auto lnext = this->new_label("next")?;
+        auto bind = UPat{ .idx = -1, .bind = "" };
+        if (arm.pats.len == 0) {
+            wild = true;
+            this->br(lbody)?;
+        } else {
+            for (auto [pi, pat] : arm.pats) {
+                const auto up = this->union_pattern(pat, v.ty)?;
+                if (up.bind.len > 0) {
+                    if (arm.pats.len > 1) { this->err(pat.line); eprintln("bindings are not allowed in multi-pattern arms"); return error.CompileFailed; }
+                    bind = up;
+                }
+                const auto c = this->tmp()?;
+                sprint(this->ins()?, "  {c} = icmp eq i32 {tag.v}, {up.idx}\n")?;
+                auto lalt = lnext;
+                if (pi + 1 < arm.pats.len) { lalt = this->new_label("alt")?; }
+                sprint(this->ins()?, "  br i1 {c}, label %{lbody}, label %{lalt}\n")?;
+                this->terminated = true;
+                if (pi + 1 < arm.pats.len) { this->label(lalt)?; }
+            }
+        }
+        this->label(lbody)?;
+        this->join_arm(&jn)?;
+        this->push_scope()?;
+        if (bind.bind.len > 0) {
+            const auto bty = v.ty.si.fields.get(bind.idx).ty;
+            auto bp = pp;
+            if (this->af != null) { bp = this->spill(this->load(bty, pp)?)?.v; }
+            this->declare_var(bind.bind, Var{ .ptr = bp, .ty = bty, .mutable = false }, arm.body.line)?;
+        }
+        this->gen_arm(arm.body, res)?;
+        this->pop_scope()?;
+        this->join_end(&jn)?;
+        if (!this->terminated) { this->br(lend)?; }
+        this->label(lnext)?;
+    }
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
+    this->end_match(lend, res)?;
+    if (!jn.any) {
+        sprint(this->ins()?, "  unreachable\n")?;
+        this->terminated = true;
+    }
+}
+
+!void Gen::gen_for_each(Stmt* s) {
+    const auto md = this->scopes.len;
+    const auto s0 = this->snap();
+    this->push_scope()?;
+    this->bor_field = null;
+    auto a = this->gen_addr(s.e)?;
+    auto via_slice = false;
+    auto slice_by = "";
+    if (a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct)) {
+        const auto p = this->load(a.ty, a.v)?;
+        a = Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
+    }
+    if (a.ty.k == .Strct) {
+        via_slice = true;
+        auto kb = this->sb();
+        sprint(&kb, "{a.ty.si.decl.name}.slice")?;
+        if (!this->methods.has(kb.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}' (no slice() method)"); return error.CompileFailed; }
+        const auto md = this->methods.get(kb.slice())?;
+        if (md.borrows) { slice_by = "slice"; }
+        const auto sv = this->call_method(md, a, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
+        const auto slot = this->alloca(sv.ty, "it")?;
+        this->store(sv, slot)?;
+        a = Addr{ .ty = sv.ty, .v = slot, .imm = false };
+    }
+    Type* elem = null;
+    auto len = "";
+    auto base = "";
+    if (a.ty.k == .Array) {
+        elem = a.ty.elem;
+        len = this->num(a.ty.len as i64)?;
+        base = a.v;
+    } else if (a.ty.k == .Slice) {
+        elem = a.ty.elem;
+        const auto sv = this->load(a.ty, a.v)?;
+        base = this->extract(sv, 0, this->t_ptr_u8)?.v;
+        len = this->extract(sv, 1, this->t_i64)?.v;
+    } else {
+        this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}'");
+        return error.CompileFailed;
+    }
+    const auto it = this->alloca(this->t_i64, "idx")?;
+    this->store(Value{ .ty = this->t_i64, .v = "0" }, it)?;
+    auto bslot = "";
+    auto lslot = "";
+    if (this->af != null) {
+        bslot = this->spill(Value{ .ty = this->t_ptr_u8, .v = base })?.v;
+        lslot = this->spill(Value{ .ty = this->t_i64, .v = len })?.v;
+    }
+    const auto lc = this->new_label("ecnd")?;
+    const auto lb = this->new_label("ebody")?;
+    const auto lstep = this->new_label("estep")?;
+    const auto le = this->new_label("eend")?;
+    this->label(lc)?;
+    const auto cur = this->load(this->t_i64, it)?;
+    if (lslot.len > 0) { len = this->load(this->t_i64, lslot)?.v; }
+    const auto c = this->tmp()?;
+    sprint(this->ins()?, "  {c} = icmp slt i64 {cur.v}, {len}\n")?;
+    sprint(this->ins()?, "  br i1 {c}, label %{lb}, label %{le}\n")?;
+    this->terminated = true;
+    this->label(lb)?;
+    this->push_scope()?;
+    if (bslot.len > 0) { base = this->load(this->t_ptr_u8, bslot)?.v; }
+    const auto ep = this->tmp()?;
+    if (a.ty.k == .Array) {
+        sprint(this->ins()?, "  {ep} = getelementptr {this->llty(a.ty)?}, ptr {base}, i64 0, i64 {cur.v}\n")?;
+    } else {
+        sprint(this->ins()?, "  {ep} = getelementptr {this->llty(elem)?}, ptr {base}, i64 {cur.v}\n")?;
+    }
+    const auto ev = this->load(elem, ep)?;
+    const auto slot = this->alloca(elem, s.name)?;
+    this->store(ev, slot)?;
+    this->declare_var(s.name, Var{ .ptr = slot, .ty = elem, .mutable = false }, s.line)?;
+    if (s.has_idx) {
+        const auto islot = this->alloca(this->t_i64, s.idx)?;
+        this->store(cur, islot)?;
+        this->declare_var(s.idx, Var{ .ptr = islot, .ty = this->t_i64, .mutable = false }, s.line)?;
+    }
+    auto lp = this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?;
+    lp.iter = this->iter_borrow(s.e, via_slice, slice_by)?;
+    this->loops.push(lp)?;
+    this->gen_stmt(s.body)?;
+    this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
+    this->loops.len -= 1;
+    this->pop_scope()?;
+    this->label(lstep)?;
+    const auto cur2 = this->load(this->t_i64, it)?;
+    const auto nx = this->tmp()?;
+    sprint(this->ins()?, "  {nx} = add i64 {cur2.v}, 1\n")?;
+    this->store(Value{ .ty = this->t_i64, .v = nx }, it)?;
+    this->br(lc)?;
+    this->label(le)?;
+    this->pop_scope()?;
+}
+
+!void Gen::gen_return(i64 line, Expr* re) {
+    if (this->cur == null) { this->err(line); eprintln("'return' cannot be used here: this code is not inside a function"); return error.CompileFailed; }
+    const auto rt = this->cur.ret;
+    auto is_err = false;
+    auto maybe_err = false;
+    auto has_val = false;
+    auto val = Value{ .ty = null, .v = "" };
+    if (re != null) { this->check_return_escape(re, line)?; }
+    if (re != null) {
+        if (rt.k == .Void) { this->err(line); eprintln("function returns void but a value was returned"); return error.CompileFailed };
+        is_err = re.k == .ErrorVal;
+        this->set_await(re);
+        const auto raw = this->gen_expr(re, rt)?;
+        maybe_err = raw.ty.k == .Errun || raw.ty.k == .ErrVal;
+        val = this->coerce(raw, rt, line)?;
+        has_val = true;
+    } else if (rt.k == .Errun && rt.elem.k == .Void) {
+        val = Value{ .ty = rt, .v = "zeroinitializer" };
+        has_val = true;
+    } else if (rt.k != .Void) {
+        this->err(line); eprintln("missing return value");
+        return error.CompileFailed;
+    }
+    if (!is_err && maybe_err && rt.k == .Errun && has_val && this->has_err_defers()) {
+        const auto tag = this->extract(val, 0, this->t_i32)?;
+        const auto c = this->tmp()?;
+        sprint(this->ins()?, "  {c} = icmp ne i32 {tag.v}, 0\n")?;
+        const auto le = this->new_label("reterr")?;
+        const auto lo = this->new_label("retok")?;
+        sprint(this->ins()?, "  br i1 {c}, label %{le}, label %{lo}\n")?;
+        this->terminated = true;
+        this->label(le)?;
+        this->run_defers(this->scopes.len - 1, 0, true, false)?;
+        this->ret_val(val)?;
+        this->terminated = true;
+        this->label(lo)?;
+        this->run_defers(this->scopes.len - 1, 0, false, false)?;
+        this->ret_val(val)?;
+        this->terminated = true;
+        return;
+    }
+    this->run_defers(this->scopes.len - 1, 0, is_err, false)?;
+    if (has_val) { this->ret_val(val)?; } else { this->ret_val(Value{ .ty = this->t_void, .v = "" })?; }
+    this->terminated = true;
+}

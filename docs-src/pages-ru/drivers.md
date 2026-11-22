@@ -5,9 +5,9 @@ section: Интероп и инструменты
 description: volatile, packed struct, inline asm, Cpu, Port, Bits, атомики, сборка без libc и ядро, которое загружается в QEMU
 ---
 
-Vibe подходит для драйверов и ядер: регистры устройств описываются структурами, привилегированные инструкции вызываются как обычные функции, а программа собирается без libc. Всё, что нужно, вшито в язык и прелюдию. Ни макросов, ни `#pragma`, ни атрибутов компилятора.
+Zark подходит для драйверов и ядер: регистры устройств описываются структурами, привилегированные инструкции вызываются как обычные функции, а программа собирается без libc. Всё, что нужно, вшито в язык и прелюдию. Ни макросов, ни `#pragma`, ни атрибутов компилятора.
 
-| Задача | В C | В Vibe |
+| Задача | В C | В Zark |
 |---|---|---|
 | регистр устройства | `volatile uint32_t *` и макросы | `volatile u32* reg` или `volatile u32` в `struct` |
 | формат дескриптора | `__attribute__((packed))` | `packed struct` |
@@ -21,7 +21,7 @@ Vibe подходит для драйверов и ядер: регистры у
 
 `volatile` ставится перед типом и означает, что каждое чтение и запись обращаются к памяти: компилятор их не склеивает и не выбрасывает. Это нужно для регистров устройств.
 
-```vibe run
+```zark run
 struct Uart {
     volatile u32 data;
     volatile u32 status;
@@ -40,7 +40,7 @@ void main() {
 
 `volatile` относится к тому, что лежит по адресу: `volatile u32* p` — указатель на `volatile u32`. Поле `volatile u32 data` и переменная `volatile u32 x` тоже работают. Ширина обращения всегда равна ширине типа: `volatile u8*` читает ровно один байт, `volatile u16*` — два.
 
-```vibe run
+```zark run
 void main() {
     u32 word = 0xAABBCCDD;
     volatile u8* bytes = &word as *u8;
@@ -57,7 +57,7 @@ void main() {
 
 Обычная структура выравнивает поля, как в C. `packed struct` кладёт поля вплотную, без пропусков: так устроены дескрипторы, таблицы IDT и GDT, заголовки пакетов и конфигурация PCI.
 
-```vibe run
+```zark run
 packed struct Descriptor {
     u64 addr;
     u32 len;
@@ -83,7 +83,7 @@ void main() {
 
 ## Биты регистров: `Bits`
 
-```vibe run
+```zark run
 void main() {
     u64 reg = 0;
     reg = Bits::set(reg, 7, 4, 0xA);
@@ -99,7 +99,7 @@ void main() {
 | `Bits::get(v, hi, lo)` | значение битового поля |
 | `Bits::set(v, hi, lo, x)` | `v` с заменённым полем |
 
-Результаты имеют тип `u64`; для 32-битного регистра добавляйте `as u32`: сужение в Vibe всегда явное.
+Результаты имеют тип `u64`; для 32-битного регистра добавляйте `as u32`: сужение в Zark всегда явное.
 
 ## Процессор: `Cpu` и порты: `Port`
 
@@ -119,7 +119,7 @@ void main() {
 
 `rdtsc`, `pause` и барьеры работают и в обычных программах:
 
-```vibe run
+```zark run
 void main() {
     Cpu::fence();
     const auto a = Cpu::rdtsc();
@@ -132,7 +132,7 @@ void main() {
 
 Таблицы страниц и буферы для DMA должны лежать по адресу, кратному размеру страницы. Перед глобальной переменной пишется `align(N)`; `N` — степень двойки.
 
-```vibe run
+```zark run
 align(4096) u64[512] page_table = 0;
 
 void main() {
@@ -144,7 +144,7 @@ void main() {
 
 ## Атомарные операции и `Spinlock`
 
-```vibe run
+```zark run
 void main() {
     u32 counter = 5;
     const auto old = Atomic::fetch_add32(&counter, 3);
@@ -170,7 +170,7 @@ void main() {
 
 Если нужной инструкции нет в `Cpu`, её можно вставить самим: `asm<Тип>("шаблон", "ограничения", операнды...)`. Шаблон и ограничения — в синтаксисе LLVM (AT&T). Фигурные скобки в строках экранируются: `\{rax\}`.
 
-```vibe
+```zark
 u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 ```
 
@@ -191,7 +191,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 
 Чтение и запись через `Mapping` идут через `volatile` и проверяют границы: выход за страницу — `error.OutOfRange`, а не падение.
 
-```vibe run
+```zark run
 !void main() {
     auto page = Mapping::anonymous(4096)?;
     defer _ = page.unmap();
@@ -203,7 +203,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 
 Чтение памяти процесса (своего или того, на который есть право по `ptrace_scope`):
 
-```vibe run
+```zark run
 !void main() {
     u32[4] secret = [11, 22, 33, 44];
     u8[16] copy;
@@ -214,7 +214,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 
 Список карт памяти и поиск области:
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -225,7 +225,7 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 
 Идентификаторы PCI-устройств (читаются без root):
 
-```vibe
+```zark
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -240,11 +240,11 @@ u64 read_flags() { return asm<u64>("pushfq; popq $0", "=r,~\{memory\}"); }
 
 ## Сборка без libc: `--freestanding`
 
-`vibe build ядро.vibe boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` компонует с `-nostdlib -static` и отключает проверки границ (их сообщения требуют libc). В режиме можно использовать всё, что не вызывает libc: `Fmt` и `Writer` работают без выделений, `println` не нужен, потому что вывод вы пишете сами.
+`zark build ядро.zk boot.S -Wl,-T,linker.ld --freestanding -o kernel.elf` компонует с `-nostdlib -static` и отключает проверки границ (их сообщения требуют libc). В режиме можно использовать всё, что не вызывает libc: `Fmt` и `Writer` работают без выделений, `println` не нужен, потому что вывод вы пишете сами.
 
 Компилятор может вызвать `memset` и `memcpy` при копировании и обнулении больших значений. В ядре определите их сами: определение с `export` заменяет объявление из прелюдии.
 
-```vibe
+```zark
 export void* memset(void* dst, i32 c, u64 n) {
     auto p = dst as *u8;
     for (auto i : 0..n) { p[i] = c as u8; }
@@ -256,9 +256,9 @@ export void* memset(void* dst, i32 c, u64 n) {
 
 ## Пример: ядро, которое загружается в QEMU
 
-В `examples/baremetal/` лежит полное ядро x86-64 на Vibe: `boot.S` (заголовок Multiboot, переход в 64-битный режим, заглушки прерываний), `linker.ld` и `kernel.vibe`.
+В `examples/baremetal/` лежит полное ядро x86-64 на Zark: `boot.S` (заголовок Multiboot, переход в 64-битный режим, заглушки прерываний), `linker.ld` и `kernel.zk`.
 
-```vibe
+```zark
 struct Serial {
     static void put(u8 c) {
         while ((Port::in8(0x3F8 + 5) & 0x20) == 0) { Cpu::pause(); }
@@ -277,16 +277,16 @@ void kprintln(Fmt f) {
 }
 
 export void kmain() {
-    kprintln("Hello from Vibe on bare metal!");
+    kprintln("Hello from Zark on bare metal!");
     kprintln("paging = {Bits::get(Cpu::cr0(), 31, 31)}");
 }
 ```
 
-Своя `kprintln` с интерполяцией строк получается из `Fmt` и `Writer` за шесть строк, а память не выделяется. Ядро выводит текст в последовательный порт, строит IDT (`packed struct`), ловит исключение `int3` в обработчике на Vibe и возвращается из него. Запуск:
+Своя `kprintln` с интерполяцией строк получается из `Fmt` и `Writer` за шесть строк, а память не выделяется. Ядро выводит текст в последовательный порт, строит IDT (`packed struct`), ловит исключение `int3` в обработчике на Zark и возвращается из него. Запуск:
 
 ```sh
 $ examples/baremetal/run.sh
-Hello from Vibe on bare metal!
+Hello from Zark on bare metal!
 protected mode = 1, paging = 1
 page table aligned = true, 4 * 5 = 20
 fib = [0, 1, 1, 2, 3, 5, 8, 13]
@@ -299,7 +299,7 @@ after int3
 ## Чего пока нет
 
 - Модулей ядра Linux: для них нужны заголовки ядра (`linux-headers`), сторонний C-файл с `module_init` и проверка в виртуальной машине. Объектный файл из `--freestanding` можно подключить в Kbuild, но готового примера пока нет.
-- Атрибута `interrupt`: обработчики прерываний пишутся как заглушки на ассемблере (см. `boot.S`) и вызывают функцию на Vibe.
+- Атрибута `interrupt`: обработчики прерываний пишутся как заглушки на ассемблере (см. `boot.S`) и вызывают функцию на Zark.
 - Битовых полей в `struct`: используйте `Bits`.
 - 8- и 16-битных атомарных операций.
 - Кодирования произвольного `asm` в собственном бэкенде.
@@ -307,6 +307,6 @@ after int3
 
 ## Что дальше
 
-- C и ассемблерные файлы рядом с Vibe: [взаимодействие с C](c-interop.md).
+- C и ассемблерные файлы рядом с Zark: [взаимодействие с C](c-interop.md).
 - Память без кучи: [память и аллокаторы](memory.md).
 - Устройство бэкендов: [как всё устроено](how-it-works.md).

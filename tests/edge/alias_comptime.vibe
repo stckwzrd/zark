@@ -1,5 +1,0 @@
-import "ct_lib.vibe" as lib;
-
-void main() {
-    println(sizeof(lib::Header));
-}

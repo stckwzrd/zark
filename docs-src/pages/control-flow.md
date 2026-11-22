@@ -2,14 +2,14 @@
 title: Control flow
 order: 14
 section: Language
-description: if, while, for, break, continue, match and defer in Vibe: all the forms with examples and edge cases
+description: if, while, for, break, continue, match and defer in Zark: all the forms with examples and edge cases
 ---
 
 There are few control constructs, and each has one form. The condition is written in parentheses, and the braces of the block are always mandatory, even for a single statement.
 
 ## `if` / `else`
 
-```vibe run
+```zark run
 void main() {
     const auto n = 7;
     if (n > 10) {
@@ -24,21 +24,21 @@ void main() {
 
 The condition must be `bool`. A number or a pointer is not accepted as a condition; an explicit comparison is needed:
 
-```vibe error fragment
+```zark error fragment
 const auto n = 5;
 if (n) { println("yes"); }
 ```
 
 The braces are mandatory:
 
-```vibe error fragment
+```zark error fragment
 const auto n = 5;
 if (n > 3) println("yes");
 ```
 
 `if` is a statement, not an expression: `auto x = if ...;` is not written. When you need to choose a value by a condition, use [`match`](#match-as-an-expression) or a variable declared in advance:
 
-```vibe run
+```zark run
 void main() {
     const auto n = 7;
     auto kind = "few";
@@ -55,7 +55,7 @@ void main() {
 
 ## `while`
 
-```vibe run
+```zark run
 void main() {
     auto i = 0;
     while (i < 3) {
@@ -77,7 +77,7 @@ An infinite loop is written as `while (true) { ... }` and left with `break` or `
 
 `for (auto i : a..b)` iterates over the integers from `a` inclusive to `b` **exclusive**. If `a >= b`, the loop does not run at all. The end of the range is evaluated once before the loop starts.
 
-```vibe run
+```zark run
 void main() {
     for (auto i : 0..4) {
         println(i);
@@ -93,7 +93,7 @@ void main() {
 
 There is no inclusive form `0..=3`: write `0..4`. There is no reverse iteration either. For a backwards pass use `while`:
 
-```vibe run
+```zark run
 void main() {
     auto i = 3;
     while (i > 0) {
@@ -107,7 +107,7 @@ A range exists only inside `for`: you cannot store `0..3` in a variable.
 
 The loop variable is immutable inside the body:
 
-```vibe error fragment
+```zark error fragment
 for (auto i : 0..3) {
     i += 1;
 }
@@ -117,7 +117,7 @@ for (auto i : 0..3) {
 
 `for (auto x : seq)` iterates over the elements of an array, a slice or any value with a `slice()` method (for example `List`). `for (auto [i, x] : seq)` adds the index.
 
-```vibe run
+```zark run
 void main() {
     const auto arr = [10, 20, 30];
     for (auto x : arr) { println(x); }
@@ -134,7 +134,7 @@ void main() {
 
 A string is iterated byte by byte: here `c` is a number of type `u8` (97, 98, 99). The element is a **copy**. To change elements in place, go by index:
 
-```vibe run
+```zark run
 void main() {
     auto xs = [1, 2, 3];
     for (auto i : 0..xs.len) {
@@ -146,7 +146,7 @@ void main() {
 
 You cannot iterate over a number:
 
-```vibe error fragment
+```zark error fragment
 for (auto x : 5) { println(x); }
 ```
 
@@ -154,7 +154,7 @@ for (auto x : 5) { println(x); }
 
 `break` leaves the nearest loop, and `continue` moves to the next iteration. To leave an outer loop, put a label in front of it and name the label in `break` or `continue`.
 
-```vibe run
+```zark run
 void main() {
     auto i = 0;
     while (true) {
@@ -175,7 +175,7 @@ void main() {
 
 A label is written in front of `for` or `while`:
 
-```vibe run
+```zark run
 void main() {
     auto found = 0;
     rows: for (auto i : 0..5) {
@@ -191,7 +191,7 @@ void main() {
 
 `break` and `continue` also work inside `match`, affecting the enclosing loop:
 
-```vibe run
+```zark run
 void main() {
     for (auto x : [1, 2, 3, 4, 5]) {
         match x {
@@ -208,7 +208,7 @@ void main() {
 
 `match` compares a value with patterns from top to bottom and runs the first branch that fits. There is no fall-through between branches.
 
-```vibe run
+```zark run
 enum Dir { North, East, South, West }
 
 void main() {
@@ -241,7 +241,7 @@ What can be matched: integers, characters (`'a'`), enums, strings (via `==`) and
 
 The branch `_` means "everything else". In a `match` **statement** it is optional: if nothing fits, nothing happens.
 
-```vibe run
+```zark run
 void main() {
     const auto n = 5;
     match n {
@@ -255,7 +255,7 @@ void main() {
 
 For a union, the pattern `.Variant(name)` binds the contents of the variant to a name. The bound value is read-only and lives inside the branch.
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -283,7 +283,7 @@ If the payload is not needed, write the variant without parentheses: `.Empty` (f
 
 `match` can stand to the right of `=`, in a `return`, in an argument. The branches are then expressions (or blocks whose value is the last expression), and all are converted to one type.
 
-```vibe run
+```zark run
 enum Level { Low, Mid, High }
 
 i64 score(Level l) {
@@ -316,7 +316,7 @@ void main() {
 
 A `match` expression has a hard requirement: it must be **exhaustive**. Cover all the variants or add `_`:
 
-```vibe error
+```zark error
 enum D { N, E }
 
 void main() {
@@ -330,7 +330,7 @@ void main() {
 
 A branch may give no value at all and instead leave the function or loop with `return`, `break` or `continue`:
 
-```vibe run
+```zark run
 i64 first_positive(i64[] xs) {
     for (auto x : xs) {
         const auto ok = match x > 0 {
@@ -352,7 +352,7 @@ void main() {
 
 `defer statement` postpones a statement until the current block is left: through the end of the block, `return`, `break` or `continue`. Several `defer`s run in reverse order, the last declared first.
 
-```vibe run
+```zark run
 void main() {
     defer println("declared first, runs last");
     defer println("declared second, runs first");
@@ -362,7 +362,7 @@ void main() {
 
 `defer` is tied to the **block**, not to the function. In a loop it fires on every iteration:
 
-```vibe run
+```zark run
 void main() {
     for (auto i : 0..3) {
         defer println("end of iteration {i}");
@@ -374,7 +374,7 @@ void main() {
 
 A block can be deferred too:
 
-```vibe run
+```zark run
 i64 work() {
     auto x = 1;
     defer {
@@ -393,7 +393,7 @@ The value of `return` is computed **before** the `defer`, so `work()` returned `
 
 The typical use is to release a resource right after acquiring it:
 
-```vibe run
+```zark run
 !void main() {
     auto list = List<i64>::init(c_allocator());
     defer list.deinit();
@@ -407,7 +407,7 @@ The typical use is to release a resource right after acquiring it:
 
 `errdefer` is the same, but only on the paths where the function returned an **error** (`return error.X`, `?` on an error and so on). It does not run on a successful exit. It is ideal for rolling back something partially built:
 
-```vibe run
+```zark run
 !i64 make(i64 n) {
     errdefer println("rollback: make({n}) failed");
     defer println("in any case: finished make({n})");

@@ -2,10 +2,10 @@
 title: Types
 order: 11
 section: Language
-description: All Vibe types: integers, floats, bool, pointers, slices, arrays, str, error unions, functions, sizes and conversions
+description: All Zark types: integers, floats, bool, pointers, slices, arrays, str, error unions, functions, sizes and conversions
 ---
 
-Vibe is statically typed. The type of every expression is known at compile time, and the memory layout is predictable: **what you see is what is in memory** (structs are laid out as in C).
+Zark is statically typed. The type of every expression is known at compile time, and the memory layout is predictable: **what you see is what is in memory** (structs are laid out as in C).
 
 ## Overview
 
@@ -28,7 +28,7 @@ Vibe is statically typed. The type of every expression is known at compile time,
 
 The size of any type is available through `sizeof`, and the alignment through `alignof`. Both are computed at compile time and have the type `u64`.
 
-```vibe run
+```zark run
 struct Pair { u8 a; i64 b; }
 
 void main() {
@@ -43,7 +43,7 @@ Note `Pair`: after the `u8` there are 7 bytes of padding, as in C.
 
 ## Integers
 
-```vibe run
+```zark run
 void main() {
     const i8 a = -128;
     const u8 b = 255;
@@ -55,7 +55,7 @@ void main() {
 
 A literal without a context is `i64`. A literal with a suitable context takes its type:
 
-```vibe run
+```zark run
 u8 takes_u8(u8 x) { return x; }
 
 void main() {
@@ -69,7 +69,7 @@ void main() {
 
 In a normal (safe) build, `+`, `-` and `*` on integers stop the program with `panic: integer overflow` and the file and line when the result does not fit the type:
 
-```vibe run exit
+```zark run exit
 void main() {
     const u8 u = 255;
     println(u + 1);
@@ -78,7 +78,7 @@ void main() {
 
 When wrapping is what you want (hashes, counters, checksums), say so with `+%`, `-%` and `*%`: they never panic, in any build:
 
-```vibe run
+```zark run
 void main() {
     const u8 u = 255;
     println(u +% 1);
@@ -93,10 +93,10 @@ With `--release` (and `--fast`, `--freestanding`) the checks are removed and pla
 
 A typical use is a hash. These operators also never get the "signed overflow is undefined" assumption of `--fast`:
 
-```vibe run
+```zark run
 void main() {
     u64 h = 14695981039346656037;
-    for (auto c : "vibe") { h = (h ^ c as u64) *% 1099511628211; }
+    for (auto c : "zark") { h = (h ^ c as u64) *% 1099511628211; }
     println(h);
     const u8 big = 250;
     println(big +% 10);
@@ -109,7 +109,7 @@ Integer division and remainder by zero stop the program with `panic: division by
 
 An integer is implicitly converted to a wider one **without loss**:
 
-```vibe run
+```zark run
 i64 wide(i64 x) { return x * 2; }
 
 void main() {
@@ -121,12 +121,12 @@ void main() {
 
 Narrowing, a change of sign and integer → float need an explicit `as`:
 
-```vibe error fragment
+```zark error fragment
 const i64 big = 5;
 const i32 small = big;
 ```
 
-```vibe error fragment
+```zark error fragment
 const i32 n = 5;
 const u32 u = n;
 ```
@@ -135,7 +135,7 @@ const u32 u = n;
 
 ## Floating-point numbers
 
-```vibe run
+```zark run
 void main() {
     const f64 a = 0.1 + 0.2;
     const f32 b = 1.0 / 3.0;
@@ -146,7 +146,7 @@ void main() {
 
 Printing goes through `%g`: up to six significant digits. Floating-point division by zero does not crash:
 
-```vibe run
+```zark run
 void main() {
     f64 z = 0.0;
     println(1.0 / z, -1.0 / z);
@@ -159,7 +159,7 @@ You cannot mix `f32` and `f64` without `as`, and the same goes for integers and 
 
 Only `true` and `false`. The conditions of `if` and `while` must be `bool`: "a nonzero number is true" does not work.
 
-```vibe error fragment
+```zark error fragment
 const auto n = 1;
 if (n) { println("yes"); }
 ```
@@ -174,7 +174,7 @@ A function without a return type returns `void`. You cannot declare a variable o
 
 `T*` is the address of a value of type `T`. Take an address with `&x`, read the value at an address with `*p`.
 
-```vibe run
+```zark run
 void main() {
     auto x = 10;
     const auto p = &x;
@@ -185,7 +185,7 @@ void main() {
 
 Pointers have arithmetic: `p + n` moves by `n` **elements**, not bytes. Indexing `p[i]` is the same as `*(p + i)`.
 
-```vibe run
+```zark run
 void main() {
     auto arr = [10, 20, 30, 40];
     const auto p = &arr[0];
@@ -197,7 +197,7 @@ void main() {
 
 Fields are accessed through a pointer with a plain dot, with no need to dereference:
 
-```vibe run
+```zark run
 struct Point { i64 x; i64 y; }
 
 void main() {
@@ -214,7 +214,7 @@ void main() {
 
 `void*` is "any pointer". It converts implicitly to `T*` and back, which is needed for allocators and C. `null` is the null pointer; it can be assigned to any pointer or function.
 
-```vibe run
+```zark run
 void main() {
     i64* p = null;
     println(p == null);
@@ -228,7 +228,7 @@ void main() {
 
 The size of an array is a compile-time constant (a number or a `const`). An array is a value: assignment copies all the elements.
 
-```vibe run
+```zark run
 const auto N = 3;
 
 void main() {
@@ -248,7 +248,7 @@ void main() {
 
 Going out of bounds is an emergency stop with the exact location. The check is on by default and is turned off by the `--release` flag:
 
-```vibe run panic
+```zark run panic
 void main() {
     const auto a = [1, 2, 3];
     auto i = 3;
@@ -260,7 +260,7 @@ void main() {
 
 A slice is a "window" into someone else's memory: a pointer and a length. It owns nothing and frees nothing.
 
-```vibe run
+```zark run
 void main() {
     auto data = [1, 2, 3, 4, 5, 6];
     const i64[] all = data[..];
@@ -278,7 +278,7 @@ The bounds of a slice include the start and exclude the end (like `a..b` in loop
 
 A slice can be made from an array, from another slice or from a pointer. For a pointer the end is mandatory because the length is unknown:
 
-```vibe run
+```zark run
 void main() {
     auto arr = [1, 2, 3, 4];
     const auto p = &arr[0];
@@ -289,7 +289,7 @@ void main() {
 
 Where a slice is expected, an array literal becomes a slice over memory on the stack:
 
-```vibe run
+```zark run
 i64 total(i64[] xs) {
     auto t = 0;
     for (auto x : xs) { t += x; }
@@ -308,7 +308,7 @@ void main() {
 
 `str` is the same thing as `u8[]`: a pointer to bytes and a length. A string is not a special type but a slice of bytes, so `.len`, indexing and slicing work:
 
-```vibe run
+```zark run
 void main() {
     const auto s = "hello";
     println(s.len, s[1], s[1..3]);
@@ -318,7 +318,7 @@ void main() {
 
 These are bytes, not Unicode characters: a Cyrillic letter takes two bytes.
 
-```vibe run
+```zark run
 void main() {
     const auto s = "привет";
     println(s.len);
@@ -331,7 +331,7 @@ void main() {
 
 `!T` is either a value of `T` or an error. Described in detail in [errors and optional values](errors-and-optionals.md).
 
-```vibe run
+```zark run
 !i64 half(i64 n) {
     if (n % 2 != 0) { return error.Odd; }
     return n / 2;
@@ -348,7 +348,7 @@ void main() {
 
 `?T` is a value or "nothing". It is the `Option<T>` of the standard library:
 
-```vibe run
+```zark run
 ?i64 first_even(i64[] xs) {
     for (auto x : xs) {
         if (x % 2 == 0) { return x; }
@@ -366,7 +366,7 @@ void main() {
 
 The type `fn(A, B) -> R` is the address of a function. For a function without a result write `fn(A, B) -> void`.
 
-```vibe run
+```zark run
 i64 double(i64 x) { return x * 2; }
 i64 negate(i64 x) { return -x; }
 
@@ -387,7 +387,7 @@ A function pointer does not hold an environment. If a function needs the variabl
 
 `type Name = Type;` gives a new name, not a new type: the two are interchangeable.
 
-```vibe run
+```zark run
 type Bytes = u8[];
 type Callback = fn(i64) -> i64;
 type Grid = i64[2][3];
@@ -408,7 +408,7 @@ void main() {
 
 A SIMD vector holds several numbers that one instruction processes at once. The types are named after the element and the number of lanes: `f32x4`, `f32x8`, `f64x2`, `f64x4`, `i32x4`, `i32x8`, `i64x2`, `u8x16` and so on (2 to 32 lanes, at most 32 bytes).
 
-```vibe run
+```zark run
 f32 dot(f32[] a, f32[] b) {
     f32x8 acc = f32x8(0.0);
     for (auto i : 0..a.len / 8) {
@@ -459,7 +459,7 @@ Everything else is done explicitly, with `as`:
 | enum ↔ integer | `Color.Blue as i64` | the ordinal number |
 | `T[]` → `T*` | `s as *T` | a pointer to the first element |
 
-```vibe run
+```zark run
 enum Color { Red, Green, Blue }
 
 void main() {

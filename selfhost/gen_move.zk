@@ -1,0 +1,562 @@
+import "sema_iface.zk";
+
+struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; List<List<MoveRec>> arms; }
+struct Origin { i64 kind; str name; str cptr; str by; }
+
+!void Gen::add_rec(MoveRec r) {
+    if (this->moved.len >= 512) {
+        this->err(this->at_line);
+        eprintln("this function tracks more than 512 moved, borrowed or owned variables at once; split it into smaller functions");
+        return error.CompileFailed;
+    }
+    if (this->shared) {
+        this->moved = this->move_copy(this->moved)?;
+        this->shared = false;
+    }
+    this->moved.push(r)?;
+}
+
+List<MoveRec> Gen::snap() {
+    this->shared = true;
+    return this->moved;
+}
+
+void Gen::restore_state(List<MoveRec> s) {
+    this->moved = s;
+    this->shared = true;
+}
+
+void Gen::prune_scope(i64 idx) {
+    if (this->moved.len == 0) { return; }
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) {
+        auto dead = false;
+        for (auto e : this->scopes.items[idx].vars.entries) { if (e.used && e.value.ptr == r.ptr) { dead = true; } }
+        if (!dead) { out.push(r) catch {}; }
+    }
+    if (out.len != this->moved.len) { this->restore_state(out); }
+}
+
+bool Gen::live_ptr(str ptr, str except) {
+    if (this->declared_before(ptr, this->scopes.len)) { return true; }
+    if (ptr == except) { return false; }
+    for (auto lp : this->loops) { if (lp.iter.len > 0 && lp.iter == ptr) { return true; } }
+    return false;
+}
+
+!List<MoveRec> Gen::move_copy(List<MoveRec> src) {
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : src) { out.push(r)?; }
+    return out;
+}
+
+!List<MoveRec> Gen::move_join(List<MoveRec> x, List<MoveRec> y) {
+    if (y.len == 0) { return x; }
+    if (x.len == 0) { return y; }
+    if (x.len == y.len && x.items.ptr == y.items.ptr) { return x; }
+    auto out = this->move_copy(x)?;
+    for (auto r : y) {
+        auto found = false;
+        for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { found = true; } }
+        if (!found) {
+            if (out.len >= 512) {
+                this->err(this->at_line);
+                eprintln("this function tracks more than 512 moved, borrowed or owned variables at once; split it into smaller functions");
+                return error.CompileFailed;
+            }
+            out.push(r)?;
+        }
+    }
+    return out;
+}
+
+i64 Gen::move_find(str ptr) {
+    for (auto [i, r] : this->moved) { if (r.ptr == ptr && (r.kind == 0 || r.kind == 3)) { return i; } }
+    return -1;
+}
+
+str Gen::local_ptr(str name) {
+    auto i = this->scopes.len;
+    while (i > 0) {
+        i -= 1;
+        const auto sc = &this->scopes.items[i];
+        if (sc.vars.has(name)) {
+            const auto v = sc.vars.get(name) catch { return ""; };
+            return v.ptr;
+        }
+    }
+    return "";
+}
+
+!Type* Gen::local_type(str name) {
+    if (this->local_ptr(name).len == 0) { return null; }
+    const auto v = this->lookup_var(name)?;
+    return v.ty;
+}
+
+bool Gen::has_reinit(str ptr, str lid) {
+    for (auto r : this->moved) { if (r.kind == 5 && r.ptr == ptr && r.cont == lid) { return true; } }
+    return false;
+}
+
+void Gen::note_use(str ptr) {
+    for (auto k : 0..this->loops.len) {
+        const auto lp = &this->loops.items[k];
+        auto seen = false;
+        for (auto e : lp.evs) { if (e.ptr == ptr) { seen = true; } }
+        if (seen || this->has_reinit(ptr, lp.id)) { continue; }
+        lp.evs.push(LoopEv{ .ptr = ptr }) catch {};
+    }
+}
+
+!void Gen::note_reinit(str ptr) {
+    for (auto k : 0..this->loops.len) {
+        const auto lp = this->loops.get(k);
+        if (!this->declared_before(ptr, lp.md) || this->has_reinit(ptr, lp.id)) { continue; }
+        this->add_rec(MoveRec{ .ptr = ptr, .kind = 5, .cont = lp.id })?;
+    }
+}
+
+!void Gen::move_use(str name, i64 line) {
+    if (this->reinit) { return; }
+    const auto p = this->local_ptr(name);
+    if (p.len == 0) { return; }
+    this->note_use(p);
+    if (this->moved.len == 0) { return; }
+    const auto i = this->move_find(p);
+    if (i < 0) { return; }
+    const auto r = this->moved.get(i);
+    this->err(line);
+    if (r.kind == 3) {
+        eprintln("'{name}' points into '{r.cname}', and '{r.by}' on line {r.line} may have moved or freed that memory; take the pointer again after it");
+    } else {
+        eprintln("'{name}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+    }
+    return error.CompileFailed;
+}
+
+!str Gen::place_key(Expr* e) {
+    if (e.k == .Ident) {
+        const auto p = this->local_ptr(e.name);
+        if (p.len > 0) { return p; }
+        const auto mx = this->member_expr(e)?;
+        if (mx != null) { return this->place_key(mx); }
+        return "";
+    }
+    if (e.k == .Field) {
+        const auto k = this->place_key(e.l)?;
+        if (k.len == 0) { return ""; }
+        auto b = this->sb();
+        sprint(&b, "{k}.{e.name}")?;
+        return b.slice();
+    }
+    return "";
+}
+
+str Gen::place_name(Expr* e) {
+    if (e.k == .Field) {
+        auto b = this->sb();
+        if (e.l.k == .Ident && e.l.name == "this") {
+            sprint(&b, "this->{e.name}") catch return e.name;
+        } else {
+            sprint(&b, "{this->place_name(e.l)}.{e.name}") catch return e.name;
+        }
+        return b.slice();
+    }
+    return e.name;
+}
+
+!void Gen::invalidate(str cptr, str cname, str by, i64 line) {
+    auto prefix = this->sb();
+    sprint(&prefix, "{cptr}.")?;
+    auto add = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) {
+        if (r.kind == 2 && (r.cont == cptr || str_starts_with(r.cont, prefix.slice()))) {
+            add.push(MoveRec{ .ptr = r.ptr, .by = by, .line = line, .kind = 3, .cname = cname })?;
+        }
+    }
+    for (auto r : add) {
+        if (this->move_find(r.ptr) < 0) { this->add_rec(r)?; }
+    }
+}
+
+!void Gen::invalidate_borrows(str by, i64 line) {
+    auto add = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) {
+        if (r.kind == 2 && r.by.len > 0) { add.push(MoveRec{ .ptr = r.ptr, .by = by, .line = line, .kind = 3, .cname = r.cname })?; }
+    }
+    for (auto r : add) {
+        if (this->move_find(r.ptr) < 0) { this->add_rec(r)?; }
+    }
+}
+
+!void Gen::move_mark(Expr* x, str by, i64 line) {
+    if (x.k != .Ident) { return; }
+    const auto p = this->local_ptr(x.name);
+    if (p.len == 0) { return; }
+    this->invalidate(p, x.name, by, line)?;
+    if (this->move_find(p) >= 0) { return; }
+    this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 0 })?;
+    const auto ty = this->local_type(x.name)?;
+    if (ty != null && is_owned(ty)) { this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 4 })?; }
+}
+
+!void Gen::move_args(FnDecl* decl, List<Expr*> args, i64 off, i64 line) {
+    for (auto [i, x] : args) {
+        const auto pi = i + off;
+        if (pi < decl.params.len && decl.params.get(pi).move) { this->move_mark(x, decl.name, line)?; }
+    }
+}
+
+!Origin Gen::origin_of(Expr* e) {
+    auto none = Origin{ .kind = 0, .name = "", .cptr = "" };
+    if (e == null) { return none; }
+    if (e.k == .Cast) { return this->origin_of(e.l); }
+    if (e.k == .StructLit) {
+        for (auto f : e.fields) {
+            const auto o = this->origin_of(f.value)?;
+            if (o.kind == 1) { return o; }
+        }
+        return none;
+    }
+    if (e.k == .Call && e.l.k == .Field && this->bor_field == e.l && this->bor_ptr.len > 0) {
+        return Origin{ .kind = 2, .name = this->bor_name, .cptr = this->bor_ptr, .by = e.l.name };
+    }
+    auto base = e;
+    auto indirect_ok = false;
+    if (e.k == .Unary && e.op == .amp) { base = e.l; indirect_ok = true; }
+    if (e.k == .Slice) { base = e; }
+    if (e.k == .Ident) { return none; }
+    if (!indirect_ok && e.k != .Slice) { return none; }
+    auto root = base;
+    auto direct = base.k == .Ident;
+    if (base.k == .Field || base.k == .Index || base.k == .Slice) { root = base.l; }
+    if (root.k != .Ident) { return none; }
+    const auto p = this->local_ptr(root.name);
+    if (p.len == 0) { return none; }
+    if (root.name == "this") { return none; }
+    const auto ty = this->local_type(root.name)?;
+    if (ty == null) { return none; }
+    if (direct) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
+    if (ty.k == .Array || (ty.k == .Strct && base.k == .Field)) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
+    if (ty.k == .Ptr || ty.k == .Slice) { return Origin{ .kind = 2, .name = root.name, .cptr = p }; }
+    return none;
+}
+
+!void Gen::set_origin(str slot, str name, Expr* init, i64 line) {
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) { if (r.ptr != slot) { out.push(r)?; } }
+    this->restore_state(out);
+    if (init == null) { return; }
+    if (init.k == .Ident) {
+        const auto src = this->local_ptr(init.name);
+        for (auto r : this->moved) {
+            if (r.ptr == src && (r.kind == 1 || r.kind == 2)) {
+                this->add_rec(MoveRec{ .ptr = slot, .by = r.by, .line = r.line, .kind = r.kind, .cont = r.cont, .cname = r.cname })?;
+                return;
+            }
+        }
+        return;
+    }
+    const auto o = this->origin_of(init)?;
+    if (o.kind == 1) { this->add_rec(MoveRec{ .ptr = slot, .by = o.name, .line = line, .kind = 1 })?; }
+    if (o.kind == 2) { this->add_rec(MoveRec{ .ptr = slot, .by = o.by, .line = line, .kind = 2, .cont = o.cptr, .cname = o.name })?; }
+}
+
+str Gen::escaped_local(Expr* e) {
+    if (e.k == .Ident) {
+        const auto p = this->local_ptr(e.name);
+        for (auto r : this->moved) { if (r.ptr == p && r.kind == 1 && p.len > 0) { return r.by; } }
+        return "";
+    }
+    const auto o = this->origin_of(e) catch { return ""; };
+    if (o.kind == 1) { return o.name; }
+    return "";
+}
+
+!void Gen::check_return_escape(Expr* re, i64 line) {
+    auto root = this->escaped_local(re);
+    if (root.len == 0 && re.k == .Ident && this->cur.ret.k == .Slice) {
+        const auto ty = this->local_type(re.name)?;
+        if (ty != null && ty.k == .Array) { root = re.name; }
+    }
+    if (root.len == 0) { return; }
+    this->err(line);
+    eprintln("returning something that points into local '{root}' (a pointer, a slice, or a closure that captured it), which dies when the function returns; allocate it with an Allocator or take a pointer from the caller");
+    return error.CompileFailed;
+}
+
+!void Gen::check_store_escape(Expr* target, Expr* rhs, i64 line) {
+    const auto root = this->escaped_local(rhs);
+    if (root.len == 0) { return; }
+    auto base = target;
+    while (base.k == .Field || base.k == .Index || base.k == .Unary) { base = base.l; }
+    if (base.k != .Ident) { return; }
+    const auto p = this->local_ptr(base.name);
+    auto outlives = false;
+    if (p.len == 0) {
+        outlives = this->globals.has(base.name);
+    } else if (this->scopes.items[0].vars.has(base.name)) {
+        const auto ty = this->local_type(base.name)?;
+        outlives = ty != null && (ty.k == .Ptr || ty.k == .Slice);
+    }
+    if (!outlives) { return; }
+    this->err(line);
+    eprintln("the address of local '{root}' is stored in '{base.name}', which outlives this function");
+    return error.CompileFailed;
+}
+
+!Join Gen::join_begin() {
+    return Join{ .s0 = this->snap(), .acc = List<MoveRec>::init(this->a), .any = false, .arms = List<List<MoveRec>>::init(this->a) };
+}
+
+!void Gen::join_arm(Join* j) {
+    this->restore_state(j.s0);
+}
+
+!void Gen::join_end(Join* j) {
+    if (this->terminated) { return; }
+    j.acc = this->move_join(j.acc, this->moved)?;
+    j.arms.push(this->snap())?;
+    j.any = true;
+}
+
+bool is_must(i64 kind) { return kind == 4 || kind == 5; }
+
+bool state_has(List<MoveRec> st, str ptr, i64 kind) {
+    for (auto r : st) { if (r.ptr == ptr && r.kind == kind) { return true; } }
+    return false;
+}
+
+bool rec_in(List<MoveRec> st, MoveRec r) {
+    for (auto q : st) {
+        if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { return true; }
+    }
+    return false;
+}
+
+!List<MoveRec> Gen::filter_must(List<MoveRec> x, List<MoveRec> allowed) {
+    auto drop = false;
+    for (auto r : x) { if (is_must(r.kind) && !rec_in(allowed, r)) { drop = true; } }
+    if (!drop) { return x; }
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : x) { if (!is_must(r.kind) || rec_in(allowed, r)) { out.push(r)?; } }
+    return out;
+}
+
+!List<MoveRec> Gen::must_meet(List<MoveRec> acc, i64 n, List<MoveRec> st) {
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : st) { if (is_must(r.kind) && (n == 0 || rec_in(acc, r))) { out.push(r)?; } }
+    return out;
+}
+
+!void Gen::join_finish(Join* j, bool fallthrough) {
+    if (fallthrough) {
+        j.acc = this->move_join(j.acc, j.s0)?;
+        j.arms.push(j.s0)?;
+        j.any = true;
+    }
+    if (!j.any) {
+        this->restore_state(j.s0);
+        return;
+    }
+    auto out = List<MoveRec>::init(this->a);
+    auto changed = false;
+    for (auto r : j.acc) {
+        auto keep = true;
+        if (is_must(r.kind)) { for (auto arm : j.arms) { if (!rec_in(arm, r)) { keep = false; } } }
+        if (keep) { out.push(r)?; } else { changed = true; }
+    }
+    if (changed) { this->restore_state(out); } else { this->restore_state(j.acc); }
+}
+
+bool Gen::declared_before(str ptr, i64 depth) {
+    auto i = 0;
+    while (i < depth && i < this->scopes.len) {
+        for (auto e : this->scopes.items[i].vars.entries) { if (e.used && e.value.ptr == ptr) { return true; } }
+        i += 1;
+    }
+    return false;
+}
+
+!str Gen::iter_borrow(Expr* seq, bool via_slice, str slice_by) {
+    if (seq.k == .Call && this->bor_field != null && seq.l == this->bor_field && this->bor_ptr.len > 0) {
+        const auto hp = this->tmp()?;
+        this->add_rec(MoveRec{ .ptr = hp, .by = seq.l.name, .line = seq.line, .kind = 2, .cont = this->bor_ptr, .cname = this->bor_name })?;
+        return hp;
+    }
+    if (seq.k == .Ident) {
+        const auto p = this->local_ptr(seq.name);
+        for (auto r : this->moved) { if (r.ptr == p && r.kind == 2) { return p; } }
+    }
+    if (via_slice) {
+        const auto k = this->place_key(seq)?;
+        if (k.len > 0) {
+            const auto hp = this->tmp()?;
+            this->add_rec(MoveRec{ .ptr = hp, .by = slice_by, .line = seq.line, .kind = 2, .cont = k, .cname = this->place_name(seq) })?;
+            return hp;
+        }
+    }
+    return "";
+}
+
+!Loop Gen::loop_new(str brk, str cont, i64 depth, str label, i64 md, bool infinite) {
+    this->nloop += 1;
+    auto ib = this->sb();
+    sprint(&ib, "L{this->nloop}")?;
+    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .id = ib.slice(), .infinite = infinite, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a), .bmust = List<MoveRec>::init(this->a), .cmust = List<MoveRec>::init(this->a), .evs = List<LoopEv>::init(this->a) };
+}
+
+!void Gen::loop_edge(i64 li, bool is_break) {
+    const auto lp = &this->loops.items[li];
+    if (is_break) {
+        lp.brks = this->move_join(lp.brks, this->moved)?;
+        lp.bmust = this->must_meet(lp.bmust, lp.nbrk, this->moved)?;
+        lp.nbrk += 1;
+    } else {
+        lp.conts = this->move_join(lp.conts, this->moved)?;
+        lp.cmust = this->must_meet(lp.cmust, lp.ncont, this->moved)?;
+        lp.ncont += 1;
+    }
+}
+
+!void Gen::loop_end(Loop lp, List<MoveRec> s0) {
+    auto back = lp.conts;
+    auto back_must = lp.cmust;
+    auto nback = lp.ncont;
+    if (!this->terminated) {
+        back = this->move_join(back, this->moved)?;
+        back_must = this->must_meet(back_must, nback, this->moved)?;
+        nback += 1;
+    }
+    for (auto r : back) {
+        if (r.kind == 3 && lp.iter.len > 0 && r.ptr == lp.iter) {
+            this->err(r.line);
+            eprintln("'{r.cname}' is changed by '{r.by}' while this loop is still iterating over it; leave the loop right after the change (break or return) or iterate over a copy");
+            return error.CompileFailed;
+        }
+        if (r.kind != 0 && r.kind != 3) { continue; }
+        if (rec_in(s0, r) || !this->declared_before(r.ptr, lp.md)) { continue; }
+        auto used = false;
+        for (auto ev : lp.evs) { if (ev.ptr == r.ptr) { used = true; } }
+        if (!used) { continue; }
+        this->err(r.line);
+        if (r.kind == 3) {
+            eprintln("'{r.cname}' is changed by '{r.by}' inside a loop while a pointer into it is kept for the next iteration; take the pointer again inside the loop");
+        } else {
+            eprintln("a variable is consumed by '{r.by}' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return");
+        }
+        return error.CompileFailed;
+    }
+    auto may = this->move_join(lp.brks, back)?;
+    if (!lp.infinite) { may = this->move_join(s0, may)?; }
+    auto post = List<MoveRec>::init(this->a);
+    for (auto r : may) { if (!is_must(r.kind) && this->live_ptr(r.ptr, lp.iter)) { post.push(r)?; } }
+    auto cand = s0;
+    if (lp.infinite) { cand = lp.bmust; }
+    for (auto r : cand) {
+        if (!is_must(r.kind) || (r.kind == 5 && r.cont == lp.id) || !this->live_ptr(r.ptr, "")) { continue; }
+        auto keep = true;
+        if (lp.infinite) {
+            if (rec_in(s0, r) && nback > 0 && !rec_in(back_must, r)) { keep = false; }
+        } else {
+            if (nback > 0 && !rec_in(back_must, r)) { keep = false; }
+            if (lp.nbrk > 0 && !rec_in(lp.bmust, r)) { keep = false; }
+        }
+        if (keep) { post.push(r)?; }
+    }
+    this->restore_state(post);
+}
+
+bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.decl.owned; }
+
+!void Gen::register_owned(str slot, str name, Type* ty, i64 line) {
+    if (!is_owned(ty)) { return; }
+    const auto sc = &this->scopes.items[this->scopes.len - 1];
+    sc.owned.push(OwnedVar{ .ptr = slot, .name = name, .tname = ty.si.decl.name, .line = line })?;
+}
+
+!void Gen::mark_escaped(str name, Type* ty) {
+    if (!is_owned(ty)) { return; }
+    const auto p = this->local_ptr(name);
+    if (p.len == 0) { return; }
+    for (auto r : this->moved) { if (r.ptr == p && r.kind == 4) { return; } }
+    this->add_rec(MoveRec{ .ptr = p, .by = "", .line = this->at_line, .kind = 4 })?;
+}
+
+!void Gen::check_dropped(Type* ty, i64 line) {
+    if (!is_owned(ty)) { return; }
+    this->err(line);
+    eprintln("a value of type '{ty.si.decl.name}' is dropped here; keep it in a variable and consume it (for example join it), or pass it to something that does");
+    return error.CompileFailed;
+}
+
+!void Gen::check_overwrite(str name, i64 line) {
+    const auto ty = this->local_type(name)?;
+    if (ty == null || !is_owned(ty)) { return; }
+    const auto p = this->local_ptr(name);
+    auto registered = false;
+    for (auto sc : this->scopes) { for (auto ov : sc.owned) { if (ov.ptr == p) { registered = true; } } }
+    if (!registered || state_has(this->moved, p, 4)) { return; }
+    this->err(line);
+    eprintln("'{name}' still holds a '{ty.si.decl.name}' that has not been consumed, and this assignment would lose it; consume it first");
+    return error.CompileFailed;
+}
+
+str Gen::consumer_of(str tname) {
+    auto found = "";
+    for (auto e : this->methods.entries) {
+        if (!e.used) { continue; }
+        const auto f = e.value;
+        if (f.receiver == tname && f.params.len > 0 && f.params.get(0).move) {
+            if (found.len == 0 || f.name == "join") { found = f.name; }
+        }
+    }
+    return found;
+}
+
+!void Gen::check_owned(i64 hi, i64 lo) {
+    if (this->terminated) { return; }
+    auto i = lo;
+    while (i <= hi) {
+        for (auto ov : this->scopes.items[i].owned) {
+            if (!state_has(this->moved, ov.ptr, 4)) {
+                this->err(ov.line);
+                const auto cons = this->consumer_of(ov.tname);
+                if (cons.len > 0) {
+                    eprintln("'{ov.name}' holds a '{ov.tname}' that is not consumed on every path out of its scope; call {ov.name}.{cons}(), pass it on, or write `defer {ov.name}.{cons}();` right after creating it");
+                } else {
+                    eprintln("'{ov.name}' holds a '{ov.tname}' that is not consumed on every path out of its scope; call a method declared `move` on it, or pass it on");
+                }
+                return error.CompileFailed;
+            }
+        }
+        i += 1;
+    }
+}
+
+!void Gen::taint_owned(str slot, Expr* init, i64 line) {
+    auto e = init;
+    while (e.k == .Try || e.k == .Catch || e.k == .Orelse) { e = e.l; }
+    if (e.k != .Call) { return; }
+    for (auto x : e.args) {
+        if (x.k == .Closure) {
+            for (auto cn : x.func.captures) {
+                if (this->local_ptr(cn).len > 0) { this->add_rec(MoveRec{ .ptr = slot, .by = cn, .line = line, .kind = 1 })?; }
+            }
+        } else {
+            const auto o = this->origin_of(x)?;
+            if (o.kind == 1) { this->add_rec(MoveRec{ .ptr = slot, .by = o.name, .line = line, .kind = 1 })?; }
+        }
+    }
+}
+
+!List<Cold> Gen::colds_copy() {
+    auto out = List<Cold>::init(this->a);
+    for (auto c : this->colds) {
+        auto ins = List<ColdIn>::init(this->a);
+        for (auto x : c.ins) { ins.push(x)?; }
+        out.push(Cold{ .helper = c.helper, .label = c.label, .nlead = c.nlead, .ins = ins })?;
+    }
+    return out;
+}

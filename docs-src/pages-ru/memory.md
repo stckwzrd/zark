@@ -2,7 +2,7 @@
 title: Память и аллокаторы
 order: 20
 section: Память и данные
-description: Стек и куча, явный Allocator, c_allocator, FixedBuf, Arena, create/destroy, свой аллокатор и типичные ошибки работы с памятью в Vibe
+description: Стек и куча, явный Allocator, c_allocator, FixedBuf, Arena, create/destroy, свой аллокатор и типичные ошибки работы с памятью в Zark
 ---
 
 Главное правило языка: **ничто не выделяет память само.** Ни строки, ни интерполяция, ни замыкания, ни `println`. Куча появляется только там, где вы явно передали **аллокатор**. Поэтому, читая код, вы всегда видите, кто, где и сколько берёт.
@@ -11,7 +11,7 @@ description: Стек и куча, явный Allocator, c_allocator, FixedBuf, 
 
 Обычные переменные, массивы и структуры живут на **стеке** функции и исчезают при выходе из неё. Для данных, которые нужно сохранить дольше или размер которых неизвестен заранее, нужна **куча**, а к ней доступ через аллокатор.
 
-```vibe run
+```zark run
 void main() {
     i64[4] local;
     local[0] = 1;
@@ -25,7 +25,7 @@ void main() {
 
 `Allocator` — маленькая структура из трёх полей: контекст и две функции.
 
-```vibe
+```zark
 struct Allocator {
     void* ctx;
     fn(void*, u64, u64) -> void* alloc_fn;
@@ -56,7 +56,7 @@ struct Allocator {
 
 ### `alloc` и `free`
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     const auto xs = a.alloc<i64>(4)?;
@@ -76,7 +76,7 @@ struct Allocator {
 
 Для одного объекта, например узла списка:
 
-```vibe run
+```zark run
 struct Node {
     i64 val;
     Node* next;
@@ -97,7 +97,7 @@ struct Node {
 
 ### `dup`
 
-```vibe run
+```zark run
 !void main() {
     const auto a = c_allocator();
     u8[3] src = [104, 105, 33];
@@ -110,9 +110,9 @@ struct Node {
 
 ## Ошибка нехватки памяти
 
-В Vibe нехватка памяти — не катастрофа, а значение, которое обрабатывается. Это особенно важно для `FixedBuf`, у которого память ограничена:
+В Zark нехватка памяти — не катастрофа, а значение, которое обрабатывается. Это особенно важно для `FixedBuf`, у которого память ограничена:
 
-```vibe run
+```zark run
 void main() {
     u8[64] mem;
     auto fb = FixedBuf::init(mem[..]);
@@ -132,7 +132,7 @@ void main() {
 
 `FixedBuf` раздаёт память из вашего массива «по возрастающей». Отдельные куски освобождать не нужно: `free` возвращает память, только если это самое последнее выделение, иначе ничего не делает. Весь буфер возвращается одним вызовом `reset()`. Аллокатор хранит указатель на `fb`, поэтому переменная `fb` должна жить, пока вы пользуетесь аллокатором.
 
-```vibe run
+```zark run
 !void main() {
     u8[256] mem;
     auto fb = FixedBuf::init(mem[..]);
@@ -155,7 +155,7 @@ void main() {
 
 `Arena` берёт крупные куски у родительского аллокатора и раздаёт из них маленькие. Куски берутся порциями от 64 КБ. Отдельные `free` ничего не делают, а `deinit()` освобождает **всё** сразу. Идеальна для данных с общим временем жизни: разбор файла, обработка одного запроса, построение дерева.
 
-```vibe run
+```zark run
 !void main() {
     auto arena = Arena::init(c_allocator());
     defer arena.deinit();
@@ -175,11 +175,11 @@ void main() {
 }
 ```
 
-Не нужно вызывать `list.deinit()` или `a.free(w1)`: всё уйдёт вместе с `arena.deinit()`. Именно так устроен сам компилятор Vibe: одна арена на запуск.
+Не нужно вызывать `list.deinit()` или `a.free(w1)`: всё уйдёт вместе с `arena.deinit()`. Именно так устроен сам компилятор Zark: одна арена на запуск.
 
 Типичный шаблон: аллокатор передаётся параметром.
 
-```vibe run
+```zark run
 struct Config {
     str name;
     List<i64> values;
@@ -205,7 +205,7 @@ struct Config {
 
 Достаточно заполнить три поля. Например, счётчик, который считает выделения и передаёт работу родителю:
 
-```vibe run
+```zark run
 struct Counting {
     i64 count;
     i64 bytes;
@@ -243,7 +243,7 @@ void count_free(void* ctx, void* p, u64 size) {
 
 Указатель на локальную переменную нельзя возвращать:
 
-```vibe error
+```zark error
 i64* bad() {
     auto x = 5;
     return &x;
@@ -256,7 +256,7 @@ void main() { println(*bad()); }
 
 Правило: данные, переживающие функцию, должны лежать в памяти, которой владеет вызывающий (параметр-срез, указатель, аллокатор).
 
-```vibe run
+```zark run
 void fill(i64[] out) {
     for (auto i : 0..out.len) { out[i] = i * i; }
 }
@@ -272,7 +272,7 @@ void main() {
 
 Параметр можно пометить `move`: функция забирает значение, и вызывающий больше не должен использовать эту переменную. В стандартной библиотеке `move` стоит на `free`, `destroy` и на каждом `deinit`/`close`, поэтому самые частые ошибки с памятью останавливаются при компиляции.
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto p = a.create<i64>() catch return;
@@ -284,7 +284,7 @@ void main() {
 
 То же касается двойного `free`, в том числе спрятанного за `defer`, и использования `List` после `deinit()`:
 
-```vibe error
+```zark error
 void main() {
     const auto a = c_allocator();
     auto buf = a.alloc<u8>(16) catch return;
@@ -295,7 +295,7 @@ void main() {
 
 Присваивание нового значения возвращает переменную к жизни. Ветки учитываются: переменную, отданную на одном из путей `if`, нельзя использовать дальше, а переменную, отданную внутри цикла, нужно присвоить заново или выйти из цикла через `break`/`return`.
 
-```vibe run
+```zark run
 void main() {
     const auto a = c_allocator();
     auto buf = a.alloc<u8>(16) catch return;
@@ -308,7 +308,7 @@ void main() {
 
 `move` можно использовать и в своём коде. У параметра он стоит перед типом, у метода — после списка параметров:
 
-```vibe run
+```zark run
 struct Conn {
     i64 fd;
     void close() move { println("closed {this->fd}"); }
@@ -328,7 +328,7 @@ void main() {
 
 Компилятор следит за тем, откуда взялись указатель или срез. Указатель на локальную переменную не может выйти из функции ни через `return`, ни через запись в параметр:
 
-```vibe error
+```zark error
 i64* first_of() {
     i64[4] a;
     auto p = &a[1];
@@ -338,7 +338,7 @@ i64* first_of() {
 void main() { println(*first_of()); }
 ```
 
-```vibe error
+```zark error
 struct Slot { i64* p; }
 
 void put(Slot* out) {
@@ -354,7 +354,7 @@ void main() {
 
 Указатель или срез внутрь контейнера действителен, пока контейнер не изменился. Методы, которые могут сдвинуть память (`push`, `append`, `insert`, `reserve`, `Map.put`, `remove`), помечены `invalidates`, а методы, отдающие указатель внутрь (`at`, `slice`, `get_ptr`), помечены `borrows`. Использовать такой указатель после вызова с `invalidates` — ошибка, как и использовать срез после `free` буфера, из которого он взят:
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -367,7 +367,7 @@ void main() {
 
 Возьмите указатель заново после изменения, и всё в порядке:
 
-```vibe run
+```zark run
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();
@@ -383,7 +383,7 @@ void main() {
 
 Изменение контейнера, пока по нему идёт цикл, — та же ошибка в другом костюме: цикл продолжает читать старый буфер. Компилятор следит и за циклами `for`, а `this->items` считается так же, как локальная переменная:
 
-```vibe error
+```zark error
 void main() {
     auto l = List<i64>::init(c_allocator());
     defer l.deinit();

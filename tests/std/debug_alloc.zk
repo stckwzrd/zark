@@ -1,0 +1,35 @@
+// DebugAllocator: leaks are reported, out-of-memory can be simulated.
+// (Use-after-free and overflow stop the program, see examples/memcheck.zk.)
+
+test "a clean run passes" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    auto l = List<i64>::init(a);
+    for (auto i : 0..1000) { l.push(i)?; }
+    l.deinit();
+    dbg.deinit()?;
+}
+
+test "a leak is an error" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    _ = a.create<i64>()?;
+    auto failed = false;
+    dbg.deinit() catch |e| { failed = e == error.MemoryLeak; };
+    assert(failed);
+}
+
+test "out of memory can be simulated" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    dbg.fail_after_n(2);
+    auto l = List<i64>::init(a);
+    auto pushed = 0;
+    for (auto i : 0..100) {
+        l.push(i) catch |e| { assert(e == error.OutOfMemory); break; };
+        pushed += 1;
+    }
+    assert(pushed == 16);
+    l.deinit();
+    dbg.deinit()?;
+}

@@ -1,7 +1,7 @@
 {
-  "name": "vibe-lang",
-  "displayName": "Vibe",
-  "description": "Vibe language support through the vibe language server",
+  "name": "zark-lang",
+  "displayName": "Zark",
+  "description": "Zark language support through the zark language server",
   "version": "0.2.0",
   "publisher": "local",
   "engines": {
@@ -14,52 +14,52 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
-    "onLanguage:vibe"
+    "onLanguage:zark"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "vibe",
+        "id": "zark",
         "aliases": [
-          "Vibe",
-          "vibe"
+          "Zark",
+          "zark"
         ],
         "extensions": [
-          ".vibe"
+          ".zk"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "vibe",
-        "scopeName": "source.vibe",
-        "path": "./syntaxes/vibe.tmLanguage.json"
+        "language": "zark",
+        "scopeName": "source.zk",
+        "path": "./syntaxes/zark.tmLanguage.json"
       }
     ],
     "snippets": [
       {
-        "language": "vibe",
-        "path": "./snippets/vibe.json"
+        "language": "zark",
+        "path": "./snippets/zark.json"
       }
     ],
     "configurationDefaults": {
-      "[vibe]": {
+      "[zark]": {
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "local.vibe-lang"
+        "editor.defaultFormatter": "local.zk-lang"
       }
     },
     "configuration": {
-      "title": "Vibe",
+      "title": "Zark",
       "properties": {
-        "vibe.path": {
+        "zark.path": {
           "type": "string",
-          "default": "vibe",
-          "description": "Path to the vibe compiler."
+          "default": "zark",
+          "description": "Path to the zark compiler."
         },
-        "vibe.trace.server": {
+        "zark.trace.server": {
           "type": "string",
           "enum": [
             "off",
@@ -73,48 +73,48 @@
     },
     "commands": [
       {
-        "command": "vibe.run",
-        "title": "Vibe: Run File",
+        "command": "zark.run",
+        "title": "Zark: Run File",
         "icon": "$(play)"
       },
       {
-        "command": "vibe.test",
-        "title": "Vibe: Test File",
+        "command": "zark.test",
+        "title": "Zark: Test File",
         "icon": "$(beaker)"
       },
       {
-        "command": "vibe.build",
-        "title": "Vibe: Build File"
+        "command": "zark.build",
+        "title": "Zark: Build File"
       },
       {
-        "command": "vibe.restartServer",
-        "title": "Vibe: Restart Language Server"
+        "command": "zark.restartServer",
+        "title": "Zark: Restart Language Server"
       }
     ],
     "menus": {
       "editor/title/run": [
         {
-          "command": "vibe.run",
-          "when": "resourceLangId == vibe",
+          "command": "zark.run",
+          "when": "resourceLangId == zark",
           "group": "navigation"
         },
         {
-          "command": "vibe.test",
-          "when": "resourceLangId == vibe",
+          "command": "zark.test",
+          "when": "resourceLangId == zark",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "vibe.run",
+        "command": "zark.run",
         "key": "ctrl+alt+r",
-        "when": "editorLangId == vibe"
+        "when": "editorLangId == zark"
       },
       {
-        "command": "vibe.test",
+        "command": "zark.test",
         "key": "ctrl+alt+t",
-        "when": "editorLangId == vibe"
+        "when": "editorLangId == zark"
       }
     ]
   },

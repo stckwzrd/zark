@@ -1,1 +1,1 @@
-panic: integer overflow at tests/panics/sub_unsigned.vibe:3
+panic: integer overflow at tests/panics/sub_unsigned.zk:3

@@ -2,16 +2,16 @@
 title: Lexical structure
 order: 10
 section: Language
-description: Comments, literals, escapes, the end of a statement and string interpolation in Vibe
+description: Comments, literals, escapes, the end of a statement and string interpolation in Zark
 ---
 
 This page describes the pieces the source text is made of: comments, numbers, strings, names and the rule for "the end of a statement".
 
 ## Files and the entry point
 
-A source file is plain UTF-8 text with the extension `.vibe`. A program starts at the function `main`. It can return nothing, an `i32` (the exit code) or `!void` (an error that ends the program).
+A source file is plain UTF-8 text with the extension `.zk`. A program starts at the function `main`. It can return nothing, an `i32` (the exit code) or `!void` (an error that ends the program).
 
-```vibe run
+```zark run
 void main() {
     println("the smallest program");
 }
@@ -19,7 +19,7 @@ void main() {
 
 The exit code can be returned as a number:
 
-```vibe run exit
+```zark run exit
 i32 main() {
     println("exiting with code 3");
     return 3;
@@ -30,7 +30,7 @@ i32 main() {
 
 There are two kinds: the line comment `//` and the block comment `/* ... */`.
 
-```vibe run
+```zark run
 void main() {
     // a line comment runs to the end of the line
     const auto a = 1 /* a block comment can sit right inside an expression */ + 2;
@@ -50,7 +50,7 @@ Every statement ends with a semicolon, as in C++. It is not needed after the clo
 
 A statement can be wrapped any way you like: only `;` ends it.
 
-```vibe run
+```zark run
 i64 sum3(i64 a, i64 b, i64 c) { return a + b + c; }
 
 void main() {
@@ -73,7 +73,7 @@ void main() {
 
 If you forget the `;`, the compiler points at the token where the statement should have ended:
 
-```vibe error
+```zark error
 void main() {
     const auto total = 1
     println(total);
@@ -82,7 +82,7 @@ void main() {
 
 Several statements fit on one line:
 
-```vibe run
+```zark run
 void main() {
     auto x = 1; x += 1; x *= 10;
     println(x);
@@ -91,7 +91,7 @@ void main() {
 
 `else` can go on the same line as `}` or on the next one:
 
-```vibe run
+```zark run
 void main() {
     const auto n = 5;
     if (n > 3) {
@@ -103,7 +103,7 @@ void main() {
 }
 ```
 
-`vibe fmt` always writes `} else {` on one line, see [tooling](tooling.md#vibe-fmt).
+`zark fmt` always writes `} else {` on one line, see [tooling](tooling.md#zark-fmt).
 
 ## Identifiers
 
@@ -129,7 +129,7 @@ test is orelse catch sizeof alignof true false null nullptr error
 | `0o17` | octal, 15 |
 | `1_000_000` | `_` is a digit separator and does not affect the value |
 
-```vibe run
+```zark run
 void main() {
     println(42, 0xff, 0b101, 0o17, 1_000_000);
     println(0xDEAD_BEEF, 0b1111_0000);
@@ -138,7 +138,7 @@ void main() {
 
 The type of an integer literal comes from the context; without a context it is `i64`:
 
-```vibe run
+```zark run
 void main() {
     const auto a = 7;
     const u8 b = 200;
@@ -150,7 +150,7 @@ void main() {
 
 A literal must fit into its type, otherwise it is a compile error:
 
-```vibe error
+```zark error
 void main() {
     const u8 b = 300;
     println(b);
@@ -161,7 +161,7 @@ void main() {
 
 ## Floating-point literals
 
-```vibe run
+```zark run
 void main() {
     println(3.14, 1e9, 2.5e-3, 1_000.5);
     const f32 f = 0.1;
@@ -175,7 +175,7 @@ A literal like `1e9` is floating-point (`f64`) even though it is written without
 
 A character in single quotes is a number of type `u8` (a byte code). Unicode characters outside ASCII do not fit into single quotes: they take several bytes.
 
-```vibe run
+```zark run
 void main() {
     const auto c = 'A';
     println(c, c + 1, (c + 1) as u8 == 'B');
@@ -206,7 +206,7 @@ A string in double quotes has the type `str`: a slice of bytes `{ ptr, len }` (s
 | `\{` | a literal `{` |
 | `\}` | a literal `}` |
 
-```vibe run
+```zark run
 void main() {
     println("line 1\nline 2");
     println("column\tcolumn");
@@ -219,7 +219,7 @@ void main() {
 
 A string literal can contain a real newline. It goes into the value as it is, together with the indentation:
 
-```vibe run
+```zark run
 void main() {
     const auto text = "first
 second
@@ -233,7 +233,7 @@ third";
 
 In `"..."` an expression in curly braces is evaluated and substituted. The braces are part of the format, so literal ones must be doubled: `{{` and `}}` (or escaped as `\{`).
 
-```vibe run
+```zark run
 void main() {
     const auto a = 6;
     const auto b = 7;

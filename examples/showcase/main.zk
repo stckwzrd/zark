@@ -1,0 +1,80 @@
+import "render.zk";
+
+const auto SCENE = embed("scene.json");
+
+!void out_write(void* ctx, str s) { print(s); }
+
+!void write_ppm(str path, Grid<Vec3>* img, Allocator a) {
+    auto bytes = List<u8>::init(a);
+    defer bytes.deinit();
+    sprint(&bytes, "P6\n{img.w} {img.h}\n255\n")?;
+    for (auto c : img.cells) {
+        bytes.push(to_byte(c.x()))?;
+        bytes.push(to_byte(c.y()))?;
+        bytes.push(to_byte(c.z()))?;
+    }
+    write_file(path, bytes.slice())?;
+}
+
+void reject(Allocator a, str text) {
+    _ = load_scene(a, text) catch |e| {
+        println("rejected: {e}");
+        return;
+    };
+    println("unexpectedly accepted");
+}
+
+!void main() {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
+
+    auto scene = load_scene(a, SCENE)?;
+    println("scene: {scene.width}x{scene.height}, {scene.shapes.len} shapes");
+
+    reject(a, "{{\"light\": [1, 2], \"objects\": []}}");
+    reject(a, "{{\"light\": [1, 2, 3], \"objects\": [{{\"type\": \"torus\", \"material\": {{\"kind\": \"diffuse\", \"color\": [1, 1, 1]}}}}]}}");
+    reject(a, "{{\"light\": [1, 2, 3], \"objects\": [");
+
+    auto img = Grid<Vec3>::make(a, scene.width, scene.height)?;
+    render(&scene, &img, 4)?;
+
+    auto w = Writer{ .ctx = null, .write_fn = out_write };
+    ascii(&img, &w)?;
+    println("checksum {checksum(&img):x}");
+
+    if (arg_count() > 2 && arg(1) == "--ppm") {
+        write_ppm(arg(2), &img, a)?;
+        println("wrote {arg(2)}");
+    }
+}
+
+test "the scene loads" {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto sc = load_scene(arena.allocator(), SCENE)?;
+    assert(sc.width == 96 && sc.shapes.len == 4);
+}
+
+test "bad scenes fail with a clear error" {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
+    _ = load_scene(a, "{{\"light\": [1, 2, 3], \"objects\": [{{\"type\": \"cube\", \"material\": {{\"kind\": \"diffuse\", \"color\": [1, 1, 1]}}}}]}}") catch |e| {
+        assert(e == error.UnknownShape);
+        return;
+    };
+    assert(false);
+}
+
+test "rendering is deterministic across thread counts" {
+    auto arena = Arena::init(c_allocator());
+    defer arena.deinit();
+    const auto a = arena.allocator();
+    auto sc = load_scene(a, SCENE)?;
+    auto one = Grid<Vec3>::make(a, sc.width, sc.height)?;
+    auto many = Grid<Vec3>::make(a, sc.width, sc.height)?;
+    render(&sc, &one, 1)?;
+    render(&sc, &many, 6)?;
+    assert(checksum(&one) == checksum(&many));
+}

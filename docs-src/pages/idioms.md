@@ -1,21 +1,21 @@
 ---
-title: Writing idiomatic Vibe
+title: Writing idiomatic Zark
 order: 20.6
 section: Memory and data
-description: How to structure Vibe programs: constructors and cleanup, allocators, errors, data modeling, testing and the habits that keep the compiler happy
+description: How to structure Zark programs: constructors and cleanup, allocators, errors, data modeling, testing and the habits that keep the compiler happy
 ---
 
-The language lets you write a program in many ways. This page shows the way that works with the compiler's checks instead of against them, and that other Vibe programmers will recognize. Every example here compiles and runs.
+The language lets you write a program in many ways. This page shows the way that works with the compiler's checks instead of against them, and that other Zark programmers will recognize. Every example here compiles and runs.
 
 ## Names and layout
 
-Types are `PascalCase`, functions, methods, variables and fields are `snake_case`, constants are `UPPER_CASE`. Files are `snake_case.vibe`. A function that builds a value is called `init` or `new` (and is `static`), and a function that releases it is `deinit`. Put the types and functions that go together in one file, and import it with `as` when the names might collide ([modules](modules.md)).
+Types are `PascalCase`, functions, methods, variables and fields are `snake_case`, constants are `UPPER_CASE`. Files are `snake_case.zk`. A function that builds a value is called `init` or `new` (and is `static`), and a function that releases it is `deinit`. Put the types and functions that go together in one file, and import it with `as` when the names might collide ([modules](modules.md)).
 
 ## A type that owns memory: `init`, `deinit`, `errdefer`
 
 The pattern is always the same: the constructor takes the allocator, remembers it, and cleans up after itself if a later step fails. The destructor is marked `move`, so using the value afterwards does not compile.
 
-```vibe run
+```zark run
 struct Buffer {
     Allocator a;
     u8[] data;
@@ -44,7 +44,7 @@ struct Buffer {
 !void main() {
     auto buf = Buffer::init(c_allocator(), 8)?;
     defer buf.deinit();
-    for (auto c : "vibe") { buf.put(c)?; }
+    for (auto c : "zark") { buf.put(c)?; }
     println(buf.text());
 }
 ```
@@ -53,7 +53,7 @@ Notice three things. The buffer stores the allocator it was created with, so `de
 
 When a constructor has several steps, each step that allocates gets an `errdefer` that undoes it. It runs only if the function returns an error:
 
-```vibe run
+```zark run
 struct Pair {
     i64* left;
     i64* right;
@@ -85,7 +85,7 @@ A function that allocates takes an `Allocator` as its first parameter. It does n
 
 Group things that live and die together in one arena. A request, a frame, a compile unit, a test: one arena, one `defer arena.deinit()`.
 
-```vibe run
+```zark run
 !str[] split_words(Allocator a, str text) {
     auto out = List<str>::init(a);
     auto start = 0;
@@ -112,7 +112,7 @@ Group things that live and die together in one arena. A request, a frame, a comp
 
 For input, take the most general view of the data: `str` instead of a list of characters, `T[]` instead of a `List<T>`. The function then works with arrays, lists, and parts of both, and it cannot reallocate what it was given.
 
-```vibe run
+```zark run
 i64 sum(i64[] xs) {
     auto total = 0;
     for (auto x : xs) { total += x; }
@@ -134,7 +134,7 @@ For output, return small values and structs by value. Use an out-parameter only 
 
 Return a named error from the place that understands the problem. Pass errors up with `?` where you cannot do better, and convert them with `catch` only at the place that knows what to do.
 
-```vibe run exit
+```zark run exit
 !i64 read_port(str s) {
     const auto n = parse_int(s) catch { return error.BadPort; };
     if (n < 1 || n > 65535) { return error.PortOutOfRange; }
@@ -152,7 +152,7 @@ Return a named error from the place that understands the problem. Pass errors up
 
 Use `?T` for "there may be nothing" and `!T` for "it may fail". A lookup that finds nothing is not an error:
 
-```vibe run
+```zark run
 ?str find_name(str[] names, str prefix) {
     for (auto n : names) {
         if (n.len >= prefix.len && n[0..prefix.len] == prefix) { return n; }
@@ -171,7 +171,7 @@ void main() {
 
 Make impossible states impossible. A request that is either waiting, running with a progress, or done with a result is a union, not three booleans:
 
-```vibe run
+```zark run
 union Job {
     Waiting;
     f64 Running;
@@ -212,7 +212,7 @@ When you add a variant, every `match` that produces a value and has no `_` arm s
 
 A struct literal sets what you name and zeroes the rest, and variables start as zero. Design a type so that the all-zero value is a valid, empty one, and you need no constructor and no flag for "initialized":
 
-```vibe run
+```zark run
 struct Stats {
     i64 count;
     i64 total;
@@ -243,7 +243,7 @@ Types with an allocator are the exception: they need `init`. A zero `List` has n
 
 Put an interface where your program meets the world: files, the network, the clock, a logger. The logic takes the interface, the program passes the real thing, and a test passes a fake one. No framework is needed.
 
-```vibe test
+```zark test
 interface Clock {
     i64 now();
 }

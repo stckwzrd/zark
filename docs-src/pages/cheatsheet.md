@@ -2,27 +2,27 @@
 title: Cheat sheet
 order: 44
 section: Reference
-description: All of Vibe's syntax on one page: tables and short examples for quick lookup
+description: All of Zark's syntax on one page: tables and short examples for quick lookup
 ---
 
 A short memo. Details on each topic are behind the links.
 
 ## A program
 
-```vibe run
+```zark run
 void main() {
-    println("Hello, Vibe!");
+    println("Hello, Zark!");
 }
 ```
 
 | Command | What it does |
 |---|---|
-| `vibe run f.vibe [-- args]` | build and run |
-| `vibe build f.vibe [-o out] [--release]` | build an executable |
-| `vibe test f.vibe` | run the `test` blocks |
-| `vibe fmt [--check] f.vibe` | format |
-| `vibe lsp` | the language server |
-| `vibe ir f.vibe` | show the LLVM IR |
+| `zark run f.zk [-- args]` | build and run |
+| `zark build f.zk [-o out] [--release]` | build an executable |
+| `zark test f.zk` | run the `test` blocks |
+| `zark fmt [--check] f.zk` | format |
+| `zark lsp` | the language server |
+| `zark ir f.zk` | show the LLVM IR |
 
 See [installation](getting-started.md) and [tooling](tooling.md).
 
@@ -57,7 +57,7 @@ See [types](types.md).
 
 ## Variables
 
-```vibe run
+```zark run
 const auto N = 4 * 2;
 i64 counter = 0;
 
@@ -93,7 +93,7 @@ Precedence, from weak to strong: `catch`/`orelse`, `||`, `&&`, comparisons, `|`,
 
 ## Control flow
 
-```vibe run
+```zark run
 void main() {
     const auto n = 7;
     if (n > 5) { println("big"); } else { println("small"); }
@@ -128,7 +128,7 @@ See [control flow](control-flow.md).
 
 ## Functions
 
-```vibe run
+```zark run
 i64 add(i64 a, i64 b) { return a + b; }
 template<T: Ord> T largest(T a, T b) { if (a > b) { return a; } return b; }
 
@@ -151,7 +151,7 @@ See [functions](functions.md).
 
 ## Structs, unions, enums
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -186,7 +186,7 @@ See [structs, unions and enums](structs-unions-enums.md).
 
 ## Errors and optionals
 
-```vibe run
+```zark run
 !i64 half(i64 n) {
     if (n % 2 != 0) { return error.Odd; }
     return n / 2;
@@ -222,7 +222,7 @@ See [memory](memory.md).
 
 ## Collections
 
-```vibe run
+```zark run
 !void main() {
     auto xs = List<i64>::init(c_allocator());
     defer xs.deinit();
@@ -255,22 +255,22 @@ See [strings](strings.md).
 ## Modules and C
 
 ```text
-import "util.vibe";                 names go into the common namespace
-import "util.vibe" as u;            u::name
-vibe run main.vibe lib.c x.cpp -lm  C and C++ together
+import "util.zk";                 names go into the common namespace
+import "util.zk" as u;            u::name
+zark run main.zk lib.c x.cpp -lm  C and C++ together
 ```
 
 See [modules](modules.md) and [C](c-interop.md).
 
 ## Tests
 
-```vibe test
+```zark test
 test "arithmetic" {
     assert(1 + 1 == 2);
 }
 ```
 
-`vibe test main.vibe`. See [testing](testing.md).
+`zark test main.zk`. See [testing](testing.md).
 
 ## Pitfalls in one line
 

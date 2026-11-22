@@ -1,1 +1,1 @@
-panic: slice [1..9] out of bounds (len 3) at tests/panics/slice_hi.vibe:2
+panic: slice [1..9] out of bounds (len 3) at tests/panics/slice_hi.zk:2

@@ -1,0 +1,124 @@
+import "std/net" as net;
+import "std/http" as http;
+import "std/thread" as thread;
+import "std/os" as os;
+import "std/fs" as fs;
+
+test "tcp echo" {
+    auto l = net::listen("127.0.0.1", 0)?;
+    const auto port = l.port();
+    auto srv = thread::spawn([&l]() -> void {
+        auto c = l.accept() catch { return; };
+        u8[256] buf;
+        auto r = net::Reader::init(&c, buf[..]);
+        while (true) {
+            const auto line = r.read_line() catch { break; };
+            c.print("{line.len}:{line}\n") catch { break; };
+        }
+        c.close();
+    })?;
+    errdefer { l.close(); srv.join(); }
+    auto c = net::connect_to("localhost", port)?;
+    c.set_timeout(5000)?;
+    c.write_all("hello\r\nworld\n")?;
+    c.close_write();
+    u8[256] buf;
+    auto r = net::Reader::init(&c, buf[..]);
+    assert(r.read_line()? == "5:hello");
+    assert(r.read_line()? == "5:world");
+    auto ended = false;
+    _ = r.read_line() catch |e| { ended = e == error.EndOfStream; "" };
+    assert(ended);
+    c.close();
+    srv.join();
+    l.close();
+    auto refused = false;
+    _ = net::connect_to("127.0.0.1", port) catch |e| { refused = e == error.ConnectionRefused; net::Conn{} };
+    assert(refused);
+}
+
+test "urls" {
+    const auto u = http::parse_url("https://[::1]:8443/a?b=c")?;
+    assert(u.scheme == "https" && u.host == "::1" && u.port == 8443 && u.target == "/a?b=c");
+    const auto v = http::parse_url("http://example.com")?;
+    assert(v.port == 80 && v.target == "/");
+    const auto a = c_allocator();
+    assert(http::url_decode(a, "a%20b+c%2F")? == "a b c/");
+    assert(http::url_encode(a, "a b/ü")? == "a%20b%2F%C3%BC");
+    auto bad = false;
+    _ = http::parse_url("ftp://x") catch |e| { bad = e == error.UnsupportedScheme; http::Url{} };
+    assert(bad);
+}
+
+test "http client against our server" {
+    auto dbg = DebugAllocator::init();
+    {
+        const auto a = dbg.allocator();
+        auto srv = http::Server::bind("127.0.0.1", 0)?;
+        const auto port = srv.port();
+        auto hits = thread::AtomicI64{};
+        auto t = thread::spawn([&srv, &hits]() -> void {
+            srv.serve(c_allocator(), 4, [&hits](http::ServerRequest* req, http::ServerResponse* res) -> void {
+                hits.add(1);
+                if (req.path == "/hello") { res.printf("text/plain", "hello {req.param("name")}") catch {}; return; }
+                if (req.path == "/echo") { res.header("X-Seen", "1") catch {}; res.json(req.body) catch {}; return; }
+                if (req.path == "/old") {
+                    res.status = 302;
+                    res.header("Location", "/hello?name=moved") catch {};
+                    res.text("") catch {};
+                    return;
+                }
+                res.status = 404;
+                res.text("no") catch {};
+            }) catch {};
+        })?;
+        errdefer { srv.stop(); t.join(); }
+        u8[128] ub;
+        auto r = http::get(a, bprint(ub[..], "http://127.0.0.1:{port}/hello?name=Ann%20B")?)?;
+        assert(r.status == 200 && r.body == "hello Ann B" && str_starts_with(r.header("Content-Type"), "text/plain"));
+        r.deinit();
+        auto p = http::post(a, bprint(ub[..], "http://localhost:{port}/echo")?, "application/json", "[1,2]")?;
+        assert(p.status == 200 && p.body == "[1,2]" && p.header("x-seen") == "1");
+        p.deinit();
+        auto rd = http::get(a, bprint(ub[..], "http://127.0.0.1:{port}/old")?)?;
+        assert(rd.status == 200 && rd.body == "hello moved");
+        rd.deinit();
+        auto nf = http::get(a, bprint(ub[..], "http://127.0.0.1:{port}/zzz")?)?;
+        assert(nf.status == 404 && !nf.ok());
+        nf.deinit();
+        srv.stop();
+        t.join();
+        assert(hits.load() == 5);
+    }
+    dbg.deinit()?;
+}
+
+test "https with a local certificate (skipped without openssl)" {
+    const auto a = c_allocator();
+    _ = os::exec(a, ["openssl", "version"]) catch { return; };
+    _ = os::exec(a, ["timeout", "1", "true"]) catch { return; };
+    const auto dir = fs::temp_dir(a, "zark-tls")?;
+    defer fs::remove_all(a, dir) catch |e| {};
+    u8[512] b;
+    auto gen = os::shell(a, bprint(b[..], "cd {dir} && openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 1 -subj /CN=localhost -addext subjectAltName=DNS:localhost 2>/dev/null")?)?;
+    defer gen.deinit();
+    if (gen.code != 0) { return; }
+    auto l = net::listen("127.0.0.1", 0)?;
+    const auto port = l.port();
+    l.close();
+    auto srv = os::shell(a, bprint(b[..], "cd {dir} && (timeout 20 openssl s_server -accept {port} -cert cert.pem -key key.pem -www -quiet >/dev/null 2>&1 &) ; sleep 1")?)?;
+    defer srv.deinit();
+    const auto ca = bprint(b[256..], "{dir}/cert.pem")?;
+    u8[128] ub;
+    auto ok = http::send(a, http::Request{ .url = bprint(ub[..], "https://localhost:{port}/")?, .ca_file = ca })?;
+    assert(ok.status == 200 && str_contains(ok.body, "s_server"));
+    ok.deinit();
+    auto rejected = false;
+    _ = http::get(a, bprint(ub[..], "https://localhost:{port}/")?) catch |e| { rejected = e == error.CertificateInvalid; http::Reply{} };
+    assert(rejected);
+    auto ins = http::send(a, http::Request{ .url = bprint(ub[..], "https://localhost:{port}/")?, .insecure = true })?;
+    assert(ins.status == 200);
+    ins.deinit();
+    auto kill = os::shell(a, bprint(b[..], "pkill -f 's_server -accept {port}' || true")?)?;
+    kill.deinit();
+}

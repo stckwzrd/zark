@@ -2,16 +2,16 @@
 title: Модули и импорт
 order: 19
 section: Язык
-description: Как разбить программу на файлы: import, import as, пространства имён, пути, циклы и правила видимости в Vibe
+description: Как разбить программу на файлы: import, import as, пространства имён, пути, циклы и правила видимости в Zark
 ---
 
 Программа может состоять из нескольких файлов. Один файл подключает другой через `import`. Здесь описано, что именно подключается, как задаются имена и какие правила проверяет компилятор.
 
 ## Простой импорт
 
-Допустим, рядом лежат два файла. Первый — `shapes.vibe`:
+Допустим, рядом лежат два файла. Первый — `shapes.zk`:
 
-```vibe file=shapes.vibe
+```zark file=shapes.zk
 struct Rect { i64 w; i64 h; }
 
 i64 area(Rect r) {
@@ -23,8 +23,8 @@ const auto SIDES = 4;
 
 Второй — главный файл. Импорт пишется в начале:
 
-```vibe run
-import "shapes.vibe";
+```zark run
+import "shapes.zk";
 
 void main() {
     const auto r = Rect{ .w = 3, .h = 4 };
@@ -32,21 +32,21 @@ void main() {
 }
 ```
 
-Простой `import "файл.vibe";` кладёт **все** имена файла (функции, структуры, union, enum, константы, глобальные переменные, псевдонимы типов) в общее пространство имён. Они используются без префикса.
+Простой `import "файл.zk";` кладёт **все** имена файла (функции, структуры, union, enum, константы, глобальные переменные, псевдонимы типов) в общее пространство имён. Они используются без префикса.
 
 Свойства импорта:
 
 - Путь — строка, **относительно файла, в котором написан `import`**, а не относительно места запуска.
 - Каждый файл загружается **один раз**, сколько бы раз и откуда его ни импортировали.
 - Импорты можно ставить в любом месте верхнего уровня, но по соглашению их пишут в начале.
-- Подкаталоги допустимы: `import "lib/util.vibe";`.
+- Подкаталоги допустимы: `import "lib/util.zk";`.
 - Циклические импорты допустимы: файл загружается один раз, поэтому цикл просто прекращается.
 
 ## `import ... as имя;`
 
 Если имена из файла могут пересечься с вашими, импортируйте с псевдонимом. Тогда все его имена получают префикс `имя::`:
 
-```vibe file=geometry.vibe
+```zark file=geometry.zk
 struct Point {
     i64 x;
     i64 y;
@@ -66,8 +66,8 @@ i64 dist2(Point p) {
 }
 ```
 
-```vibe run
-import "geometry.vibe" as geo;
+```zark run
+import "geometry.zk" as geo;
 
 void main() {
     const auto p = geo::Point{ .x = 3, .y = 4 };
@@ -92,13 +92,13 @@ void main() {
 
 Файл загружается один раз, сколько бы раз и под какими бы именами его ни импортировали. Оба имени одного файла работают:
 
-```vibe file=util.vibe
+```zark file=util.zk
 i64 tool() { return 1; }
 ```
 
-```vibe run
-import "util.vibe" as a;
-import "util.vibe" as b;
+```zark run
+import "util.zk" as a;
+import "util.zk" as b;
 
 void main() { println(a::tool() + b::tool()); }
 ```
@@ -107,20 +107,20 @@ void main() { println(a::tool() + b::tool()); }
 
 ## Простой импорт «протекает»
 
-Если файл `util.vibe` сам делает **простой** `import "base.vibe"`, то имена из `base.vibe` оказываются в общем пространстве имён и становятся видны везде, в том числе в главном файле:
+Если файл `util.zk` сам делает **простой** `import "base.zk"`, то имена из `base.zk` оказываются в общем пространстве имён и становятся видны везде, в том числе в главном файле:
 
-```vibe file=lib/base.vibe
+```zark file=lib/base.zk
 i64 base_val() { return 41; }
 ```
 
-```vibe file=lib/util.vibe
-import "base.vibe";
+```zark file=lib/util.zk
+import "base.zk";
 
 i64 helper() { return base_val() + 1; }
 ```
 
-```vibe run
-import "lib/util.vibe" as u;
+```zark run
+import "lib/util.zk" as u;
 
 void main() {
     println(u::helper());
@@ -128,16 +128,16 @@ void main() {
 }
 ```
 
-Имена из `util.vibe` получили префикс `u::`, а `base_val` из вложенного простого импорта — нет. Если хотите изолированный модуль, импортируйте всё через `as`, и тогда префикс везде будет явным.
+Имена из `util.zk` получили префикс `u::`, а `base_val` из вложенного простого импорта — нет. Если хотите изолированный модуль, импортируйте всё через `as`, и тогда префикс везде будет явным.
 
 ## Пути
 
-Путь в `import` читается от каталога **текущего файла**. Поэтому `lib/util.vibe`, подключая `"base.vibe"`, ищет его рядом с собой, в `lib/`, а не рядом с главным файлом.
+Путь в `import` читается от каталога **текущего файла**. Поэтому `lib/util.zk`, подключая `"base.zk"`, ищет его рядом с собой, в `lib/`, а не рядом с главным файлом.
 
 Отсутствующий файл — ошибка при компиляции:
 
-```vibe error
-import "missing.vibe" as m;
+```zark error
+import "missing.zk" as m;
 
 void main() {}
 ```
@@ -150,17 +150,17 @@ void main() {}
 
 Если два простых импорта определяют одно имя, компилятор останавливается с сообщением о дубликате:
 
-```vibe file=one.vibe
+```zark file=one.zk
 i64 helper() { return 1; }
 ```
 
-```vibe file=two.vibe
+```zark file=two.zk
 i64 helper() { return 2; }
 ```
 
-```vibe error
-import "one.vibe";
-import "two.vibe";
+```zark error
+import "one.zk";
+import "two.zk";
 
 void main() {
     println(helper());
@@ -177,27 +177,27 @@ void main() {
 
 ```text
 project/
-├── main.vibe        главный файл, содержит main()
-├── model.vibe       структуры и их методы
-├── parse.vibe       разбор входных данных
-└── util.vibe        мелкие помощники
+├── main.zk        главный файл, содержит main()
+├── model.zk       структуры и их методы
+├── parse.zk       разбор входных данных
+└── util.zk        мелкие помощники
 ```
 
 Главный файл подключает остальные:
 
 ```text
-import "model.vibe" as model
-import "parse.vibe" as parse
-import "util.vibe"
+import "model.zk" as model
+import "parse.zk" as parse
+import "util.zk"
 ```
 
-Запуск: `vibe run main.vibe`. Остальные файлы подтягиваются сами.
+Запуск: `zark run main.zk`. Остальные файлы подтягиваются сами.
 
 ## Только достижимое компилируется
 
 Компилятор берёт из импортированных файлов только те функции, до которых можно добраться из `main`. Лишний импорт не раздувает бинарник, а неиспользуемая функция не проверяется на типы (если это не дженерик, ошибки в нём проявятся при первом использовании).
 
-```vibe file=maybe.vibe
+```zark file=maybe.zk
 i64 used() { return 1; }
 
 i64 never_called() {
@@ -205,8 +205,8 @@ i64 never_called() {
 }
 ```
 
-```vibe run
-import "maybe.vibe";
+```zark run
+import "maybe.zk";
 
 void main() {
     println(used());

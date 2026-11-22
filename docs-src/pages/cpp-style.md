@@ -1,15 +1,15 @@
 ---
-title: Vibe for C++ programmers
+title: Zark for C++ programmers
 order: 3
 section: Start
-description: Vibe syntax through the eyes of a C++ programmer: types first, template, methods inside struct, lambdas, for with parentheses and a list of differences from C++
+description: Zark syntax through the eyes of a C++ programmer: types first, template, methods inside struct, lambdas, for with parentheses and a list of differences from C++
 ---
 
-Vibe is written almost like C++: types go first, generics use `template` and `<...>`, methods live inside `struct`, and a lambda capture is `[&k]`. This page shows all the essentials and lists how the language differs from C++.
+Zark is written almost like C++: types go first, generics use `template` and `<...>`, methods live inside `struct`, and a lambda capture is `[&k]`. This page shows all the essentials and lists how the language differs from C++.
 
 ## Declarations: the type comes first
 
-```vibe run
+```zark run
 const i64 LIMIT = 4;
 i64 counter = 0;
 
@@ -40,7 +40,7 @@ Types: `T*` is a pointer, `T[]` a slice, `T[N]` an array, `!T` an error, `?T` an
 
 ## Structs and methods inside struct
 
-```vibe run
+```zark run
 struct Point {
     i64 x;
     i64 y;
@@ -65,7 +65,7 @@ i32 main() {
 
 ## Union, enum and `::`
 
-```vibe run
+```zark run
 union Shape {
     f64 Circle;
     i64 Rect;
@@ -94,7 +94,7 @@ The variants of a union are written like fields: `type Name;`. A variant without
 
 ## Templates
 
-```vibe run
+```zark run
 struct Pair<A, B> {
     A first;
     B second;
@@ -120,7 +120,7 @@ The parameters of generic functions are written in `template<...>`, and those of
 
 In `if` and `while` the condition is in parentheses, and the curly braces remain mandatory.
 
-```vibe run
+```zark run
 i64 sum(i64[] xs) {
     i64 total = 0;
     for (i64 x : xs) { total += x; }
@@ -156,7 +156,7 @@ A loop can carry a label (`outer: for (...)`) for `break outer;` and `continue o
 
 ## Errors and optional values
 
-```vibe run
+```zark run
 !i64 parse(str s) {
     if (s.len == 0) { return error.Empty; }
     return parse_int(s);
@@ -181,7 +181,7 @@ i32 main() {
 
 The capture is written as in C++, `[&k]`: variables are captured **by reference**, the context lives on the stack, and a closure must not be returned from a function.
 
-```vibe run
+```zark run
 i32 main() {
     i64 n = 10;
     i64 calls = 0;
@@ -198,12 +198,12 @@ The type of a closure is written `fn[](i64) -> i64`, and that of a function `fn(
 
 ## Modules
 
-```vibe file=cpp_lib.vibe
+```zark file=cpp_lib.zk
 i64 twice(i64 x) { return x * 2; }
 ```
 
-```vibe run
-import "cpp_lib.vibe" as lib;
+```zark run
+import "cpp_lib.zk" as lib;
 
 i32 main() {
     println(lib::twice(21));
@@ -218,7 +218,7 @@ i32 main() {
 
 ## Table of differences
 
-| C++ | Vibe |
+| C++ | Zark |
 |---|---|
 | `int`, `long`, `double` | `i32`, `i64`, `f64` |
 | `T* p`, `const T& r` | `T* p`; there are no references, only pointers and slices |
