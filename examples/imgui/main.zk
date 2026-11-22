@@ -1,0 +1,122 @@
+import "sdl.zk";
+import "imgui.zk";
+
+struct App {
+    bool show_demo;
+    bool paused;
+    f32 freq;
+    f32 amp;
+    f32[3] clear;
+    f64 phase;
+    i64 clicks;
+    u8[64] name;
+}
+
+f32 wave(void* data, i32 i) {
+    App* app = data;
+    return app->amp * sin(app->phase + i as f64 * app->freq as f64 * 0.1) as f32;
+}
+
+void panel(App* app, f32 dt) {
+    u8[96] line;
+    igSetNextWindowPos(ImVec2{ .x = 24.0, .y = 24.0 }, 4, ImVec2{ .x = 0.0, .y = 0.0 });
+    igSetNextWindowSize(ImVec2{ .x = 440.0, .y = 0.0 }, 4);
+    igBegin("Zark + Dear ImGui", null, 0);
+    igText("Dear ImGui %s (C++) driven from Zark", igGetVersion());
+    igText("%.1f FPS, frame %.2f ms", (1.0 / dt as f64), dt as f64 * 1000.0);
+
+    igSeparatorText("Widgets");
+    if (igButton("Click me", ImVec2{ .x = 0.0, .y = 0.0 })) { app->clicks += 1; }
+    igSameLine(0.0, 8.0);
+    const auto label = bprint(line[..], "clicked {app->clicks} times") catch "";
+    igText("%s", label.ptr);
+    igInputText("name", &app->name[0], 64, 0, null, null);
+    const auto hello = bprint(line[..], "hello, {cstr(&app->name[0])}!") catch "";
+    igText("%s", hello.ptr);
+
+    igSeparatorText("Plot driven by a Zark callback");
+    igSliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
+    igSliderFloat("amplitude", &app->amp, 0.1, 1.0, "%.2f", 0);
+    igCheckbox("pause", &app->paused);
+    igPlotLines_FnFloatPtr("wave", wave, app, 120, 0, null, -1.0, 1.0, ImVec2{ .x = 0.0, .y = 80.0 });
+    igProgressBar((app->phase / 6.2831853) as f32, ImVec2{ .x = -1.0, .y = 0.0 }, null);
+
+    igSeparatorText("Window");
+    igColorEdit3("background", &app->clear[0], 0);
+    igCheckbox("show the ImGui demo window", &app->show_demo);
+    igEnd();
+    if (app->show_demo) { igShowDemoWindow(&app->show_demo); }
+}
+
+!void main() {
+    if (SDL_Init(0x20) != 0) {
+        eprintln("SDL_Init: {cstr(SDL_GetError())}");
+        return error.SdlFailed;
+    }
+    defer SDL_Quit();
+    SDL_GL_SetAttribute(21, 1);
+    SDL_GL_SetAttribute(17, 3);
+    SDL_GL_SetAttribute(18, 3);
+    SDL_GL_SetAttribute(5, 1);
+    const auto win = SDL_CreateWindow("Zark + Dear ImGui", 0x2FFF0000, 0x2FFF0000, 1100, 700, 0x2 | 0x20 | 0x2000);
+    if (win == null) {
+        eprintln("SDL_CreateWindow: {cstr(SDL_GetError())}");
+        return error.SdlFailed;
+    }
+    defer SDL_DestroyWindow(win);
+    const auto gl = SDL_GL_CreateContext(win);
+    if (gl == null) {
+        eprintln("SDL_GL_CreateContext: {cstr(SDL_GetError())}");
+        return error.SdlFailed;
+    }
+    defer SDL_GL_DeleteContext(gl);
+    SDL_GL_SetSwapInterval(1);
+
+    igCreateContext(null);
+    const auto io = igGetIO_Nil();
+    io->IniFilename = null;
+    igStyleColorsDark(null);
+    ImGui_ImplSDL2_InitForOpenGL(win, gl);
+    ImGui_ImplOpenGL3_Init("#version 130");
+    defer ImGui_ImplOpenGL3_Shutdown();
+    defer ImGui_ImplSDL2_Shutdown();
+
+    auto app = App{ .freq = 1.0, .amp = 0.8, .clear = [0.08, 0.09, 0.12] };
+    app.name[0] = 'Z';
+    app.name[1] = 'a';
+    app.name[2] = 'r';
+    app.name[3] = 'k';
+
+    auto max_frames = -1;
+    if (arg_count() > 1) { max_frames = parse_int(arg(1)) catch -1; }
+
+    auto frames = 0;
+    auto running = true;
+    while (running) {
+        auto ev = SdlEvent{};
+        while (SDL_PollEvent(&ev) != 0) {
+            ImGui_ImplSDL2_ProcessEvent(&ev);
+            if (ev.kind == 0x100) { running = false; }
+        }
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        igNewFrame();
+        const auto dt = io->DeltaTime;
+        if (!app.paused) { app.phase += dt as f64 * app.freq as f64 * 2.0; }
+        if (app.phase > 6.2831853) { app.phase -= 6.2831853; }
+        panel(&app, dt);
+        igRender();
+
+        i32 w = 0;
+        i32 h = 0;
+        SDL_GL_GetDrawableSize(win, &w, &h);
+        glViewport(0, 0, w, h);
+        glClearColor(app.clear[0], app.clear[1], app.clear[2], 1.0);
+        glClear(0x4000);
+        ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
+        SDL_GL_SwapWindow(win);
+
+        frames += 1;
+        if (max_frames >= 0 && frames >= max_frames) { running = false; }
+    }
+}
