@@ -6,7 +6,7 @@ sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasu
 
 echo "== seed: bootstrap/seed.ll.gz -> stage1 (clang)"
 gzip -dc bootstrap/seed.ll.gz > build/seed.ll
-clang -O1 -Wno-override-module build/seed.ll std/rt.c -o build/seed -lm
+clang -O1 -Wno-override-module build/seed.ll std/rt.c -o build/seed -lm -lpthread -ldl
 
 echo "== stage1: compiler built from the seed"
 build/seed build selfhost/main.vibe --release -o build/stage1

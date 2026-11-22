@@ -6,7 +6,8 @@ prefix="${PREFIX:-$HOME/.local}"
 if [ ! -x build/vibe ]; then ./bootstrap.sh; fi
 
 mkdir -p "$prefix/bin"
-cp build/vibe "$prefix/bin/vibe"
+cp build/vibe "$prefix/bin/vibe.new"
+mv -f "$prefix/bin/vibe.new" "$prefix/bin/vibe"
 echo "installed $prefix/bin/vibe"
 case ":$PATH:" in
     *":$prefix/bin:"*) ;;

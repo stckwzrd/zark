@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")/.."
 VIBE=${VIBE:-./build/vibe}
+( ulimit -v 3000000 ) 2>/dev/null || { echo "ok   scale (skipped, ulimit -v is not available)"; exit 0; }
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
