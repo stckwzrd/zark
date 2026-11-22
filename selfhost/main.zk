@@ -6,6 +6,7 @@ import "resolve.zk";
 import "fmt.zk";
 import "loader.zk";
 import "cbuild.zk";
+import "cbind.zk";
 import "lsp.zk";
 import "project.zk";
 import "std/os" as osm;
@@ -22,6 +23,7 @@ usage:
   zark lsp                          language server on stdin/stdout
   zark ir    <file.zk>            print LLVM IR to stdout
   zark new   NAME                   create a project (zark.toml, src/main.zk)
+  zark cbind <header.h> [-I.. -D..] [-o out.zk]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
 ");
@@ -224,6 +226,7 @@ void restore_stack() {
 !i32 compile(Allocator a) {
     grow_stack();
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
+    if (arg_count() >= 2 && arg(1) == "cbind") { return cbind_main(a); }
     if (arg_count() >= 2 && arg(1) == "new") {
         if (arg_count() != 3) {
             eprintln("usage: zark new NAME");

@@ -42,6 +42,7 @@ if [ $tok_bad -eq 0 ]; then pass=$((pass+1)); echo "ok   tokens match tests/toke
 if ZARK=$ZARK tests/baremetal.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/project.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/cbuild.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/cbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]
