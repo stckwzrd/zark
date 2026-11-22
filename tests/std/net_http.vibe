@@ -96,6 +96,7 @@ test "http client against our server" {
 test "https with a local certificate (skipped without openssl)" {
     const auto a = c_allocator();
     _ = os::exec(a, ["openssl", "version"]) catch { return; };
+    _ = os::exec(a, ["timeout", "1", "true"]) catch { return; };
     const auto dir = fs::temp_dir(a, "vibe-tls")?;
     defer fs::remove_all(a, dir) catch |e| {};
     u8[512] b;
