@@ -131,6 +131,22 @@ void restore_stack() {
     _ = setrlimit(3, &lim);
 }
 
+!str rt_object(Allocator a, str cache) {
+    auto cb = List<u8>::init(a);
+    sprint(&cb, "{cache}/vrt.c")?;
+    auto ob = List<u8>::init(a);
+    sprint(&ob, "{cache}/vrt.o")?;
+    const auto old = read_file(a, cb.slice()) catch "";
+    if (old == RT_C && file_exists(ob.slice())) { return ob.slice(); }
+    write_file(cb.slice(), RT_C)?;
+    auto tb = List<u8>::init(a);
+    sprint(&tb, "{cache}/vrt.{getpid()}.o")?;
+    const auto code = run(a, ["clang", "-O1", "-c", cb.slice(), "-o", tb.slice()])?;
+    if (code != 0) { return error.CompileFailed; }
+    _ = run(a, ["mv", "-f", tb.slice(), ob.slice()])?;
+    return ob.slice();
+}
+
 !i32 compile(Allocator a) {
     grow_stack();
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
@@ -406,6 +422,8 @@ void restore_stack() {
         if (code != 0) { return code; }
         objs.push(ob.slice())?;
     }
+
+    if (!freestanding) { objs.push(rt_object(a, cache)?)?; }
 
     auto link = List<str>::init(a);
     if (needs_cxx) { link.push("clang++")?; } else { link.push("clang")?; }
