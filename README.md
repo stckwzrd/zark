@@ -189,7 +189,7 @@ async i64 chain() {
 }
 ```
 
-`await` is only allowed where nothing else is half-evaluated (a statement, an initializer, `v = await f();`, `return await f();`, an `if`/`while`/`match` condition), and the ownership checks apply across it. See SPEC.md section 7b. `examples/async_echo.vibe` is an echo server and client running on the executor with hand-written futures, and `tests/edge/async_basic.vibe` shows the `async`/`await` syntax.
+`await` is only allowed where nothing else is half-evaluated (a statement, an initializer, `v = await f();`, `return await f();`, an `if`/`while`/`match` condition), and the ownership checks apply across it. See SPEC.md section 7b. `examples/async_echo.vibe` is an echo server written with `async`/`await`: a server task spawns one task per accepted connection, and three clients collect their replies through `JoinHandle`s. `tests/edge/async_basic.vibe` shows more of the syntax.
 
 ### Projects
 
