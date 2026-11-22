@@ -100,7 +100,7 @@ Precedence, lowest to highest:
 - `[a, b, c]` gives an array `T[3]`. With an expected `T[]` it becomes a slice over stack storage.
 - `x[a..b]`, `x[a..]`, `x[..b]`, `x[..]` slice arrays, slices and pointers. Pointers need an end index.
 - `e as T` covers int↔int, int↔float, float↔float, ptr↔ptr, ptr↔int, enum↔int and `T[]` → `T*`.
-- `sizeof(T)` and `alignof(T)` are compile-time `u64` values.
+- `sizeof(T)` and `alignof(T)` are compile-time `u64` values. The operand may also be an expression (`sizeof(x)`, `sizeof(f())`); it is not evaluated.
 - `match v { pat => expr, ... }` is also an expression. Arms are expressions or blocks whose last statement is the value, or leave with `return`/`break`/`continue`. All values are converted to one type (the expected type, otherwise the first arm's). An expression `match` must be exhaustive: cover every variant or add `_`.
 - `?T` means `Option<T>`. `null` and a plain `T` convert to `?T` implicitly; `.Some(x)` and `.None` also work. `a orelse b` yields the value of `a`, or `b` when it is empty; `b` can also be `return`, `break` or `continue`.
 - `[&a, &b](i64 x) -> i64 { ... }` is a closure. The listed variables are captured by reference: the closure keeps pointers to them in a context on the stack of the function that wrote the literal, so it must not outlive that function. Its type is `fn[](i64) -> i64`. A closure is called like a function and costs one indirect call.
@@ -135,7 +135,7 @@ Arms are tested top to bottom, there is no fall-through, and a `match` is not re
 
 ## 6. Builtins and formatting
 
-The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`, `__rt_init` (called first by `main` and by the test runner unless `--freestanding`; the prelude uses it to install the crash handler). Everything else is ordinary code in `std/std.vibe`.
+The compiler itself knows only these names: `sizeof`, `alignof`, `embed`, `panic`, `assert`, the type `Fmt`, `Self`, `error`, `Option` (the meaning of `?T`), `async` and `await` (syntax only), the prelude types `Poll` and `Context` (the types used by the generated `poll` of an async function, see section 7b) and the runtime helpers `__panic`, `__oob`, `__ovf`, `__str_eq`, `__errname`, `__rt_init` (called first by `main` and by the test runner unless `--freestanding`; the prelude uses it to install the crash handler). Everything else is ordinary code in `std/std.vibe`.
 
 | Builtin | Notes |
 |---|---|
@@ -207,6 +207,48 @@ A struct declared `owned struct S { ... }` is a resource that must be consumed. 
 ## 7a. Compile-time evaluation
 
 `comptime EXPR` (a prefix operator, binding like unary `-`) evaluates `EXPR` while compiling and uses the result as a constant. The compiler builds the program with a generated `main` that runs `EXPR` (all functions, constants and the prelude are available; local variables and type parameters are not), runs it, and reads the bytes back. The type must be plain data: integers, floats, `bool`, enums, `str`, and arrays or structs of those; a `void` expression is run for its effects. A result of an array or struct type lives in read-only data and is indexed in place. A top-level `comptime EXPR;` runs before code generation, so `comptime assert(sizeof(T) == 16);` is a static assertion. Each distinct expression is run once per compilation, in a child compilation of the same program. `comptime` inside a string interpolation is not supported. The prelude helpers `__ct_emit` and `__ct_emit_str` carry the result.
+
+## 7b. Async
+
+`async` is a contextual modifier written before the return type of a function, a method or a generic function: `async i64 f(i64 a)`, `async !str fetch(Conn* c)`, `static async i64 make()`, `template<T> async T id(T v)`. `await` is a contextual prefix operator. Both words stay ordinary identifiers elsewhere. `async` on an `extern` or `export` function is an error.
+
+```vibe
+async !str fetch(Conn* c, str path) {
+    c.write_all("GET {path}\n")?;
+    auto line = await c.read_line();
+    return line;
+}
+```
+
+**Frames.** Calling an async function does not run it. It returns its frame by value, in state 0: a struct made by the compiler (one per function and per generic instance) with the state number, the copied arguments, the result slot, every local and compiler temporary of the body, and the frames of the futures it awaits. So `auto f = fetch(c, "/");` works and `sizeof(f)` is the size of the frame; `sizeof(fetch(c, "/"))` gives it without running anything. For a method, `this` is an argument like any other (a pointer, not a copy).
+
+**The `poll` protocol.** The frame has a method `Poll<T> poll(Context* cx)`. `Poll<T>` is the prelude union `{ T Ready; Pending; }`, `Context` holds a `Waker { void* data; fn(void*) wake_fn; }`. Any struct with a method of that shape is a future, so a library writes leaf futures by hand and `await` treats them like frames. An async function without a result type is a future of `Poll<bool>` that yields `true`. The executor polls a task again only after its waker was called, so a future that returns `Pending` must have arranged for that. `await e` on a type without such a method is an error.
+
+**`await e`.** It evaluates `e`, stores the future in the frame, and polls it with the same `cx`. If it is pending, the current `poll` returns `Pending` and the next `poll` resumes at the same place. On `Ready(v)` the expression is `v`. `return` and `?` in an async function store the result in the frame and return `Ready`. `defer` and `errdefer` run at the usual places, once per exit.
+
+**Where `await` may appear.** Nothing computed earlier in the same expression may be alive across a suspension, so `await` is accepted only in these positions, optionally followed by `?` or `catch`:
+- as a whole expression statement: `await f();`
+- as the initializer of a declaration: `auto v = await f();`
+- as the right side of `=` to a local variable: `v = await f();`
+- as the operand of `return`: `return await f();`
+- as the whole condition or scrutinee of `if`, `while` or `match`: `if (await ready())`, `while (await more())`, `match (await next()) { ... }`. A `while` condition is awaited again on every iteration.
+
+Anything else is rejected with "bind the result to a variable first": an argument, an operand (`await f() == 2`, `(await f()) as i64`), `p.f = await e`, `a[i] = await e`, `x += await e`, an `await` inside a `catch |e| { ... }` block or inside a block arm of a `match` expression that is part of a larger expression (`auto v = g() catch |e| { await h(); 1; };`). `await` is also an error in `defer` and `errdefer` (also in a block), in a closure, and outside an async function. The statement forms `if`, `while`, `match`, `for` and plain blocks may contain `await` in their bodies as usual.
+
+**Recursion.** A frame cannot contain itself. A call chain that would (an async function awaiting itself, or a cycle through several) is an error that says the recursive call has to go through a pointer to a separately allocated frame.
+
+**Pinning and ownership.** Once polled, a frame holds pointers into itself (locals whose address was taken, the awaited child frame), so it must not move. The compiler checks what it can see by name: `await f` consumes the local variable `f` (a later use is the "used after consumed" error of section 7), and so does passing it to a `move` parameter such as the executor's `spawn(move F fut)`. A future that was not started may be moved freely. A future reached through a pointer, a field or an array element is not consumed by name (`await h.y;` twice compiles), and moving a frame after it was polled is not detected: that is up to the library and the caller.
+
+**Borrows across `await`.** The executor may run other tasks while one waits, so an `await` counts like a call that `invalidates` every container borrow: a local pointer or slice that came from a `borrows` method (`list.at(i)`, `list.slice()`), and the iteration `for (x : c)` over a container whose `slice()` is a `borrows` method, may not be used after the `await` (a loop must not reach its next iteration). The pointer has to be taken again after the `await`. The limits are the ones of `invalidates` (section 7): names only; `&l.items[0]`, pointers derived from a copy of a borrowed slice, and pointers stored in structs are not tracked; a pointer passed into an awaited call lives in that child frame and is not tracked either. Pointers to the frame's own locals and slices of the arguments are fine across an `await`. The rule also applies to a `List` that is local to the async function, where nobody else could touch it.
+
+**Cancellation.** There are no destructors: a frame that is dropped while suspended does not run its `defer`s and its awaited child frames are not finished. Pending I/O that belongs to a dropped future has to be disarmed with its `cancel()` (`Readable`, `Writable`, `Accept`, `Read`, `Write`), or it stays registered with the executor until the task ends.
+
+**The library (`std/async`).** The module is plain Vibe plus a small poller in `std/rt.c` (`vrt_poller_*`: epoll on Linux, kqueue on macOS; there is no Windows reactor). It is single-threaded and uses the `Allocator` given to the executor, nothing else allocates.
+- `Executor::init(a)` / `deinit()` (an `owned` struct). Tasks keep a pointer to it, so it must not move after the first `spawn`.
+- `ex.spawn(fut)` takes a future by `move`, puts it in memory from the executor's allocator and returns `JoinHandle<T>`; spawned tasks run while some `block_on` is running. `ex.block_on(&fut)` polls a future and the executor until the future is ready, and returns `error.Deadlock` if nothing can make progress. `JoinHandle<T>` has `done()`, `take()`, `detach()` and is itself a future (`await h`).
+- `Sleep::after(&ex, ms)` is a future that is ready after `ms` milliseconds; `Readable::on(&ex, fd)` and `Writable::on(&ex, fd)` are ready when the descriptor is.
+- `TcpListener::bind(&ex, host, port)` has `accept()`; `TcpStream` has `read(buf)` and `write(data)`; these return futures of `!TcpStream`, `!i64` (0 means the peer closed) and `!i64` (the byte count, all of `data` is written). `TcpStream::connect(&ex, host, port)` is a blocking call that returns a nonblocking stream. `close()` consumes the listener or the stream.
+- One waker is kept per descriptor and direction.
 
 ## 8. C interop
 
