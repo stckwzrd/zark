@@ -3,9 +3,9 @@
 //   if (fs::is_dir("src")) { auto d = fs::list_dir(a, "src")?; defer d.deinit(); ... }
 // Reading and writing whole files is in the prelude: read_file, write_file, file_exists.
 
-extern void* opendir(u8* path);
-extern u8* readdir(void* d);
-extern i32 closedir(void* d);
+extern void* vrt_opendir(u8* path);
+extern u8* vrt_readdir(void* d);
+extern i32 vrt_closedir(void* d);
 extern u8* vrt_dirent_name(u8* ent);
 extern i32 vrt_dirent_type(u8* ent);
 extern i32 rmdir(u8* path);
@@ -93,13 +93,13 @@ bool entry_less(Entry x, Entry y) { return str_less(x.name, y.name); }
 
 !DirList list_dir(Allocator a, str path) {
     u8[4096] pb;
-    const auto d = opendir(to_cstr(pb[..], path)?);
+    const auto d = vrt_opendir(to_cstr(pb[..], path)?);
     if (d == null) { errno_error()?; }
-    defer _ = closedir(d);
+    defer _ = vrt_closedir(d);
     auto out = DirList{ .entries = List<Entry>::init(a), .a = a };
     errdefer out.deinit();
     while (true) {
-        const auto ent = readdir(d);
+        const auto ent = vrt_readdir(d);
         if (ent == null) { break; }
         const auto name = cstr(vrt_dirent_name(ent));
         if (name == "." || name == "..") { continue; }

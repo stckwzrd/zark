@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")/.."
 VIBE=${VIBE:-./build/vibe}
+command -v timeout >/dev/null || timeout() { shift; "$@"; }
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 python3 - "$dir" <<'PY'
