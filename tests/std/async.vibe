@@ -204,3 +204,332 @@ test "a future that never wakes is a deadlock" {
     _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
     assert(dead);
 }
+
+extern i32 socketpair(i32 domain, i32 kind, i32 protocol, i32* fds);
+extern i32 close(i32 fd);
+extern i32 vrt_set_nonblocking(i32 fd);
+
+type Count = !i64;
+
+struct Spin {
+    async::Executor* ex;
+    async::Sleep s;
+    async::Readable r;
+    i32 fd;
+
+    Poll<i64> poll(Context* cx) {
+        if (!this->r.io.armed) {
+            this->r = async::Readable::on(this->ex, this->fd);
+            _ = this->r.poll(cx);
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(1);
+            .Pending => {}
+        }
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+struct Wave {
+    async::Executor* ex;
+    List<async::JoinHandle<i64>>* hs;
+    i64 sum;
+    i64 until;
+
+    Poll<bool> poll(Context* cx) {
+        if (time::mono_ns() > this->until) { return .Ready(false); }
+        auto i = 0;
+        while (i < this->hs.len) {
+            auto h = this->hs.get(i);
+            if (h.done()) {
+                this->sum += h.take();
+                _ = this->hs.swap_remove(i) catch h;
+            } else {
+                i += 1;
+            }
+        }
+        if (this->hs.len == 0 && this->ex.tasks.len == 0) { return .Ready(true); }
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+test "finished tasks free their memory" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        i32[100] fds;
+        for (auto i : 0..50) { assert(pipe(&fds[2 * i]) == 0); }
+        auto hs = List<async::JoinHandle<i64>>::init(a);
+        defer hs.deinit();
+        i64 base = 0;
+        u64 base_bytes = 0;
+        for (auto wave : 0..20) {
+            for (auto i : 0..50) {
+                auto h = ex.spawn<Spin, i64>(Spin{ .ex = &ex, .s = async::Sleep::after(&ex, 1), .fd = fds[2 * i] })?;
+                if (i % 2 == 0) { hs.push(h)?; } else { h.detach(); }
+            }
+            auto w = Wave{ .ex = &ex, .hs = &hs, .until = time::mono_ns() + 2000000000 };
+            assert(ex.block_on<Wave, bool>(&w)?);
+            assert(w.sum == 25);
+            if (wave == 1) {
+                base = dbg.live;
+                base_bytes = dbg.live_bytes;
+            }
+        }
+        assert(dbg.live <= base);
+        assert(dbg.live_bytes <= base_bytes + 4096);
+        assert(ex.io == 0);
+        auto n = Never{};
+        bool dead = false;
+        _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
+        assert(dead);
+        for (auto i : 0..100) { _ = close(fds[i]); }
+    }
+    dbg.deinit()?;
+}
+
+struct Guarded {
+    async::JoinHandle<Count>* h;
+    async::Sleep s;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->h.poll(cx)) {
+            .Ready(r) => return .Ready(r catch -1);
+            .Pending => {}
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(-2);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "a reader and a writer share one fd" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    const auto big = c_allocator().alloc<u8>(1 << 22)?;
+    defer c_allocator().free<u8>(big);
+    auto s = async::TcpStream{ .ex = &ex, .fd = sv[0] };
+    u8[4] buf;
+    auto hr = ex.spawn<async::Read, Count>(s.read(buf[..]))?;
+    auto hw = ex.spawn<async::Write, Count>(s.write(big))?;
+    const auto b = sv[1];
+    auto t = thread::spawn([b]() -> void {
+        time::sleep_ms(30);
+        u8 x = 'x';
+        _ = write(b, &x as *void, 1);
+        time::sleep_ms(300);
+        u8[4096] sink;
+        auto got = 0;
+        while (got < (1 << 22)) {
+            const auto n = read(b, &sink[0] as *void, 4096);
+            if (n <= 0) { break; }
+            got += n;
+        }
+    })?;
+    defer t.join();
+    auto g = Guarded{ .h = &hr, .s = async::Sleep::after(&ex, 200) };
+    assert(ex.block_on<Guarded, i64>(&g)? == 1);
+    assert(buf[0] == 'x');
+    assert(ex.block_on<async::JoinHandle<Count>, Count>(&hw)?? == 1 << 22);
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}
+
+struct EchoServer {
+    async::TcpListener* l;
+    i32 step;
+    async::Accept acc;
+    async::TcpStream s;
+    async::Read rd;
+    async::Write wr;
+    u8[64] buf;
+    i64 n;
+
+    Poll<bool> poll(Context* cx) {
+        while (true) {
+            if (this->step == 0) {
+                this->acc = this->l.accept();
+                this->step = 1;
+            } else if (this->step == 1) {
+                match (this->acc.poll(cx)) {
+                    .Ready(r) => {
+                        this->s = r catch { return .Ready(false); };
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            } else if (this->step == 2) {
+                if (this->n > 0 && this->buf[this->n - 1] == '\n') {
+                    this->wr = this->s.write(this->buf[0..this->n]);
+                    this->step = 4;
+                } else {
+                    this->rd = this->s.read(this->buf[this->n..]);
+                    this->step = 3;
+                }
+            } else if (this->step == 3) {
+                match (this->rd.poll(cx)) {
+                    .Ready(r) => {
+                        const auto got = r catch { return .Ready(false); };
+                        if (got == 0) { return .Ready(false); }
+                        this->n += got;
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            } else {
+                match (this->wr.poll(cx)) {
+                    .Ready(r) => {
+                        _ = r catch { return .Ready(false); };
+                        this->s.close();
+                        return .Ready(true);
+                    }
+                    .Pending => return .Pending;
+                }
+            }
+        }
+        return .Pending;
+    }
+}
+
+struct EchoClient {
+    async::Executor* ex;
+    i64 port;
+    i32 step;
+    async::TcpStream s;
+    async::Write wr;
+    async::Read rd;
+    u8[64] buf;
+    i64 n;
+
+    Poll<bool> poll(Context* cx) {
+        while (true) {
+            if (this->step == 0) {
+                this->s = async::TcpStream::connect(this->ex, "127.0.0.1", this->port) catch { return .Ready(false); };
+                this->wr = this->s.write("ping\n");
+                this->step = 1;
+            } else if (this->step == 1) {
+                match (this->wr.poll(cx)) {
+                    .Ready(r) => {
+                        _ = r catch { return .Ready(false); };
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            } else if (this->step == 2) {
+                if (this->n == 5) { break; }
+                this->rd = this->s.read(this->buf[this->n..]);
+                this->step = 3;
+            } else {
+                match (this->rd.poll(cx)) {
+                    .Ready(r) => {
+                        const auto got = r catch { return .Ready(false); };
+                        if (got == 0) { break; }
+                        this->n += got;
+                        this->step = 2;
+                    }
+                    .Pending => return .Pending;
+                }
+            }
+        }
+        this->s.close();
+        return .Ready(this->buf[0..this->n] == "ping\n");
+    }
+}
+
+test "echo over loopback" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto l = async::TcpListener::bind(&ex, "127.0.0.1", 0)?;
+    defer l.close();
+    assert(l.port() > 0);
+    auto h = ex.spawn<EchoServer, bool>(EchoServer{ .l = &l })?;
+    auto c = EchoClient{ .ex = &ex, .port = l.port() };
+    assert(ex.block_on<EchoClient, bool>(&c)?);
+    assert(ex.block_on<async::JoinHandle<bool>, bool>(&h)?);
+}
+
+struct ConnectClose {
+    async::Executor* ex;
+    i64 port;
+    i32 step;
+    async::Sleep s;
+    async::TcpStream c;
+
+    Poll<bool> poll(Context* cx) {
+        if (this->step == 0) {
+            this->c = async::TcpStream::connect(this->ex, "127.0.0.1", this->port) catch { return .Ready(false); };
+            this->s = async::Sleep::after(this->ex, 30);
+            this->step = 1;
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => {
+                this->c.close();
+                return .Ready(true);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+struct ReadEnd {
+    async::TcpListener* l;
+    async::Sleep guard;
+    i32 step;
+    async::Accept acc;
+    async::TcpStream s;
+    async::Read rd;
+    u8[16] buf;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->guard.poll(cx)) {
+            .Ready(_) => return .Ready(-1);
+            .Pending => {}
+        }
+        if (this->step == 0) {
+            this->acc = this->l.accept();
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->acc.poll(cx)) {
+                .Ready(r) => {
+                    this->s = r catch { return .Ready(-2); };
+                    this->rd = this->s.read(this->buf[..]);
+                    this->step = 2;
+                }
+                .Pending => return .Pending;
+            }
+        }
+        match (this->rd.poll(cx)) {
+            .Ready(r) => {
+                const auto got = r catch { return .Ready(-3); };
+                this->s.close();
+                return .Ready(got);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "closed peer ends a pending read" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto l = async::TcpListener::bind(&ex, "127.0.0.1", 0)?;
+    defer l.close();
+    auto h = ex.spawn<ConnectClose, bool>(ConnectClose{ .ex = &ex, .port = l.port() })?;
+    auto r = ReadEnd{ .l = &l, .guard = async::Sleep::after(&ex, 2000) };
+    const auto start = time::mono_ns();
+    assert(ex.block_on<ReadEnd, i64>(&r)? == 0);
+    assert(time::mono_ns() - start >= 20000000);
+    assert(ex.block_on<async::JoinHandle<bool>, bool>(&h)?);
+}
