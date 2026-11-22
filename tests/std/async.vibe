@@ -269,7 +269,7 @@ test "finished tasks free their memory" {
         u64 base_bytes = 0;
         for (auto wave : 0..20) {
             for (auto i : 0..50) {
-                auto h = ex.spawn<Spin, i64>(Spin{ .ex = &ex, .s = async::Sleep::after(&ex, 1), .fd = fds[2 * i] })?;
+                auto h = ex.spawn<Spin, i64>(Spin{ .ex = &ex, .s = async::Sleep::after(&ex, 5), .fd = fds[2 * i] })?;
                 if (i % 2 == 0) { hs.push(h)?; } else { h.detach(); }
             }
             auto w = Wave{ .ex = &ex, .hs = &hs, .until = time::mono_ns() + 2000000000 };
@@ -643,6 +643,123 @@ test "a cancelled read does not spin or hold the executor" {
     assert(!h.done());
     assert(ex.io == 0);
     h.detach();
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}
+
+struct ForgotRead {
+    async::Executor* ex;
+    i32 fd;
+    i32 peer;
+    i32 step;
+    i64 polls;
+    i64 io;
+    async::Read rd;
+    async::Sleep s;
+    u8[4] buf;
+
+    Poll<i64> poll(Context* cx) {
+        this->polls += 1;
+        if (this->polls > 50) { return .Ready(-1); }
+        if (this->step == 0) {
+            auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };
+            this->rd = st.read(this->buf[..]);
+            this->s = async::Sleep::after(this->ex, 10);
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->rd.poll(cx)) {
+                .Ready(_) => return .Ready(-2);
+                .Pending => {}
+            }
+            match (this->s.poll(cx)) {
+                .Ready(_) => {}
+                .Pending => return .Pending;
+            }
+            u8 x = 'x';
+            _ = write(this->peer, &x as *void, 1);
+            this->s = async::Sleep::after(this->ex, 100);
+            this->step = 2;
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => {
+                this->io = this->ex.io;
+                return .Ready(this->polls);
+            }
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "a forgotten read that became ready does not spin" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    auto f = ForgotRead{ .ex = &ex, .fd = sv[0], .peer = sv[1] };
+    const auto n = ex.block_on(&f)?;
+    assert(n > 0 && n < 50);
+    assert(f.io == 1);
+    _ = close(sv[0]);
+    _ = close(sv[1]);
+}
+
+struct TwoReads {
+    async::Executor* ex;
+    i32 fd;
+    i32 peer;
+    i32 step;
+    async::Read r1;
+    async::Read r2;
+    async::Sleep s;
+    u8[4] b1;
+    u8[4] b2;
+
+    Poll<i64> poll(Context* cx) {
+        if (this->step == 0) {
+            auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };
+            this->r1 = st.read(this->b1[..]);
+            this->r2 = st.read(this->b2[..]);
+            match (this->r1.poll(cx)) {
+                .Ready(_) => return .Ready(-1);
+                .Pending => {}
+            }
+            match (this->r2.poll(cx)) {
+                .Ready(_) => return .Ready(-1);
+                .Pending => {}
+            }
+            this->r1.cancel();
+            this->s = async::Sleep::after(this->ex, 10);
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->s.poll(cx)) {
+                .Ready(_) => {}
+                .Pending => return .Pending;
+            }
+            u8 x = 'x';
+            _ = write(this->peer, &x as *void, 1);
+            this->step = 2;
+            return .Pending;
+        }
+        match (this->r2.poll(cx)) {
+            .Ready(n) => return .Ready(n catch -1);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "cancelling an older read keeps a newer one armed" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    auto f = TwoReads{ .ex = &ex, .fd = sv[0], .peer = sv[1] };
+    assert(ex.block_on(&f)? == 1);
     _ = close(sv[0]);
     _ = close(sv[1]);
 }
