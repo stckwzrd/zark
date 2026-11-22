@@ -102,6 +102,10 @@ bool can_coerce(Type* from, Type* to) {
         }
         .Pre => return this->pre_vals.get(e.ival as i64),
         .Comptime => return this->gen_comptime(e, expected),
+        .Await => {
+            this->err(e.line); eprintln("async is not supported here yet");
+            return error.CompileFailed;
+        }
         .Ident => {
             const auto n = e.name;
             if (this->has_var(n)) {

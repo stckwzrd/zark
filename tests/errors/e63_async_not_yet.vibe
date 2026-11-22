@@ -1,0 +1,7 @@
+async i64 f() {
+    return 1;
+}
+
+void main() {
+    auto x = f();
+}

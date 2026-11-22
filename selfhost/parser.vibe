@@ -564,6 +564,12 @@ struct Parser {
             this->cts.push(c)?;
             return c;
         }
+        if (this->await_ahead()) {
+            _ = this->advance();
+            const auto w = this->ex(.Await, t)?;
+            w.l = this->parse_prefix()?;
+            return w;
+        }
         match t.tag {
             .minus, .bang, .tilde, .amp, .star => {
                 _ = this->advance();

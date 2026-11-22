@@ -685,6 +685,10 @@ struct Gen {
         const auto saved_file = this->file;
         this->file = decl.file;
         defer this->file = saved_file;
+        if (decl.is_async) {
+            this->err(decl.line); eprintln("async is not supported here yet");
+            return error.CompileFailed;
+        }
         auto params = List<Type*>::init(this->a);
         for (auto p : decl.params) { params.push(this->resolve_type(p.ty, env)?)?; }
         auto ret = this->t_void;
