@@ -89,6 +89,41 @@ void Gen::set_await(Expr* e) {
     return fi;
 }
 
+!Type* Gen::poll_output(Type* t) {
+    if (t.k != .Strct) { return null; }
+    auto kb = this->sb();
+    sprint(&kb, "{t.si.decl.name}.poll")?;
+    if (!this->methods.has(kb.slice())) { return null; }
+    const auto md = this->methods.get(kb.slice())?;
+    auto pn = this->sb();
+    sprint(&pn, "vb.{t.si.llname}.poll")?;
+    Type* pt = null;
+    if (md.ret == null && this->fn_insts.has(pn.slice())) { pt = this->fn_insts.get(pn.slice())?.ret; }
+    if (md.ret != null && md.type_params.len == 0) { pt = this->resolve_type(md.ret, this->recv_env(md, t)?)?; }
+    if (pt == null || !is_union(pt) || pt.si.decl.name != "Poll") { return null; }
+    return pt.si.fields.get(field_index(pt.si, "Ready")).ty;
+}
+
+!void Gen::infer_from_poll(List<str> tps, Env env) {
+    auto free = "";
+    auto nfree = 0;
+    Type* out = null;
+    auto nout = 0;
+    for (auto tp : tps) {
+        if (!env.has(tp)) {
+            free = tp;
+            nfree += 1;
+            continue;
+        }
+        const auto o = this->poll_output(env.get(tp)?)?;
+        if (o != null) {
+            out = o;
+            nout += 1;
+        }
+    }
+    if (nfree == 1 && nout == 1) { env.put(free, out)?; }
+}
+
 !void Gen::gen_frame_ctor(FnInst* fi) {
     const auto ft = fi.ret;
     const auto fty = this->llty(ft)?;
