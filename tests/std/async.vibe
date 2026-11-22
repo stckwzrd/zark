@@ -492,7 +492,11 @@ struct ReadEnd {
 
     Poll<i64> poll(Context* cx) {
         match (this->guard.poll(cx)) {
-            .Ready(_) => return .Ready(-1);
+            .Ready(_) => {
+                this->acc.cancel();
+                this->rd.cancel();
+                return .Ready(-1);
+            }
             .Pending => {}
         }
         if (this->step == 0) {
@@ -532,4 +536,113 @@ test "closed peer ends a pending read" {
     assert(ex.block_on<ReadEnd, i64>(&r)? == 0);
     assert(time::mono_ns() - start >= 20000000);
     assert(ex.block_on<async::JoinHandle<bool>, bool>(&h)?);
+}
+
+struct Nap {
+    async::Sleep s;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(7);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+struct Impatient {
+    async::JoinHandle<i64>* h;
+    async::Sleep s;
+
+    Poll<i64> poll(Context* cx) {
+        match (this->h.poll(cx)) {
+            .Ready(v) => return .Ready(v);
+            .Pending => {}
+        }
+        match (this->s.poll(cx)) {
+            .Ready(_) => return .Ready(-1);
+            .Pending => return .Pending;
+        }
+        return .Pending;
+    }
+}
+
+test "a waiter that gave up is not woken after free" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        auto slow = ex.spawn<Nap, i64>(Nap{ .s = async::Sleep::after(&ex, 60) })?;
+        auto w = ex.spawn<Impatient, i64>(Impatient{ .h = &slow, .s = async::Sleep::after(&ex, 5) })?;
+        assert(ex.block_on<async::JoinHandle<i64>, i64>(&w)? == -1);
+        auto s = async::Sleep::after(&ex, 100);
+        assert(ex.block_on<async::Sleep, bool>(&s)?);
+        assert(slow.done());
+        assert(slow.take() == 7);
+        assert(ex.tasks.len == 0);
+    }
+    dbg.deinit()?;
+}
+
+struct LostRead {
+    async::Executor* ex;
+    i32 fd;
+    i32 peer;
+    i32 step;
+    i64 polls;
+    async::Read rd;
+    async::Sleep s;
+    u8[4] buf;
+
+    Poll<i64> poll(Context* cx) {
+        this->polls += 1;
+        if (this->polls > 50) { return .Ready(-1); }
+        if (this->step == 0) {
+            auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };
+            this->rd = st.read(this->buf[..]);
+            this->s = async::Sleep::after(this->ex, 10);
+            this->step = 1;
+        }
+        if (this->step == 1) {
+            match (this->rd.poll(cx)) {
+                .Ready(_) => return .Ready(-2);
+                .Pending => {}
+            }
+            match (this->s.poll(cx)) {
+                .Ready(_) => {}
+                .Pending => return .Pending;
+            }
+            this->rd.cancel();
+            u8 x = 'x';
+            _ = write(this->peer, &x as *void, 1);
+            this->s = async::Sleep::after(this->ex, 50);
+            this->step = 2;
+        }
+        if (this->step == 2) {
+            match (this->s.poll(cx)) {
+                .Ready(_) => this->step = 3;
+                .Pending => return .Pending;
+            }
+        }
+        return .Pending;
+    }
+}
+
+test "a cancelled read does not spin or hold the executor" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    i32[2] sv;
+    assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    assert(vrt_set_nonblocking(sv[0]) == 0);
+    auto h = ex.spawn<LostRead, i64>(LostRead{ .ex = &ex, .fd = sv[0], .peer = sv[1] })?;
+    auto n = Never{};
+    bool dead = false;
+    _ = ex.block_on<Never, bool>(&n) catch |e| { dead = e == error.Deadlock; false };
+    assert(dead);
+    assert(!h.done());
+    assert(ex.io == 0);
+    h.detach();
+    _ = close(sv[0]);
+    _ = close(sv[1]);
 }

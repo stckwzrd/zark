@@ -20,8 +20,10 @@ struct Task {
     i64 index;
     i32 timers;
     i32 io;
+    i32 waits;
     bool released;
     Waker joiner;
+    Task* waiter;
 }
 
 struct TaskBox<F, T> {
@@ -80,7 +82,18 @@ struct JoinHandle<T> {
 
     Poll<T> poll(Context* cx) {
         if (this->done()) { return .Ready(this->take()); }
-        this->task.joiner = cx.waker;
+        auto t = this->task;
+        t.joiner = cx.waker;
+        const auto cur = t.ex.current;
+        if (t.waiter != cur) {
+            const auto old = t.waiter;
+            t.waiter = cur;
+            if (cur != null) { cur.waits += 1; }
+            if (old != null) {
+                old.waits -= 1;
+                t.ex.release(old);
+            }
+        }
         return .Pending;
     }
 }
@@ -161,7 +174,10 @@ owned struct Executor {
             const auto timeout = this->timeout_ms();
             if (timeout < 0 && this->io == 0) { return error.Deadlock; }
             const auto n = vrt_poller_wait(this->poller, &tokens[0], &events[0], 64, timeout);
-            if (n < 0) { return error.SystemCall; }
+            if (n < 0) {
+                this->drop_io(null);
+                return error.SystemCall;
+            }
             for (auto i : 0..n as i64) {
                 const auto e = events[i];
                 this->ready(tokens[i] as i32, (e & 5) != 0, (e & 6) != 0);
@@ -187,6 +203,12 @@ owned struct Executor {
                 t.state = 3;
                 if (t.io > 0) { this->drop_io(t); }
                 t.joiner.wake();
+                const auto w = t.waiter;
+                if (w != null) {
+                    t.waiter = null;
+                    w.waits -= 1;
+                    this->release(w);
+                }
                 this->release(t);
             } else if (t.state == 2) {
                 t.state = 0;
@@ -206,7 +228,7 @@ owned struct Executor {
     }
 
     void release(Task* t) {
-        if (t.state != 3 || !t.released || t.timers > 0) { return; }
+        if (t.state != 3 || !t.released || t.timers > 0 || t.waits > 0) { return; }
         _ = this->tasks.swap_remove(t.index) catch t;
         if (t.index < this->tasks.len) { this->tasks.get(t.index).index = t.index; }
         this->a.free<u8>((t as *u8)[0..t.size as i64]);
@@ -372,6 +394,12 @@ struct Io {
         this->armed = true;
         return .Pending;
     }
+
+    void cancel() {
+        if (!this->armed) { return; }
+        this->ex.disarm(this->fd, this->write);
+        this->armed = false;
+    }
 }
 
 struct Readable {
@@ -379,6 +407,7 @@ struct Readable {
 
     static Readable on(Executor* ex, i32 fd) { return Readable{ .io = Io{ .ex = ex, .fd = fd } }; }
     Poll<bool> poll(Context* cx) { return this->io.poll(cx); }
+    void cancel() { this->io.cancel(); }
 }
 
 struct Writable {
@@ -386,6 +415,7 @@ struct Writable {
 
     static Writable on(Executor* ex, i32 fd) { return Writable{ .io = Io{ .ex = ex, .fd = fd, .write = true } }; }
     Poll<bool> poll(Context* cx) { return this->io.poll(cx); }
+    void cancel() { this->io.cancel(); }
 }
 
 struct TcpListener {
@@ -419,6 +449,8 @@ struct Accept {
     Executor* ex;
     i32 fd;
     Readable r;
+
+    void cancel() { this->r.cancel(); }
 
     Poll<!TcpStream> poll(Context* cx) {
         while (true) {
@@ -480,6 +512,8 @@ struct Read {
     u8[] buf;
     Readable r;
 
+    void cancel() { this->r.cancel(); }
+
     Poll<!i64> poll(Context* cx) {
         while (true) {
             if (this->r.io.armed) {
@@ -511,6 +545,8 @@ struct Write {
     str data;
     i64 off;
     Writable w;
+
+    void cancel() { this->w.cancel(); }
 
     Poll<!i64> poll(Context* cx) {
         while (this->off < this->data.len) {
