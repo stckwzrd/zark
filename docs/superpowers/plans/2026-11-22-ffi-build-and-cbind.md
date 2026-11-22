@@ -52,14 +52,14 @@
 **Interfaces:**
 - Produces in `cbuild.zk`:
   - `bool is_compile_flag(str x)`: true for `-I*`, `-isystem`, `-D*`, `-U*`, `-std=*`, `-include`, `-f*`, `-W*` except `-Wl,*`, and `-pthread`. `-I dir` with the value as the next argument is not supported; document nothing, just reject it as a source.
-  - `struct Split { List<str> flags; List<str> sources; List<str> link; }`
-  - `!Split split_extras(Allocator a, List<str> extras)`: `link` gets `-l*`, `-L*`, `-Wl,*`, `-T*`, `-nostdlib`, `-static`, and anything ending `.o .a .so`; `flags` gets compile flags; everything else is a source.
-  - `!List<str> compile_sources(Allocator a, str cache, Split* s, str olevel, bool* needs_cxx)`: compiles each source with `clang`/`clang++` (`.cpp .cc .cxx` is C++) and the flags, returns the object paths, sets `*needs_cxx`.
+  - `struct CSplit { List<str> flags; List<str> sources; List<str> link; }`
+  - `!CSplit split_extras(Allocator a, List<str> extras)`: `link` gets `-l*`, `-L*`, `-Wl,*`, `-T*`, `-nostdlib`, `-static`, and anything ending `.o .a .so`; `flags` gets compile flags; everything else is a source.
+  - `!List<str> compile_sources(Allocator a, str cache, CSplit* s, str olevel, bool* needs_cxx)`: compiles each source with `clang`/`clang++` (`.cpp .cc .cxx` is C++) and the flags, returns the object paths, sets `*needs_cxx`.
 - Consumes: `run(Allocator, str[]) !i32` from the prelude.
 
 - [ ] **Step 1: Write `tests/cbuild.sh`** (bash, `fail()` helper like `tests/project.sh`, temp dir with `trap`) with test `flags_cli`: a C file `a b/ans.c` (directory name with a space) that does `#include "cfg.h"` and defines `long answer(void) { return ANSWER; }`, header `a b/inc/cfg.h` with `#define BASE 40`, and `main.zk` calling `extern i64 answer();` and printing it. Run `$ZARK run main.zk "a b/ans.c" "-Ia b/inc" -DANSWER=42` and assert the output is `42`; run with `-DANSWER=BASE+2` and assert `42`.
 - [ ] **Step 2: Run it** (`ZARK=build/zark tests/cbuild.sh`) and see it fail (today `-I...` is passed to the linker as a source and fails).
-- [ ] **Step 3: Implement `cbuild.zk`** as specified in Interfaces; replace the loop in `main.zk` with `split_extras` + `compile_sources`; link arguments come from `Split.link`. Keep `.S`/`.c`/`.o` freestanding behaviour unchanged. Compile flags also go into `g.ct_extras` the same way extras do today (check how `comptime` uses it).
+- [ ] **Step 3: Implement `cbuild.zk`** as specified in Interfaces; replace the loop in `main.zk` with `split_extras` + `compile_sources`; link arguments come from `CSplit.link`. Keep `.S`/`.c`/`.o` freestanding behaviour unchanged. Compile flags also go into `g.ct_extras` the same way extras do today (check how `comptime` uses it).
 - [ ] **Step 4: Run `tests/cbuild.sh`** and see `flags_cli` pass; run `./bootstrap.sh` and see it finish green.
 - [ ] **Step 5: Hook `tests/cbuild.sh` into `tests/run.sh`** right after the `project.sh` block (same `pass/fail` pattern). Commit: `add C/C++ compile flags`.
 
@@ -69,7 +69,7 @@
 - Modify: `selfhost/project.zk` (`Manifest`, `load_project`, `project_args`, the commented template in `scaffold_project` stays as is), `tests/cbuild.sh`
 
 **Interfaces:**
-- Consumes: `is_compile_flag`, `Split` from Task 1.
+- Consumes: `is_compile_flag`, `CSplit` from Task 1.
 - `[build]` keys (all optional): `include`, `defines`, `cflags`, `lib-dirs` are string lists; `std` is a string; `pkg-config` is a string list. Paths in `include` and `lib-dirs` are relative to the manifest directory and become absolute.
 - Produces: `Manifest` gains `List<str> cflags` (already-formed compile flags: `-I<abs>`, `-D<d>`, `-std=<s>`, then `cflags` entries) and `List<str> pkgs`. `project_args` emits `cflags`, then for each package the result of `pkg-config --cflags --libs <pkg>` classified with `is_compile_flag` (compile) versus link flags, then `-L<abs>` for `lib-dirs`. Dependencies add their `cflags`, `pkgs`, `sources`, `libs` to the parent (like `sources` and `libs` today).
 - Errors (exit 1, message on stderr): `pkg-config` not found: `error: pkg-config is not installed (needed for 'sdl2')`; unknown package: include the package name.
@@ -88,6 +88,7 @@
 - `compile_sources` keeps its signature. Object path `.zark-cache/obj/<base>-<hash16>.o` where `<hash16>` is a 64-bit FNV-1a (hex, 16 chars) over: compiler name, `olevel`, all flags in order, the source path and its text. Each compile writes `<obj>.tmp.<pid>` with `-MD -MF <obj>.d.tmp.<pid>`, then `mv`s object and `.d`, then writes `<obj>.stamp` (temp plus `mv`) holding the hash of the contents of all files listed in the `.d` file. A hit requires the object, the `.d` and the stamp to exist and the recomputed stamp to match, so a header edit forces a rebuild. Two sources with the same base name get different objects (the hash includes the path).
 - Compile jobs run in parallel with `parallel_for` from `std/thread` over the sources that missed, `min(ZARK_JOBS or 8, misses)` threads; a job's stdout/stderr are captured with `exec` and printed in source order after all jobs finish; the first nonzero exit code is returned as the error. Object order in the result equals source order.
 - Consumes: `fnv`-style helper local to `cbuild.zk` (`u64 fnv64(u64 h, str s)`), `fs`, `path` modules.
+- Also fixes two Task 1 review findings in `selfhost/cbuild.zk`: (a) `split_extras` must test `is_compile_flag` before the `.o/.a/.so` suffix rule, so `-DLIB=libfoo.a` stays a compile flag; (b) `-std=` flags apply per language: `-std=c++*`/`-std=gnu++*` only to C++ sources, any other `-std=` only to C sources, all other compile flags to both. Test: `mixed_c_cpp_std` (one `.c` and one `.cpp` with `-std=c++17` and `-std=c11`, both compile and link).
 
 - [ ] **Step 1: Tests** in `tests/cbuild.sh`: `cache_hit` (build twice with `--time`-free check: second run must not invoke clang, assert via a `PATH` shim `clang` script that appends to a log file and execs the real clang, count lines unchanged on the second run), `cache_header_edit` (edit the included header between runs, assert the new value appears), `same_base_name` (`a/util.c` and `b/util.c` with different functions, both linked), `parallel_determinism` (ten sources, run three times with `ZARK_JOBS=1` and `ZARK_JOBS=8`, program output identical and objects named identically), `concurrent_runs` (two `zark build` in the background into different `-o` with the same cache, both succeed and run).
 - [ ] **Step 2: Run, see `cache_*` and `concurrent_runs` fail** (no cache today; the collision test fails too).
@@ -101,7 +102,7 @@
 
 **Interfaces:**
 - In a project whose `main` file does not exist and which lists at least one source: `zark build` compiles the sources and links them (`clang++` if any is C++) to `build/<name>` (or `build.out`); `zark run` does that and runs the result with the program arguments; `zark test` reports `no tests` with exit 0.
-- A `.zk` file without `main` is accepted when `Split.sources` is non-empty; the linker reports a missing `main`.
+- A `.zk` file without `main` is accepted when `CSplit.sources` is non-empty; the linker reports a missing `main`.
 - A project with neither a Zark `main` nor sources keeps today's error.
 
 - [ ] **Step 1: Tests** `cpp_only_project` (manifest with `sources = ["src/app.cpp"]`, `std = "c++17"`, `libs = ["stdc++"]`; `zark run -- a b` prints the argv count) and `zark_lib_with_c_main` (main in C calls an `export`ed Zark function, Zark file has no `main`).
@@ -199,7 +200,7 @@
 **Interfaces:**
 - In `cbind.zk`: globals `List<str> c_flags`, `str c_cache`, `List<str> c_inline_sources`; `!str cbind_import(Allocator a, str header, str from_dir)` returns the path of the cached `.zk` file `<cache>/cbind/<hash16>.zk` and, when the result has inline wrappers, writes `<hash16>.c` next to it and appends its path to `c_inline_sources` (once per path). The hash covers the resolved header path, the flags, the clang version line (`clang --version` first line) and the contents of all files in `deps`; the first call after a header edit regenerates. A cache hit reads a `<hash16>.deps` file (paths) and rehashes their contents instead of running the preprocessor. Writes use temp plus `mv`.
 - In `loader.zk`: when `d.path` ends with `.h`, call `cbind_import` and load the returned file with the import's alias as prefix (`load_file(path, d.alias)`). The same header imported twice maps to one cache file, so the loader's existing "seen" handling applies.
-- In `main.zk`: before loading, set `c_flags` from `Split.flags` and `c_cache`; after loading, append `c_inline_sources` to the source list that `compile_sources` compiles. C++ extensions (`.hpp .hh .hxx`) fail with `error: C++ headers are not supported yet (layer 4): <path>`. A missing header prints the directories searched (`clang -E -v` is not needed; list `from_dir`, each `-I`, and `/usr/include`).
+- In `main.zk`: before loading, set `c_flags` from `CSplit.flags` and `c_cache`; after loading, append `c_inline_sources` to the source list that `compile_sources` compiles. C++ extensions (`.hpp .hh .hxx`) fail with `error: C++ headers are not supported yet (layer 4): <path>`. A missing header prints the directories searched (`clang -E -v` is not needed; list `from_dir`, each `-I`, and `/usr/include`).
 - Interop test in `tests/cbind/interop/`: `lib.h` with a struct by value (`{ int x; double y; }`, x86-64 only part guarded by the script), an enum with explicit values, a macro constant, a union, a callback typedef, a `static inline`, a `const char*` return and a variadic `int sum_ints(int n, ...)`; `lib.c` implements them; `main.zk` does `import "lib.h" as lib;` and prints results; `main.out` holds the golden.
 
 - [ ] **Step 1: Write the interop fixture and tests in `tests/cbind.sh`:** `import_basic` (run with `lib.c` and `-I`), `import_cache_hit` (a `clang` PATH shim counts invocations; the second run only invokes it for linking and compiling `lib.c`, not for `-E`), `import_header_edit` (change a macro value in `lib.h`, output changes), `import_twice` (two Zark files import the same header, one with an alias and one through a relative path; compiles and runs), `import_path_with_space` (header in a directory with a space), `import_cpp_header` (`.hpp` gives the C++ error and exit 1), `import_missing` (error names the searched dirs), `sizeof_matches` (a Zark program prints `sizeof(lib::T)` for every emitted struct and the C program prints the same numbers; compare).
