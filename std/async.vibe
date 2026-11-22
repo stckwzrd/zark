@@ -2,6 +2,14 @@ extern i64 vrt_poller_new();
 extern i32 vrt_poller_set(i64 p, i32 fd, i32 readable, i32 writable, u64 token);
 extern i32 vrt_poller_wait(i64 p, u64* tokens, i32* events, i32 max, i64 timeout_ms);
 extern void vrt_poller_free(i64 p);
+extern i32 vrt_set_nonblocking(i32 fd);
+extern i32 accept(i32 fd, u8* addr, u32* len);
+extern i64 recv(i32 fd, void* buf, u64 n, i32 flags);
+extern i64 vrt_send(i32 fd, void* buf, u64 n, i32 flags);
+extern i32 close(i32 fd);
+extern i32 vrt_errno();
+
+import "std/net" as net;
 
 struct Task {
     void* frame;
@@ -9,6 +17,11 @@ struct Task {
     i32 state;
     Executor* ex;
     u64 size;
+    i64 index;
+    i32 timers;
+    i32 io;
+    bool released;
+    Waker joiner;
 }
 
 struct TaskBox<F, T> {
@@ -20,6 +33,18 @@ struct TaskBox<F, T> {
 struct Timer {
     i64 deadline;
     Waker waker;
+    Task* task;
+}
+
+struct Reg {
+    bool r;
+    bool w;
+    bool rready;
+    bool wready;
+    Waker rw;
+    Waker ww;
+    Task* rt;
+    Task* wt;
 }
 
 void task_wake(void* data) {
@@ -42,7 +67,22 @@ struct JoinHandle<T> {
     T* slot;
 
     bool done() { return this->task.state == 3; }
-    T take() { return *this->slot; }
+    T take() {
+        const auto v = *this->slot;
+        this->detach();
+        return v;
+    }
+
+    void detach() {
+        this->task.released = true;
+        this->task.ex.release(this->task);
+    }
+
+    Poll<T> poll(Context* cx) {
+        if (this->done()) { return .Ready(this->take()); }
+        this->task.joiner = cx.waker;
+        return .Pending;
+    }
 }
 
 owned struct Executor {
@@ -52,6 +92,8 @@ owned struct Executor {
     List<Task*> queue;
     List<Task*> batch;
     List<Timer> timers;
+    List<Reg> regs;
+    Task* current;
     i64 io;
     bool main_woken;
 
@@ -59,7 +101,8 @@ owned struct Executor {
         const auto p = vrt_poller_new();
         if (p <= 0) { return error.SystemCall; }
         return Executor{ .a = a, .poller = p, .tasks = List<Task*>::init(a), .queue = List<Task*>::init(a),
-            .batch = List<Task*>::init(a), .timers = List<Timer>::init(a) };
+            .batch = List<Task*>::init(a), .timers = List<Timer>::init(a),
+            .regs = List<Reg>::init(a) };
     }
 
     void deinit() move {
@@ -68,6 +111,7 @@ owned struct Executor {
         this->queue.deinit();
         this->batch.deinit();
         this->timers.deinit();
+        this->regs.deinit();
         vrt_poller_free(this->poller);
     }
 
@@ -78,7 +122,7 @@ owned struct Executor {
         this->batch.reserve(n)?;
         auto b = this->a.create<TaskBox<F, T>>()?;
         b.fut = fut;
-        b.head = Task{ .frame = b as *void, .state = 1, .ex = this, .size = sizeof(TaskBox<F, T>),
+        b.head = Task{ .frame = b as *void, .state = 1, .ex = this, .size = sizeof(TaskBox<F, T>), .index = this->tasks.len,
             .poll_thunk = [](void* p, Context* cx) -> bool {
                 auto b = p as *TaskBox<F, T>;
                 match (b.fut.poll(cx)) {
@@ -105,7 +149,10 @@ owned struct Executor {
             if (this->main_woken) {
                 this->main_woken = false;
                 match (fut.poll(&cx)) {
-                    .Ready(v) => return v;
+                    .Ready(v) => {
+                        this->drop_io(null);
+                        return v;
+                    }
                     .Pending => {}
                 }
             }
@@ -116,9 +163,8 @@ owned struct Executor {
             const auto n = vrt_poller_wait(this->poller, &tokens[0], &events[0], 64, timeout);
             if (n < 0) { return error.SystemCall; }
             for (auto i : 0..n as i64) {
-                auto w = tokens[i] as *Io;
-                w.ready = true;
-                w.waker.wake();
+                const auto e = events[i];
+                this->ready(tokens[i] as i32, (e & 5) != 0, (e & 6) != 0);
             }
         }
         return error.Deadlock;
@@ -133,8 +179,15 @@ owned struct Executor {
             auto t = this->batch.get(i);
             t.state = 2;
             auto cx = Context{ .waker = Waker{ .data = t as *void, .wake_fn = task_wake } };
-            if (t.poll_thunk(t.frame, &cx)) {
+            this->current = t;
+            const auto done = t.poll_thunk(t.frame, &cx);
+            this->current = null;
+            if (done) {
+                if (t.state == 1) { this->unqueue(t); }
                 t.state = 3;
+                if (t.io > 0) { this->drop_io(t); }
+                t.joiner.wake();
+                this->release(t);
             } else if (t.state == 2) {
                 t.state = 0;
             }
@@ -143,8 +196,102 @@ owned struct Executor {
         this->batch.clear();
     }
 
+    void unqueue(Task* t) {
+        for (auto i : 0..this->queue.len) {
+            if (this->queue.get(i) == t) {
+                _ = this->queue.swap_remove(i) catch t;
+                return;
+            }
+        }
+    }
+
+    void release(Task* t) {
+        if (t.state != 3 || !t.released || t.timers > 0) { return; }
+        _ = this->tasks.swap_remove(t.index) catch t;
+        if (t.index < this->tasks.len) { this->tasks.get(t.index).index = t.index; }
+        this->a.free<u8>((t as *u8)[0..t.size as i64]);
+    }
+
+    !void arm(i32 fd, bool write, Waker w) {
+        while (this->regs.len <= fd as i64) { this->regs.push(Reg{})?; }
+        auto g = &this->regs.items[fd as i64];
+        auto t = this->current;
+        if (write) {
+            g.ww = w;
+            if (g.w && g.wt == t) { return; }
+            if (g.w && g.wt != null) { g.wt.io -= 1; }
+            if (!g.w) { this->io += 1; }
+            g.w = true;
+            g.wready = false;
+            g.wt = t;
+        } else {
+            g.rw = w;
+            if (g.r && g.rt == t) { return; }
+            if (g.r && g.rt != null) { g.rt.io -= 1; }
+            if (!g.r) { this->io += 1; }
+            g.r = true;
+            g.rready = false;
+            g.rt = t;
+        }
+        if (t != null) { t.io += 1; }
+        if (vrt_poller_set(this->poller, fd, g.r as i32, g.w as i32, fd as u64) != 0) {
+            this->disarm(fd, write);
+            return error.SystemCall;
+        }
+    }
+
+    void disarm(i32 fd, bool write) {
+        auto g = &this->regs.items[fd as i64];
+        if (write) {
+            if (!g.w) { return; }
+            g.w = false;
+            if (g.wt != null) { g.wt.io -= 1; }
+        } else {
+            if (!g.r) { return; }
+            g.r = false;
+            if (g.rt != null) { g.rt.io -= 1; }
+        }
+        this->io -= 1;
+        _ = vrt_poller_set(this->poller, fd, g.r as i32, g.w as i32, fd as u64);
+    }
+
+    bool take_ready(i32 fd, bool write) {
+        auto g = &this->regs.items[fd as i64];
+        if (write && !g.wready || !write && !g.rready) { return false; }
+        this->disarm(fd, write);
+        return true;
+    }
+
+    void ready(i32 fd, bool r, bool w) {
+        if (fd as i64 >= this->regs.len) { return; }
+        auto g = &this->regs.items[fd as i64];
+        if (r && g.r) {
+            g.rready = true;
+            g.rw.wake();
+        }
+        if (w && g.w) {
+            g.wready = true;
+            g.ww.wake();
+        }
+    }
+
+    void drop_io(Task* t) {
+        for (auto fd : 0..this->regs.len) {
+            const auto g = this->regs.get(fd);
+            if (g.r && g.rt == t) { this->disarm(fd as i32, false); }
+            if (g.w && g.wt == t) { this->disarm(fd as i32, true); }
+        }
+    }
+
+    void forget(i32 fd) {
+        if (fd as i64 >= this->regs.len) { return; }
+        this->disarm(fd, false);
+        this->disarm(fd, true);
+    }
+
     !void add_timer(i64 deadline, Waker w) {
-        this->timers.push(Timer{ .deadline = deadline, .waker = w })?;
+        this->timers.push(Timer{ .deadline = deadline, .waker = w, .task = this->current })?;
+        if (this->current != null) { this->current.timers += 1; }
         auto h = this->timers.slice();
         auto i = h.len - 1;
         while (i > 0 && h[(i - 1) / 2].deadline > h[i].deadline) {
@@ -157,6 +304,7 @@ owned struct Executor {
         const auto now = now_ns();
         while (this->timers.len > 0 && this->timers.get(0).deadline <= now) {
             const auto w = this->timers.get(0).waker;
+            const auto t = this->timers.get(0).task;
             this->timers.set(0, this->timers.get(this->timers.len - 1));
             this->timers.len -= 1;
             auto h = this->timers.slice();
@@ -171,6 +319,10 @@ owned struct Executor {
                 i = m;
             }
             w.wake();
+            if (t != null) {
+                t.timers -= 1;
+                this->release(t);
+            }
         }
     }
 
@@ -205,27 +357,19 @@ struct Sleep {
 struct Io {
     Executor* ex;
     i32 fd;
-    i32 readable;
-    i32 writable;
+    bool write;
     bool armed;
-    bool ready;
-    Waker waker;
 
     Poll<bool> poll(Context* cx) {
-        if (this->ready) {
-            if (this->armed) {
-                _ = vrt_poller_set(this->ex.poller, this->fd, 0, 0, this as u64);
-                this->ex.io -= 1;
-                this->armed = false;
-            }
+        if (this->armed && this->ex.take_ready(this->fd, this->write)) {
+            this->armed = false;
             return .Ready(true);
         }
-        this->waker = cx.waker;
-        if (!this->armed) {
-            if (vrt_poller_set(this->ex.poller, this->fd, this->readable, this->writable, this as u64) != 0) { return .Ready(true); }
-            this->armed = true;
-            this->ex.io += 1;
-        }
+        this->ex.arm(this->fd, this->write, cx.waker) catch {
+            this->armed = false;
+            return .Ready(false);
+        };
+        this->armed = true;
         return .Pending;
     }
 }
@@ -233,13 +377,165 @@ struct Io {
 struct Readable {
     Io io;
 
-    static Readable on(Executor* ex, i32 fd) { return Readable{ .io = Io{ .ex = ex, .fd = fd, .readable = 1 } }; }
+    static Readable on(Executor* ex, i32 fd) { return Readable{ .io = Io{ .ex = ex, .fd = fd } }; }
     Poll<bool> poll(Context* cx) { return this->io.poll(cx); }
 }
 
 struct Writable {
     Io io;
 
-    static Writable on(Executor* ex, i32 fd) { return Writable{ .io = Io{ .ex = ex, .fd = fd, .writable = 1 } }; }
+    static Writable on(Executor* ex, i32 fd) { return Writable{ .io = Io{ .ex = ex, .fd = fd, .write = true } }; }
     Poll<bool> poll(Context* cx) { return this->io.poll(cx); }
+}
+
+struct TcpListener {
+    Executor* ex;
+    i32 fd;
+
+    static !TcpListener bind(Executor* ex, str host, i64 port) {
+        const auto l = net::listen(host, port)?;
+        if (vrt_set_nonblocking(l.fd) != 0) {
+            _ = close(l.fd);
+            return error.SystemCall;
+        }
+        return TcpListener{ .ex = ex, .fd = l.fd };
+    }
+
+    i64 port() {
+        const auto l = net::Listener{ .fd = this->fd };
+        return l.port();
+    }
+
+    Accept accept() { return Accept{ .ex = this->ex, .fd = this->fd, .r = Readable::on(this->ex, this->fd) }; }
+
+    void close() move {
+        this->ex.forget(this->fd);
+        _ = close(this->fd);
+        this->fd = -1;
+    }
+}
+
+struct Accept {
+    Executor* ex;
+    i32 fd;
+    Readable r;
+
+    Poll<!TcpStream> poll(Context* cx) {
+        while (true) {
+            if (this->r.io.armed) {
+                match (this->r.poll(cx)) {
+                    .Ready(_) => {}
+                    .Pending => return .Pending;
+                }
+            }
+            const auto fd = accept(this->fd, null, null);
+            if (fd >= 0) {
+                if (vrt_set_nonblocking(fd) != 0) {
+                    _ = close(fd);
+                    return .Ready(error.SystemCall);
+                }
+                return .Ready(TcpStream{ .ex = this->ex, .fd = fd });
+            }
+            const auto e = vrt_errno();
+            if (e == 11) {
+                match (this->r.poll(cx)) {
+                    .Ready(_) => return .Ready(error.SystemCall);
+                    .Pending => return .Pending;
+                }
+            }
+            if (e != 4 && e != 103) {
+                errno_error() catch |err| { return .Ready(err); };
+            }
+        }
+        return .Pending;
+    }
+}
+
+struct TcpStream {
+    Executor* ex;
+    i32 fd;
+
+    static !TcpStream connect(Executor* ex, str host, i64 port) {
+        const auto c = net::connect_to(host, port)?;
+        if (vrt_set_nonblocking(c.fd) != 0) {
+            _ = close(c.fd);
+            return error.SystemCall;
+        }
+        return TcpStream{ .ex = ex, .fd = c.fd };
+    }
+
+    Read read(u8[] buf) { return Read{ .ex = this->ex, .fd = this->fd, .buf = buf, .r = Readable::on(this->ex, this->fd) }; }
+    Write write(str data) { return Write{ .ex = this->ex, .fd = this->fd, .data = data, .w = Writable::on(this->ex, this->fd) }; }
+
+    void close() move {
+        this->ex.forget(this->fd);
+        _ = close(this->fd);
+        this->fd = -1;
+    }
+}
+
+struct Read {
+    Executor* ex;
+    i32 fd;
+    u8[] buf;
+    Readable r;
+
+    Poll<!i64> poll(Context* cx) {
+        while (true) {
+            if (this->r.io.armed) {
+                match (this->r.poll(cx)) {
+                    .Ready(_) => {}
+                    .Pending => return .Pending;
+                }
+            }
+            const auto n = recv(this->fd, this->buf.ptr, this->buf.len as u64, 0);
+            if (n >= 0) { return .Ready(n); }
+            const auto e = vrt_errno();
+            if (e == 11) {
+                match (this->r.poll(cx)) {
+                    .Ready(_) => return .Ready(error.SystemCall);
+                    .Pending => return .Pending;
+                }
+            }
+            if (e != 4) {
+                errno_error() catch |err| { return .Ready(err); };
+            }
+        }
+        return .Pending;
+    }
+}
+
+struct Write {
+    Executor* ex;
+    i32 fd;
+    str data;
+    i64 off;
+    Writable w;
+
+    Poll<!i64> poll(Context* cx) {
+        while (this->off < this->data.len) {
+            if (this->w.io.armed) {
+                match (this->w.poll(cx)) {
+                    .Ready(_) => {}
+                    .Pending => return .Pending;
+                }
+            }
+            const auto n = vrt_send(this->fd, this->data.ptr + this->off, (this->data.len - this->off) as u64, net::MSG_NOSIGNAL);
+            if (n >= 0) {
+                this->off += n;
+                continue;
+            }
+            const auto e = vrt_errno();
+            if (e == 11) {
+                match (this->w.poll(cx)) {
+                    .Ready(_) => return .Ready(error.SystemCall);
+                    .Pending => return .Pending;
+                }
+            }
+            if (e != 4) {
+                errno_error() catch |err| { return .Ready(err); };
+            }
+        }
+        return .Ready(this->off);
+    }
 }

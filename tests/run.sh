@@ -8,7 +8,7 @@ check() { # name, cmd...
   if diff -u "tests/expected/$name.out" <("$@" 2>&1) >/dev/null; then pass=$((pass+1)); echo "ok   $name"
   else fail=$((fail+1)); echo "FAIL $name"; diff -u "tests/expected/$name.out" <("$@" 2>&1) | head -20; fi
 }
-names="hello features edge memory funcs unions minilang stdlib2 io cpp_style interfaces classes operators_oop checks simd align_structs"
+names="hello features edge memory funcs unions minilang stdlib2 io cpp_style interfaces classes operators_oop checks simd align_structs async_echo"
 x86=0; [ "$(uname -m)" = x86_64 ] && x86=1
 linux=0; [ "$(uname -s)" = Linux ] && linux=1
 [ $x86 = 1 ] && names="$names driver"
