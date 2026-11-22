@@ -102,10 +102,7 @@ bool can_coerce(Type* from, Type* to) {
         }
         .Pre => return this->pre_vals.get(e.ival as i64),
         .Comptime => return this->gen_comptime(e, expected),
-        .Await => {
-            this->err(e.line); eprintln("async is not supported here yet");
-            return error.CompileFailed;
-        }
+        .Await => return this->gen_await(e),
         .Ident => {
             const auto n = e.name;
             if (this->has_var(n)) {
@@ -204,7 +201,7 @@ bool can_coerce(Type* from, Type* to) {
             this->label(lerr)?;
             const auto rv = this->insert(rt, "zeroinitializer", tag, 0)?;
             this->run_defers(this->scopes.len - 1, 0, true, false)?;
-            sprint(this->ins()?, "  ret {this->llty(rt)?} {rv}\n")?;
+            this->ret_val(Value{ .ty = rt, .v = rv })?;
             this->terminated = true;
             this->label(lok)?;
             if (v.ty.elem.k == .Void) { return Value{ .ty = this->t_void, .v = "" } };
@@ -214,7 +211,7 @@ bool can_coerce(Type* from, Type* to) {
         .Closure => return this->gen_closure(e);
         .Match => return this->gen_match_expr(e, expected);
         .Sizeof, .Alignof => {
-            const auto t = this->resolve_type_at(e.ty, e.line)?;
+            const auto t = this->sizeof_type(e)?;
             u64 n = 0;
             if (e.k == .Sizeof) { n = this->size_of(t)? } else { n = this->align_of(t)?; }
             auto rt = this->t_u64;
@@ -452,11 +449,9 @@ bool has_defaults(Type* t) {
     auto caps = List<CapInfo>::init(this->a);
     auto ctx = "null";
     if (fd.captures.len > 0) {
-        this->ntmp += 1;
-        auto nb = this->sb();
-        sprint(&nb, "%v.ctx.{this->ntmp}")?;
-        ctx = nb.slice();
-        sprint(&this->allocas, "  {ctx} = alloca [{fd.captures.len} x ptr]\n")?;
+        const auto at = this->mk_elem(.Array, this->t_ptr_u8)?;
+        at.len = fd.captures.len as u64;
+        ctx = this->alloca(at, "ctx")?;
         for (auto [i, cn] : fd.captures) {
             if (!this->has_var(cn)) { this->err(e.line); eprintln("captured variable '{cn}' is not defined{this->hint(cn, this->var_names())}"); return error.CompileFailed; }
             const auto v = this->lookup_var(cn)?;

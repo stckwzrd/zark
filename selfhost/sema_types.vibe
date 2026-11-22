@@ -293,6 +293,12 @@ bool Gen::satisfies(Type* t, str name) {
         sprint(&this->types_out, "%\"{inst.llname}\" = type {{ i32, [{inst.payload_words} x i64] }}\n")?;
         return inst;
     }
+    this->emit_struct_type(inst)?;
+    return inst;
+}
+
+!void Gen::emit_struct_type(StructInst* inst) {
+    const auto sd = inst.decl;
     auto need = sd.align > 0;
     if (!sd.packed) {
         for (auto f : inst.fields) {
@@ -327,7 +333,7 @@ bool Gen::satisfies(Type* t, str name) {
             sprint(&this->types_out, "[{total - off} x i8]")?;
         }
         this->types_out.append(" }>\n")?;
-        return inst;
+        return;
     }
     if (sd.packed) {
         sprint(&this->types_out, "%\"{inst.llname}\" = type <{{ ")?;
@@ -339,7 +345,6 @@ bool Gen::satisfies(Type* t, str name) {
         this->types_out.append(this->llty(f.ty)?)?;
     }
     if (sd.packed) { this->types_out.append(" }>\n")?; } else { this->types_out.append(" }\n")?; }
-    return inst;
 }
 
 !i64 Gen::eval_const(Expr* e) {
@@ -380,8 +385,8 @@ bool Gen::satisfies(Type* t, str name) {
                 .caret => return l ^ r;
             }
         }
-        .Sizeof => return this->size_of(this->resolve_type(e.ty, this->env)?)? as i64;
-        .Alignof => return this->align_of(this->resolve_type(e.ty, this->env)?)? as i64;
+        .Sizeof => { if (e.ty != null) { return this->size_of(this->resolve_type(e.ty, this->env)?)? as i64; } }
+        .Alignof => { if (e.ty != null) { return this->align_of(this->resolve_type(e.ty, this->env)?)? as i64; } }
     }
     this->err(e.line); eprintln("expression is not a compile-time constant");
     return error.CompileFailed;

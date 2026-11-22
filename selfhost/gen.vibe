@@ -60,7 +60,10 @@ struct FnInst {
     bool generated;
     bool is_closure;
     List<CapInfo> caps;
+    bool busy;
 }
+
+struct AsyncFn { Type* frame; Type* poll; Value cx; List<str> slots; List<str> resumes; str result; }
 
 struct Gen {
     Allocator a;
@@ -146,6 +149,8 @@ struct Gen {
     i64 pend_line;
     i64 pend_off;
     bool has_pend;
+    AsyncFn* af;
+    Expr* await_at;
 
     Type* t_i64;
     Type* t_i32;
@@ -465,6 +470,11 @@ struct Gen {
         auto b = this->sb();
         sprint(&b, "%v.{hint}.{this->ntmp}")?;
         const auto name = b.slice();
+        if (this->af != null) {
+            this->af.frame.si.fields.push(FieldInfo{ .name = name[1..], .ty = ty })?;
+            this->af.slots.push(name)?;
+            return name;
+        }
         const auto al = this->align_of(ty)?;
         if (al > this->ll_align(ty)? || al > 8) {
             if (al > 16) { this->needs_llvm = true; }
@@ -676,7 +686,15 @@ struct Gen {
             for (auto x : type_args) { sprint(&name, ".{this->mangle(x)?}")?; }
         }
         const auto key = name.slice();
-        if (this->fn_insts.has(key)) { return this->fn_insts.get(key); }
+        if (this->fn_insts.has(key)) {
+            const auto old = this->fn_insts.get(key)?;
+            if (old.busy) {
+                this->err(this->at_line);
+                eprintln("async function '{decl.name}' calls itself, so its frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame");
+                return error.CompileFailed;
+            }
+            return old;
+        }
         if (key.len > 400) {
             this->err(decl.line); eprintln("'{decl.name}' is instantiated recursively with ever larger types");
             return error.CompileFailed;
@@ -685,14 +703,11 @@ struct Gen {
         const auto saved_file = this->file;
         this->file = decl.file;
         defer this->file = saved_file;
-        if (decl.is_async) {
-            this->err(decl.line); eprintln("async is not supported here yet");
-            return error.CompileFailed;
-        }
         auto params = List<Type*>::init(this->a);
         for (auto p : decl.params) { params.push(this->resolve_type(p.ty, env)?)?; }
         auto ret = this->t_void;
         if (decl.ret != null) { ret = this->resolve_type(decl.ret, env)?; }
+        if (decl.is_async) { return this->inst_async(decl, env, key, params, ret); }
         const auto fi = this->a.create<FnInst>()?;
         *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };
         this->fn_insts.put(key, fi)?;

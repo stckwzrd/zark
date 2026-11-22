@@ -34,6 +34,7 @@ struct MatchRes { Type* ty; str slot; }
             auto val = Value{ .ty = null, .v = "" };
             if (s.e != null) {
                 this->bor_field = null;
+                this->await_at = await_of(s.e);
                 auto v = this->gen_expr(s.e, ty)?;
                 if (ty != null) { v = this->coerce(v, ty, s.line)?; }
                 val = v;
@@ -69,6 +70,7 @@ struct MatchRes { Type* ty; str slot; }
             if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
             if (s.op == .eq) {
                 this->bor_field = null;
+                if (s.e2.k == .Ident) { this->await_at = await_of(s.e); }
                 const auto v = this->coerce(this->gen_expr(s.e, addr.ty)?, addr.ty, s.line)?;
                 this->check_store_escape(s.e2, s.e, s.line)?;
                 if (plain_local) { this->check_overwrite(s.e2.name, s.line)?; }
@@ -98,6 +100,7 @@ struct MatchRes { Type* ty; str slot; }
             }
         }
         .ExprS => {
+            this->await_at = await_of(s.e);
             const auto v = this->gen_expr(s.e, null)?;
             this->check_dropped(v.ty, s.line)?;
             if (v.ty.k == .Errun) { this->err(s.line); eprintln("error union is ignored; handle it with '?' or 'catch'"); return error.CompileFailed };
@@ -553,6 +556,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     if (re != null) {
         if (rt.k == .Void) { this->err(line); eprintln("function returns void but a value was returned"); return error.CompileFailed };
         is_err = re.k == .ErrorVal;
+        this->await_at = await_of(re);
         const auto raw = this->gen_expr(re, rt)?;
         maybe_err = raw.ty.k == .Errun || raw.ty.k == .ErrVal;
         val = this->coerce(raw, rt, line)?;
@@ -574,15 +578,15 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         this->terminated = true;
         this->label(le)?;
         this->run_defers(this->scopes.len - 1, 0, true, false)?;
-        sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?;
+        this->ret_val(val)?;
         this->terminated = true;
         this->label(lo)?;
         this->run_defers(this->scopes.len - 1, 0, false, false)?;
-        sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?;
+        this->ret_val(val)?;
         this->terminated = true;
         return;
     }
     this->run_defers(this->scopes.len - 1, 0, is_err, false)?;
-    if (has_val) { sprint(this->ins()?, "  ret {this->llty(rt)?} {val.v}\n")?; } else { sprint(this->ins()?, "  ret void\n")?; }
+    if (has_val) { this->ret_val(val)?; } else { this->ret_val(Value{ .ty = this->t_void, .v = "" })?; }
     this->terminated = true;
 }
