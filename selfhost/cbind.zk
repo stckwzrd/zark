@@ -199,9 +199,11 @@ struct CType {
     str name;
     i64 tag;
     CDecl* rec;
+    bool c_unsigned;
+    bool plain;
 }
 
-enum CDK { Func, Struct, Typedef, Macro, Var, Skip }
+enum CDK { Func, Struct, Typedef, Macro, Var, Skip, Enum, Const }
 
 struct CDecl {
     CDK k;
@@ -220,10 +222,11 @@ struct CDecl {
     bool has_body;
     bool asm_label;
     bool func_like;
-    bool undef;
     str body;
     str reason;
 }
+
+struct CMac { str body; bool live; bool func_like; bool bad; CDecl* d; }
 
 struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; }
 
@@ -252,45 +255,284 @@ i64 cb_prec(str op) {
     if (op == "*" || op == "/" || op == "%") { return 10; }
     if (op == "+" || op == "-") { return 9; }
     if (op == "<<" || op == ">>") { return 8; }
+    if (op == "<" || op == ">" || op == "<=" || op == ">=") { return 7; }
+    if (op == "==" || op == "!=") { return 6; }
     if (op == "&") { return 5; }
     if (op == "^") { return 4; }
     if (op == "|") { return 3; }
+    if (op == "&&") { return 2; }
+    if (op == "||") { return 1; }
     return 0;
 }
 
-!i64 cb_binop(str op, i64 l, i64 r) {
-    if (op == "*") { return l *% r; }
-    if (op == "+") { return l +% r; }
-    if (op == "-") { return l -% r; }
-    if (op == "&") { return l & r; }
-    if (op == "^") { return l ^ r; }
-    if (op == "|") { return l | r; }
-    if (op == "/" || op == "%") {
-        if (r == 0) { return error.ParseFailed; }
-        if (r == -1) {
-            if (op == "/") { return 0 -% l; }
-            return 0;
-        }
-        if (op == "/") { return l / r; }
-        return l % r;
-    }
-    if (r < 0 || r > 63) { return error.ParseFailed; }
-    if (op == "<<") { return ((l as u64) << (r as u64)) as i64; }
-    return l >> r;
+struct CVal { i64 v; bool u; bool w; }
+
+CVal cb_cast(CVal x, i64 width, bool signed) {
+    if (width == 64) { return CVal{ .v = x.v, .u = !signed, .w = true }; }
+    auto v = x.v;
+    if (width == 32 && signed) { v = (x.v as i32) as i64; }
+    if (width == 32 && !signed) { v = x.v & 0xffffffff; }
+    if (width == 16 && signed) { v = (x.v as i16) as i64; }
+    if (width == 16 && !signed) { v = x.v & 0xffff; }
+    if (width == 8 && signed) { v = (x.v as i8) as i64; }
+    if (width == 8 && !signed) { v = x.v & 0xff; }
+    return CVal{ .v = v, .u = width == 32 && !signed };
 }
 
-!i64 cb_char(str text) {
-    if (text.len == 3) { return text[1] as i64; }
-    if (text.len != 4 || text[1] != '\\') { return error.ParseFailed; }
-    match text[2] {
-        'n' => return 10;
-        't' => return 9;
-        'r' => return 13;
-        '0' => return 0;
-        '\\' => return 92;
-        '\'' => return 39;
+CVal cb_norm(i64 v, bool u, bool w) {
+    auto width = 32;
+    if (w) { width = 64; }
+    return cb_cast(CVal{ .v = v }, width, !u);
+}
+
+CVal cb_bool(bool b) {
+    if (b) { return CVal{ .v = 1 }; }
+    return CVal{ .v = 0 };
+}
+
+bool cb_big(CVal x) { return x.u && x.w && x.v < 0; }
+
+bool cb_fits(CVal x, i64 width, bool signed) {
+    if (cb_big(x)) { return width == 64 && !signed; }
+    if (width == 64) { return signed || x.v >= 0; }
+    const auto half = (1 as i64) << (width - 1);
+    if (signed) { return x.v >= 0 - half && x.v < half; }
+    return x.v >= 0 && x.v < half * 2;
+}
+
+!CVal cb_checked(i64 v, bool u, bool w) {
+    if (!u && !w && !cb_fits(CVal{ .v = v }, 32, true)) { return error.ParseFailed; }
+    return cb_norm(v, u, w);
+}
+
+!CVal cb_shift(str op, CVal l, CVal r) {
+    auto width = 32;
+    if (l.w) { width = 64; }
+    if (cb_big(r) || r.v < 0 || r.v >= width) { return error.ParseFailed; }
+    const auto n = r.v as u64;
+    const auto x = l.v as u64;
+    if (op == ">>") {
+        if (l.u) { return CVal{ .v = (x >> n) as i64, .u = l.u, .w = l.w }; }
+        return CVal{ .v = l.v >> r.v, .w = l.w };
     }
+    if (!l.u) {
+        if (l.v < 0) { return error.ParseFailed; }
+        if (n > 0 && (x >> ((width as u64) - n)) != 0) { return error.ParseFailed; }
+    }
+    return cb_norm((x << n) as i64, l.u, l.w);
+}
+
+!CVal cb_bin(str op, CVal l, CVal r) {
+    if (op == "&&") { return cb_bool(l.v != 0 && r.v != 0); }
+    if (op == "||") { return cb_bool(l.v != 0 || r.v != 0); }
+    if (op == "<<" || op == ">>") { return cb_shift(op, l, r); }
+    const auto w = l.w || r.w;
+    auto u = l.u || r.u;
+    if (w) { u = (l.w && l.u) || (r.w && r.u); }
+    const auto a = cb_norm(l.v, u, w).v;
+    const auto b = cb_norm(r.v, u, w).v;
+    if (op == "==") { return cb_bool(a == b); }
+    if (op == "!=") { return cb_bool(a != b); }
+    if (op == "<" || op == ">" || op == "<=" || op == ">=") {
+        auto lt = a < b;
+        auto gt = a > b;
+        if (u && w) {
+            lt = (a as u64) < (b as u64);
+            gt = (a as u64) > (b as u64);
+        }
+        if (op == "<") { return cb_bool(lt); }
+        if (op == ">") { return cb_bool(gt); }
+        if (op == "<=") { return cb_bool(!gt); }
+        return cb_bool(!lt);
+    }
+    if (op == "&") { return cb_norm(a & b, u, w); }
+    if (op == "|") { return cb_norm(a | b, u, w); }
+    if (op == "^") { return cb_norm(a ^ b, u, w); }
+    const auto min = (1 as i64) << 63;
+    if (op == "/" || op == "%") {
+        if (b == 0) { return error.ParseFailed; }
+        if (u && w) {
+            if (op == "/") { return cb_norm(((a as u64) / (b as u64)) as i64, u, w); }
+            return cb_norm(((a as u64) % (b as u64)) as i64, u, w);
+        }
+        if (a == min && b == -1) { return error.ParseFailed; }
+        if (op == "/") { return cb_checked(a / b, u, w); }
+        return cb_checked(a % b, u, w);
+    }
+    auto v = a +% b;
+    if (op == "-") { v = a -% b; }
+    if (op == "*") { v = a *% b; }
+    if (op != "+" && op != "-" && op != "*") { return error.ParseFailed; }
+    if (u || !w) { return cb_checked(v, u, w); }
+    if (op == "+" && (a >= 0) == (b >= 0) && (v >= 0) != (a >= 0)) { return error.ParseFailed; }
+    if (op == "-" && (a >= 0) != (b >= 0) && (v >= 0) != (a >= 0)) { return error.ParseFailed; }
+    if (op == "*" && a != 0 && ((a == -1 && b == min) || (b == -1 && a == min) || v / a != b)) { return error.ParseFailed; }
+    return CVal{ .v = v, .w = true };
+}
+
+!CVal cb_neg(CVal x) {
+    if (x.u) { return cb_norm(0 -% x.v, x.u, x.w); }
+    if (x.w && x.v == (1 as i64) << 63) { return error.ParseFailed; }
+    return cb_checked(0 - x.v, x.u, x.w);
+}
+
+!CVal cb_next(CVal v) {
+    if (v.w) {
+        if (v.u && v.v == -1) { return error.OutOfRange; }
+        if (!v.u && v.v == 0x7fffffffffffffff) { return error.OutOfRange; }
+        return CVal{ .v = v.v +% 1, .u = v.u, .w = true };
+    }
+    const auto n = v.v + 1;
+    if (cb_fits(CVal{ .v = n }, 32, !v.u)) { return CVal{ .v = n, .u = v.u }; }
+    return CVal{ .v = n, .u = v.u, .w = true };
+}
+
+!CVal cb_lit(str text) {
+    auto s = text;
+    while (s.len > 0 && (s[s.len - 1] == 'u' || s[s.len - 1] == 'U' || s[s.len - 1] == 'l' || s[s.len - 1] == 'L')) { s = s[0..s.len - 1]; }
+    const auto sfx = text[s.len..];
+    auto ok = false;
+    for (auto q : ["", "u", "U", "l", "L", "ll", "LL", "ul", "uL", "Ul", "UL", "lu", "lU", "Lu", "LU", "ull", "uLL", "Ull", "ULL", "llu", "llU", "LLu", "LLU"]) {
+        if (sfx == q) { ok = true; }
+    }
+    if (!ok || s.len == 0 || str_find(s, "_") >= 0) { return error.ParseFailed; }
+    const auto nu = str_find(sfx, "u") >= 0 || str_find(sfx, "U") >= 0;
+    const auto nl = sfx.len > 0 && !(sfx.len == 1 && nu);
+    auto radix = 10;
+    auto digits = s;
+    if (s.len > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        radix = 16;
+        digits = s[2..];
+    } else if (s.len > 2 && s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) {
+        radix = 2;
+        digits = s[2..];
+    } else if (s[0] == '0') {
+        radix = 8;
+    }
+    const auto v = parse_int_radix(digits, radix) catch { return error.ParseFailed; };
+    const auto x = CVal{ .v = v as i64, .u = true, .w = true };
+    if (!nu && !nl && cb_fits(x, 32, true)) { return cb_cast(x, 32, true); }
+    if ((nu || radix != 10) && !nl && cb_fits(x, 32, false)) { return cb_cast(x, 32, false); }
+    if (!nu && cb_fits(x, 64, true)) { return cb_cast(x, 64, true); }
+    if (nu || radix != 10) { return x; }
     return error.ParseFailed;
+}
+
+!str cb_decode(Allocator a, str s) {
+    auto b = List<u8>::init(a);
+    auto i = 0;
+    while (i < s.len) {
+        auto c = s[i] as i64;
+        i += 1;
+        if (c == '\\') {
+            if (i >= s.len) { return error.ParseFailed; }
+            const auto e = s[i];
+            i += 1;
+            c = -1;
+            match e {
+                'n' => c = 10;
+                't' => c = 9;
+                'r' => c = 13;
+                'a' => c = 7;
+                'b' => c = 8;
+                'f' => c = 12;
+                'v' => c = 11;
+                '\\' => c = 92;
+                '\'' => c = 39;
+                '"' => c = 34;
+                '?' => c = 63;
+            }
+            if (e >= '0' && e <= '7') {
+                c = (e - '0') as i64;
+                auto k = 1;
+                while (k < 3 && i < s.len && s[i] >= '0' && s[i] <= '7') {
+                    c = c * 8 + (s[i] - '0') as i64;
+                    i += 1;
+                    k += 1;
+                }
+            } else if (e == 'x') {
+                if (i >= s.len || !is_hex(s[i])) { return error.ParseFailed; }
+                c = 0;
+                while (i < s.len && is_hex(s[i]) && c <= 255) {
+                    const auto h = s[i];
+                    auto d = (h - '0') as i64;
+                    if (h >= 'a') {
+                        d = (h - 'a') as i64 + 10;
+                    } else if (h >= 'A') {
+                        d = (h - 'A') as i64 + 10;
+                    }
+                    c = c * 16 + d;
+                    i += 1;
+                }
+            }
+            if (c < 0 || c > 255) { return error.ParseFailed; }
+        }
+        b.push(c as u8)?;
+    }
+    return b.slice();
+}
+
+!CVal cb_chr(Allocator a, str text, bool uchar) {
+    if (text.len < 3 || text[0] != '\'' || text[text.len - 1] != '\'') { return error.ParseFailed; }
+    const auto b = cb_decode(a, text[1..text.len - 1])?;
+    if (b.len != 1) { return error.ParseFailed; }
+    auto v = b[0] as i64;
+    if (!uchar && v >= 128) { v -= 256; }
+    return CVal{ .v = v };
+}
+
+!str cb_zstr(Allocator a, str bytes) {
+    auto b = List<u8>::init(a);
+    b.push('"')?;
+    for (auto c : bytes) {
+        if (c == '"' || c == '\\' || c == '{' || c == '}') {
+            b.push('\\')?;
+            b.push(c)?;
+        } else if (c == 10) {
+            sprint(&b, "\\n")?;
+        } else if (c == 9) {
+            sprint(&b, "\\t")?;
+        } else if (c == 13) {
+            sprint(&b, "\\r")?;
+        } else if (c >= 0x20 && c < 0x7f) {
+            b.push(c)?;
+        } else {
+            sprint(&b, "\\x{c:02X}")?;
+        }
+    }
+    b.push('"')?;
+    return b.slice();
+}
+
+bool cb_zfloat(str s) {
+    auto i = 0;
+    while (i < s.len && is_digit(s[i])) { i += 1; }
+    if (i == 0) { return false; }
+    if (i < s.len && s[i] == '.') {
+        i += 1;
+        const auto f = i;
+        while (i < s.len && is_digit(s[i])) { i += 1; }
+        if (i == f) { return false; }
+    }
+    if (i < s.len && (s[i] == 'e' || s[i] == 'E')) {
+        i += 1;
+        if (i < s.len && (s[i] == '+' || s[i] == '-')) { i += 1; }
+        const auto f = i;
+        while (i < s.len && is_digit(s[i])) { i += 1; }
+        if (i == f) { return false; }
+    }
+    return i == s.len && (str_find(s, ".") >= 0 || str_find(s, "e") >= 0 || str_find(s, "E") >= 0);
+}
+
+!str cb_num(Allocator a, CVal v) {
+    auto b = List<u8>::init(a);
+    if (cb_big(v)) { sprint(&b, "{v.v as u64}")?; } else { sprint(&b, "{v.v}")?; }
+    return b.slice();
+}
+
+bool cb_has(List<str>* l, str s) {
+    for (auto x : l.slice()) { if (x == s) { return true; } }
+    return false;
 }
 
 !i64 cb_int(str text) {
@@ -322,9 +564,12 @@ struct CParser {
     List<CDecl*> decls;
     bool attr_layout;
     str attr_why;
+    str attr_bad;
     bool asm_label;
-    Map<str> bad_enums;
-    Map<i64> enums;
+    bool uchar;
+    Map<CType*> enum_tys;
+    Map<CVal> enums;
+    Map<CMac*> macs;
 
     CTok peek() { return this->toks[this->pos]; }
     CTok peek_at(i64 n) { return this->toks[min(this->pos + n, this->toks.len - 1)]; }
@@ -404,6 +649,7 @@ struct CParser {
                 if (t == "_Alignas" || t == "alignas") {
                     this->attr_layout = true;
                     this->attr_why = "aligned attribute";
+                    this->attr_bad = this->attr_why;
                 }
                 if (t == "__asm__" || t == "__asm" || t == "asm") { this->asm_label = true; }
                 for (auto k : from..this->pos) {
@@ -413,6 +659,7 @@ struct CParser {
                     if (w == "aligned" || w == "__aligned__") { this->attr_why = "aligned attribute"; }
                     if (w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type") { this->attr_why = "vector_size attribute"; }
                     if (w == "mode" || w == "__mode__") { this->attr_why = "mode attribute"; }
+                    if (w == "aligned" || w == "__aligned__" || w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type" || w == "mode" || w == "__mode__") { this->attr_bad = this->attr_why; }
                 }
                 continue;
             }
@@ -513,6 +760,7 @@ struct CParser {
             }
         } else if (base == "char") {
             s.ty = this->int_ty(8, nsigned > 0)?;
+            s.ty.plain = nsigned + nunsigned == 0;
         } else if (nshort > 0) {
             s.ty = this->int_ty(16, nunsigned == 0)?;
         } else if (nlong > 0) {
@@ -606,17 +854,27 @@ struct CParser {
         this->expect(";")?;
     }
 
-    !void enum_values() {
+    !void enum_values(CType* fixed, List<str>* names, List<CVal>* vals) {
         _ = this->next();
-        i64 v = 0;
+        auto v = CVal{ .v = 0 };
         while (!this->eat("}")) {
             const auto t = this->next();
             if (t.k != .Ident) { return error.ParseFailed; }
             this->skip_noise();
-            if (this->eat("=")) { v = this->cexpr(1)?; }
+            names.push(t.text)?;
+            if (this->eat("=")) {
+                v = this->eval_const()?;
+            } else if (names.len > 1) {
+                v = cb_next(v)?;
+            }
+            if (fixed != null) {
+                if (!cb_fits(v, fixed.width, fixed.signed)) { return error.OutOfRange; }
+                v = cb_cast(v, fixed.width, fixed.signed);
+            } else if (cb_fits(v, 32, true)) {
+                v = cb_cast(v, 32, true);
+            }
+            vals.push(v)?;
             this->enums.put(t.text, v)?;
-            if (v < -2147483648 || v > 2147483647) { return error.OutOfRange; }
-            v += 1;
             if (!this->eat(",")) {
                 this->expect("}")?;
                 return;
@@ -624,24 +882,68 @@ struct CParser {
         }
     }
 
+    !CType* enum_type(List<CVal> vals, bool packed) {
+        auto neg = false;
+        auto big = false;
+        auto int_ok = true;
+        auto u32_ok = true;
+        for (auto v : vals.slice()) {
+            if (!v.u && v.v < 0) { neg = true; }
+            if (cb_big(v)) { big = true; }
+            if (!cb_fits(v, 32, true)) { int_ok = false; }
+            if (!cb_fits(v, 32, false)) { u32_ok = false; }
+        }
+        if (neg && big) { return this->bad("enum value range"); }
+        if (packed) {
+            for (auto w : [8, 16, 32, 64]) {
+                auto ok = true;
+                for (auto v : vals.slice()) { if (!cb_fits(v, w, neg)) { ok = false; } }
+                if (ok) { return this->int_ty(w, neg); }
+            }
+        }
+        if (int_ok) {
+            const auto t = this->int_ty(32, true)?;
+            t.c_unsigned = !neg;
+            return t;
+        }
+        if (u32_ok) { return this->int_ty(32, false); }
+        if (!big) {
+            const auto t = this->int_ty(64, true)?;
+            t.c_unsigned = !neg;
+            return t;
+        }
+        return this->int_ty(64, false);
+    }
+
     !CType* enum_spec() {
         const auto saved = this->attr_layout;
         const auto saved_why = this->attr_why;
+        const auto saved_bad = this->attr_bad;
         defer this->attr_layout = saved;
         defer this->attr_why = saved_why;
+        defer this->attr_bad = saved_bad;
         this->attr_layout = false;
+        this->attr_bad = "";
+        const auto rel = this->peek().rel;
         this->skip_noise();
         auto tag = "";
         if (this->peek().k == .Ident) { tag = this->next().text; }
         this->skip_noise();
         auto why = "";
+        CType* fixed = null;
         if (this->eat(":")) {
-            _ = this->specs()?;
-            why = "enum with fixed underlying type";
+            fixed = this->resolve(this->specs()?.ty);
+            if (fixed.k != .Int) {
+                why = "enum with fixed underlying type";
+                fixed = null;
+            }
         }
-        if (this->at("{{")) {
+        auto names = List<str>::init(this->a);
+        auto vals = List<CVal>::init(this->a);
+        const auto body = this->at("{{");
+        if (body) {
             const auto from = this->pos;
-            this->enum_values() catch |e| {
+            this->enum_values(fixed, &names, &vals) catch |e| {
                 if (e != error.ParseFailed && e != error.OutOfRange) { return e; }
                 if (why.len == 0 && e == error.OutOfRange) { why = "enum value range"; }
                 if (why.len == 0) { why = "enum value not evaluated"; }
@@ -650,16 +952,47 @@ struct CParser {
             };
         }
         this->skip_noise();
-        if (this->attr_layout) { why = "packed enum"; }
-        if (tag.len > 0) {
-            if (why.len > 0) { this->bad_enums.put(tag, why)?; }
-            why = this->bad_enums.get_or(tag, "");
+        if (why.len == 0 && this->attr_bad.len > 0) { why = this->attr_bad; }
+        CType* t = null;
+        if (why.len > 0) {
+            t = this->bad(why)?;
+        } else if (fixed != null) {
+            t = fixed;
+        } else if (body) {
+            t = this->enum_type(vals, this->attr_layout)?;
+        } else {
+            if (tag.len > 0 && this->enum_tys.has(tag)) { return this->enum_tys.get(tag); }
+            return this->bad("incomplete enum");
         }
-        if (why.len > 0) { return this->bad(why); }
-        if (tag.len == 0) { return this->int_ty(32, true); }
-        const auto t = this->mk(.Named)?;
-        t.name = tag;
-        t.tag = 3;
+        if (tag.len > 0) { this->enum_tys.put(tag, t)?; }
+        if (!body) { return t; }
+        if (t.k == .Bad) {
+            for (auto n : names.slice()) { _ = this->enums.remove(n); }
+            if (tag.len > 0) {
+                const auto d = this->decl(.Enum, tag, rel)?;
+                d.ty = t;
+                this->decls.push(d)?;
+            } else {
+                const auto d = this->decl(.Skip, names.last() catch "?", rel)?;
+                d.reason = t.name;
+                this->decls.push(d)?;
+            }
+            return t;
+        }
+        if (tag.len > 0) {
+            const auto d = this->decl(.Enum, tag, rel)?;
+            d.ty = t;
+            this->decls.push(d)?;
+        }
+        for (auto [i, n] : names.slice()) {
+            auto v = vals.get(i);
+            if (fixed == null && !cb_fits(v, 32, true)) { v = cb_cast(v, t.width, t.signed && !t.c_unsigned); }
+            this->enums.put(n, v)?;
+            const auto d = this->decl(.Const, n, rel)?;
+            d.body = cb_num(this->a, v)?;
+            if (cb_big(v)) { d.ty = this->int_ty(64, false)?; }
+            this->decls.push(d)?;
+        }
         return t;
     }
 
@@ -710,7 +1043,7 @@ struct CParser {
                 _ = this->next();
             } else {
                 const auto start = this->pos;
-                n = this->cexpr(1) catch -2;
+                n = (this->eval_const() catch CVal{ .v = -2 }).v;
                 if (n < 0 || !this->at("]")) {
                     n = -2;
                     this->pos = start - 1;
@@ -762,30 +1095,84 @@ struct CParser {
         return f;
     }
 
-    !i64 cexpr(i64 lo) {
+    !CVal eval_const() {
+        const auto c = this->cbin(1)?;
+        if (!this->eat("?")) { return c; }
+        const auto x = this->eval_const()?;
+        this->expect(":")?;
+        const auto y = this->eval_const()?;
+        const auto w = x.w || y.w;
+        auto u = x.u || y.u;
+        if (w) { u = (x.w && x.u) || (y.w && y.u); }
+        if (c.v != 0) { return cb_norm(x.v, u, w); }
+        return cb_norm(y.v, u, w);
+    }
+
+    !CVal cbin(i64 lo) {
         auto l = this->cunary()?;
         while (true) {
             const auto op = this->peek().text;
             const auto p = cb_prec(op);
             if (p == 0 || p < lo) { return l; }
             _ = this->next();
-            const auto r = this->cexpr(p + 1)?;
-            l = cb_binop(op, l, r)?;
+            const auto r = this->cbin(p + 1)?;
+            l = cb_bin(op, l, r)?;
         }
     }
 
-    !i64 cunary() {
+    bool at_type() {
+        const auto t = this->peek();
+        if (t.k != .Ident || t.text == "struct" || t.text == "union") { return false; }
+        return this->typedefs.has(t.text) || cb_is_spec_word(t.text);
+    }
+
+    !CType* type_name() {
+        const auto s = this->specs()?;
+        if (s.is_typedef || s.is_extern || s.is_static || s.is_inline) { return error.ParseFailed; }
+        const auto f = this->declarator(s.ty)?;
+        if (f.name.len > 0) { return error.ParseFailed; }
+        this->expect(")")?;
+        return this->resolve(f.ty);
+    }
+
+    !CVal cunary() {
         const auto t = this->next();
+        if (t.text == "(" && this->at_type()) {
+            const auto ty = this->type_name()?;
+            const auto x = this->cunary()?;
+            if (ty.k == .Bool) { return cb_bool(x.v != 0); }
+            if (ty.k != .Int) { return error.ParseFailed; }
+            if (ty.plain) { return cb_cast(x, 8, !this->uchar); }
+            return cb_cast(x, ty.width, ty.signed && !ty.c_unsigned);
+        }
         if (t.text == "(") {
-            const auto v = this->cexpr(1)?;
+            const auto v = this->eval_const()?;
             this->expect(")")?;
             return v;
         }
-        if (t.text == "-") { return 0 -% this->cunary()?; }
+        if (t.text == "sizeof") {
+            this->expect("(")?;
+            if (!this->at_type()) { return error.ParseFailed; }
+            const auto ty = this->type_name()?;
+            auto n = 0;
+            if (ty.k == .Int || ty.k == .Float) { n = ty.width / 8; }
+            if (ty.k == .Bool) { n = 1; }
+            if (ty.k == .Ptr) { n = 8; }
+            if (n == 0) { return error.ParseFailed; }
+            return CVal{ .v = n, .u = true, .w = true };
+        }
+        if (t.text == "-") { return cb_neg(this->cunary()?); }
         if (t.text == "+") { return this->cunary(); }
-        if (t.text == "~") { return ~this->cunary()?; }
-        if (t.k == .Num) { return cb_int(t.text); }
-        if (t.k == .Chr) { return cb_char(t.text); }
+        if (t.text == "~") {
+            const auto x = this->cunary()?;
+            return cb_norm(~x.v, x.u, x.w);
+        }
+        if (t.text == "!") {
+            const auto x = this->cunary()?;
+            return cb_bool(x.v == 0);
+        }
+        if (t.k == .Num) { return cb_lit(t.text); }
+        if (t.k == .Chr) { return cb_chr(this->a, t.text, this->uchar); }
         if (t.k == .Ident && this->enums.has(t.text)) { return this->enums.get(t.text); }
         return error.ParseFailed;
     }
@@ -894,12 +1281,130 @@ struct CParser {
     !void flush(i64 upto) {
         while (this->di < this->defs.len && this->defs.get(this->di).at <= upto) {
             const auto m = this->defs.get(this->di);
+            this->di += 1;
+            const auto x = this->macs.get_or(m.name, null);
+            if (m.undef) {
+                if (x != null && x.live) {
+                    x.live = false;
+                    if (m.rel) { x.d.rel = false; } else { x.d.reason = "undefined in system header"; }
+                }
+                continue;
+            }
+            if (x != null && x.live) {
+                if (x.body != m.body || x.func_like != m.func_like) {
+                    x.bad = true;
+                    x.d.reason = "redefined";
+                    if (m.rel) { x.d.rel = true; }
+                }
+                continue;
+            }
+            if (x != null) { x.d.rel = false; }
             const auto d = this->decl(.Macro, m.name, m.rel)?;
             d.func_like = m.func_like;
-            d.undef = m.undef;
             d.body = m.body;
             this->decls.push(d)?;
-            this->di += 1;
+            const auto y = this->a.create<CMac>()?;
+            y.body = m.body;
+            y.live = true;
+            y.func_like = m.func_like;
+            y.d = d;
+            this->macs.put(m.name, y)?;
+        }
+    }
+
+    !void expand(str body, List<str>* hide, List<CTok>* out) {
+        if (body.len > 0 && body[0] == '#') { return error.ParseFailed; }
+        auto lx = CLexer{ .a = this->a, .src = body, .packs = List<i64>::init(this->a), .seen = Map<bool>::init(this->a), .out = CLex{ .toks = List<CTok>::init(this->a), .defs = List<CDef>::init(this->a), .deps = List<str>::init(this->a) } };
+        lx.run()?;
+        for (auto t : lx.out.toks.slice()) {
+            if (t.k == .Eof) { break; }
+            if (out.len > 10000) { return error.ParseFailed; }
+            const auto m = this->macs.get_or(t.text, null);
+            if (t.k == .Ident && m != null && m.live && !cb_has(hide, t.text)) {
+                if (m.bad) { return error.ParseFailed; }
+                if (!m.func_like) {
+                    hide.push(t.text)?;
+                    this->expand(m.body, hide, out)?;
+                    hide.len -= 1;
+                    continue;
+                }
+            }
+            out.push(t)?;
+        }
+    }
+
+    !void macro_value(CDecl* d) {
+        d.reason = "not a constant";
+        auto hide = List<str>::init(this->a);
+        hide.push(d.name)?;
+        auto ts = List<CTok>::init(this->a);
+        this->expand(d.body, &hide, &ts) catch |e| {
+            if (e != error.ParseFailed) { return e; }
+            return;
+        };
+        if (ts.len == 0) {
+            d.reason = "empty macro";
+            return;
+        }
+        auto strs = true;
+        for (auto t : ts.slice()) { if (t.k != .Str) { strs = false; } }
+        if (strs) {
+            auto b = List<u8>::init(this->a);
+            for (auto t : ts.slice()) {
+                const auto x = cb_decode(this->a, t.text[1..t.text.len - 1]) catch |e| {
+                    if (e != error.ParseFailed) { return e; }
+                    return;
+                };
+                sprint(&b, "{x}")?;
+            }
+            d.body = cb_zstr(this->a, b.slice())?;
+            d.reason = "";
+            return;
+        }
+        auto i = 0;
+        auto j = ts.len;
+        while (j - i >= 2 && ts.get(i).text == "(" && ts.get(j - 1).text == ")") {
+            i += 1;
+            j -= 1;
+        }
+        auto sign = "";
+        if (j - i == 2 && ts.get(i).text == "-") {
+            sign = "-";
+            i += 1;
+        }
+        const auto f = ts.get(i).text;
+        if (j - i == 1 && ts.get(i).k == .Num && cb_zfloat(f)) {
+            auto b = List<u8>::init(this->a);
+            sprint(&b, "{sign}{f}")?;
+            d.body = b.slice();
+            d.reason = "";
+            return;
+        }
+        ts.push(CTok{ .k = .Eof, .text = "" })?;
+        const auto toks = this->toks;
+        const auto pos = this->pos;
+        defer this->toks = toks;
+        defer this->pos = pos;
+        this->toks = ts.slice();
+        this->pos = 0;
+        const auto v = this->eval_const() catch |e| {
+            if (e != error.ParseFailed && e != error.OutOfRange) { return e; }
+            return;
+        };
+        if (!this->at_eof()) { return; }
+        d.body = cb_num(this->a, v)?;
+        if (cb_big(v)) { d.ty = this->int_ty(64, false)?; }
+        d.reason = "";
+    }
+
+    !void macros() {
+        for (auto d : this->decls.slice()) {
+            if (d.k != .Macro || !d.rel || d.reason.len > 0) { continue; }
+            if (d.func_like) {
+                d.reason = "function-like macro";
+            } else {
+                this->macro_value(d)?;
+            }
         }
     }
 
@@ -927,6 +1432,7 @@ struct CParser {
             };
         }
         this->flush(this->toks.len)?;
+        this->macros()?;
     }
 }
 
@@ -964,6 +1470,7 @@ struct CEmit {
     Map<bool> defined;
     Map<CType*> typedefs;
     Map<CDecl*> records;
+    Map<str> consts;
     str why;
     str cur;
 
@@ -1033,7 +1540,6 @@ struct CEmit {
             .Array => { return this->align(t.elem); }
             .Named => {
                 if (t.rec != null) { return this->rec_align(t.rec); }
-                if (t.tag == 3) { return 4; }
                 if (t.tag == 0) {
                     const auto x = this->typedefs.get_or(t.name, null);
                     if (x != null) { return this->align(x); }
@@ -1125,10 +1631,6 @@ struct CEmit {
             if (t.rec.name.len == 0) { this->fail("anonymous record"); }
             if (this->bad.has(t.rec.name) && t.rec.name != this->cur) { this->uses(t.rec.name)?; }
             this->esc(b, t.rec.name)?;
-            return;
-        }
-        if (t.tag == 3) {
-            sprint(b, "i32")?;
             return;
         }
         if (t.tag != 0) {
@@ -1252,12 +1754,30 @@ struct CEmit {
         _ = this->line(d.name, 1, b.slice())?;
     }
 
+    !void konst(CDecl* d) {
+        if (d.reason.len > 0) { return this->warn(d.name, d.reason); }
+        const auto prev = this->consts.get_or(d.name, "");
+        if (prev.len > 0 && prev != d.body) { this->bad.put(d.name, true)?; }
+        if (this->bad.has(d.name)) { return this->warn(d.name, "name clash"); }
+        this->consts.put(d.name, d.body)?;
+        if (!this->claim(d.name, 4)?) { return; }
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "const ")?;
+        if (d.ty == null) { sprint(&b, "auto")?; } else { this->ty(&b, d.ty)?; }
+        sprint(&b, " ")?;
+        this->esc(&b, d.name)?;
+        sprint(&b, " = {d.body};")?;
+        _ = this->line(d.name, 4, b.slice())?;
+    }
+
     !void decl(CDecl* d) {
         if (!d.rel) { return; }
         this->why = "";
         match d.k {
-            .Macro => {
-                if (d.func_like) { this->warn(d.name, "function-like macro")?; }
+            .Macro, .Const => { this->konst(d)?; }
+            .Enum => {
+                const auto x = this->typedefs.get_or(d.name, null);
+                if (x != null && x != d.ty) { this->warn(d.name, "name clash")?; } else { this->typedef_out(d)?; }
             }
             .Var => {
                 if (d.is_extern) { this->warn(d.name, "extern variable")?; } else { this->warn(d.name, "variable")?; }
@@ -1319,9 +1839,10 @@ struct CBind {
     }
     auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a) } };
     lx.run()?;
-    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .bad_enums = Map<str>::init(a), .enums = Map<i64>::init(a), .decls = List<CDecl*>::init(a) };
+    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
     p.parse_all()?;
-    auto e = CEmit{ .a = a, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a) };
+    auto e = CEmit{ .a = a, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a) };
     e.run(p.decls)?;
     return CBind{ .zk = e.out.slice(), .inline_c = "", .deps = lx.out.deps, .warnings = e.warnings };
 }
