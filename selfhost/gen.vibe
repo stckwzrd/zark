@@ -151,6 +151,7 @@ struct Gen {
     bool has_pend;
     AsyncFn* af;
     Expr* await_at;
+    bool in_defer;
 
     Type* t_i64;
     Type* t_i32;
@@ -625,9 +626,12 @@ struct Gen {
                 j -= 1;
                 const auto d = this->scopes.items[i].defers.get(j);
                 if (d.is_err && !is_err) { continue; }
+                const auto was = this->in_defer;
+                this->in_defer = true;
                 this->push_scope()?;
                 this->gen_stmt(d.stmt)?;
                 this->pop_scope()?;
+                this->in_defer = was;
             }
         }
         this->check_owned(hi, lo)?;

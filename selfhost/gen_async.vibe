@@ -134,6 +134,7 @@ Expr* await_of(Expr* e) {
         this->in_cast = s.in_cast;
         this->af = s.af;
         this->await_at = s.await_at;
+        this->in_defer = s.in_defer;
         fi.busy = false;
     }
     const auto decl = fi.decl;
@@ -162,6 +163,7 @@ Expr* await_of(Expr* e) {
     this->bor_field = null;
     this->in_cast = false;
     this->await_at = null;
+    this->in_defer = false;
     const auto af = this->a.create<AsyncFn>()?;
     *af = AsyncFn{ .frame = ft, .poll = pi.ret, .cx = Value{ .ty = pi.params.get(1), .v = "%a.1" }, .slots = List<str>::init(this->a), .resumes = List<str>::init(this->a) };
     this->af = af;
@@ -237,6 +239,10 @@ Expr* await_of(Expr* e) {
 !Value Gen::gen_await(Expr* e) {
     if (this->af == null) {
         this->err(e.line); eprintln("'await' can only be used directly inside an async function (not in a plain function or a closure)");
+        return error.CompileFailed;
+    }
+    if (this->in_defer) {
+        this->err(e.line); eprintln("'await' is not allowed in deferred code (defer/errdefer)");
         return error.CompileFailed;
     }
     if (e != this->await_at) {
