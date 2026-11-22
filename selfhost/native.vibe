@@ -4,6 +4,9 @@
 // aggregates are passed by pointer and returned through a hidden sret pointer.
 
 import "x64.vibe";
+import "std/thread" as thread;
+
+extern i64 vrt_sysconf(i32 name);
 
 enum LK { I, F32, F64, P, V, S, A }
 
@@ -287,7 +290,39 @@ struct Native {
     }
 
     // ------------------------------------------------------------------ module
+    !Native* fork(Allocator wa) {
+        const auto n = wa.create<Native>()?;
+        n.a = wa;
+        n.debug = this->debug;
+        n.named = this->named;
+        n.t_i1 = this->t_i1;
+        n.t_i8 = this->t_i8;
+        n.t_i32 = this->t_i32;
+        n.t_i64 = this->t_i64;
+        n.t_ptr = this->t_ptr;
+        n.t_void = this->t_void;
+        n.t_f32 = this->t_f32;
+        n.t_f64 = this->t_f64;
+        n.byn = List<i64>::init(wa);
+        n.ivreg = List<i64>::init(wa);
+        return n;
+    }
+
+    !void compile_all(FnDef[] defs) {
+        if (defs.len == 0) { return; }
+        auto pool = Pool{ .proto = this, .defs = defs, .objs = List<ObjFile>::init(this->a) };
+        for (auto _k : 0..defs.len) { pool.objs.push(ObjFile{})?; }
+        auto k = max(min(vrt_sysconf(84), 8), 1);
+        const auto e = env("VIBE_JOBS") catch "";
+        if (e.len > 0) { k = max((parse_int(e) catch 1) as i64, 1); }
+        k = min(k, defs.len);
+        thread::parallel_for(k, k, [&pool](i64 w) -> void { native_worker(&pool); })?;
+        if (pool.errors.load() > 0) { return error.CompileFailed; }
+        for (auto i : 0..defs.len) { this->obj.absorb(&pool.objs.items[i])?; }
+    }
+
     !void compile_module(str ir) {
+        auto defs = List<FnDef>::init(this->a);
         auto lines = List<str>::init(this->a);
         auto st = 0;
         for (auto [i, ch] : ir) {
@@ -319,11 +354,12 @@ struct Native {
             } else if (str_starts_with(ln, "define ")) {
                 auto j = i + 1;
                 while (j < lines.len && lines.get(j) != "}") { j += 1; }
-                this->function(ln, lines.slice()[i + 1..j])?;
+                defs.push(FnDef{ .hdr = ln, .body = lines.slice()[i + 1..j] })?;
                 i = j;
             }
             i += 1;
         }
+        this->compile_all(defs.slice())?;
     }
 
     !void global(str ln) {
@@ -1967,6 +2003,30 @@ struct Native {
             }
             this->store_res(ins, RAX)?;
         }
+    }
+}
+
+struct FnDef { str hdr; str[] body; }
+
+struct Pool {
+    Native* proto;
+    FnDef[] defs;
+    List<ObjFile> objs;
+    thread::AtomicI64 next;
+    thread::AtomicI64 errors;
+}
+
+void native_worker(Pool* p) {
+    const auto wa = c_allocator().create<Arena>() catch { p.errors.add(1); return; };
+    *wa = Arena::init(c_allocator());
+    const auto alloc = wa.allocator();
+    const auto n = p.proto.fork(alloc) catch { p.errors.add(1); return; };
+    while (true) {
+        const auto i = p.next.add(1);
+        if (i >= p.defs.len) { break; }
+        n.obj = new_obj(alloc);
+        n.function(p.defs[i].hdr, p.defs[i].body) catch { p.errors.add(1); return; };
+        p.objs.items[i] = n.obj;
     }
 }
 
