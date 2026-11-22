@@ -1,7 +1,7 @@
 import "sema_iface.vibe";
 
 struct Join { List<MoveRec> s0; List<MoveRec> acc; bool any; List<List<MoveRec>> arms; }
-struct Origin { i64 kind; str name; str cptr; }
+struct Origin { i64 kind; str name; str cptr; str by; }
 
 !void Gen::add_rec(MoveRec r) {
     if (this->moved.len >= 512) {
@@ -180,6 +180,16 @@ str Gen::place_name(Expr* e) {
     }
 }
 
+!void Gen::invalidate_borrows(str by, i64 line) {
+    auto add = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) {
+        if (r.kind == 2 && r.by.len > 0) { add.push(MoveRec{ .ptr = r.ptr, .by = by, .line = line, .kind = 3, .cname = r.cname })?; }
+    }
+    for (auto r : add) {
+        if (this->move_find(r.ptr) < 0) { this->add_rec(r)?; }
+    }
+}
+
 !void Gen::move_mark(Expr* x, str by, i64 line) {
     if (x.k != .Ident) { return; }
     const auto p = this->local_ptr(x.name);
@@ -210,7 +220,7 @@ str Gen::place_name(Expr* e) {
         return none;
     }
     if (e.k == .Call && e.l.k == .Field && this->bor_field == e.l && this->bor_ptr.len > 0) {
-        return Origin{ .kind = 2, .name = this->bor_name, .cptr = this->bor_ptr };
+        return Origin{ .kind = 2, .name = this->bor_name, .cptr = this->bor_ptr, .by = e.l.name };
     }
     auto base = e;
     auto indirect_ok = false;
@@ -250,7 +260,7 @@ str Gen::place_name(Expr* e) {
     }
     const auto o = this->origin_of(init)?;
     if (o.kind == 1) { this->add_rec(MoveRec{ .ptr = slot, .by = o.name, .line = line, .kind = 1 })?; }
-    if (o.kind == 2) { this->add_rec(MoveRec{ .ptr = slot, .by = "", .line = line, .kind = 2, .cont = o.cptr, .cname = o.name })?; }
+    if (o.kind == 2) { this->add_rec(MoveRec{ .ptr = slot, .by = o.by, .line = line, .kind = 2, .cont = o.cptr, .cname = o.name })?; }
 }
 
 str Gen::escaped_local(Expr* e) {
@@ -372,7 +382,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
 !str Gen::iter_borrow(Expr* seq, bool via_slice) {
     if (seq.k == .Call && this->bor_field != null && seq.l == this->bor_field && this->bor_ptr.len > 0) {
         const auto hp = this->tmp()?;
-        this->add_rec(MoveRec{ .ptr = hp, .line = seq.line, .kind = 2, .cont = this->bor_ptr, .cname = this->bor_name })?;
+        this->add_rec(MoveRec{ .ptr = hp, .by = seq.l.name, .line = seq.line, .kind = 2, .cont = this->bor_ptr, .cname = this->bor_name })?;
         return hp;
     }
     if (seq.k == .Ident) {
@@ -383,7 +393,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
         const auto k = this->place_key(seq)?;
         if (k.len > 0) {
             const auto hp = this->tmp()?;
-            this->add_rec(MoveRec{ .ptr = hp, .line = seq.line, .kind = 2, .cont = k, .cname = this->place_name(seq) })?;
+            this->add_rec(MoveRec{ .ptr = hp, .by = "slice", .line = seq.line, .kind = 2, .cont = k, .cname = this->place_name(seq) })?;
             return hp;
         }
     }

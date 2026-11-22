@@ -258,6 +258,8 @@ void Gen::set_await(Expr* e) {
     }
     this->await_at = null;
     const auto fv = this->gen_expr(e.l, null)?;
+    this->move_mark(e.l, "await", e.line)?;
+    this->invalidate_borrows("await", e.line)?;
     auto kb = this->sb();
     if (fv.ty.k == .Strct) { sprint(&kb, "{fv.ty.si.decl.name}.poll")?; }
     if (fv.ty.k != .Strct || !this->methods.has(kb.slice())) {

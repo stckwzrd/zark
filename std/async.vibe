@@ -128,7 +128,7 @@ owned struct Executor {
         vrt_poller_free(this->poller);
     }
 
-    template<F, T> !JoinHandle<T> spawn(F fut) {
+    template<F, T> !JoinHandle<T> spawn(move F fut) {
         const auto n = this->tasks.len + 1;
         this->tasks.reserve(n)?;
         this->queue.reserve(n)?;
