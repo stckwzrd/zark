@@ -1,5 +1,26 @@
 #define _GNU_SOURCE
+#ifdef VRT_FREESTANDING
+long vrt_syscall(long nr, long a, long b, long c, long d, long e, long f)
+{
+#if defined(__x86_64__)
+    long r;
+    register long r10 __asm__("r10") = d;
+    register long r8 __asm__("r8") = e;
+    register long r9 __asm__("r9") = f;
+    __asm__ volatile("syscall" : "=a"(r) : "a"(nr), "D"(a), "S"(b), "d"(c), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+    return r;
+#else
+    return -38;
+#endif
+}
+
+void vrt_breakpoint(void)
+{
+    __builtin_debugtrap();
+}
+#else
 #include <errno.h>
+#include <limits.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -83,6 +104,9 @@ int vrt_native(void)
 
 static int open_flags(long f)
 {
+#if defined(__linux__) && defined(__x86_64__)
+    return (int)f;
+#endif
     int o = (int)(f & 3);
     if (f & 0100) o |= O_CREAT;
     if (f & 0200) o |= O_EXCL;
@@ -123,11 +147,15 @@ long vrt_syscall(long nr, long a, long b, long c, long d, long e, long f)
     case 17: return err(pread((int)a, (void *)b, (size_t)c, (off_t)d));
     case 18: return err(pwrite((int)a, (void *)b, (size_t)c, (off_t)d));
     case 9: {
+#if defined(__linux__) && defined(__x86_64__)
+        int fl = (int)d;
+#else
         int fl = 0;
         if (d & 1) fl |= MAP_SHARED;
         if (d & 2) fl |= MAP_PRIVATE;
         if (d & 0x10) fl |= MAP_FIXED;
         if (d & 0x20) fl |= MAP_ANON;
+#endif
         void *p = mmap((void *)a, (size_t)b, (int)c, fl, (int)e, (off_t)f);
         return p == MAP_FAILED ? err(-1) : (long)p;
     }
@@ -164,17 +192,20 @@ int vrt_clock_gettime(int id, vtimespec *ts)
 
 long vrt_sysconf(int name)
 {
-    return sysconf(name == 84 ? _SC_NPROCESSORS_ONLN : name);
+    return sysconf(name == 84 ? _SC_NPROCESSORS_ONLN : name == 30 ? _SC_PAGESIZE : name);
 }
 
 long vrt_exe_path(char *buf, unsigned long n)
 {
 #if defined(__APPLE__)
-    char tmp[4096];
+    char tmp[4096], rp[PATH_MAX];
     uint32_t size = sizeof tmp;
     if (_NSGetExecutablePath(tmp, &size) != 0) return -1;
-    if (!realpath(tmp, buf)) return -1;
-    return (long)strlen(buf);
+    if (!realpath(tmp, rp)) return -1;
+    unsigned long l = strlen(rp);
+    if (l >= n) return -1;
+    memcpy(buf, rp, l + 1);
+    return (long)l;
 #else
     return readlink("/proc/self/exe", buf, n);
 #endif
@@ -309,6 +340,18 @@ static void lazy(_Atomic int *s, void (*init)(void *), void *x)
 static void mutex_init(void *x) { pthread_mutex_init(&((vmutex *)x)->m, 0); }
 static void cond_init(void *x) { pthread_cond_init(&((vcond *)x)->c, 0); }
 
+int vrt_thread_create(unsigned long *t, void *(*start)(void *), void *arg)
+{
+    pthread_attr_t at;
+    pthread_t id;
+    pthread_attr_init(&at);
+    pthread_attr_setstacksize(&at, 8u << 20);
+    int r = pthread_create(&id, &at, start, arg);
+    pthread_attr_destroy(&at);
+    *t = (unsigned long)id;
+    return r;
+}
+
 int vrt_mutex_lock(vmutex *m)
 {
     lazy(&m->state, mutex_init, m);
@@ -416,3 +459,4 @@ void vrt_crash_install(report_fn fn)
     int sigs[] = { SIGSEGV, SIGBUS, SIGFPE, SIGILL };
     for (int i = 0; i < 4; i++) sigaction(sigs[i], &sa, 0);
 }
+#endif
