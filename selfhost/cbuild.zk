@@ -103,23 +103,49 @@ struct CJob {
     str err;
 }
 
+bool drop(str path) {
+    fs::remove_file(path) catch |e| {
+        if (e == error.NotFound) { return true; }
+        eprintln("error: cannot remove {path}: {e}");
+        return false;
+    };
+    return true;
+}
+
 void run_job(CJob* j) {
-    const auto r = os::exec(c_allocator(), j.argv.slice()) catch {
+    const auto r = os::exec(c_allocator(), j.argv.slice()) catch |e| {
+        eprintln("error: cannot run the C compiler: {e}");
         j.code = 127;
-        j.err = "error: cannot run the C compiler\n";
         return;
     };
     j.code = r.code;
     j.out = r.out;
     j.err = r.err;
     if (r.code != 0) {
-        fs::remove_file(j.tmp) catch {};
-        fs::remove_file(j.dtmp) catch {};
+        drop(j.tmp);
+        drop(j.dtmp);
         return;
     }
     const auto dfile = str_concat(c_allocator(), [j.obj, ".d"]) catch { j.code = 1; return; };
-    fs::move(j.dtmp, dfile) catch { j.code = 1; return; };
-    fs::move(j.tmp, j.obj) catch { j.code = 1; };
+    const auto stamp = str_concat(c_allocator(), [j.obj, ".stamp"]) catch { j.code = 1; return; };
+    if (!drop(stamp)) {
+        j.code = 1;
+        drop(j.tmp);
+        drop(j.dtmp);
+        return;
+    }
+    fs::move(j.dtmp, dfile) catch |e| {
+        eprintln("error: cannot move {j.dtmp} to {dfile}: {e}");
+        j.code = 1;
+        drop(j.tmp);
+        drop(j.dtmp);
+        return;
+    };
+    fs::move(j.tmp, j.obj) catch |e| {
+        eprintln("error: cannot move {j.tmp} to {j.obj}: {e}");
+        j.code = 1;
+        drop(j.tmp);
+    };
 }
 
 !void write_stamp(Allocator a, str obj) {

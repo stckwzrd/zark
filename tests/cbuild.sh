@@ -117,6 +117,71 @@ wait $pid1 || fail "concurrent_runs: first build failed: $(cat cr/o1.txt)"
 wait $pid2 || fail "concurrent_runs: second build failed: $(cat cr/o2.txt)"
 [ "$(cr/p1)" = "285" ] && [ "$(cr/p2)" = "285" ] || fail "concurrent_runs: wrong output"
 
+mkdir -p hd
+printf '#define V 1\n' > hd/h.h
+printf '#include "h.h"\nlong v(void) { return V; }\n' > hd/v.c
+cp he/main.zk hd/main.zk
+out=$(cd hd && "$ZARK" run main.zk v.c 2>&1)
+[ "$out" = "1" ] || fail "cache_header_delete: expected 1, got: $out"
+rm hd/h.h
+out=$(cd hd && "$ZARK" run main.zk v.c 2>&1); code=$?
+[ $code -ne 0 ] || fail "cache_header_delete: expected a failure, got: $out"
+case "$out" in *h.h*) ;; *) fail "cache_header_delete: no compile error about h.h in: $out" ;; esac
+
+mkdir -p fc
+printf 'long answer(void) { return ANSWER; }\n' > fc/ans.c
+cp main.zk fc/main.zk
+out=$(cd fc && "$ZARK" run main.zk ans.c -DANSWER=1 2>&1)
+[ "$out" = "1" ] || fail "cache_flag_change: expected 1, got: $out"
+out=$(cd fc && "$ZARK" run main.zk ans.c -DANSWER=2 2>&1)
+[ "$out" = "2" ] || fail "cache_flag_change: expected 2 after the flag change, got: $out"
+
+mkdir -p "sp/s p" "sp/i n"
+printf '#define V 5\n' > "sp/i n/h.h"
+printf '#include "h.h"\nlong v(void) { return V; }\n' > "sp/s p/v.c"
+cp he/main.zk sp/main.zk
+(cd sp && PATH="$T/shim:$PATH" "$ZARK" build main.zk "s p/v.c" "-Ii n" -o prog 2>&1) > /dev/null || fail "cache_space_path: first build"
+n1=$(grep -c -e '-c s p/v\.c' clang.log)
+[ "$n1" -ge 1 ] || fail "cache_space_path: the shim did not see the compile"
+(cd sp && PATH="$T/shim:$PATH" "$ZARK" build main.zk "s p/v.c" "-Ii n" -o prog 2>&1) > /dev/null || fail "cache_space_path: second build"
+n2=$(grep -c -e '-c s p/v\.c' clang.log)
+[ "$n1" = "$n2" ] || fail "cache_space_path: the second build ran clang on the source ($n1 -> $n2)"
+[ "$(sp/prog)" = "5" ] || fail "cache_space_path: wrong output"
+
+mkdir -p is
+printf '#define V 1\n' > is/h.h
+printf '#include "h.h"\nlong v(void) { return V; }\n' > is/v.c
+cp he/main.zk is/main.zk
+(cd is && PATH="$T/shim:$PATH" "$ZARK" build main.zk v.c -o prog 2>&1) > /dev/null || fail "cache_interrupted_stamp: first build"
+n1=$(grep -c -e '-c v\.c' clang.log)
+rm is/.zark-cache/obj/*.stamp
+printf '#define V 2\n' > is/h.h
+printf '#define V 1\n' > is/h.h
+(cd is && PATH="$T/shim:$PATH" "$ZARK" build main.zk v.c -o prog 2>&1) > /dev/null || fail "cache_interrupted_stamp: second build"
+n2=$(grep -c -e '-c v\.c' clang.log)
+[ "$n2" -gt "$n1" ] || fail "cache_interrupted_stamp: a missing stamp was trusted"
+
+mkdir -p ik
+printf '#define V 1\n' > ik/h.h
+printf '#include "h.h"\nlong v(void) { return V; }\n' > ik/a.c
+printf 'long w(void) { return 0; }\n' > ik/b.c
+printf 'extern i64 v();\nextern i64 w();\nvoid main() { println("{v() + w()}"); }\n' > ik/main.zk
+(cd ik && "$ZARK" build main.zk a.c b.c -o prog 2>&1) > /dev/null || fail "cache_interrupted_stamp: kill setup build"
+printf '#define V 2\n' > ik/h.h
+printf 'long w(void) { return 1; }\n' > ik/b.c
+mkdir -p slow
+printf '#!/bin/sh\ncase "$*" in\n*" b.c "*) sleep 3; exit 1;;\nesac\n"%s" "$@"\n' "$real" > slow/clang
+chmod +x slow/clang
+(cd ik && ZARK_JOBS=2 PATH="$T/slow:$PATH" exec "$ZARK" build main.zk a.c b.c -o prog > /dev/null 2>&1) &
+kpid=$!
+sleep 1
+kill -9 $kpid
+wait $kpid 2>/dev/null
+printf '#define V 1\n' > ik/h.h
+printf 'long w(void) { return 0; }\n' > ik/b.c
+out=$(cd ik && "$ZARK" run main.zk a.c b.c 2>&1)
+[ "$out" = "1" ] || fail "cache_interrupted_stamp: after a killed build expected 1, got: $out"
+
 if command -v pkg-config >/dev/null; then
   mkdir -p pk/src
   printf '[package]\nname = "pk"\n\n[build]\npkg-config = ["zark-no-such-package"]\n' > pk/zark.toml
