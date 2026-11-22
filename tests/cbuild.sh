@@ -85,6 +85,35 @@ printf 'extern i64 fa();\nextern i64 fb();\nvoid main() { println("{fa() + fb()}
 out=$(cd sb && "$ZARK" run main.zk a/util.c b/util.c 2>&1)
 [ "$out" = "3" ] || fail "same_base_name: expected 3, got: $out"
 
+mkdir -p co/c
+printf '[package]\nname = "co"\n\n[build]\nsources = ["c/app.cpp"]\nstd = "c++17"\nlibs = ["stdc++"]\n' > co/zark.toml
+printf '#include <string>\n#include <cstdio>\nint main(int argc, char** argv) { std::string s = std::to_string(argc - 1); std::printf("%%s\\n", s.c_str()); return 0; }\n' > co/c/app.cpp
+out=$(cd co && "$ZARK" run -- a b 2>&1)
+[ "$out" = "2" ] || fail "cpp_only_project run: expected 2, got: $out"
+(cd co && "$ZARK" build 2>&1) > /dev/null || fail "cpp_only_project build"
+[ "$(co/build/co x y z)" = "3" ] || fail "cpp_only_project build: wrong output"
+out=$(cd co && "$ZARK" test 2>&1); code=$?
+[ $code -eq 0 ] || fail "cpp_only_project test: exit $code: $out"
+case "$out" in *"no tests"*) ;; *) fail "cpp_only_project test: expected no tests, got: $out" ;; esac
+
+mkdir -p em/src
+printf '[package]\nname = "em"\n' > em/zark.toml
+out=$(cd em && "$ZARK" run 2>&1); code=$?
+[ $code -ne 0 ] || fail "missing_main_no_sources: expected a failure"
+case "$out" in *src/main.zk*) ;; *) fail "missing_main_no_sources: no mention of src/main.zk in: $out" ;; esac
+
+mkdir -p zl
+printf 'export i64 zark_twice(i64 x) { return x * 2; }\n' > zl/lib.zk
+printf '#include <stdio.h>\nlong zark_twice(long);\nint main(void) { printf("%%ld\\n", zark_twice(21)); return 0; }\n' > zl/m.c
+out=$("$ZARK" run zl/lib.zk zl/m.c 2>&1)
+[ "$out" = "42" ] || fail "zark_lib_with_c_main: expected 42, got: $out"
+mkdir -p zp/src zp/c
+printf '[package]\nname = "zp"\n\n[build]\nsources = ["c/m.c"]\n' > zp/zark.toml
+cp zl/lib.zk zp/src/main.zk
+cp zl/m.c zp/c/m.c
+out=$(cd zp && "$ZARK" run 2>&1)
+[ "$out" = "42" ] || fail "zark_lib_with_c_main project: expected 42, got: $out"
+
 mkdir -p pd
 srcs=""
 decls=""
