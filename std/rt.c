@@ -180,6 +180,15 @@ long vrt_exe_path(char *buf, unsigned long n)
 #endif
 }
 
+void *vrt_opendir(const char *path) { return opendir(path); }
+
+unsigned char *vrt_readdir(void *d)
+{
+    return (unsigned char *)readdir(d);
+}
+
+int vrt_closedir(void *d) { return closedir(d); }
+
 unsigned char *vrt_dirent_name(void *ent)
 {
     return (unsigned char *)((struct dirent *)ent)->d_name;
