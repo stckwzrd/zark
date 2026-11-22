@@ -8,11 +8,13 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
   - `sema_types.vibe`: type layouts, names, resolution, constraints (first piece of the semantic layer).
   - `gen*.vibe`: generics, statements, expressions, calls, formatting. Emits LLVM IR **as text**.
   - `gen_move.vibe`: the ownership checks (`move`, `borrows`, `invalidates`, `owned`, escapes of locals), flow-sensitive over `Gen.moved`; `gen_ct.vibe`: `comptime` (a child compilation of the same program).
+  - `gen_async.vibe`: `async`/`await`: frame types, the generated `poll` state machine, `await` and the position rule; ownership across `await` lives in `gen_move.vibe`.
   - `native.vibe`: parses that IR and lowers it to x86-64 (System V ABI, every SSA value in a stack slot).
   - `x64.vibe`: encoder + ELF `.o` writer.
   - `main.vibe`: the driver.
-- `std/std.vibe`: the prelude, embedded into the compiler with `embed`.
-- `std/<name>.vibe`: standard modules (fs, path, time, os, args, json, net, http, thread), also embedded; `import "std/fs" as fs;` loads `<std>/fs.vibe` (`selfhost/loader.vibe`). A new module needs a line in `std_source` there, and the compiler must be rebuilt to pick up module changes.
+- `std/std.vibe`: the prelude, embedded into the compiler with `embed`. It also declares `Poll<T>`, `Waker` and `Context`, which the generated `poll` of an async function uses.
+- `std/rt.c`: the C runtime (`vrt_*`, including the epoll/kqueue poller used by `std/async`), also embedded into the compiler.
+- `std/<name>.vibe`: standard modules (fs, path, time, os, args, json, net, http, thread, async), also embedded; `import "std/fs" as fs;` loads `<std>/fs.vibe` (`selfhost/loader.vibe`). A new module needs a line in `std_source` there, and the compiler must be rebuilt to pick up module changes.
 - `tests/std/*.vibe`: `test` blocks for the standard library, run by `tests/run.sh`.
 - `tests/edge/*.vibe` (programs with golden output), `tests/panics/*.vibe` (must panic with the golden message), `tests/errors/*.vibe` (must not compile), `tests/scale.sh` (a huge function must compile in bounded time and memory). `tools/fuzz.py`, `tools/fuzz_edge.py` (backends must agree) and `tools/fuzz_ovf.py` (overflow checks against a Python oracle) hunt for bugs.
 - `selfhost/project.vibe`: `vibe.toml` (a TOML subset), dependencies (path, git into `.vibe/deps`), `vibe new`; `tests/project.sh` tests it.
@@ -36,7 +38,7 @@ Vibe is a Zig-like systems language. The compiler is self-hosted, and the defaul
 
 ## Invariants (do not break)
 1. The fixed points must hold: stage2 == stage3, native2 == native3.
-2. **New syntax or builtins reach `selfhost/` in two steps.** (This also covers the contextual words `move`, `borrows`, `invalidates`, `owned` and `comptime`: mark `std/` or use them in `selfhost/` only after the seed understands them.) (a) Teach the compiler the feature without using it in `selfhost/`, run `./bootstrap.sh`, then `tools/update-seed.sh` and commit the new seed. (b) Only then use the feature in `selfhost/`. Using it earlier makes the old seed unable to build stage1.
+2. **New syntax or builtins reach `selfhost/` in two steps.** (This also covers the contextual words `move`, `borrows`, `invalidates`, `owned`, `comptime`, `async` and `await`: mark `std/` or use them in `selfhost/` only after the seed understands them.) (a) Teach the compiler the feature without using it in `selfhost/`, run `./bootstrap.sh`, then `tools/update-seed.sh` and commit the new seed. (b) Only then use the feature in `selfhost/`. Using it earlier makes the old seed unable to build stage1. The same holds for a new `vrt_*` symbol: `std/rt.c` is embedded in the seed, so add the function there, bootstrap, update the seed, and only then call it from `std/` or `selfhost/`.
 3. The language rule: **no hidden allocations**. Memory goes only through an explicit `Allocator`. String interpolation is allowed only as an argument of a function whose last parameter is a `Fmt` (the std print family, your own).
 5. The compiler must not know std names (`tests/no_magic_names.sh`, run by `bootstrap.sh`). The protocol names it may use are listed in `SPEC.md` section 6.
 4. The lexer output must match `tests/tokens/*.tok`. After an intended lexer change, regenerate them with `build/vibe tokens FILE > tests/tokens/NAME.tok` (NAME is the path with `/` replaced by `_`) and review the diff.

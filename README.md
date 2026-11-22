@@ -171,9 +171,25 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 ### Standard modules (`import "std/fs" as fs;`)
 
-`std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`). See the guide page "Standard modules".
+`std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`), `std/async` (a single-threaded executor with timers and TCP on epoll or kqueue). See the guide page "Standard modules".
 
 A file that starts with `#!/usr/bin/env -S vibe run` can be run directly as a script; the arguments after it go to the program.
+
+### Async
+
+`async` functions compile to state machines. Calling one returns its frame by value, so its size is known (`sizeof(f)`) and you decide where it lives; nothing is allocated. `await` suspends the function until the awaited future is ready. A future is any struct with `Poll<T> poll(Context* cx)`, and `std/async` runs them with an `Executor` (`block_on`, `spawn`, `Sleep`, `TcpListener`, `TcpStream`).
+
+```vibe
+async i64 add(i64 a, i64 b) { return a + b; }
+
+async i64 chain() {
+    auto x = await add(1, 2);
+    auto y = await add(x, 10);
+    return x * y;
+}
+```
+
+`await` is only allowed where nothing else is half-evaluated (a statement, an initializer, `v = await f();`, `return await f();`, an `if`/`while`/`match` condition), and the ownership checks apply across it. See SPEC.md section 7b. `examples/async_echo.vibe` is an echo server and client running on the executor with hand-written futures, and `tests/edge/async_basic.vibe` shows the `async`/`await` syntax.
 
 ### Projects
 
@@ -218,4 +234,5 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [ ] `comptime` blocks, `inline for`
 - [x] passing structs by value across the C ABI (`extern`)
 - [ ] `@cImport` via libclang
+- [x] `async`/`await` as state machines with a single-threaded executor (`std/async`); a multi-threaded executor and `join`/`select` are not done
 - [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `vibe test`, `vibe fmt`
