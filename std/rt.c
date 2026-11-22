@@ -58,6 +58,11 @@ int vrt_errno(void)
     return e;
 }
 
+void vrt_breakpoint(void)
+{
+    __builtin_debugtrap();
+}
+
 int vrt_os(void)
 {
 #if defined(__APPLE__)
@@ -134,10 +139,18 @@ long vrt_syscall(long nr, long a, long b, long c, long d, long e, long f)
     case 231: _exit((int)a);
     }
 #if defined(__linux__)
-    return err(syscall(nr, a, b, c, d, e, f));
-#else
-    return -38;
+    switch (nr) {
+#ifdef SYS_process_vm_readv
+    case 310: return err(syscall(SYS_process_vm_readv, a, b, c, d, e, f));
+    case 311: return err(syscall(SYS_process_vm_writev, a, b, c, d, e, f));
 #endif
+    case 217: return err(syscall(SYS_getdents64, a, b, c));
+    }
+#if defined(__x86_64__)
+    return err(syscall(nr, a, b, c, d, e, f));
+#endif
+#endif
+    return -38;
 }
 
 int vrt_clock_gettime(int id, vtimespec *ts)

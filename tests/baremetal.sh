@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")/.."
+[ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ] || { echo "ok   baremetal (skipped, needs x86-64 Linux)"; exit 0; }
 VIBE=${VIBE:-./build/vibe}
 command -v qemu-system-x86_64 >/dev/null && command -v objcopy >/dev/null || { echo "ok   baremetal (skipped, no qemu)"; exit 0; }
 case $VIBE in /*) ;; *) VIBE=$PWD/$VIBE ;; esac
