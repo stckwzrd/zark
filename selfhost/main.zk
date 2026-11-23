@@ -418,7 +418,6 @@ void restore_stack() {
     const auto t0 = now_ns();
     const auto g = new_gen(a, safety)?;
     const auto can_native = vrt_native() != 0;
-    g.c_abi = !force_native && (is_ir || opt || force_llvm || !can_native);
     g.freestanding = freestanding;
     g.fast = fast;
     g.fastmath = fastmath;

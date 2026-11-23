@@ -138,6 +138,7 @@ struct Save { i64 reg; i64 off; }
 
 struct Native {
     bool debug;
+    bool c_abi;
     Allocator a;
     ObjFile obj;
     Map<LT*> named;
@@ -155,6 +156,7 @@ struct Native {
     Map<i64> allocas;
     i64 frame;
     i64 sret_slot;
+    i64 ret_ext;
     i64 nlocal;
     str fname;
     i64 fn_file;
@@ -860,9 +862,16 @@ struct Native {
         this->allocas = Map<i64>::init(this->a);
         this->frame = 0;
         this->sret_slot = 0;
-        // header: define [internal ]RET @name(T %a.0, ...) {
+        this->ret_ext = 0;
+        this->c_abi = false;
+        // header: define [internal ][ccc ][signext|zeroext ]RET @name(T %a.0, ...) {
         auto c = Cur{ .s = hdr, .i = 7 };
         const auto internal = c.eat_word("internal");
+        c.ws();
+        if (c.eat_word("ccc")) { this->c_abi = true; }
+        c.ws();
+        if (c.eat_word("signext")) { this->ret_ext = 1; } else if (c.eat_word("zeroext")) { this->ret_ext = 2; }
+        c.ws();
         const auto ret = this->ty(&c)?;
         c.ws();
         c.i += 1; // @
@@ -874,16 +883,37 @@ struct Native {
         auto params = List<Arg>::init(this->a);
         while (!c.eat(')')) {
             const auto pt = this->ty(&c)?;
+            LT* bv = null;
+            auto ext = 0;
+            while (true) {
+                c.ws();
+                if (c.eat_word("byval(")) {
+                    bv = this->ty(&c)?;
+                    _ = c.eat(')');
+                } else if (c.eat_word("sret(")) {
+                    _ = this->ty(&c)?;
+                    _ = c.eat(')');
+                } else if (c.eat_word("align")) {
+                    c.ws();
+                    _ = c.word();
+                } else if (c.eat_word("signext")) {
+                    ext = 1;
+                } else if (c.eat_word("zeroext")) {
+                    ext = 2;
+                } else {
+                    break;
+                }
+            }
             c.ws();
             const auto pn = c.value();
-            params.push(Arg{ .ty = pt, .v = pn, .id1 = 0 })?;
+            params.push(Arg{ .ty = pt, .v = pn, .id1 = 0, .byval = bv, .ext = ext })?;
             _ = c.eat(',');
         }
 
         // pass 1: parse instructions, allocate slots
         auto blocks = List<Block>::init(this->a);
         auto phis_of = Map<List<Ins*>>::init(this->a);   // block label -> phis
-        if (is_agg(ret)) { this->sret_slot = this->new_slot(8, 8); }
+        if (is_agg(ret) && !(this->c_abi && ret.size <= 16)) { this->sret_slot = this->new_slot(8, 8); }
         this->fn_file = 0;
         this->fn_line = 0;
         auto cur_line = 0;
@@ -1043,7 +1073,7 @@ struct Native {
         auto ni = 0;
         auto nf = 0;
         auto nstack = 0;
-        if (is_agg(ret)) {
+        if (is_agg(ret) && !(this->c_abi && ret.size <= 16)) {
             asm.st(RDI, RBP, this->sret_slot, 8)?;
             ni = 1;
         }
@@ -1052,6 +1082,13 @@ struct Native {
         for (auto p : params) {
             const auto off = this->loc(p.v);
             const auto pr = this->reg_of(p.v);
+            if (p.byval != null) {
+                const auto soff = 16 + 8 * nstack;
+                nstack += (p.byval.size + 7) / 8;
+                asm.lea(R10, RBP, soff)?;
+                if (pr >= 0) { asm.mov_rr(pr, R10)?; } else { asm.st(R10, RBP, off, 8)?; }
+                continue;
+            }
             if (is_flt(p.ty) && nf < 8) {
                 if (pr >= 0) {
                     asm.movq_r_x(pr, nf, true)?;
@@ -1575,14 +1612,36 @@ struct Native {
         if (op == "ret") {
             if (ins.ty.k != .V) {
                 if (is_agg(ins.ty)) {
-                    asm.ld(R11, RBP, this->sret_slot, 8, false)?;
-                    this->put(ins.ty, ins.a, R11, 0)?;
-                    asm.mov_rr(RAX, R11)?;
+                    if (this->c_abi && ins.ty.size <= 16) {
+                        const auto base = this->agg_loc(ins.ty, ins.a)?;
+                        auto gi = 0;
+                        auto fi = 0;
+                        for (auto [i, ft] : ins.ty.fields) {
+                            const auto off = base + ins.ty.offs.get(i);
+                            asm.ld(R10, RBP, off, 8, false)?;
+                            if (is_flt(ft)) {
+                                asm.movq_x_r(fi, R10, ft.k == .F64)?;
+                                fi += 1;
+                            } else if (gi == 0) {
+                                asm.mov_rr(RAX, R10)?;
+                                gi += 1;
+                            } else {
+                                asm.mov_rr(RDX, R10)?;
+                                gi += 1;
+                            }
+                        }
+                    } else {
+                        asm.ld(R11, RBP, this->sret_slot, 8, false)?;
+                        this->put(ins.ty, ins.a, R11, 0)?;
+                        asm.mov_rr(RAX, R11)?;
+                    }
                 } else if (is_flt(ins.ty)) {
                     this->load_op(RAX, ins.ty, ins.a, false)?;
                     asm.movq_x_r(0, RAX, ins.ty.k == .F64)?;
                 } else {
-                    this->load_op(RAX, ins.ty, ins.a, false)?;
+                    auto sgn = false;
+                    if (this->ret_ext == 1) { sgn = true; }
+                    this->load_op(RAX, ins.ty, ins.a, sgn)?;
                 }
             }
             for (auto sv : this->saved) { asm.ld(sv.reg, RBP, sv.off, 8, false)?; }
