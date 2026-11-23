@@ -84,6 +84,24 @@ UNIONS = {
 ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3", "E",
          "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUA", "SUX"] + ARM
 
+VECS = {
+    "f32x4": ("float", 4, "f"),
+    "f64x2": ("double", 2, "f"),
+    "i32x4": ("int32_t", 4, "i"),
+    "u8x16": ("uint8_t", 16, "i"),
+    "i64x2": ("int64_t", 2, "i"),
+}
+
+SHORT_VECS = {
+    "f32x2": ("float", 2, "f"),
+    "i16x4": ("int16_t", 4, "i"),
+    "u8x8": ("uint8_t", 8, "i"),
+}
+
+ALL_VECS = {**VECS, **SHORT_VECS}
+
+ARM_HOST = os.uname().machine in ("aarch64", "arm64")
+
 SIZES = {"i8": 1, "u8": 1, "bool": 1, "i16": 2, "u16": 2, "i32": 4, "u32": 4, "f32": 4, "i64": 8, "u64": 8, "f64": 8}
 
 VA_CODE = {"i8": "i", "u8": "i", "bool": "i", "i16": "i", "u16": "i", "i32": "i", "u32": "u",
@@ -140,6 +158,11 @@ QUICK = {
     "callback_hz",
     "variadic_fix_hfa",
     "variadic_var_hfa",
+    "direct_f32x4",
+    "indirect_u8x16_ret",
+    "export_i64x2",
+    "callback_f64x2_ret",
+    "export_vec_spill_f32x4",
 }
 
 
@@ -196,6 +219,8 @@ def offsets(t):
 
 
 def ctype(t):
+    if t in ALL_VECS:
+        return "v_" + t
     return SCALARS[t][0] if t in SCALARS else t
 
 
@@ -204,6 +229,14 @@ def zktype(t):
 
 
 def make_value(t, ctr):
+    if t in ALL_VECS:
+        _, n, kind = ALL_VECS[t]
+        out = []
+        for _ in range(n):
+            i = ctr[0]
+            ctr[0] += 1
+            out.append(float((i % 5) + 1) if kind == "f" else (i % 9) + 1)
+        return out
     if t in SCALARS:
         kind = SCALARS[t][2]
         i = ctr[0]
@@ -233,6 +266,9 @@ def leaf_sum(v):
 
 
 def zlit(t, v):
+    if t in ALL_VECS:
+        lane = "f32" if ALL_VECS[t][2] == "f" else "i64"
+        return f"{t}(" + ", ".join(zlit(lane, x) for x in v) + ")"
     if t in SCALARS:
         kind = SCALARS[t][2]
         if kind == "f":
@@ -253,6 +289,9 @@ def zlit(t, v):
 
 
 def clit(t, v):
+    if t in ALL_VECS:
+        lane = "f32" if ALL_VECS[t][2] == "f" else "i64"
+        return f"({ctype(t)}){{ " + ", ".join(clit(lane, x) for x in v) + " }"
     if t in SCALARS:
         kind = SCALARS[t][2]
         if kind == "f":
@@ -275,6 +314,8 @@ def clit(t, v):
 def csum(t, var):
     if t in SCALARS:
         return f"((int64_t){var})"
+    if t in ALL_VECS:
+        return "(" + " + ".join(f"((int64_t){var}[{i}])" for i in range(ALL_VECS[t][1])) + ")"
     a = array_parts(t)
     if a is not None:
         return "(" + " + ".join(csum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")" if a[1] else "0"
@@ -288,6 +329,8 @@ def csum(t, var):
 def zsum(t, var):
     if t in SCALARS:
         return f"({var} as i64)"
+    if t in ALL_VECS:
+        return "(" + " + ".join(f"({var}[{i}] as i64)" for i in range(ALL_VECS[t][1])) + ")"
     a = array_parts(t)
     if a is not None:
         return "(" + " + ".join(zsum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")" if a[1] else "0"
@@ -312,7 +355,7 @@ def z_field(f, ft):
 
 
 def c_structs():
-    out = []
+    out = [f"typedef {c} v_{t} __attribute__((vector_size({n * SIZES[t[:t.index('x')]]})));" for t, (c, n, _) in ALL_VECS.items()]
     for name in ORDER:
         if name in UNIONS:
             fields = " ".join(c_field(f, ft) for f, ft in UNIONS[name])
@@ -464,7 +507,7 @@ def render_zk(case):
             body = zlit(ret, rv)
         lines.append(f"{prefix}{zktype(ret)} f_{name}({sig}) {{ return {body}; }}")
     lines.append("")
-    if ret in STRUCTS or ret in UNIONS or array_parts(ret) is not None:
+    if ret in STRUCTS or ret in UNIONS or ret in ALL_VECS or array_parts(ret) is not None:
         result = f"RESULT {{{zsum(ret, 'r')}}}"
     else:
         result = "RESULT {(r as i64)}"
@@ -495,7 +538,7 @@ def render_c(case):
     rv = case["ret_value"]
     body = clit(ret, rv) if rv is not None else sum_c(params)
     rt = ctype(ret)
-    if ret in STRUCTS or ret in UNIONS or array_parts(ret) is not None:
+    if ret in STRUCTS or ret in UNIONS or ret in ALL_VECS or array_parts(ret) is not None:
         run_body = f"{rt} r = "
         run_ret = csum(ret, "r")
     else:
@@ -817,7 +860,20 @@ def fixed_cases():
         build_case("callback_many", "callback", spill),
         build_case("callback_char", "callback", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
         build_case("callback_i8_ret", "callback", [], ret="i8", ret_value=-1),
-    ] + union_cases() + variadic_cases() + arm_cases()
+    ] + union_cases() + variadic_cases() + arm_cases() + vec_cases(VECS) + (vec_cases(SHORT_VECS) if ARM_HOST else [])
+
+
+def vec_cases(vecs):
+    out = []
+    first = list(vecs)[0]
+    for mode in ("direct", "indirect", "export", "callback"):
+        for t in vecs:
+            out.append(build_case(f"{mode}_{t}", mode, [(t, "a"), ("i32", "x"), (t, "b")]))
+            out.append(build_case(f"{mode}_{t}_ret", mode, [], ret=t, ret_value=make_value(t, [1])))
+        spill = [("f64", "x")] + [(first, f"v{i}") for i in range(6)] + [("D2", "d"), (first, "w"), ("i64", "n")]
+        out.append(build_case(f"{mode}_vec_spill_{first}", mode, spill))
+    out.append(va_case(f"variadic_fix_{first}", [(first, f"v{i}") for i in range(7)], [("D2", None), ("f64", None), ("M", None)]))
+    return out
 
 
 def arm_cases():
@@ -1132,7 +1188,7 @@ def render_oracle(cases):
 def oracle_cases(extra):
     out = []
     seen = set()
-    for case in fixed_cases() + extra:
+    for case in fixed_cases() + vec_cases(SHORT_VECS) + extra:
         key = (case["mode"] == "variadic", tuple(t for t, _ in case["params"]), case["ret"],
                tuple(case.get("var", [])), case.get("vsum"))
         if key in seen:

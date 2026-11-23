@@ -80,6 +80,13 @@ everywhere; on arm64 hosts `tests/run.sh` runs the whole fuzzer with
 `--backends llvm,O` (the native backend exists only on Linux x86-64 and is
 skipped elsewhere).
 
+The vector cases (`*_f32x4`, `*_f64x2`, `*_i32x4`, `*_u8x16`, `*_i64x2`,
+`*_vec_spill_f32x4`, `variadic_fix_f32x4`) pass 16-byte SIMD vectors as
+`vector_size(16)` C vectors, also when the vector registers run out before a
+struct of two doubles. The 8-byte ones (`*_f32x2`, `*_i16x4`, `*_u8x8`,
+`*_vec_spill_f32x2`, `variadic_fix_f32x2`) exist only on arm64, where the
+compiler accepts them; the IR oracle always includes them.
+
 ## IR oracle
 
 `--ir-oracle aarch64,arm64-apple` builds every fixed (and `--cases` random)

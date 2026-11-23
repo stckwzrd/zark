@@ -720,6 +720,7 @@ struct Gen {
         for (auto p : decl.params) { params.push(this->resolve_type(p.ty, env)?)?; }
         auto ret = this->t_void;
         if (decl.ret != null) { ret = this->resolve_type(decl.ret, env)?; }
+        if (decl.is_extern || decl.is_export) { this->c_vecs(params, ret, decl.line)?; }
         if (decl.is_async) { return this->inst_async(decl, env, key, params, ret); }
         const auto fi = this->a.create<FnInst>()?;
         *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };

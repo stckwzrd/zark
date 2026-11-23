@@ -131,6 +131,7 @@ bool can_coerce(Type* from, Type* to) {
                 if (fd.type_params.len > 0) { this->err(e.line); eprintln("generic function '{n}' cannot be used as a value"); return error.CompileFailed; }
                 if (fd.variadic) { this->err(e.line); eprintln("variadic function '{n}' cannot be used as a value"); return error.CompileFailed; }
                 const auto fi = this->inst_fn(fd, this->new_env()?, this->no_types())?;
+                this->c_vecs(fi.params, fi.ret, e.line)?;
                 const auto t = this->mk(.Func)?;
                 t.params = fi.params;
                 t.ret = fi.ret;
