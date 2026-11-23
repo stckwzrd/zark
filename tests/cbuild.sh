@@ -253,6 +253,7 @@ if command -v pkg-config >/dev/null; then
   out=$(cd pk && "$ZARK" run 2>&1); code=$?
   [ $code -ne 0 ] || fail "pkg_config_missing_package: expected a failure"
   case "$out" in *zark-no-such-package*) ;; *) fail "pkg_config_missing_package: no package name in: $out" ;; esac
+  case "$out" in *error.CompileFailed*) fail "pkg_config_missing_package: stray error name in: $out" ;; esac
   if pkg-config --exists zlib; then
     printf '[package]\nname = "pk"\n\n[build]\npkg-config = ["zlib"]\n' > pk/zark.toml
     printf 'extern u8* zlibVersion();\nvoid main() { println("{zlibVersion() != null}"); }\n' > pk/src/main.zk
