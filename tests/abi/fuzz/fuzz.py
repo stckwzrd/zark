@@ -841,6 +841,283 @@ def random_cases(count, seed):
     return out
 
 
+ORACLE_TARGETS = {
+    "aarch64": ("aarch64-linux-gnu", ["--arch", "aarch64", "--os", "linux"]),
+    "arm64-apple": ("arm64-apple-macosx", ["--arch", "aarch64", "--os", "macos"]),
+}
+
+KEEP_ATTRS = ("signext", "zeroext", "inreg", "sret", "byval", "byref", "alignstack", "inalloca", "preallocated")
+
+
+def split_top(s, sep=","):
+    out = []
+    depth = 0
+    cur = ""
+    for ch in s:
+        if ch in "([{<":
+            depth += 1
+        elif ch in ")]}>":
+            depth -= 1
+        if ch == sep and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return out
+
+
+def take_type(s):
+    s = s.strip()
+    if s[:1] in "[{<":
+        depth = 0
+        for i, ch in enumerate(s):
+            if ch in "([{<":
+                depth += 1
+            elif ch in ")]}>":
+                depth -= 1
+                if depth == 0:
+                    return s[:i + 1], s[i + 1:]
+    if s.startswith('%"'):
+        i = s.index('"', 2)
+        return s[:i + 1], s[i + 1:]
+    parts = s.split(None, 1)
+    return parts[0], parts[1] if len(parts) > 1 else ""
+
+
+def norm_param(p):
+    ty, rest = take_type(p)
+    attrs = []
+    for tok in split_top(rest, " "):
+        name = tok.split("(", 1)[0]
+        if name in ("sret", "byval", "byref"):
+            attrs.append(name)
+        elif name in KEEP_ATTRS:
+            attrs.append(tok)
+    return " ".join([" ".join(ty.split())] + sorted(attrs))
+
+
+def norm_params(text):
+    return [norm_param(p) for p in split_top(text) if p != "..."] + (["..."] if text.strip().endswith("...") else [])
+
+
+def flatten(t, types):
+    t = t.strip()
+    if t in types:
+        return flatten(types[t], types)
+    if t.startswith("<{") or t.startswith("{"):
+        inner = t[2:-2] if t.startswith("<{") else t[1:-1]
+        return [x for f in split_top(inner) for x in flatten(f, types)]
+    m = re.match(r"\[(\d+) x (.*)\]$", t)
+    if m:
+        return flatten(m.group(2), types) * int(m.group(1))
+    return [t]
+
+
+def norm_ret(text, types):
+    attrs = []
+    toks = text.split()
+    rest = []
+    skip = {"declare", "define", "internal", "private", "dso_local", "ccc", "noundef", "tail", "call", "hidden", "nonnull"}
+    i = 0
+    while i < len(toks):
+        if toks[i] in ("signext", "zeroext", "inreg"):
+            attrs.append(toks[i])
+        elif toks[i] not in skip:
+            break
+        i += 1
+    ty, vsig = take_type(" ".join(toks[i:]))
+    return " ".join(attrs + flatten(ty, types)), " ".join(vsig.split())
+
+
+def parse_module(text):
+    types = {}
+    funcs = {}
+    decls = {}
+    cur = None
+    for line in text.splitlines():
+        m = re.match(r'^(%[^\s=]+) = type (.*)$', line)
+        if m:
+            types[m.group(1)] = m.group(2)
+            continue
+        m = re.match(r'^(declare|define) (.*?)@"?([\w.$]+)"?\((.*)\)[^)]*$', line)
+        if m:
+            sig = (m.group(2), m.group(4))
+            if m.group(1) == "declare":
+                decls[m.group(3)] = sig
+            else:
+                cur = m.group(3)
+                funcs[cur] = (sig, [])
+            continue
+        if line.startswith("}"):
+            cur = None
+            continue
+        if cur is not None and " call " in " " + line:
+            funcs[cur][1].append(line)
+    return types, funcs, decls
+
+
+def parse_call(line):
+    m = re.search(r"\bcall (.*?)([@%][\w.$\"]+)\((.*)\)", line)
+    if m is None:
+        return None
+    return m.group(1), m.group(2), m.group(3)
+
+
+def sig_view(sig, types):
+    ret, vsig = norm_ret(sig[0], types)
+    return f"{ret} ({', '.join(norm_params(sig[1]))}){(' ' + vsig) if vsig else ''}"
+
+
+def call_view(call, types):
+    ret, vsig = norm_ret(call[0], types)
+    return f"{ret} ({', '.join(norm_params(call[2]))}){(' ' + vsig) if vsig else ''}"
+
+
+def find_fn(funcs, name):
+    for k in (f"vb.{name}$c", f"{name}$c", f"vb.{name}", name):
+        if k in funcs:
+            return funcs[k]
+    return None
+
+
+def oracle_items(mod, case_name, variadic):
+    types, funcs, decls = mod
+    items = {}
+    if f"f_{case_name}" in decls:
+        items["declare"] = sig_view(decls[f"f_{case_name}"], types)
+    use = find_fn(funcs, f"use_{case_name}")
+    if use is not None:
+        for line in use[1]:
+            c = parse_call(line)
+            if c is None:
+                continue
+            if c[1] == f"@f_{case_name}":
+                items["call"] = call_view(c, types)
+            elif c[1].startswith("%"):
+                items["indirect"] = call_view(c, types)
+    if not variadic:
+        g = find_fn(funcs, f"g_{case_name}")
+        if g is not None:
+            items["export"] = sig_view(g[0], types)
+        h = find_fn(funcs, f"h_{case_name}")
+        if h is not None:
+            items["fnptr"] = sig_view(h[0], types)
+    return items
+
+
+def oracle_lit_c(t, v):
+    if t in SCALARS:
+        return f"({ctype(t)}){clit(t, v)}"
+    return clit(t, v)
+
+
+def render_oracle(cases):
+    zk = z_structs() + [""]
+    c = ["#include <stdint.h>", "#include <stdbool.h>"] + c_structs() + [""]
+    calls = []
+    for case in cases:
+        n = case["oname"]
+        params = case["params"]
+        ret = case["ret"]
+        rt = ctype(ret)
+        zrt = zktype(ret)
+        if case["mode"] == "variadic":
+            if case["vsum"]:
+                zk.append(f"extern i64 f_{n}(i32 n, ...);")
+                c.append(f"int64_t f_{n}(int32_t n, ...);")
+                zhead = [str(len(case["var"]))]
+                chead = [str(len(case["var"]))]
+            else:
+                zsig = sig_zk(params)
+                csig = sig_c(params)
+                zk.append(f"extern {zrt} f_{n}({zsig + ', ' if zsig else ''}u8* fmt, ...);")
+                c.append(f"{rt} f_{n}({csig + ', ' if csig else ''}const char *fmt, ...);")
+                fmt = "".join(va_code(t) for t in case["var"])
+                zhead = [zlit(t, v) for (t, _), v in zip(params, case["values"])] + [f'"{fmt}"']
+                chead = [clit(t, v) for (t, _), v in zip(params, case["values"])] + [f'"{fmt}"']
+            zvar = [va_lit(t, v) for t, v in zip(case["var"], case["var_values"])]
+            cvar = [oracle_lit_c(t, v) for t, v in zip(case["var"], case["var_values"])]
+            zk.append(f"void use_{n}() {{ const auto r = f_{n}({', '.join(zhead + zvar)}); }}")
+            c.append(f"void use_{n}(void) {{ f_{n}({', '.join(chead + cvar)}); }}")
+        else:
+            zsig = sig_zk(params)
+            csig = sig_c(params) or "void"
+            fnty = fn_ty(params, ret)
+            za = args_zk(params, case["values"])
+            ca = ", ".join(oracle_lit_c(t, v) for (t, _), v in zip(params, case["values"]))
+            zk.append(f"extern {zrt} f_{n}({zsig});")
+            zk.append(f"export {zrt} g_{n}({zsig}) {{ {zrt} r; return r; }}")
+            zk.append(f"{zrt} h_{n}({zsig}) {{ {zrt} r; return r; }}")
+            zk.append(f"void use_{n}() {{ const auto r = f_{n}({za}); {fnty} fp = f_{n}; const auto q = fp({za}); {fnty} hp = h_{n}; }}")
+            c.append(f"{rt} f_{n}({csig});")
+            c.append(f"{rt} g_{n}({csig}) {{ {rt} r; __builtin_memset(&r, 0, sizeof r); return r; }}")
+            c.append(f"void use_{n}(void) {{ f_{n}({ca}); {rt} (*fp)({csig}) = f_{n}; fp({ca}); }}")
+        calls.append(f"use_{n}();")
+    zk.append("void main() { " + " ".join(calls) + " }")
+    return "\n".join(zk) + "\n", "\n".join(c) + "\n"
+
+
+def oracle_cases(extra):
+    out = []
+    seen = set()
+    for case in fixed_cases() + extra:
+        key = (case["mode"] == "variadic", tuple(t for t, _ in case["params"]), case["ret"],
+               tuple(case.get("var", [])), case.get("vsum"))
+        if key in seen:
+            continue
+        seen.add(key)
+        case = dict(case)
+        case["oname"] = f"o{len(out)}"
+        out.append(case)
+    return out
+
+
+def run_oracle(targets, extra):
+    cases = oracle_cases(extra)
+    zk_text, c_text = render_oracle(cases)
+    d = os.path.join(OUT, "ir_oracle")
+    os.makedirs(d, exist_ok=True)
+    zk = os.path.join(d, "main.zk")
+    c = os.path.join(d, "side.c")
+    write_file(zk, zk_text)
+    write_file(c, c_text)
+    bad = 0
+    for target in targets:
+        triple, flags = ORACLE_TARGETS[target]
+        z = subprocess.run([ZARK, "ir", zk] + flags, capture_output=True, text=True)
+        if z.returncode != 0:
+            print(f"{target}: zark ir failed: {(z.stdout + z.stderr).strip()[:400]}")
+            bad += 1
+            continue
+        k = subprocess.run(["clang", f"--target={triple}", "-ffreestanding", "-S", "-emit-llvm", "-O0", "-o", "-", c],
+                           capture_output=True, text=True)
+        if k.returncode != 0:
+            print(f"{target}: clang failed: {k.stderr.strip()[:400]}")
+            bad += 1
+            continue
+        zm = parse_module(z.stdout)
+        cm = parse_module(k.stdout)
+        n = 0
+        mism = 0
+        for case in cases:
+            variadic = case["mode"] == "variadic"
+            zi = oracle_items(zm, case["oname"], variadic)
+            ci = oracle_items(cm, case["oname"], variadic)
+            ci_names = ["declare", "call"] if variadic else ["declare", "call", "indirect", "export", "fnptr"]
+            for item in ci_names:
+                want = ci.get(item if item != "fnptr" else "export")
+                got = zi.get(item)
+                n += 1
+                if got != want:
+                    mism += 1
+                    print(f"MISMATCH {target} {case['name']} {item}\n    zark:  {got}\n    clang: {want}")
+        print(f"{target}: {len(cases)} signatures, {n} items, {mism} mismatches")
+        bad += mism
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", type=int, default=0)
@@ -849,7 +1126,16 @@ def main():
     ap.add_argument("--only", default="")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--ir-oracle", default="")
     args = ap.parse_args()
+
+    if args.ir_oracle:
+        targets = [t for t in args.ir_oracle.split(",") if t]
+        for t in targets:
+            if t not in ORACLE_TARGETS:
+                print(f"unknown oracle target: {t} (known: {', '.join(ORACLE_TARGETS)})")
+                return 2
+        return run_oracle(targets, random_cases(args.cases, args.seed) if args.cases > 0 else [])
 
     cases = [
         {"name": "layout", "mode": "layout", "params": [], "values": [], "expected": 0, "layout": True},
