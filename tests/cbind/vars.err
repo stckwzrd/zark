@@ -3,3 +3,6 @@ skipped tls_b: thread-local variable
 skipped hidden: static variable
 skipped ld_var: long double
 skipped dup: name clash
+skipped gone: unavailable attribute
+skipped gone2: unavailable attribute
+skipped gone3: unavailable attribute
