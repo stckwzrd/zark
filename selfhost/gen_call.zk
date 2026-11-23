@@ -364,7 +364,9 @@ bool Gen::names_type(Expr* e) {
         if (decl.is_extern && pi < cmodes.len && cmodes.get(pi) != 0) {
             argtxt.append(this->c_arg(v, cmodes.get(pi))?)?;
         } else {
-            sprint(&argtxt, "{this->llty(v.ty)?} {v.v}")?;
+            auto ea = "";
+            if (decl.is_extern) { ea = c_ext(v.ty); }
+            sprint(&argtxt, "{this->llty(v.ty)?}{ea} {v.v}")?;
         }
     }
     if (decl.is_extern && !decl.variadic && is_c_agg(fi.ret)) {
@@ -397,13 +399,16 @@ bool Gen::names_type(Expr* e) {
         return this->load(fi.ret, buf);
     }
 
-    auto fnty = this->llty(fi.ret)?;
+    auto rty = this->llty(fi.ret)?;
+    if (decl.is_extern && !is_c_agg(fi.ret)) { rty = this->c_ret_ty(fi.ret)?; }
+    auto fnty = rty;
     if (decl.variadic) {
         auto ft = this->sb();
-        sprint(&ft, "{this->llty(fi.ret)?} (")?;
+        sprint(&ft, "{rty} (")?;
         for (auto [i, p] : fi.params) {
             if (i > 0) { ft.append(", ")?; }
             ft.append(this->llty(p)?)?;
+            if (decl.is_extern) { ft.append(c_ext(p))?; }
         }
         if (fi.params.len > 0) { ft.append(", ...)")?; } else { ft.append("...)")?; }
         fnty = ft.slice();
@@ -546,6 +551,24 @@ str cword_ty(i64 cls) {
     return "i64";
 }
 
+str c_ext(Type* t) {
+    if (t.k == .Bool) { return " zeroext"; }
+    if (t.k == .Int && t.bits < 32) {
+        if (t.signed) { return " signext"; }
+        return " zeroext";
+    }
+    return "";
+}
+
+str c_ret_ext(Type* t) {
+    if (t.k == .Bool) { return "zeroext "; }
+    if (t.k == .Int && t.bits < 32) {
+        if (t.signed) { return "signext "; }
+        return "zeroext ";
+    }
+    return "";
+}
+
 /// how each parameter of a C function travels: 0 = as itself, 1 = split into registers,
 /// 2 = in memory (byval). A struct that does not fit into the registers that are left goes
 /// to memory as a whole, as the ABI says, so the registers are counted here like clang does.
@@ -582,7 +605,12 @@ str cword_ty(i64 cls) {
 
 /// the parameter types a C function sees for one Zark parameter
 !str Gen::c_param_ty(Type* t, i64 mode) {
-    if (mode == 0) { return this->llty(t); }
+    if (mode == 0) {
+        auto b = this->sb();
+        b.append(this->llty(t)?)?;
+        b.append(c_ext(t))?;
+        return b.slice();
+    }
     const auto c = this->classify_c(t)?;
     auto b = this->sb();
     if (mode == 2) {
@@ -597,7 +625,12 @@ str cword_ty(i64 cls) {
 
 /// the return type a C function declares for a Zark result ("void" when it goes through sret)
 !str Gen::c_ret_ty(Type* t) {
-    if (!is_c_agg(t)) { return this->llty(t); }
+    if (!is_c_agg(t)) {
+        auto b = this->sb();
+        b.append(c_ret_ext(t))?;
+        b.append(this->llty(t)?)?;
+        return b.slice();
+    }
     const auto c = this->classify_c(t)?;
     if (c.memory) { return "void"; }
     if (c.words == 1) { return cword_ty(c.c0); }

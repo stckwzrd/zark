@@ -21,7 +21,7 @@ Generated sources and binaries go to `build/abi_fuzz/` (git-ignored).
 
 | direction | case prefix | status on 75f7eb4 |
 |---|---|---|
-| Zark calls C directly | `direct_*`, `rnd_*` | green, except `direct_char` with `-O` |
+| Zark calls C directly | `direct_*`, `rnd_*` | green |
 | Zark calls C through `fn` pointer | `indirect_*` | red for aggregates |
 | C calls Zark `export` | `export_*`, `export_struct` | red |
 | C calls a Zark callback | `callback_*` | red |
@@ -37,9 +37,12 @@ native, while `P` (`i32, i32`) fails everywhere. `indirect_16` (`f64, f64`)
 passes on `--llvm`/`-O` and fails on native. The matrix is the source of
 truth, not the direction.
 
-`direct_char` sends `i8 -1`, `u8 200`, `bool true`. Native and `--llvm` return
-200; `-O` returns 456, i.e. the `i8` argument is not sign-extended before the
-C call. This is a separate small-integer ABI bug found by the harness.
+`direct_char` sends `i8 -1`, `u8 200`, `bool true`. It was the first real bug
+found by the harness: `-O` returned 456, because the `i8` argument was not
+sign-extended before the C call. The compiler now emits `signext`/`zeroext`
+on small C parameters and returns; the same case plus `direct_i8_ret`,
+`direct_u8_ret`, `direct_i16_ret`, `direct_u16_ret` and `direct_bool_ret`
+cover the other direction and stay as regressions.
 
 ## Matrix
 

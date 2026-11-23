@@ -35,7 +35,6 @@ STRUCTS = {
 ORDER = ["P", "M", "D2", "Big", "Mix", "Nest"]
 
 KNOWN_BROKEN = {
-    ("direct_char", "O"),
     ("indirect_p", "native"),
     ("indirect_p", "llvm"),
     ("indirect_p", "O"),
@@ -177,18 +176,23 @@ def args_zk(params, vals):
     return ", ".join(zlit(t, v) for (t, _), v in zip(params, vals))
 
 
-def build_case(name, mode, params, values=None):
+def build_case(name, mode, params, values=None, ret="i64", ret_value=None):
     ctr = [0]
     if values is None:
         vals = [make_value(t, ctr) for t, _ in params]
     else:
         vals = values
-    expected = sum(leaf_sum(v) for v in vals)
+    if ret_value is None:
+        expected = sum(leaf_sum(v) for v in vals)
+    else:
+        expected = int(ret_value)
     return {
         "name": name,
         "mode": mode,
         "params": params,
         "values": vals,
+        "ret": ret,
+        "ret_value": ret_value,
         "expected": expected,
     }
 
@@ -198,25 +202,31 @@ def render_zk(case):
     mode = case["mode"]
     params = case["params"]
     vals = case["values"]
+    ret = case["ret"]
+    rv = case["ret_value"]
     lines = z_structs()
     lines.append("")
     sig = sig_zk(params)
     if mode in ("direct", "indirect"):
-        lines.append(f"extern i64 f_{name}({sig});")
+        lines.append(f"extern {zktype(ret)} f_{name}({sig});")
     else:
         prefix = "export " if mode == "export" else ""
-        lines.append(f"{prefix}i64 f_{name}({sig}) {{ return {sum_zk(params)}; }}")
+        body = "0" if ret != "i64" else sum_zk(params)
+        if rv is not None:
+            body = zlit(ret, rv)
+        lines.append(f"{prefix}{zktype(ret)} f_{name}({sig}) {{ return {body}; }}")
     lines.append("")
     if mode == "direct":
-        lines.append(f"void main() {{ const auto r = f_{name}({args_zk(params, vals)}); println(\"RESULT {{r}}\"); }}")
+        lines.append(f"void main() {{ const auto r = f_{name}({args_zk(params, vals)}); println(\"RESULT {{(r as i64)}}\"); }}")
     elif mode == "indirect":
-        lines.append(f"void main() {{ {fn_ty(params)} fp = f_{name}; const auto r = fp({args_zk(params, vals)}); println(\"RESULT {{r}}\"); }}")
+        lines.append(f"void main() {{ fn({', '.join(zktype(t) for t, _ in params)}) -> {zktype(ret)} fp = f_{name}; const auto r = fp({args_zk(params, vals)}); println(\"RESULT {{(r as i64)}}\"); }}")
     elif mode == "export":
         lines.append(f"extern i64 run_{name}();")
         lines.append(f"void main() {{ const auto r = run_{name}(); println(\"RESULT {{r}}\"); }}")
     else:
-        lines.append(f"extern i64 run_{name}({fn_ty(params)} cb);")
-        lines.append(f"void main() {{ {fn_ty(params)} fp = f_{name}; const auto r = run_{name}(fp); println(\"RESULT {{r}}\"); }}")
+        fnty = f"fn({', '.join(zktype(t) for t, _ in params)}) -> {zktype(ret)}"
+        lines.append(f"extern i64 run_{name}({fnty} cb);")
+        lines.append(f"void main() {{ {fnty} fp = f_{name}; const auto r = run_{name}(fp); println(\"RESULT {{r}}\"); }}")
     return "\n".join(lines) + "\n"
 
 
@@ -229,14 +239,18 @@ def render_c(case):
     lines.extend(c_structs())
     lines.append("")
     sig = sig_c(params)
+    ret = case["ret"]
+    rv = case["ret_value"]
+    body = clit(ret, rv) if rv is not None else sum_c(params)
+    rt = ctype(ret)
     if mode in ("direct", "indirect"):
-        lines.append(f"int64_t f_{name}({sig}) {{ return {sum_c(params)}; }}")
+        lines.append(f"{rt} f_{name}({sig}) {{ return {body}; }}")
     elif mode == "export":
-        lines.append(f"extern int64_t f_{name}({sig});")
-        lines.append(f"int64_t run_{name}(void) {{ return f_{name}({args_c(params, vals)}); }}")
+        lines.append(f"extern {rt} f_{name}({sig});")
+        lines.append(f"int64_t run_{name}(void) {{ return (int64_t)f_{name}({args_c(params, vals)}); }}")
     else:
-        lines.append(f"extern int64_t f_{name}({sig});")
-        lines.append(f"int64_t run_{name}(int64_t (*cb)({sig})) {{ return cb({args_c(params, vals)}); }}")
+        lines.append(f"extern {rt} f_{name}({sig});")
+        lines.append(f"int64_t run_{name}({rt} (*cb)({sig})) {{ return (int64_t)cb({args_c(params, vals)}); }}")
     return "\n".join(lines) + "\n"
 
 
@@ -333,6 +347,11 @@ def fixed_cases():
         build_case("direct_nest", "direct", [("Nest", "n")]),
         build_case("direct_many", "direct", many),
         build_case("direct_char", "direct", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
+        build_case("direct_i8_ret", "direct", [], ret="i8", ret_value=-1),
+        build_case("direct_u8_ret", "direct", [], ret="u8", ret_value=200),
+        build_case("direct_i16_ret", "direct", [], ret="i16", ret_value=-300),
+        build_case("direct_u16_ret", "direct", [], ret="u16", ret_value=60000),
+        build_case("direct_bool_ret", "direct", [], ret="bool", ret_value=True),
         build_case("indirect_p", "indirect", [("P", "a"), ("P", "b")]),
         build_case("indirect_16", "indirect", [("D2", "d")]),
         build_case("export_p", "export", [("P", "a"), ("P", "b")]),

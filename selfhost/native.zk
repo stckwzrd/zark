@@ -94,7 +94,7 @@ struct Cur { str s; i64 i;
 }
 
 // ------------------------------------------------------------------ instructions
-struct Arg { LT* ty; str v; i64 id1; LT* byval; }
+struct Arg { LT* ty; str v; i64 id1; LT* byval; i64 ext; }
 struct PhiIn { str v; str pred; }
 
 struct Ins {
@@ -1194,6 +1194,10 @@ struct Native {
         } else if (op == "call") {
             c.ws();
             if (c.eat_word("ccc")) { ins.cabi = true; }
+            c.ws();
+            if (c.eat_word("signext")) {
+            } else if (c.eat_word("zeroext")) {
+            }
             ins.ty = this->ty(&c)?;
             c.ws();
             if (c.peek() == '(') {
@@ -1223,6 +1227,7 @@ struct Native {
                 const auto at = this->ty(&c)?;
                 // C ABI attributes: byval(T) (copied onto the stack), sret(T), align N
                 LT* bv = null;
+                auto ext = 0;
                 while (true) {
                     c.ws();
                     if (c.eat_word("byval(")) {
@@ -1234,11 +1239,15 @@ struct Native {
                     } else if (c.eat_word("align")) {
                         c.ws();
                         _ = c.word();
+                    } else if (c.eat_word("signext")) {
+                        ext = 1;
+                    } else if (c.eat_word("zeroext")) {
+                        ext = 2;
                     } else {
                         break;
                     }
                 }
-                ins.args.push(Arg{ .ty = at, .v = c.value(), .id1 = 0, .byval = bv })?;
+                ins.args.push(Arg{ .ty = at, .v = c.value(), .id1 = 0, .byval = bv, .ext = ext })?;
                 _ = c.eat(',');
             }
             if (ins.ty.k == .V) { ins.dest = ""; }
@@ -1956,7 +1965,13 @@ struct Native {
         for (auto k : 0..nargs) {
             if (kind.get(k) != 2) { continue; }
             const auto ar = ins.args.get(k);
-            if (is_agg(ar.ty)) { asm.lea(R10, RBP, locs.get(k))?; } else { this->load_op(R10, ar.ty, ar.v, ar.ty.k == .I)?; }
+            if (is_agg(ar.ty)) {
+                asm.lea(R10, RBP, locs.get(k))?;
+            } else {
+                auto sgn = ar.ty.k == .I;
+                if (ar.ext == 1) { sgn = true; } else if (ar.ext == 2) { sgn = false; }
+                this->load_op(R10, ar.ty, ar.v, sgn)?;
+            }
             asm.st(R10, RSP, 8 * regno.get(k), 8)?;
         }
         for (auto k : 0..nargs) {
@@ -1968,8 +1983,9 @@ struct Native {
                 if (is_agg(ar.ty)) {
                     asm.lea(regno.get(k), RBP, locs.get(k))?;
                 } else {
-                    // C ABI: small ints are extended by the callee's expectation; extend signed for safety
-                    this->load_op(regno.get(k), ar.ty, ar.v, ar.ty.k == .I && ar.ty.bits > 1)?;
+                    auto sgn = ar.ty.k == .I && ar.ty.bits > 1;
+                    if (ar.ext == 1) { sgn = true; } else if (ar.ext == 2) { sgn = false; }
+                    this->load_op(regno.get(k), ar.ty, ar.v, sgn)?;
                 }
             }
         }

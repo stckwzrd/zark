@@ -725,7 +725,11 @@ struct Gen {
             auto sret = false;
             if (!decl.variadic && is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
             if (decl.variadic) {
-                sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+                if (is_c_agg(ret)) {
+                    sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+                } else {
+                    sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
+                }
             } else {
                 sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
             }
