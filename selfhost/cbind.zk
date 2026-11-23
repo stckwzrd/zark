@@ -3040,6 +3040,7 @@ List<str> c_inline_sources = List<str>{};
 List<str> c_uses = List<str>{};
 Map<str> c_headers = Map<str>{};
 str c_version = "";
+const auto CBIND_SRC = embed("cbind.zk");
 
 bool is_c_header(str p) {
     return str_ends_with(p, ".h") || str_ends_with(p, ".hpp") || str_ends_with(p, ".hh") || str_ends_with(p, ".hxx");
@@ -3171,7 +3172,7 @@ str c_header_name(str p) {
             eprint(r.err);
             return error.CompileFailed;
         }
-        c_version = c_allocator().dup(it.line)?;
+        c_version = str_concat(c_allocator(), [it.line, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?])?;
     }
     auto flags = List<str>::init(a);
     for (auto f : c_flags.slice()) { if (!str_starts_with(f, "-std=c++") && !str_starts_with(f, "-std=gnu++")) { flags.push(f)?; } }

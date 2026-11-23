@@ -580,6 +580,27 @@ grep -q -- "-E" clang.log || fail "import_cache_hit: shim not used: $(cat clang.
 out=$(cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c 2>&1) || fail "import_cache_hit: second run: $out"
 [ "$out" = "$(cat interop/main.out)" ] || fail "import_cache_hit: got: $out"
 if grep -E -- "(^| )-E( |$)|fdump-record-layouts" clang.log; then fail "import_cache_hit: preprocessed again"; fi
+if command -v python3 >/dev/null; then
+    python3 - "$ZARK" zark2 <<'EOF' || fail "import_compiler_change: cannot patch the compiler"
+import sys
+b = open(sys.argv[1], "rb").read()
+old = b'CBIND_SRC = embed("cbind.zk")'
+assert b.count(old) == 1, b.count(old)
+open(sys.argv[2], "wb").write(b.replace(old, b'CBIND_SRC = embed("cbind.zz")'))
+EOF
+    chmod +x zark2
+    [ "$(uname -s)" = Darwin ] && codesign -f -s - zark2 2> /dev/null
+    : > clang.log
+    out=$(cd hit && PATH="$T/shim:$PATH" "$T/zark2" run main.zk lib.c 2>&1) || fail "import_compiler_change: $out"
+    [ "$out" = "$(cat interop/main.out)" ] || fail "import_compiler_change: got: $out"
+    grep -qE -- "(^| )-E( |$)" clang.log || fail "import_compiler_change: stale binding reused"
+    [ $(ls hit/.zark-cache/cbind/*.zk | wc -l) -eq 2 ] || fail "import_compiler_change: expected two cached bindings: $(ls hit/.zark-cache/cbind)"
+    : > clang.log
+    (cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c > /dev/null 2>&1) || fail "import_compiler_change: rerun"
+    if grep -E -- "(^| )-E( |$)" clang.log; then fail "import_compiler_change: own binding not reused"; fi
+else
+    echo "skip import_compiler_change: python3 is not installed"
+fi
 
 sed 's/#define LIB_MAGIC 42/#define LIB_MAGIC 43/' hit/lib.h > hit/lib.h.new && mv hit/lib.h.new hit/lib.h
 out=$(cd hit && "$ZARK" run main.zk lib.c 2>&1) || fail "import_header_edit: $out"
