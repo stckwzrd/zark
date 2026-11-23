@@ -12,7 +12,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix; do
+for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16; do
     flags="-fsigned-char"
     [ "$name" = shorten ] && flags="$flags -fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -178,6 +178,67 @@ EOF
     for f in $native --llvm -O; do
         out=$("$ZARK" run $f use_unionval2.zk tests/cbind/unionval.c 2>&1) || fail "unionval $f: run: $out"
         [ "$out" = "$(printf '2.5 42 3.5 4.5 2 4 6 1.25 2.5 8 2.5\n54.5 8 4 12 4 16 16')" ] || fail "unionval $f: got: $out"
+    done
+fi
+
+cat > probe16.c <<'EOF'
+#include <stdio.h>
+#include <stddef.h>
+#include "align16.h"
+#define P(T) printf("%zu %zu ", sizeof(T), _Alignof(T))
+int main(void) {
+    P(struct a16); P(struct m16); P(struct pair16); P(struct dbl16); P(struct mix16); P(struct off16);
+    P(union un16); P(struct has16); P(union hu); P(struct a32); P(struct big16);
+    printf("%zu %zu %zu %zu\n", offsetof(struct m16, x), offsetof(struct mix16, n), offsetof(struct has16, p), offsetof(struct big16, c));
+    return 0;
+}
+EOF
+clang -I tests/cbind probe16.c -o probe16 || fail "align16: C probe"
+cat > use_align16.zk <<'EOF'
+import "align16.zk";
+void main() {
+    m16 m;
+    mix16 x;
+    has16 h;
+    big16 b;
+    const auto om = (&m.x as *u8 as i64) - (&m as *u8 as i64);
+    const auto ox = (&x.n as *u8 as i64) - (&x as *u8 as i64);
+    const auto oh = (&h.p as *u8 as i64) - (&h as *u8 as i64);
+    const auto ob = (&b.c as *u8 as i64) - (&b as *u8 as i64);
+    println("{sizeof(a16)} {alignof(a16)} {sizeof(m16)} {alignof(m16)} {sizeof(pair16)} {alignof(pair16)} {sizeof(dbl16)} {alignof(dbl16)} {sizeof(mix16)} {alignof(mix16)} {sizeof(off16)} {alignof(off16)} {sizeof(un16)} {alignof(un16)} {sizeof(has16)} {alignof(has16)} {sizeof(hu)} {alignof(hu)} {sizeof(a32)} {alignof(a32)} {sizeof(big16)} {alignof(big16)} {om} {ox} {oh} {ob}");
+    a32 q;
+    q.x = 5;
+    h.k = 1;
+    h.p.a = 2;
+    h.p.b = 3;
+    b.a = 1;
+    b.b = 2;
+    b.c = 3;
+    un16 u;
+    *u.as_l() = 7;
+    println("{a32_x(&q)} {sum_has_p(&h)} {sum_big(&b)} {read_un16(&u)}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_align16.zk tests/cbind/align16.c 2>&1) || fail "align16 $f: run: $out"
+    [ "$out" = "$(./probe16)
+1005 1006 6 7" ] || fail "align16 $f: got: $out, C layout: $(./probe16)"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    cat > use_align16v.zk <<'EOF'
+import "align16.zk";
+void main() {
+    const auto p = mk_pair(4, 5);
+    const auto d = mk_dbl(1.5, 2.0);
+    mix16 m;
+    m.d = 2.0;
+    m.n = 40;
+    println("{p.a} {p.b} {sum_pair(p)} {sum_dbl(d)} {d.x} {d.y} {sum_mix(m)}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_align16v.zk tests/cbind/align16.c 2>&1) || fail "align16 by value $f: run: $out"
+        [ "$out" = "4 5 45 5.5 1.5 2 42" ] || fail "align16 by value $f: got: $out"
     done
 fi
 

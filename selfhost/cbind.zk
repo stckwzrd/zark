@@ -687,7 +687,7 @@ struct CParser {
                     if (w == "packed" || w == "__packed__") { this->layout_why = "packed"; }
                     if (w == "aligned" || w == "__aligned__") { this->layout_why = "aligned"; }
                     if (w == "packed" || w == "__packed__") { this->attr_why = "packed attribute"; }
-                    if (w == "aligned" || w == "__aligned__") { this->attr_why = "aligned attribute"; }
+                    if ((w == "aligned" || w == "__aligned__") && this->attr_why.len == 0) { this->attr_why = "aligned attribute"; }
                     if (w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type") { this->attr_why = "vector_size attribute"; }
                     if (w == "mode" || w == "__mode__") { this->attr_why = "mode attribute"; }
                     if (w == "target" || w == "__target__") { this->nowrap = "target attribute"; }
@@ -895,7 +895,7 @@ struct CParser {
                 this->skip_until_comma();
             }
             this->skip_noise();
-            if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
+            if (this->attr_why.len > 0 && this->attr_why != "aligned attribute") { f.ty = this->bad(this->attr_why)?; }
             d.fields.push(f)?;
             if (!this->eat(",")) { break; }
         }
@@ -2000,14 +2000,21 @@ struct CEmit {
         }
         if (d.is_union) { return this->union_out(d); }
         auto why = "";
+        auto over = 0;
         if (d.bitfields) {
             why = "bitfields";
         } else if (d.layout_attr) {
             why = d.attr;
+            const auto l = this->layout(d);
+            if (d.attr == "aligned" && l != null && l.align > 8) {
+                why = "";
+                over = l.align;
+            }
         }
         auto b = List<u8>::init(this->a);
         if (why.len == 0) {
             this->why = "";
+            if (over > 0) { sprint(&b, "align({over}) ")?; }
             sprint(&b, "struct ")?;
             this->esc(&b, d.name)?;
             sprint(&b, " {{ ")?;
@@ -2030,7 +2037,7 @@ struct CEmit {
             sprint(&b, "}")?;
             why = this->why;
             this->why = "";
-            if (why.len == 0) { why = this->natural(d); }
+            if (why.len == 0) { why = this->natural(d, over); }
         }
         if (why.len > 0) { return this->opaque(d, why); }
         for (auto s : d.subs.slice()) {
@@ -2107,11 +2114,11 @@ struct CEmit {
         return CSize{ .size = -1 };
     }
 
-    str natural(CDecl* d) {
+    str natural(CDecl* d, i64 over) {
         const auto l = this->layout(d);
         if (l == null) { return "layout not found"; }
         auto o = 0;
-        auto al = 1;
+        auto al = max(over, 1);
         for (auto [i, f] : d.fields.slice()) {
             auto z = this->size(f.ty);
             if (f.ty.k == .Array && f.ty.n == -1) { z = this->size(f.ty.elem); }
@@ -2126,12 +2133,6 @@ struct CEmit {
     }
 
     !bool storage(List<u8>* b, CDecl* d, CLayout* l) {
-        if (l.align > 8) {
-            auto w = List<u8>::init(this->a);
-            sprint(&w, "alignment {l.align}")?;
-            this->skip(d.name, w.slice())?;
-            return false;
-        }
         if (l.size == 0) {
             this->skip(d.name, "empty record")?;
             return false;
@@ -2139,12 +2140,13 @@ struct CEmit {
         auto el = "u8";
         if (l.align == 2) { el = "u16"; }
         if (l.align == 4) { el = "u32"; }
-        if (l.align == 8) { el = "u64"; }
+        if (l.align >= 8) { el = "u64"; }
+        if (l.align > 8) { sprint(b, "align({l.align}) ")?; }
         sprint(b, "struct ")?;
         this->esc(b, d.name)?;
         const auto u = this->uclass(d, l)?;
         if (u.bad || (u.c0 != 2 && u.c1 != 2)) {
-            sprint(b, " {{ {el}[{l.size / l.align}] storage; ")?;
+            sprint(b, " {{ {el}[{l.size / min(l.align, 8)}] storage; ")?;
             return true;
         }
         const auto lo = this->word_el(u.c0, l, el);
@@ -2327,9 +2329,17 @@ struct CEmit {
     !bool abi_ok(CType* t) {
         if (this->rec_of(t) == null) { return true; }
         const auto z = this->size(t);
+        if (z.align > 8 && z.size > 16) {
+            this->fail("over-aligned record by value");
+            return false;
+        }
         if (z.size > 16) { return true; }
         auto r = CAbi{};
         this->mark(&r, t, 0, true, true)?;
+        if (z.align > 8 && (r.c0 == 0 || r.c1 == 0)) {
+            this->fail("over-aligned record by value");
+            return false;
+        }
         return !r.bad && r.c0 == r.z0 && r.c1 == r.z1;
     }
 

@@ -1,3 +1,5 @@
+align(16) struct al { u64[4] storage; }
+align(16) struct fv { u64[4] storage; }
 struct fm { u64[1] storage; }
 struct pk { u8[5] storage; }
 struct unpk { i8 c; i32 x; }
@@ -30,6 +32,7 @@ struct bits { u64[2] storage; }
 struct pkd { u8[7] storage; }
 struct ald { u64[1] storage; }
 struct alf { u64[2] storage; }
+align(16) struct al16 { i8 c; }
 struct usesbits { bits[2] b; pkd p; alf f; }
 struct bitu { u32[2] storage; }
 extern i32 takebits(bits b);

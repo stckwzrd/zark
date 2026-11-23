@@ -1,0 +1,3 @@
+opaque off16: layout differs
+skipped get_a16: over-aligned record by value
+skipped sum_has: over-aligned record by value

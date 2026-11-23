@@ -319,6 +319,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 | `typedef T name;` | `type name = T;` |
 | `struct`, nested anonymous struct | `struct` with the same layout, anonymous parts named `outer__anonN` |
 | incomplete struct | empty struct, used through pointers |
+| struct or union aligned above 8 (`__attribute__((aligned(16)))`, `_Alignas(16)` member) | `align(N) struct`: with the C fields when clang's layout equals the natural one rounded to `N`, otherwise opaque storage of the same size and alignment |
 | `union` | struct `{ uN[k] storage; }` with accessors `as_member()` returning a pointer; in a union of at most 16 bytes an SSE eightbyte is stored as `f64` or `f32` (`storage_hi` holds the second eightbyte when the two differ), so size, alignment and System V class match the C union |
 | `enum E { A, B }` | `type E = i32;` (or the integer type that holds the values) plus `const auto A = 0;` … |
 | `#define N 42`, string, float or char constant | `const auto N = 42;` |
@@ -327,7 +328,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 
 Fields, parameters and types whose names are Zark keywords or type names get a trailing `_` (`type_`, `str_`); functions with such names are skipped. A declaration that uses a skipped one is skipped too.
 
-Limits: C only (no C++ headers); by-value aggregates follow System V x86-64 only. Skipped with a warning: `long double`, `_Complex`, `_Atomic`, bitfield members of unions (a struct with bitfields becomes opaque storage), alignment above 8, extern variables, function-like macros, variadic static inline functions, variadic function pointer types, plain `static` functions, records passed by value whose System V class the binding does not reproduce exactly (`opaque record by value`), and records passed by value in function pointer types. A record with a flexible array member loses that member, or becomes opaque storage when its layout would differ.
+Limits: C only (no C++ headers); by-value aggregates follow System V x86-64 only. Skipped with a warning: `long double`, `_Complex`, `_Atomic`, bitfield members of unions (a struct with bitfields becomes opaque storage), extern variables, function-like macros, variadic static inline functions, variadic function pointer types, plain `static` functions, records passed by value whose System V class the binding does not reproduce exactly (`opaque record by value`), records aligned above 8 passed or returned by value when they are larger than 16 bytes or leave an eightbyte without a class (`over-aligned record by value`), and records passed by value in function pointer types. A record with a flexible array member loses that member, or becomes opaque storage when its layout would differ.
 
 ## 9. System (prelude)
 

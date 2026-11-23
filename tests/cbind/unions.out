@@ -3,6 +3,7 @@ struct small { u16[1] storage; u8* as_c() { void* p = this; return p; } i16* as_
 struct bytes { u8[3] storage; u8[3]* as_b() { void* p = this; return p; } }
 struct mix { f64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
 struct part { u64[2] storage; i32* as_i() { void* p = this; return p; } }
+align(16) struct big { u64[2] storage; f64* as_d() { void* p = this; return p; } i32* as_i() { void* p = this; return p; } }
 struct cbu { u64[1] storage; *fn(i32) -> i32 as_f() { void* p = this; return p; } void** as_p() { void* p = this; return p; } }
 struct flags { u32[1] storage; u32* as_all() { void* p = this; return p; } }
 struct holder__anon0 { u32[1] storage; i32* as_x() { void* p = this; return p; } f32* as_y() { void* p = this; return p; } }
@@ -32,5 +33,6 @@ extern f64 vsum(var_t v);
 extern holder make_holder(i32 k);
 extern bind mkbind(i32 k);
 extern fwd* get_fwd();
+extern void usebig(big* b);
 extern void incp(inc_t* x);
 extern i64 csize(i32 which);

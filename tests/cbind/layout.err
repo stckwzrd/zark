@@ -1,10 +1,10 @@
 skipped aint: aligned attribute
-skipped al: alignment 16
+opaque al: uses skipped aint
 skipped v4: vector_size attribute
 skipped vadd: uses skipped v4
 skipped di: mode attribute
 skipped dmode: uses skipped di
-skipped fv: alignment 16
+opaque fv: vector_size attribute
 opaque fm: mode attribute
 opaque pk: packed
 opaque pk2: packed
@@ -12,7 +12,6 @@ opaque bits: bitfields
 opaque pkd: packed
 opaque ald: aligned
 opaque alf: aligned
-skipped al16: alignment 16
 opaque bitu: bitfields
 skipped takepkd: opaque record by value
 skipped a3.i: underaligned member

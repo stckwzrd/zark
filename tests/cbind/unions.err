@@ -1,6 +1,4 @@
 skipped part.z: _Complex
-skipped big: alignment 16
 skipped flags.lo: bitfield
-skipped usebig: uses skipped big
 skipped byinc: incomplete record by value
 skipped byinc2: incomplete record by value
