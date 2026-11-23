@@ -1,0 +1,18 @@
+union mix { float f; double d; };
+union im { int i; float f; };
+struct pt { int x; int y; };
+struct ald2 { float f; } __attribute__((aligned(8)));
+struct hasfp { double (*cb)(union mix); union mix (*get)(void); };
+struct okfp { int (*cb)(union im); union im (*get)(void); };
+struct ptrfp { int (*cb)(union im*); struct pt* (*get)(void); };
+typedef void (*cb1)(union mix m);
+typedef void (*cb2)(struct pt p);
+typedef struct ald2 (*cb3)(void);
+typedef int (*cb4)(union im* m);
+typedef void (*cb5)(void (*inner)(struct pt));
+void setcb(void (*cb)(union im m));
+union im (*getf(void))(void);
+struct pt* (*getg(void))(void);
+struct hasfp mk(void);
+struct ptrfp mkp(void);
+int callp(int (*cb)(union im*), int x);

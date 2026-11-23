@@ -37,3 +37,6 @@ int takebits(struct bits b);
 int takebitsp(struct bits* b);
 int takepkd(struct pkd p);
 int takeald(struct ald a);
+#pragma pack(2)
+union a3 { char c; int i; double d; char arr[9]; };
+#pragma pack()

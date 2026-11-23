@@ -1632,6 +1632,8 @@ struct CEmit {
             .Ptr, .Func => { return 8; }
             .Array => { return this->align(t.elem); }
             .Named => {
+                const auto z = this->size(t);
+                if (z.size >= 0) { return z.align; }
                 if (t.rec != null) { return this->rec_align(t.rec); }
                 if (t.tag == 0) {
                     const auto x = this->typedefs.get_or(t.name, null);
@@ -1722,6 +1724,8 @@ struct CEmit {
         }
         sprint(b, ") -> ")?;
         this->ty(b, f.elem)?;
+        if (this->rec_of(f.elem) != null) { this->fail("record by value in function pointer"); }
+        for (auto p : f.params.slice()) { if (this->rec_of(p.ty) != null) { this->fail("record by value in function pointer"); } }
     }
 
     !void named_ty(List<u8>* b, CType* t) {
@@ -1942,7 +1946,7 @@ struct CEmit {
 
     str natural(CDecl* d) {
         const auto l = this->layout(d);
-        if (l == null) { return ""; }
+        if (l == null) { return "layout not found"; }
         auto o = 0;
         auto al = 1;
         for (auto [i, f] : d.fields.slice()) {
@@ -2020,6 +2024,10 @@ struct CEmit {
                 this->warn(fb.slice(), "bitfield")?;
                 continue;
             }
+            if (this->size(f.ty).align > l.align) {
+                this->warn(fb.slice(), "underaligned member")?;
+                continue;
+            }
             const auto pt = this->a.create<CType>()?;
             pt.k = .Ptr;
             pt.elem = f.ty;
@@ -2054,6 +2062,7 @@ struct CEmit {
                     r.bad = true;
                     return;
                 }
+                if (e == 0) { return; }
                 for (auto i : 0..t.n) { this->mark(r, t.elem, off + i * e, z, c)?; }
             }
             .Named => {
