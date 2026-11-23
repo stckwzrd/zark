@@ -36,22 +36,14 @@ ORDER = ["P", "M", "D2", "Big", "Mix", "Nest"]
 
 KNOWN_BROKEN = {
     ("indirect_p", "native"),
-    ("indirect_p", "llvm"),
-    ("indirect_p", "O"),
     ("indirect_16", "native"),
+    ("indirect_24", "native"),
+    ("indirect_mixed", "native"),
     ("export_struct", "native"),
-    ("export_struct", "llvm"),
-    ("export_struct", "O"),
     ("export_p", "native"),
-    ("export_p", "llvm"),
-    ("export_p", "O"),
     ("export_mixed", "native"),
     ("callback_p", "native"),
-    ("callback_p", "llvm"),
-    ("callback_p", "O"),
     ("callback_big", "native"),
-    ("callback_big", "llvm"),
-    ("callback_big", "O"),
 }
 
 
@@ -304,16 +296,16 @@ def status_for(result, expected):
     return "FAIL", out
 
 
-def run_export_struct(backend):
-    case_dir = os.path.join(OUT, "export_struct")
+def run_special(name, backend):
+    case_dir = os.path.join(OUT, name)
     os.makedirs(case_dir, exist_ok=True)
     os.chmod(case_dir, 0o755)
     d = os.path.join(case_dir, backend)
     os.makedirs(d, exist_ok=True)
     os.chmod(d, 0o755)
     binp = os.path.join(d, "bin")
-    zk = os.path.join(ROOT, "tests", "abi", "export_struct", "main.zk")
-    c = os.path.join(ROOT, "tests", "abi", "export_struct", "driver.c")
+    zk = os.path.join(ROOT, "tests", "abi", name, "main.zk")
+    c = os.path.join(ROOT, "tests", "abi", name, "driver.c")
     args = [ZARK, "build", zk, c, "-o", binp]
     if backend == "llvm":
         args.append("--llvm")
@@ -354,10 +346,18 @@ def fixed_cases():
         build_case("direct_bool_ret", "direct", [], ret="bool", ret_value=True),
         build_case("indirect_p", "indirect", [("P", "a"), ("P", "b")]),
         build_case("indirect_16", "indirect", [("D2", "d")]),
+        build_case("indirect_24", "indirect", [("Big", "b")]),
+        build_case("indirect_mixed", "indirect", [("M", "m")]),
+        build_case("indirect_char", "indirect", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
+        build_case("indirect_i8_ret", "indirect", [], ret="i8", ret_value=-1),
         build_case("export_p", "export", [("P", "a"), ("P", "b")]),
         build_case("export_mixed", "export", [("M", "m")]),
+        build_case("export_char", "export", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
+        build_case("export_i8_ret", "export", [], ret="i8", ret_value=-1),
         build_case("callback_p", "callback", [("P", "a"), ("P", "b")]),
         build_case("callback_big", "callback", [("Big", "b")]),
+        build_case("callback_char", "callback", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
+        build_case("callback_i8_ret", "callback", [], ret="i8", ret_value=-1),
     ]
 
 
@@ -382,7 +382,10 @@ def main():
     ap.add_argument("--strict", action="store_true")
     args = ap.parse_args()
 
-    cases = [{"name": "export_struct", "mode": "export_ret", "params": [], "values": [], "expected": 46, "special": True}]
+    cases = [
+        {"name": "export_struct", "mode": "export_ret", "params": [], "values": [], "expected": 46, "special": True, "dir": "export_struct"},
+        {"name": "export_big", "mode": "export_ret", "params": [], "values": [], "expected": 33, "special": True, "dir": "export_big"},
+    ]
     cases += fixed_cases()
     if args.cases > 0:
         cases += random_cases(args.cases, args.seed)
@@ -404,7 +407,7 @@ def main():
         detail = ""
         for backend in backends:
             if case.get("special"):
-                result = run_export_struct(backend)
+                result = run_special(case["dir"], backend)
             else:
                 result = run_one(case, backend)
             status, out = status_for(result, case["expected"])

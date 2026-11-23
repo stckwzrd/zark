@@ -19,23 +19,30 @@ Generated sources and binaries go to `build/abi_fuzz/` (git-ignored).
 
 ## What is covered
 
-| direction | case prefix | status on 75f7eb4 |
+| direction | case prefix | status |
 |---|---|---|
 | Zark calls C directly | `direct_*`, `rnd_*` | green |
-| Zark calls C through `fn` pointer | `indirect_*` | red for aggregates |
-| C calls Zark `export` | `export_*`, `export_struct` | red |
-| C calls a Zark callback | `callback_*` | red |
+| Zark calls C through `fn` pointer | `indirect_*` | green on LLVM/`-O`; native pending |
+| C calls Zark `export` | `export_*`, `export_struct` | green on LLVM/`-O`; native pending |
+| C calls a Zark callback | `callback_*` | green on LLVM/`-O`; native pending |
+
+The C-ABI thunk path is enabled for `--llvm`, `-O`, `--release` and hosts
+without the native backend. The default native build keeps the old ABI until
+the follow-up commit; that is the remaining `KNOWN_BROKEN` set (nine cells).
 
 `export_struct` is the 12-line negative control: Zark exports
 `P addp(P, P)` with `struct P { i32 x; i32 y; }`, C calls it with the SysV
-layout and expects `4 6`. Native crashes; `--llvm` returns garbage; `-O`
-returns garbage.
+layout and expects `4 6`. It was red on every backend; now it is green on
+`--llvm` and `-O` and remains native-only red. `export_big` exports a
+24-byte struct, so the C caller takes it through `sret`; it is green on all
+three backends, because the native backend already used a hidden sret
+pointer for internal aggregate returns.
 
-The failure is shape-specific, not direction-wide: `export_mixed`
-(`struct { i64; f64; }`) passes on `--llvm` and `-O` and crashes only on
-native, while `P` (`i32, i32`) fails everywhere. `indirect_16` (`f64, f64`)
-passes on `--llvm`/`-O` and fails on native. The matrix is the source of
-truth, not the direction.
+The failures were shape-specific, not direction-wide: `export_mixed`
+(`struct { i64; f64; }`) passed on `--llvm` before the thunk work, while
+`P` (`i32, i32`) did not. `indirect_16` (`f64, f64`) still passes on
+`--llvm`/`-O` and fails on native. The matrix is the source of truth, not
+the direction.
 
 `direct_char` sends `i8 -1`, `u8 200`, `bool true`. It was the first real bug
 found by the harness: `-O` returned 456, because the `i8` argument was not
@@ -58,11 +65,12 @@ When a fix lands, remove the corresponding `(case, backend)` pair from
 
 ## Not yet covered
 
+- Native thunks for aggregates (next commit).
 - `sizeof`/`alignof`/`offsetof` comparison between C and Zark.
 - Struct returns from generated cases (only the hand-written
   `tests/abi/export_struct`).
 - Unions, bitfields, packed and over-aligned structs.
 - Variadic functions.
 - AArch64. The classifier and the CI matrix are step 4.
-- Full random signatures for `indirect`/`export`/`callback`; those are
-  known-broken until the thunk work lands.
+- Random signatures for `indirect`/`export`/`callback`; random mode still
+  generates direct calls only.
