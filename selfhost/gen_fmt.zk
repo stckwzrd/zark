@@ -232,8 +232,11 @@ bool is_agg_type(Type* t) { return t.k == .Strct || t.k == .Array || t.k == .Sli
     if (spec.len > 0 && !this->user_fmt(v.ty)) { this->check_spec(spec, e.line)?; }
     const auto thunk = this->fmt_thunk(v.ty)?;
     const auto slot = this->spill(v)?;
+    auto tk = this->sb();
+    sprint(&tk, "{thunk}")?;
+    const auto tsym = this->fmt_syms.get(tk.slice())?;
     auto tn = this->sb();
-    sprint(&tn, "@vb.__ff{thunk}")?;
+    sprint(&tn, "@{tsym}")?;
     pieces.push(FPiece{ .lit = cur.slice(), .ptr = slot.v, .thunk = tn.slice(), .spec = spec, .has = true })?;
     *cur = this->sb();
 }
@@ -282,7 +285,11 @@ bool is_agg_type(Type* t) { return t.k == .Strct || t.k == .Array || t.k == .Sli
     this->file = saved;
     auto fname = this->sb();
     sprint(&fname, "__ff{id}")?;
-    _ = this->inst_fn(this->fns.get(fname.slice())?, this->new_env()?, this->no_types())?;
+    const auto fi = this->inst_fn(this->fns.get(fname.slice())?, this->new_env()?, this->no_types())?;
+    const auto sym = this->func_ptr(fi)?;
+    auto kb = this->sb();
+    sprint(&kb, "{id}")?;
+    this->fmt_syms.put(kb.slice(), sym)?;
     return id;
 }
 

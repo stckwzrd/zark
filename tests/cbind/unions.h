@@ -3,7 +3,7 @@ union small { char c; short s; };
 union bytes { unsigned char b[3]; };
 union mix { float f; double d; };
 union part { int i; _Complex double z; };
-union big { long double ld; int i; };
+union big { double d __attribute__((aligned(16))); int i; };
 union cbu { int (*f)(int); void* p; };
 union flags { unsigned all; unsigned lo : 4; };
 struct holder { int k; union { int x; float y; } u; struct { char p; char q; } pq; };

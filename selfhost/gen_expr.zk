@@ -134,8 +134,9 @@ bool can_coerce(Type* from, Type* to) {
                 const auto t = this->mk(.Func)?;
                 t.params = fi.params;
                 t.ret = fi.ret;
+                const auto sym = this->func_ptr(fi)?;
                 auto b = this->sb();
-                sprint(&b, "@{fi.llname}")?;
+                sprint(&b, "@{sym}")?;
                 return Value{ .ty = t, .v = b.slice() };
             }
             this->err(e.line); eprintln("unknown identifier '{n}'{this->hint(n, this->visible_names())}");
