@@ -5,6 +5,8 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL cbind: $*"; exit 1; }
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
+native=
+if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then native=--native; fi
 nohid() { sed -E 's/zark_inl_[0-9a-f]{16}_/zark_inl_H_/g' "$@"; }
 cd "$T"
 mkdir -p tests
@@ -105,7 +107,7 @@ void main() {
     println("{h.cb(&q)} {p.x} {p.y} {callp(thrice, 5)} {sizeof(hasfp)} {sizeof(okfp)}");
 }
 EOF
-    for f in --native --llvm; do
+    for f in $native --llvm; do
         out=$("$ZARK" run $f use_fnptr2.zk tests/cbind/fnptr.c 2>&1) || fail "fnptr $f: run: $out"
         [ "$out" = "40 7 8 16 16 16" ] || fail "fnptr $f: got: $out"
     done
@@ -153,7 +155,7 @@ out=$("$ZARK" run use_inline2.zk inline.c 2> run.err) || fail "inline: run: $(ca
 [ "$out" = "$(printf '5 2.5 true 5 3 0 true false 15\n4 6 7 -5 10 12 101 42 25 7')" ] || fail "inline: got: $out"
 if [ "$(uname -m)" = x86_64 ]; then
     printf 'import "inline.zk";\nvoid main() { const auto p = pt_make(8, 9); println("{p.x} {p.y}"); }\n' > use_inline3.zk
-    for f in --native --llvm; do
+    for f in $native --llvm; do
         out=$("$ZARK" run $f use_inline3.zk inline.c 2> run.err) || fail "inline $f: run: $(cat run.err)"
         [ "$out" = "8 9" ] || fail "inline $f: got: $out"
     done

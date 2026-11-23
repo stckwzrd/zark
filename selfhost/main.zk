@@ -417,6 +417,7 @@ void restore_stack() {
     if (safety) { ovf = true; }
     const auto t0 = now_ns();
     const auto g = new_gen(a, safety)?;
+    const auto can_native = vrt_native() != 0;
     g.freestanding = freestanding;
     g.fast = fast;
     g.fastmath = fastmath;
@@ -465,7 +466,6 @@ void restore_stack() {
     const auto cache = ".zark-cache";
     _ = mkdir(".zark-cache", 493);
     const auto stem = stem_of(src_file);
-    const auto can_native = vrt_native() != 0;
     if (force_native && !can_native) {
         eprintln("error: the native backend only supports x86-64 Linux, use --llvm");
         return 1;

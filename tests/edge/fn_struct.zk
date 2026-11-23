@@ -1,0 +1,16 @@
+struct Item { i64 key; i64 val; }
+
+bool by_key(Item a, Item b) { return a.key < b.key; }
+
+!void main() {
+    const auto a = c_allocator();
+    Item[5] xs = [
+        Item{ .key = 4, .val = 40 },
+        Item{ .key = 1, .val = 10 },
+        Item{ .key = 5, .val = 50 },
+        Item{ .key = 2, .val = 20 },
+        Item{ .key = 3, .val = 30 },
+    ];
+    sort_by(a, xs[..], by_key)?;
+    for (auto x : xs) { println(x.key, x.val); }
+}

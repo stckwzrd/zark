@@ -64,7 +64,7 @@ import "sema_check.zk";
             sprint(&fname, "ivf{id}x{i}")?;
             const auto fi = this->inst_fn(this->fns.get(fname.slice())?, this->new_env()?, this->no_types())?;
             if (i > 0) { refs.append(", ")?; }
-            sprint(&refs, "ptr @{fi.llname}")?;
+            sprint(&refs, "ptr @{this->func_ptr(fi)?}")?;
         }
         auto gb = this->sb();
         sprint(&gb, "@vtbl.{id}")?;

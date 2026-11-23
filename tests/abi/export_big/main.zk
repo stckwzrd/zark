@@ -1,0 +1,12 @@
+struct B { i64 a; i64 b; i64 c; }
+
+export B makeb(i64 x) {
+    return B{ .a = x, .b = x + 1, .c = x + 2 };
+}
+
+extern i64 run_export_big();
+
+void main() {
+    const auto r = run_export_big();
+    println("RESULT {r}");
+}

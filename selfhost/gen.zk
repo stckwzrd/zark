@@ -55,6 +55,8 @@ struct FnInst {
     FnDecl* decl;
     Env env;
     str llname;
+    str cabi;
+    bool needs_thunk;
     List<Type*> params;
     Type* ret;
     bool generated;
@@ -73,6 +75,7 @@ struct Gen {
     bool ovf;
     bool wrapping;
     bool needs_llvm;
+    List<FnInst*> c_thunks;
     i64 rdepth;
     i64 cdepth;
     List<MoveRec> moved;
@@ -113,6 +116,7 @@ struct Gen {
     List<str> error_names;
     List<Value> pre_vals;
     Map<i64> thunks;
+    Map<str> fmt_syms;
     Map<str> vtables;
     Map<Type*> rtypes;
 
@@ -720,23 +724,38 @@ struct Gen {
         const auto fi = this->a.create<FnInst>()?;
         *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };
         this->fn_insts.put(key, fi)?;
+        if (!decl.is_extern && decl.is_export && this->sig_needs_c(params, ret)) {
+            auto b = this->sb();
+            sprint(&b, "{key}$z")?;
+            fi.llname = b.slice();
+            fi.cabi = key;
+            fi.needs_thunk = true;
+            this->c_thunks.push(fi)?;
+        }
         if (decl.is_extern) {
             auto txt = this->sb();
             auto sret = false;
             if (!decl.variadic && is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
             if (decl.variadic) {
-                sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+                if (is_c_agg(ret)) {
+                    sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
+                } else {
+                    sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
+                }
             } else {
                 sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
             }
-            if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; }
+            auto firstp = true;
+            if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; firstp = false; }
             auto cm = List<i64>::init(this->a);
             if (!decl.variadic) { cm = this->c_modes(params, ret)?; }
             for (auto [i, p] : params) {
-                if (i > 0 || sret) { txt.append(", ")?; }
                 auto mode = 0;
                 if (i < cm.len) { mode = cm.get(i); }
+                if (mode == 3) { continue; }
+                if (!firstp) { txt.append(", ")?; }
                 txt.append(this->c_param_ty(p, mode)?)?;
+                firstp = false;
             }
             if (decl.variadic) {
                 if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
@@ -826,6 +845,15 @@ struct Gen {
             };
         }
         if (nerr > 0) { return error.CompileFailed; }
+        auto ti = 0;
+        while (ti < this->c_thunks.len) {
+            const auto tf = this->c_thunks.get(ti);
+            ti += 1;
+            this->gen_c_thunk(tf) catch {
+                this->flush_diag();
+                return error.CompileFailed;
+            };
+        }
         if (this->test_mode) {
             this->gen_test_main(test_insts)?;
         } else if (main_inst != null) {
@@ -935,7 +963,7 @@ struct Gen {
         this->push_scope()?;
         auto hdr = this->sb();
         auto linkage = "internal ";
-        if (decl.is_export || fi.llname == "vb.main") { linkage = ""; }
+        if ((decl.is_export && !fi.needs_thunk) || fi.llname == "vb.main") { linkage = ""; }
         sprint(&hdr, "define {linkage}{this->llty(fi.ret)?} @{fi.llname}(")?;
         if (fi.is_closure) { hdr.append("ptr %ctx")?; }
         for (auto [i, p] : decl.params) {
@@ -1008,12 +1036,14 @@ struct Gen {
     g.error_names = List<str>::init(a);
     g.pre_vals = List<Value>::init(a);
     g.thunks = Map<i64>::init(a);
+    g.fmt_syms = Map<str>::init(a);
     g.vtables = Map<str>::init(a);
     g.rtypes = Map<Type*>::init(a);
     g.types_out = List<u8>::init(a);
     g.globals_out = List<u8>::init(a);
     g.decls_out = List<u8>::init(a);
     g.funcs_out = List<u8>::init(a);
+    g.c_thunks = List<FnInst*>::init(a);
     g.body = List<u8>::init(a);
     g.allocas = List<u8>::init(a);
     g.cts = Map<Expr*>::init(a);
