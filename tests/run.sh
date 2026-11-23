@@ -36,6 +36,12 @@ for f in tests/panics/*.zk; do
   elif [ "$(echo "$out" | sed 's/<std>:[0-9]*/<std>/')" = "$(cat tests/expected/$n.out)" ]; then pass=$((pass+1)); echo "ok   $n"
   else fail=$((fail+1)); echo "FAIL $n"; diff <(echo "$out") tests/expected/$n.out | head -10; fi
 done
+if [ $linux = 1 ] && command -v addr2line >/dev/null; then
+  out=$($ZARK run tests/crash/thunk_names.zk $FLAGS 2>&1)
+  want="addp at"; [ "$FLAGS" = -O ] && want="main at"
+  if echo "$out" | grep -qE '\$[zc] at' || ! echo "$out" | grep -q "$want"; then fail=$((fail+1)); echo "FAIL crash_thunk_names"; echo "$out" | tail -10
+  else pass=$((pass+1)); echo "ok   crash_thunk_names"; fi
+fi
 for f in tests/errors/*.zk; do
   if $ZARK run "$f" >/dev/null 2>&1; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
 done

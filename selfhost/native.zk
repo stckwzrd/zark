@@ -842,6 +842,7 @@ struct Native {
     !void record_vars(str fname, i64 start, i64 end, List<str> dvars) {
         auto fnn = fname;
         if (str_starts_with(fnn, "vb.")) { fnn = fnn[3..]; }
+        if (str_ends_with(fnn, "$z") || str_ends_with(fnn, "$c")) { fnn = fnn[0..fnn.len - 2]; }
         auto f = DbgFunc{ .name = fnn, .start = start, .end = end, .vars = List<DbgVar>::init(this->a) };
         for (auto d : dvars) {
             const auto s1 = str_find_byte(d, ' ');
