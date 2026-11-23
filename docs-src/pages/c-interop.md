@@ -71,7 +71,7 @@ zark cbind gl.h -DGL_GLEXT_PROTOTYPES -o gl.zk
 zark cbind shapes.h -o shapes.zk --inline-c shapes_inline.c
 ```
 
-The output is a plain `.zk` file you can read, edit and commit. With `--inline-c` the wrappers for `static inline` functions go to a C file that you compile in next to it (`zark run main.zk shapes_inline.c`).
+The output is a plain `.zk` file you can read and edit. With `--inline-c` the wrappers for `static inline` functions go to a C file that you compile in next to it (`zark run main.zk shapes_inline.c`). That C file includes the header by its absolute path, and the wrapper names in both files are hashed from that path, so the pair only works on the machine and in the checkout where it was made. Use it to inspect what an import produces, and let `import` regenerate the bindings elsewhere. A header without `static inline` functions produces a `.zk` that does not depend on the path.
 
 Only C headers work. A C++ library is reached through a C API, as cimgui does for Dear ImGui (`examples/imgui/`), or through your own `extern "C"` facade (see below).
 

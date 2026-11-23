@@ -302,7 +302,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 
 ### `zark cbind`
 
-`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions; that file must be compiled into the program next to `out.zk`.
+`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions; that file must be compiled into the program next to `out.zk`. The C file includes the header by its absolute path and the wrapper names hash that path, so the pair is specific to the machine and checkout that produced it: it is for inspection, not for committing.
 
 | C | Zark |
 |---|---|
