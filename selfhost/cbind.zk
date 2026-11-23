@@ -235,6 +235,7 @@ struct CDecl {
     bool func_like;
     str body;
     str reason;
+    str nowrap;
     str attr;
     str file;
     i64 line;
@@ -587,6 +588,7 @@ struct CParser {
     i64 seq;
     str attr_why;
     str attr_bad;
+    str nowrap;
     bool asm_label;
     bool uchar;
     bool short_enums;
@@ -685,6 +687,11 @@ struct CParser {
                     if (w == "aligned" || w == "__aligned__") { this->attr_why = "aligned attribute"; }
                     if (w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type") { this->attr_why = "vector_size attribute"; }
                     if (w == "mode" || w == "__mode__") { this->attr_why = "mode attribute"; }
+                    if (w == "target" || w == "__target__") { this->nowrap = "target attribute"; }
+                    if (w == "unavailable" || w == "__unavailable__") { this->nowrap = "unavailable attribute"; }
+                    if (w == "error" || w == "__error__") { this->nowrap = "error attribute"; }
+                    if (w == "warning" || w == "__warning__") { this->nowrap = "warning attribute"; }
+                    if (w == "diagnose_if" || w == "__diagnose_if__") { this->nowrap = "diagnose_if attribute"; }
                     if (w == "aligned" || w == "__aligned__" || w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type" || w == "mode" || w == "__mode__") { this->attr_bad = this->attr_why; }
                 }
                 continue;
@@ -1250,6 +1257,7 @@ struct CParser {
 
     !void top() {
         this->attr_why = "";
+        this->nowrap = "";
         const auto rel = this->peek().rel;
         const auto from = this->pos;
         const auto s = this->specs()?;
@@ -1271,6 +1279,7 @@ struct CParser {
                     d.is_extern = s.is_extern;
                     d.asm_label = this->asm_label;
                     d.reason = this->attr_why;
+                    d.nowrap = this->nowrap;
                     d.from = from;
                     d.at = f.at;
                     this->decls.push(d)?;
@@ -1518,6 +1527,13 @@ str cb_known(str name) {
     return "";
 }
 
+bool cb_wrap_name(str s) {
+    if (str_starts_with(s, "zark_inl_")) { return true; }
+    if (s.len < 2 || s[0] != 'a') { return false; }
+    for (auto c : s[1..]) { if (!is_digit(c)) { return false; } }
+    return true;
+}
+
 !void cb_tok(List<u8>* b, str w, str next) {
     if (b.len > 0 && w.len > 0) {
         const auto p = b.get(b.len - 1);
@@ -1578,6 +1594,9 @@ struct CEmit {
     List<u8> c;
     List<u8> undefs;
     Map<bool> undone;
+    Map<str> nowrap;
+    Map<bool> inl;
+    str hid;
 
     void fail(str why) {
         if (this->why.len == 0) { this->why = why; }
@@ -1792,12 +1811,13 @@ struct CEmit {
     !void func(CDecl* d) {
         if (d.asm_label) { this->relabeled.put(d.name, true)?; }
         if (d.is_inline && !d.is_extern && !d.has_body) { return; }
+        if (d.is_static && !d.is_inline && this->inl.has(d.name)) { return; }
         if (d.is_static && !d.is_inline) { return this->warn(d.name, "static function"); }
         if (this->relabeled.has(d.name)) { return this->warn(d.name, "asm label"); }
         if (d.reason.len > 0) { return this->warn(d.name, d.reason); }
-        if (d.is_inline && d.has_body) { return this->inline_fn(d); }
         if (keyword(d.name) != .ident) { return this->warn(d.name, "Zark keyword"); }
         if (cb_is_prim(d.name)) { return this->warn(d.name, "Zark type name"); }
+        if (d.is_inline && d.has_body) { return this->inline_fn(d); }
         if (!this->claim(d.name, 3)?) { return; }
         const auto f = d.ty;
         auto b = List<u8>::init(this->a);
@@ -1854,6 +1874,7 @@ struct CEmit {
                 ids.push(nm)?;
             } else if (t.k == .Ident) {
                 for (auto p : ps) { if (p.name == w) { this->fail("parameter used in a type"); } }
+                if (cb_wrap_name(w)) { this->fail("name used by the wrapper"); }
                 ids.push(w)?;
             }
             cb_tok(b, w, this->toks[min(k, this->toks.len - 1)].text)?;
@@ -1870,6 +1891,9 @@ struct CEmit {
         if (!this->claim(d.name, 3)?) { return; }
         const auto f = d.ty;
         if (f.varargs) { this->fail("variadic inline function"); }
+        const auto nw = this->nowrap.get_or(d.name, "");
+        if (nw.len > 0) { this->fail(nw); }
+        if (cb_wrap_name(d.name)) { this->fail("name used by the wrapper"); }
         auto ids = List<str>::init(this->a);
         ids.push(d.name)?;
         auto r = f.elem;
@@ -1881,7 +1905,7 @@ struct CEmit {
         auto ret = "return ";
         if (r.k == .Void) { ret = ""; }
         auto wn = List<u8>::init(this->a);
-        sprint(&wn, "zark_inl_{d.name}")?;
+        sprint(&wn, "zark_inl_{this->hid}_{d.name}")?;
         const auto inl = wn.slice();
         ids.push(inl)?;
         auto c = List<u8>::init(this->a);
@@ -2395,6 +2419,13 @@ struct CEmit {
     }
 
     !void run(List<CDecl*> decls) {
+        this->nowrap = Map<str>::init(this->a);
+        this->inl = Map<bool>::init(this->a);
+        for (auto d : decls.slice()) {
+            if (d.k != .Func) { continue; }
+            if (d.nowrap.len > 0 && !this->nowrap.has(d.name)) { this->nowrap.put(d.name, d.nowrap)?; }
+            if (d.is_inline && d.has_body) { this->inl.put(d.name, true)?; }
+        }
         for (auto pass : 0..2) {
             this->out = List<u8>::init(this->a);
             this->warnings = List<str>::init(this->a);
@@ -2586,13 +2617,18 @@ struct CBind {
     };
     drop(stub);
     e.keys(p.decls)?;
+    auto h = fnv64(0xcbf29ce484222325 as u64, read_file(a, lx.out.header)?);
+    for (auto f : flags.slice()) { h = fnv64(h, f); }
+    auto hb = List<u8>::init(a);
+    sprint(&hb, "{h:016x}")?;
+    e.hid = hb.slice();
     e.run(p.decls)?;
     auto ic = List<u8>::init(a);
     if (e.c.len > 0) {
         const auto abs = path::absolute(a, lx.out.header)?;
         const auto undefs = e.undefs.slice();
         const auto wraps = e.c.slice();
-        sprint(&ic, "#include \"{abs}\"\n{undefs}{wraps}")?;
+        sprint(&ic, "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"\n#include \"{abs}\"\n{undefs}{wraps}")?;
     }
     return CBind{ .zk = e.out.slice(), .inline_c = ic.slice(), .deps = lx.out.deps, .warnings = e.warnings };
 }

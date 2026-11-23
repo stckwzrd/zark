@@ -1,0 +1,9 @@
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "@DIR@/tests/cbind/wrapfix.h"
+int zark_inl_ac627b84616b647b_foo(int a0) { return foo(a0); }
+int zark_inl_ac627b84616b647b_type_(int a0) { return type_(a0); }
+int zark_inl_ac627b84616b647b_g(int a0) { return g(a0); }
+const char *const zark_inl_ac627b84616b647b_cc(const char *const a0) { return cc(a0); }
+int volatile zark_inl_ac627b84616b647b_vq(int a0) { return vq(a0); }
+int zark_inl_ac627b84616b647b_old(int a0) { return old(a0); }
