@@ -2233,23 +2233,24 @@ struct CEmit {
         const auto lo = this->word_el(u.c0, l, el);
         auto hi = lo;
         if (l.size > 8) { hi = this->word_el(u.c1, l, el); }
+        const auto w = min(l.align, 8);
         if (lo == hi) {
-            sprint(b, " {{ {lo}[{l.size / l.align}] storage; ")?;
+            sprint(b, " {{ {lo}[{l.size / w}] storage; ")?;
             return true;
         }
-        sprint(b, " {{ {lo}[{8 / l.align}] storage; {hi}[{(l.size - 8) / l.align}] storage_hi; ")?;
+        sprint(b, " {{ {lo}[{8 / w}] storage; {hi}[{(l.size - 8) / w}] storage_hi; ")?;
         return true;
     }
 
     str word_el(i64 cls, CLayout* l, str el) {
         if (cls != 2) { return el; }
-        if (l.align == 8) { return "f64"; }
+        if (l.align >= 8) { return "f64"; }
         return "f32";
     }
 
     !CAbi uclass(CDecl* d, CLayout* l) {
         auto r = CAbi{};
-        if (!d.is_union || d.opaque || l.size > 16 || (l.align != 4 && l.align != 8)) {
+        if (!d.is_union || d.opaque || l.size > 16 || (l.align != 4 && l.align != 8 && l.align != 16)) {
             r.bad = true;
             return r;
         }
@@ -2433,8 +2434,8 @@ struct CEmit {
                     while (o < l.size) {
                         auto cls = 1;
                         if (!u.bad && ((o < 8 && u.c0 == 2) || (o >= 8 && u.c1 == 2))) { cls = 2; }
-                        r.put(true, off + o, l.align, cls);
-                        o += l.align;
+                        r.put(true, off + o, min(l.align, 8), cls);
+                        o += min(l.align, 8);
                     }
                 }
                 if (!c) { return; }

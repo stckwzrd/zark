@@ -322,7 +322,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 | `struct`, nested anonymous struct | `struct` with the same layout, anonymous parts named `outer__anonN` |
 | incomplete struct | empty struct, used through pointers |
 | struct or union aligned above 8 (`__attribute__((aligned(16)))`, `_Alignas(16)` member) | `align(N) struct`: with the C fields when clang's layout equals the natural one rounded to `N`, otherwise opaque storage of the same size and alignment |
-| `union` | struct `{ uN[k] storage; }` with accessors `as_member()` returning a pointer; in a union of at most 16 bytes an SSE eightbyte is stored as `f64` or `f32` (`storage_hi` holds the second eightbyte when the two differ), so size, alignment and System V class match the C union |
+| `union` | struct `{ uN[k] storage; }` with accessors `as_member()` returning a pointer; in a union of at most 16 bytes (also one aligned to 16) an SSE eightbyte is stored as `f64` or `f32` (`storage_hi` holds the second eightbyte when the two differ), so size, alignment and System V class match the C union |
 | `enum E { A, B }` | `type E = i32;` (or the integer type that holds the values) plus `const auto A = 0;` … |
 | `#define N 42`, string, float or char constant | `const auto N = 42;` |
 | function, variadic function | `extern` declaration |

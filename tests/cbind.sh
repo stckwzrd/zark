@@ -234,11 +234,14 @@ void main() {
     m.d = 2.0;
     m.n = 40;
     println("{p.a} {p.b} {sum_pair(p)} {sum_dbl(d)} {d.x} {d.y} {sum_mix(m)}");
+    auto u = mk_ud16(1.5, 2.25);
+    auto x = mk_umix16(0.5, 7);
+    println("{(*u.as_d())[0]} {(*u.as_d())[1]} {sum_ud16(u)} {x.as_s().x} {x.as_s().n} {sum_umix16(x)} {sum_od16(1, 2, 3, 4, 5, mk_od16(7, 8), 6)}");
 }
 EOF
     for f in $native --llvm -O; do
         out=$("$ZARK" run $f use_align16v.zk tests/cbind/align16.c 2>&1) || fail "align16 by value $f: run: $out"
-        [ "$out" = "4 5 45 5.5 1.5 2 42" ] || fail "align16 by value $f: got: $out"
+        [ "$out" = "$(printf '4 5 45 5.5 1.5 2 42\n1.5 2.25 24 0.5 7 57 729')" ] || fail "align16 by value $f: got: $out"
     done
 fi
 

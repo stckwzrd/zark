@@ -18,3 +18,13 @@ extern i64 sum_big(big16* b);
 extern i32 a32_x(a32* p);
 extern i64 sum_has_p(has16* h);
 extern i32 read_un16(un16* u);
+struct dl { f64 x; i64 n; }
+align(16) struct ud16 { f64[2] storage; f64[2]* as_d() { void* p = this; return p; } }
+align(16) struct umix16 { f64[1] storage; u64[1] storage_hi; dl* as_s() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+extern ud16 mk_ud16(f64 a, f64 b);
+extern f64 sum_ud16(ud16 u);
+extern umix16 mk_umix16(f64 x, i64 n);
+extern i64 sum_umix16(umix16 u);
+align(16) struct od16 { u64[2] storage; }
+extern od16 mk_od16(i32 a, i32 b);
+extern i64 sum_od16(i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, od16 o, i64 a6);
