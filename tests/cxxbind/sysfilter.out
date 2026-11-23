@@ -1,0 +1,6 @@
+type Code = i32;
+type Level = u8;
+const auto Level_Info = 0;
+const auto Level_Warn = 1;
+const auto Ok = 0;
+extern Code check(Level l);
