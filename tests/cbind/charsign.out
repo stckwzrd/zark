@@ -1,0 +1,17 @@
+type cht = i8;
+struct cs { i8 c; i8 s; u8 u; i8[4] name; u8* text; }
+extern i8 first(u8* s);
+extern i8 add1(i8 c);
+extern i32 widen(i8 c);
+extern i8 sneg(i8 x);
+extern u8 ubig(u8 x);
+extern i32 count_ch(u8* s, u8** rest);
+extern void fill(cs* p, cht c);
+extern i8* zark_var_H_gc();
+i8* gc_ptr() { return zark_var_H_gc(); }
+extern cht* zark_var_H_gct();
+cht* gct_ptr() { return zark_var_H_gct(); }
+extern i8* zark_var_H_gs();
+i8* gs_ptr() { return zark_var_H_gs(); }
+extern i8[4]* zark_var_H_ga();
+i8[4]* ga_ptr() { return zark_var_H_ga(); }

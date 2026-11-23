@@ -137,7 +137,9 @@ extern f64 vec3_dot(Vec3* a, Vec3* b);
 ```
 `zark run main.zk mathlib.c engine.cpp` compiles everything and links with `clang++` automatically. C++ is reached through an `extern "C"` facade: see `examples/interop/`. String literals pass as `const char*` directly.
 
-C headers need no hand-written declarations: `import "SDL2/SDL.h" as sdl;` binds the functions, structs, unions, enums, constant macros and static inline functions of a header (`zark cbind header.h` prints the same bindings as a file). A `zark.toml` sets include directories, defines, the C/C++ standard, `pkg-config` packages and the C/C++ sources; objects are cached by content and compiled in parallel. `examples/imgui/` drives Dear ImGui (through cimgui) and SDL2 this way. Details and limits are in SPEC.md section 8.
+C headers need no hand-written declarations: `import "SDL2/SDL.h" as sdl;` binds the functions, structs, unions, enums, constant macros and static inline functions of a header (`zark cbind header.h` prints the same bindings as a file). A `zark.toml` sets include directories, defines, the C/C++ standard, `pkg-config` packages and the C/C++ sources; objects are cached by content and compiled in parallel. `examples/imgui/` drives Dear ImGui (through cimgui) and SDL2 this way. An extern variable `int count;` becomes `count_ptr()`, which returns its address; a struct with bitfields gets `get_f()`/`set_f(v)`; a struct aligned above 8 becomes `align(N) struct`; a plain `char` is `i8` where C's `char` is signed and `u8` where it is unsigned (Linux arm64).
+
+Structs and Zark unions go by value through `extern`, `export` and function pointers (a union is `{ int32_t tag; payload }` to C, the tag being the zero-based variant index), and variadic C functions take structs and unions as C passes them. The C ABIs are System V x86-64 and AAPCS64 on Linux and Apple arm64; arm64 builds always use the LLVM path, since the native backend is x86-64 only. SIMD vectors cross as C vectors of 16 bytes (also 8 bytes on arm64), not inside structs. Details and limits are in SPEC.md section 8.
 
 ## Drivers and bare metal
 

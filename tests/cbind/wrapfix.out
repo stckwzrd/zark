@@ -1,13 +1,13 @@
 type a1 = i32;
-extern i32 zark_inl_ac627b84616b647b_foo(i32 a0);
-i32 foo(i32 a0) { return zark_inl_ac627b84616b647b_foo(a0); }
-extern i32 zark_inl_ac627b84616b647b_type_(i32 a0);
-i32 type_(i32 a0) { return zark_inl_ac627b84616b647b_type_(a0); }
-extern i32 zark_inl_ac627b84616b647b_g(i32 a0);
-i32 g(i32 a0) { return zark_inl_ac627b84616b647b_g(a0); }
-extern u8* zark_inl_ac627b84616b647b_cc(u8* a0);
-u8* cc(u8* a0) { return zark_inl_ac627b84616b647b_cc(a0); }
-extern i32 zark_inl_ac627b84616b647b_vq(i32 a0);
-i32 vq(i32 a0) { return zark_inl_ac627b84616b647b_vq(a0); }
-extern i32 zark_inl_ac627b84616b647b_old(i32 a0);
-i32 old(i32 a0) { return zark_inl_ac627b84616b647b_old(a0); }
+extern i32 zark_inl_H_foo(i32 a0);
+i32 foo(i32 a0) { return zark_inl_H_foo(a0); }
+extern i32 zark_inl_H_type_(i32 a0);
+i32 type_(i32 a0) { return zark_inl_H_type_(a0); }
+extern i32 zark_inl_H_g(i32 a0);
+i32 g(i32 a0) { return zark_inl_H_g(a0); }
+extern u8* zark_inl_H_cc(u8* a0);
+u8* cc(u8* a0) { return zark_inl_H_cc(a0); }
+extern i32 zark_inl_H_vq(i32 a0);
+i32 vq(i32 a0) { return zark_inl_H_vq(a0); }
+extern i32 zark_inl_H_old(i32 a0);
+i32 old(i32 a0) { return zark_inl_H_old(a0); }

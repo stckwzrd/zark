@@ -215,6 +215,7 @@ struct CType {
     CDecl* rec;
     bool c_unsigned;
     bool plain;
+    bool vol;
 }
 
 enum CDK { Func, Struct, Typedef, Macro, Var, Skip, Enum, Const }
@@ -233,6 +234,8 @@ struct CDecl {
     bool is_extern;
     bool is_static;
     bool is_inline;
+    bool is_tls;
+    bool vol;
     bool has_body;
     bool asm_label;
     bool func_like;
@@ -246,13 +249,14 @@ struct CDecl {
     str key;
     bool walked;
     bool opaque;
+    bool inner_attr;
     i64 from;
     i64 at;
 }
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
 
-struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; }
+struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; bool is_tls; bool vol; }
 
 bool cb_is_qualifier(str w) {
     for (auto q : ["const", "volatile", "restrict", "__restrict", "__restrict__", "__const", "__volatile", "__volatile__", "__extension__", "_Nullable", "_Nonnull", "_Null_unspecified", "_Nullable_result", "__nullable", "__nonnull", "__null_unspecified", "__unaligned", "__ptr32", "__ptr64", "__w64", "__cdecl", "__stdcall", "__fastcall"]) {
@@ -585,6 +589,8 @@ struct CParser {
     i64 di;
     Map<CType*> typedefs;
     Map<bool> tags;
+    Map<bool> vol_tds;
+    i64 vols;
     List<CDecl*> decls;
     bool attr_layout;
     str layout_why;
@@ -687,7 +693,7 @@ struct CParser {
                     if (w == "packed" || w == "__packed__") { this->layout_why = "packed"; }
                     if (w == "aligned" || w == "__aligned__") { this->layout_why = "aligned"; }
                     if (w == "packed" || w == "__packed__") { this->attr_why = "packed attribute"; }
-                    if (w == "aligned" || w == "__aligned__") { this->attr_why = "aligned attribute"; }
+                    if ((w == "aligned" || w == "__aligned__") && this->attr_why.len == 0) { this->attr_why = "aligned attribute"; }
                     if (w == "vector_size" || w == "__vector_size__" || w == "ext_vector_type") { this->attr_why = "vector_size attribute"; }
                     if (w == "mode" || w == "__mode__") { this->attr_why = "mode attribute"; }
                     if (w == "target" || w == "__target__") { this->nowrap = "target attribute"; }
@@ -700,6 +706,7 @@ struct CParser {
                 continue;
             }
             if (!cb_is_qualifier(t)) { return; }
+            if (t == "volatile" || t == "__volatile" || t == "__volatile__") { this->vols += 1; }
             _ = this->next();
         }
     }
@@ -716,7 +723,9 @@ struct CParser {
         auto why = "";
         auto any = false;
         while (true) {
+            const auto v0 = this->vols;
             this->skip_noise();
+            if (this->vols > v0) { s.vol = true; }
             const auto t = this->peek();
             if (t.k != .Ident) { break; }
             const auto w = t.text;
@@ -728,7 +737,9 @@ struct CParser {
                 s.is_static = true;
             } else if (w == "inline" || w == "__inline" || w == "__inline__" || w == "__forceinline") {
                 s.is_inline = true;
-            } else if (w == "_Thread_local" || w == "__thread" || w == "thread_local" || w == "register" || w == "auto" || w == "_Noreturn" || w == "constexpr") {
+            } else if (w == "_Thread_local" || w == "__thread" || w == "thread_local") {
+                s.is_tls = true;
+            } else if (w == "register" || w == "auto" || w == "_Noreturn" || w == "constexpr") {
             } else if (w == "long") {
                 nlong += 1;
             } else if (w == "short") {
@@ -795,7 +806,7 @@ struct CParser {
                 s.ty.width = 64;
             }
         } else if (base == "char") {
-            s.ty = this->int_ty(8, nsigned > 0)?;
+            s.ty = this->int_ty(8, nsigned > 0 || (nunsigned == 0 && !this->uchar))?;
             s.ty.plain = nsigned + nunsigned == 0;
         } else if (nshort > 0) {
             s.ty = this->int_ty(16, nunsigned == 0)?;
@@ -851,6 +862,7 @@ struct CParser {
             if (this->at_eof()) { return error.ParseFailed; }
             this->field(d)?;
         }
+        d.inner_attr = this->attr_layout;
         _ = this->next();
         this->skip_noise();
         d.layout_attr = this->attr_layout || packed;
@@ -895,7 +907,7 @@ struct CParser {
                 this->skip_until_comma();
             }
             this->skip_noise();
-            if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
+            if (this->attr_why.len > 0 && this->attr_why != "aligned attribute") { f.ty = this->bad(this->attr_why)?; }
             d.fields.push(f)?;
             if (!this->eat(",")) { break; }
         }
@@ -1061,7 +1073,9 @@ struct CParser {
             } else {
                 t = this->ptr(t)?;
             }
+            const auto v0 = this->vols;
             this->skip_noise();
+            t.vol = this->vols > v0;
         }
         if (this->at("(") && this->grouped()) {
             const auto inner = this->pos + 1;
@@ -1245,6 +1259,14 @@ struct CParser {
         return x;
     }
 
+    bool is_vol(CType* t, CSpecs s) {
+        auto x = t;
+        while (x.k == .Array) { x = x.elem; }
+        if (x.k == .Ptr) { return x.vol; }
+        if (x != s.ty) { return false; }
+        return s.vol || (x.k == .Named && x.tag == 0 && this->vol_tds.has(x.name));
+    }
+
     !void typedef_decl(CField f, CType* base, bool rel) {
         if (!this->typedefs.has(f.name)) { this->typedefs.put(f.name, f.ty)?; }
         if (base.rec != null && base.rec.name.len == 0 && f.ty == base) {
@@ -1270,7 +1292,12 @@ struct CParser {
             auto f = this->declarator(s.ty)?;
             if (f.name.len == 0) { return error.ParseFailed; }
             if (s.is_typedef) {
-                if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
+                if (this->is_vol(f.ty, s)) { this->vol_tds.put(f.name, true)?; }
+                if (this->attr_why.len > 0) {
+                    const auto orig = f.ty;
+                    f.ty = this->bad(this->attr_why)?;
+                    if (this->attr_why == "aligned attribute") { f.ty.elem = orig; }
+                }
                 this->typedef_decl(f, s.ty, rel)?;
             } else {
                 const auto rt = this->resolve(f.ty);
@@ -1293,8 +1320,13 @@ struct CParser {
                     }
                 } else {
                     const auto d = this->decl(.Var, f.name, rel)?;
+                    d.ty = f.ty;
+                    if (this->attr_why.len > 0 && this->attr_why != "aligned attribute") { d.ty = this->bad(this->attr_why)?; }
                     d.is_extern = s.is_extern;
                     d.is_static = s.is_static;
+                    d.is_tls = s.is_tls;
+                    d.vol = this->is_vol(f.ty, s);
+                    d.nowrap = this->nowrap;
                     this->decls.push(d)?;
                     if (this->eat("=")) { this->skip_until_comma(); }
                 }
@@ -1531,7 +1563,7 @@ str cb_known(str name) {
 }
 
 bool cb_wrap_name(str s) {
-    if (str_starts_with(s, "zark_inl_")) { return true; }
+    if (str_starts_with(s, "zark_inl_") || str_starts_with(s, "zark_var_") || str_starts_with(s, "zark_bf_")) { return true; }
     if (s.len < 2 || s[0] != 'a') { return false; }
     for (auto c : s[1..]) { if (!is_digit(c)) { return false; } }
     return true;
@@ -1547,6 +1579,23 @@ bool cb_wrap_name(str s) {
         if (sp) { b.push(' ')?; }
     }
     sprint(b, "{w}")?;
+}
+
+str cb_cint(i64 width, bool signed) {
+    if (width == 8) {
+        if (signed) { return "signed char"; }
+        return "unsigned char";
+    }
+    if (width == 16) {
+        if (signed) { return "short"; }
+        return "unsigned short";
+    }
+    if (width == 64) {
+        if (signed) { return "long long"; }
+        return "unsigned long long";
+    }
+    if (signed) { return "int"; }
+    return "unsigned int";
 }
 
 struct CSize { i64 size; i64 align; }
@@ -1570,6 +1619,13 @@ struct CAbi {
         if (!z && w == 0 && (cls == 1 || this->c0 == 0)) { this->c0 = cls; }
         if (!z && w == 1 && (cls == 1 || this->c1 == 0)) { this->c1 = cls; }
     }
+}
+
+struct CHfa {
+    i64 base;
+    i64 n;
+    bool no;
+    bool unk;
 }
 
 struct CEmit {
@@ -1730,6 +1786,12 @@ struct CEmit {
             this->fn_ty(b, e)?;
             return;
         }
+        auto c = e;
+        while (c.k == .Named && c.tag == 0 && this->typedefs.has(c.name)) { c = this->typedefs.get_or(c.name, c); }
+        if (c.k == .Int && c.plain) {
+            sprint(b, "u8*")?;
+            return;
+        }
         this->behind += 1;
         defer this->behind -= 1;
         auto inner = List<u8>::init(this->a);
@@ -1844,8 +1906,8 @@ struct CEmit {
             sprint(&b, "...")?;
         }
         sprint(&b, ");")?;
-        if (!this->abi_ok(f.elem)?) { this->fail("opaque record by value"); }
-        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty)?) { this->fail("opaque record by value"); } }
+        if (!this->abi_ok(f.elem, true)?) { this->fail("opaque record by value"); }
+        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty, false)?) { this->fail("opaque record by value"); } }
         _ = this->line(d.name, 3, b.slice())?;
     }
 
@@ -1941,8 +2003,8 @@ struct CEmit {
         const auto zn = this->ename(d.name)?;
         auto b = List<u8>::init(this->a);
         sprint(&b, "extern {rts} {inl}({zps});\n{rts} {zn}({zps}) {{ {ret}{inl}({argss}); }}")?;
-        if (!this->abi_ok(f.elem)?) { this->fail("opaque record by value"); }
-        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty)?) { this->fail("opaque record by value"); } }
+        if (!this->abi_ok(f.elem, true)?) { this->fail("opaque record by value"); }
+        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty, false)?) { this->fail("opaque record by value"); } }
         if (!this->line(d.name, 3, b.slice())?) { return; }
         const auto cs = c.slice();
         sprint(&this->c, "{cs}")?;
@@ -1952,6 +2014,44 @@ struct CEmit {
             this->undone.put(id, true)?;
             sprint(&this->undefs, "#undef {id}\n")?;
         }
+    }
+
+    !void var(CDecl* d) {
+        if (d.is_tls) { return this->warn(d.name, "thread-local variable"); }
+        if (d.is_static) { return this->warn(d.name, "static variable"); }
+        if (!d.is_extern) { return this->warn(d.name, "variable"); }
+        if (d.vol) { return this->warn(d.name, "volatile variable"); }
+        const auto nw = this->nowrap.get_or(d.name, "");
+        if (nw.len > 0) { return this->warn(d.name, nw); }
+        auto nb = List<u8>::init(this->a);
+        sprint(&nb, "{d.name}_ptr")?;
+        const auto name = nb.slice();
+        const auto k = this->done.get_or(name, 0);
+        if (k == 5) { return; }
+        if (k != 0) { return this->warn(d.name, "name clash"); }
+        const auto pt = this->a.create<CType>()?;
+        pt.k = .Ptr;
+        pt.elem = d.ty;
+        const auto x = this->expand(d.ty);
+        if (x.k == .Array && x.n == -1) { pt.elem = x.elem; }
+        auto tb = List<u8>::init(this->a);
+        auto c = pt.elem;
+        while (c.k == .Named && c.tag == 0 && this->typedefs.has(c.name)) { c = this->typedefs.get_or(c.name, c); }
+        if (c.k == .Int && c.plain) {
+            this->ty(&tb, pt.elem)?;
+            sprint(&tb, "*")?;
+        } else {
+            this->ty(&tb, pt)?;
+        }
+        if (this->why.len > 0) { return this->warn(d.name, this->why); }
+        const auto ts = tb.slice();
+        auto wn = List<u8>::init(this->a);
+        sprint(&wn, "zark_var_{this->hid}_{d.name}")?;
+        const auto w = wn.slice();
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "extern {ts} {w}();\n{ts} {name}() {{ return {w}(); }}")?;
+        if (!this->line(name, 5, b.slice())?) { return; }
+        sprint(&this->c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{this->hid}_{d.name})\nvoid* {w}(void) {{ return (void*)&{d.name}; }}\n#endif\n")?;
     }
 
     !void typedef_out(CDecl* d) {
@@ -1994,14 +2094,21 @@ struct CEmit {
         }
         if (d.is_union) { return this->union_out(d); }
         auto why = "";
+        auto over = 0;
         if (d.bitfields) {
             why = "bitfields";
         } else if (d.layout_attr) {
             why = d.attr;
+            const auto l = this->layout(d);
+            if (d.attr == "aligned" && l != null && l.align > 8) {
+                why = "";
+                over = l.align;
+            }
         }
         auto b = List<u8>::init(this->a);
         if (why.len == 0) {
             this->why = "";
+            if (over > 0) { sprint(&b, "align({over}) ")?; }
             sprint(&b, "struct ")?;
             this->esc(&b, d.name)?;
             sprint(&b, " {{ ")?;
@@ -2024,7 +2131,7 @@ struct CEmit {
             sprint(&b, "}")?;
             why = this->why;
             this->why = "";
-            if (why.len == 0) { why = this->natural(d); }
+            if (why.len == 0) { why = this->natural(d, over); }
         }
         if (why.len > 0) { return this->opaque(d, why); }
         for (auto s : d.subs.slice()) {
@@ -2101,11 +2208,11 @@ struct CEmit {
         return CSize{ .size = -1 };
     }
 
-    str natural(CDecl* d) {
+    str natural(CDecl* d, i64 over) {
         const auto l = this->layout(d);
         if (l == null) { return "layout not found"; }
         auto o = 0;
-        auto al = 1;
+        auto al = max(over, 1);
         for (auto [i, f] : d.fields.slice()) {
             auto z = this->size(f.ty);
             if (f.ty.k == .Array && f.ty.n == -1) { z = this->size(f.ty.elem); }
@@ -2120,12 +2227,6 @@ struct CEmit {
     }
 
     !bool storage(List<u8>* b, CDecl* d, CLayout* l) {
-        if (l.align > 8) {
-            auto w = List<u8>::init(this->a);
-            sprint(&w, "alignment {l.align}")?;
-            this->skip(d.name, w.slice())?;
-            return false;
-        }
         if (l.size == 0) {
             this->skip(d.name, "empty record")?;
             return false;
@@ -2133,11 +2234,45 @@ struct CEmit {
         auto el = "u8";
         if (l.align == 2) { el = "u16"; }
         if (l.align == 4) { el = "u32"; }
-        if (l.align == 8) { el = "u64"; }
+        if (l.align >= 8) { el = "u64"; }
+        if (l.align > 8) { sprint(b, "align({l.align}) ")?; }
         sprint(b, "struct ")?;
         this->esc(b, d.name)?;
-        sprint(b, " {{ {el}[{l.size / l.align}] storage; ")?;
+        const auto u = this->uclass(d, l)?;
+        if (u.bad || (u.c0 != 2 && u.c1 != 2)) {
+            sprint(b, " {{ {el}[{l.size / min(l.align, 8)}] storage; ")?;
+            return true;
+        }
+        const auto lo = this->word_el(u.c0, l, el);
+        auto hi = lo;
+        if (l.size > 8) { hi = this->word_el(u.c1, l, el); }
+        const auto w = min(l.align, 8);
+        if (lo == hi) {
+            sprint(b, " {{ {lo}[{l.size / w}] storage; ")?;
+            return true;
+        }
+        sprint(b, " {{ {lo}[{8 / w}] storage; {hi}[{(l.size - 8) / w}] storage_hi; ")?;
         return true;
+    }
+
+    str word_el(i64 cls, CLayout* l, str el) {
+        if (cls != 2) { return el; }
+        if (l.align >= 8) { return "f64"; }
+        return "f32";
+    }
+
+    !CAbi uclass(CDecl* d, CLayout* l) {
+        auto r = CAbi{};
+        if (!d.is_union || d.opaque || l.size > 16 || (l.align != 4 && l.align != 8 && l.align != 16)) {
+            r.bad = true;
+            return r;
+        }
+        const auto t = this->a.create<CType>()?;
+        t.k = .Named;
+        t.tag = 2;
+        t.rec = d;
+        this->mark(&r, t, 0, false, true)?;
+        return r;
     }
 
     !void opaque(CDecl* d, str why) {
@@ -2146,8 +2281,73 @@ struct CEmit {
         auto b = List<u8>::init(this->a);
         if (!this->storage(&b, d, l)?) { return; }
         d.opaque = true;
+        auto ext = List<u8>::init(this->a);
+        auto c = List<u8>::init(this->a);
+        if (d.bitfields) { this->bit_access(d, &ext, &b, &c)?; }
         sprint(&b, "}")?;
-        if (this->line(d.name, 1, b.slice())?) { this->note(d.name, why)?; }
+        ext.append(b.slice())?;
+        if (this->line(d.name, 1, ext.slice())?) {
+            this->note(d.name, why)?;
+            this->c.append(c.slice())?;
+        }
+    }
+
+    !void bit_access(CDecl* d, List<u8>* ext, List<u8>* m, List<u8>* c) {
+        auto rt = "";
+        if (d.file.len == 0) {
+            rt = str_concat(this->a, ["struct ", d.name])?;
+        } else {
+            const auto td = this->typedefs.get_or(d.name, null);
+            if (td != null && td.rec == d) { rt = d.name; }
+        }
+        const auto zr = this->ename(d.name)?;
+        for (auto s : d.subs.slice()) { this->sub_bits(d, s)?; }
+        for (auto [i, f] : d.fields.slice()) {
+            if (!f.bits || f.name.len == 0) { continue; }
+            auto fb = List<u8>::init(this->a);
+            sprint(&fb, "{d.name}.{f.name}")?;
+            if (rt.len == 0) {
+                this->warn(fb.slice(), "bitfield in anonymous record")?;
+                continue;
+            }
+            auto x = f.ty;
+            while (x.k == .Named && x.tag == 0 && this->typedefs.has(x.name)) { x = this->typedefs.get_or(x.name, x); }
+            auto ct = "_Bool";
+            if (x.k == .Int) {
+                ct = cb_cint(x.width, x.signed && !x.c_unsigned);
+            } else if (x.k != .Bool) {
+                this->warn(fb.slice(), "bitfield type")?;
+                continue;
+            }
+            this->why = "";
+            auto zb = List<u8>::init(this->a);
+            this->ty(&zb, f.ty)?;
+            if (this->why.len > 0) {
+                this->warn(fb.slice(), this->why)?;
+                this->why = "";
+                continue;
+            }
+            const auto zt = zb.slice();
+            auto gb = List<u8>::init(this->a);
+            sprint(&gb, "zark_bf_{this->hid}_get_{d.name}_{i}")?;
+            auto sb = List<u8>::init(this->a);
+            sprint(&sb, "zark_bf_{this->hid}_set_{d.name}_{i}")?;
+            const auto g = gb.slice();
+            const auto st = sb.slice();
+            sprint(ext, "extern {zt} {g}({zr}* p);\nextern void {st}({zr}* p, {zt} v);\n")?;
+            sprint(m, "{zt} get_{f.name}() {{ return {g}(this); }} void set_{f.name}({zt} v) {{ {st}(this, v); }} ")?;
+            sprint(c, "{ct} {g}({rt}* p) {{ return p->{f.name}; }}\nvoid {st}({rt}* p, {ct} v) {{ p->{f.name} = v; }}\n")?;
+        }
+    }
+
+    !void sub_bits(CDecl* d, CDecl* s) {
+        for (auto f : s.fields.slice()) {
+            if (!f.bits || f.name.len == 0) { continue; }
+            auto fb = List<u8>::init(this->a);
+            sprint(&fb, "{d.name}.{f.name}")?;
+            this->warn(fb.slice(), "bitfield in anonymous record")?;
+        }
+        for (auto x : s.subs.slice()) { this->sub_bits(d, x)?; }
     }
 
     bool union_fits(CDecl* d, CLayout* l) {
@@ -2253,10 +2453,13 @@ struct CEmit {
                     return;
                 }
                 if (z) {
+                    const auto u = this->uclass(d, l)?;
                     auto o = 0;
                     while (o < l.size) {
-                        r.put(true, off + o, l.align, 1);
-                        o += l.align;
+                        auto cls = 1;
+                        if (!u.bad && ((o < 8 && u.c0 == 2) || (o >= 8 && u.c1 == 2))) { cls = 2; }
+                        r.put(true, off + o, min(l.align, 8), cls);
+                        o += min(l.align, 8);
                     }
                 }
                 if (!c) { return; }
@@ -2283,12 +2486,153 @@ struct CEmit {
         }
     }
 
-    !bool abi_ok(CType* t) {
+    !void hfa(CHfa* r, CType* t, bool z) {
+        if (r.no || r.unk) { return; }
+        match t.k {
+            .Float => {
+                const auto w = t.width / 8;
+                if ((w != 4 && w != 8) || (r.base != 0 && r.base != w)) {
+                    r.no = true;
+                    return;
+                }
+                r.base = w;
+                r.n += 1;
+                if (r.n > 4) { r.no = true; }
+            }
+            .Array => {
+                if (t.n <= 0) {
+                    r.no = true;
+                    return;
+                }
+                for (auto _i : 0..t.n) { this->hfa(r, t.elem, z)?; }
+            }
+            .Named => {
+                const auto d = this->rec_of(t);
+                if (d == null) {
+                    if (t.tag == 0) {
+                        const auto x = this->typedefs.get_or(t.name, null);
+                        if (x != null) { return this->hfa(r, x, z); }
+                    }
+                    r.unk = true;
+                    return;
+                }
+                const auto rz = this->size(t);
+                if (rz.size < 0) {
+                    r.unk = true;
+                    return;
+                }
+                if (rz.size == 0) { return; }
+                const auto n0 = r.n;
+                if (z && (d.is_union || d.opaque)) {
+                    const auto l = this->layout(d);
+                    if (l == null) {
+                        r.unk = true;
+                        return;
+                    }
+                    const auto u = this->uclass(d, l)?;
+                    const auto w = min(l.align, 8);
+                    if (u.bad || u.c0 != 2 || (l.size > 8 && u.c1 != 2) || (r.base != 0 && r.base != w)) {
+                        r.no = true;
+                        return;
+                    }
+                    r.base = w;
+                    r.n += l.size / w;
+                    if (r.n > 4) { r.no = true; }
+                    return;
+                }
+                if (d.is_union) {
+                    auto most = 0;
+                    for (auto f : d.fields.slice()) {
+                        auto m = CHfa{ .base = r.base };
+                        if (f.bits) { m.no = true; } else { this->hfa(&m, f.ty, z)?; }
+                        if (m.unk) { r.unk = true; }
+                        if (m.no) { r.no = true; }
+                        if (r.no || r.unk) { return; }
+                        if (m.base != 0) { r.base = m.base; }
+                        most = max(most, m.n);
+                    }
+                    r.n += most;
+                } else {
+                    for (auto f : d.fields.slice()) {
+                        if (f.ty.k == .Array && f.ty.n == -1) {
+                            if (!z) { r.no = true; }
+                            continue;
+                        }
+                        if (f.bits) {
+                            r.no = true;
+                            return;
+                        }
+                        this->hfa(r, f.ty, z)?;
+                    }
+                }
+                if (r.n > 4) { r.no = true; }
+                if (!r.no && !r.unk && (r.base == 0 || (r.n - n0) * r.base != rz.size)) { r.no = true; }
+            }
+            .Bad => {
+                if (t.elem != null) { return this->hfa(r, t.elem, z); }
+                if (t.name == "__int128") { r.no = true; } else { r.unk = true; }
+            }
+            _ => { r.no = true; }
+        }
+    }
+
+    bool has_vec(CType* t) {
+        auto x = t;
+        while (x.k == .Named && x.tag == 0) {
+            x = this->typedefs.get_or(x.name, null);
+            if (x == null) { return false; }
+        }
+        if (x.k == .Bad) { return x.name == "vector_size attribute" || (x.elem != null && this->has_vec(x.elem)); }
+        if (x.k == .Array) { return this->has_vec(x.elem); }
+        const auto d = this->rec_of(x);
+        if (d == null) { return false; }
+        for (auto f : d.fields.slice()) { if (this->has_vec(f.ty)) { return true; } }
+        return false;
+    }
+
+    !bool abi_ok(CType* t, bool ret) {
         if (this->rec_of(t) == null) { return true; }
+        if (this->has_vec(t)) {
+            this->fail("vector in a record by value");
+            return false;
+        }
         const auto z = this->size(t);
+        if (z.align > 8 && z.size > 16 && c_arch != 1) {
+            this->fail("over-aligned record by value");
+            return false;
+        }
+        if (c_arch == 1) {
+            auto zh = CHfa{};
+            auto ch = CHfa{};
+            this->hfa(&zh, t, true)?;
+            this->hfa(&ch, t, false)?;
+            if (zh.unk || ch.unk) { return false; }
+            if (zh.no != ch.no || (!zh.no && (zh.base != ch.base || zh.n != ch.n))) { return false; }
+            if (c_apple || ret || z.align < 16 || (zh.no && z.size > 16)) { return true; }
+            const auto d = this->rec_of(t);
+            auto cu = 1;
+            auto zu = 1;
+            auto unk = false;
+            for (auto f : d.fields.slice()) {
+                auto ft = f.ty;
+                if (ft.k == .Array && ft.n == -1) { ft = ft.elem; } else { zu = max(zu, this->size(ft).align); }
+                if (this->size(ft).size < 0) { unk = true; }
+                cu = max(cu, this->size(ft).align);
+            }
+            if (d.is_union || d.opaque) { zu = min(z.align, 8); }
+            if (d.inner_attr || unk || (cu >= 16) != (zu >= 16)) {
+                this->fail("over-aligned record by value");
+                return false;
+            }
+            return true;
+        }
         if (z.size > 16) { return true; }
         auto r = CAbi{};
         this->mark(&r, t, 0, true, true)?;
+        if (z.align > 8 && (r.c0 == 0 || r.c1 == 0)) {
+            this->fail("over-aligned record by value");
+            return false;
+        }
         return !r.bad && r.c0 == r.z0 && r.c1 == r.z1;
     }
 
@@ -2317,9 +2661,7 @@ struct CEmit {
                 const auto x = this->typedefs.get_or(d.name, null);
                 if (x != null && x != d.ty) { this->warn(d.name, "name clash")?; } else { this->typedef_out(d)?; }
             }
-            .Var => {
-                if (d.is_extern) { this->warn(d.name, "extern variable")?; } else { this->warn(d.name, "variable")?; }
-            }
+            .Var => { this->var(d)?; }
             .Skip => { this->warn(d.name, d.reason)?; }
             .Func => { this->func(d)?; }
             .Typedef => { this->typedef_out(d)?; }
@@ -2371,6 +2713,7 @@ struct CEmit {
             if (d.k == .Func && (!d.is_static || (d.is_inline && d.has_body)) && !d.asm_label) { this->need(d.ty)?; }
             if (d.k == .Typedef) { this->need(d.ty)?; }
             if (d.k == .Struct) { this->need_rec(d)?; }
+            if (d.k == .Var && d.is_extern && !d.is_tls && !d.is_static) { this->need(d.ty)?; }
         }
     }
 
@@ -2425,7 +2768,7 @@ struct CEmit {
         this->nowrap = Map<str>::init(this->a);
         this->inl = Map<bool>::init(this->a);
         for (auto d : decls.slice()) {
-            if (d.k != .Func) { continue; }
+            if (d.k != .Func && d.k != .Var) { continue; }
             if (d.nowrap.len > 0 && !this->nowrap.has(d.name)) { this->nowrap.put(d.name, d.nowrap)?; }
             if (d.is_inline && d.has_body) { this->inl.put(d.name, true)?; }
         }
@@ -2439,7 +2782,8 @@ struct CEmit {
             this->c = List<u8>::init(this->a);
             this->undefs = List<u8>::init(this->a);
             this->undone = Map<bool>::init(this->a);
-            for (auto d : decls.slice()) { this->decl(d)?; }
+            for (auto d : decls.slice()) { if (d.k != .Var) { this->decl(d)?; } }
+            for (auto d : decls.slice()) { if (d.k == .Var) { this->decl(d)?; } }
         }
     }
 }
@@ -2601,7 +2945,7 @@ struct CBind {
     }
     auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a), .from = List<str>::init(a) } };
     lx.run()?;
-    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { p.short_enums = true; }
@@ -2651,6 +2995,9 @@ struct CBind {
         } else if (x == "--inline-c" && i + 1 < arg_count()) {
             i += 1;
             c_path = arg(i);
+        } else if ((x == "--arch" || x == "--os") && i + 1 < arg_count()) {
+            i += 1;
+            if (!set_target(x, arg(i))) { return 1; }
         } else if (pairs_next(x) && i + 1 < arg_count()) {
             flags.push(x)?;
             i += 1;
@@ -2669,9 +3016,10 @@ struct CBind {
         i += 1;
     }
     if (header.len == 0) {
-        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk] [--inline-c out.c]");
+        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]");
         return 1;
     }
+    if (cross_target()) { flags.push(target_flag())?; }
     const auto b = cbind_header(a, header, ".", flags) catch |e| {
         if (e != error.CompileFailed) { eprintln("error: cannot bind {header}: {e}"); }
         return 1;
@@ -2689,8 +3037,10 @@ struct CBind {
 List<str> c_flags = List<str>{};
 str c_cache = ".zark-cache";
 List<str> c_inline_sources = List<str>{};
+List<str> c_uses = List<str>{};
 Map<str> c_headers = Map<str>{};
 str c_version = "";
+const auto CBIND_SRC = embed("cbind.zk");
 
 bool is_c_header(str p) {
     return str_ends_with(p, ".h") || str_ends_with(p, ".hpp") || str_ends_with(p, ".hh") || str_ends_with(p, ".hxx");
@@ -2822,7 +3172,7 @@ str c_header_name(str p) {
             eprint(r.err);
             return error.CompileFailed;
         }
-        c_version = c_allocator().dup(it.line)?;
+        c_version = str_concat(c_allocator(), [it.line, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?])?;
     }
     auto flags = List<str>::init(a);
     for (auto f : c_flags.slice()) { if (!str_starts_with(f, "-std=c++") && !str_starts_with(f, "-std=gnu++")) { flags.push(f)?; } }

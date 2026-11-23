@@ -1,0 +1,30 @@
+1 .kw_struct struct
+1 .ident Pt
+1 .lbrace {
+1 .ident f32x4
+1 .ident v
+1 .semi ;
+1 .ident i32
+1 .ident n
+1 .semi ;
+1 .rbrace }
+3 .kw_extern extern
+3 .ident i32
+3 .ident labs
+3 .lparen (
+3 .ident Pt
+3 .ident p
+3 .rparen )
+3 .semi ;
+5 .ident void
+5 .ident main
+5 .lparen (
+5 .rparen )
+5 .lbrace {
+6 .ident println
+6 .lparen (
+6 .str_lit {labs(Pt{ .n = 1 })}
+6 .rparen )
+6 .semi ;
+7 .rbrace }
+8 .eof 

@@ -21,9 +21,9 @@ usage:
   zark test  <file.zk> [extra.c|.cpp|.o ...] [-O]   run the test blocks of a file
   zark fmt   [--check] <file.zk ...>  format source files in place
   zark lsp                          language server on stdin/stdout
-  zark ir    <file.zk>            print LLVM IR to stdout
+  zark ir    <file.zk> [--arch x86_64|aarch64] [--os linux|macos]  print LLVM IR to stdout
   zark new   NAME                   create a project (zark.toml, src/main.zk)
-  zark cbind <header.h> [-I.. -D..] [-o out.zk] [--inline-c out.c]  print Zark bindings for a C header
+  zark cbind <header.h> [-I.. -D..] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
 ");
@@ -109,6 +109,30 @@ extern i32 setenv(u8* name, u8* value, i32 overwrite);
 extern i64 vrt_exe_path(u8* buf, u64 n);
 extern i32 vrt_native();
 extern i32 vrt_os();
+extern i32 vrt_arch();
+
+bool set_target(str x, str v) {
+    if (x == "--arch" && (v == "x86_64" || v == "aarch64")) {
+        c_arch = 0;
+        if (v == "aarch64") { c_arch = 1; }
+        return true;
+    }
+    if (x == "--os" && (v == "linux" || v == "macos")) {
+        c_apple = v == "macos";
+        return true;
+    }
+    eprintln("error: unknown value '{v}' for {x} (--arch x86_64|aarch64, --os linux|macos)");
+    return false;
+}
+
+bool cross_target() { return c_arch != vrt_arch() as i64 || c_apple != (vrt_os() == 2); }
+
+str target_flag() {
+    if (c_arch == 1 && c_apple) { return "--target=arm64-apple-macosx11.0"; }
+    if (c_arch == 1) { return "--target=aarch64-linux-gnu"; }
+    if (c_apple) { return "--target=x86_64-apple-macosx10.15"; }
+    return "--target=x86_64-linux-gnu";
+}
 
 void grow_stack() {
     if (getenv("ZARK_STACK") != null) { return; }
@@ -225,6 +249,8 @@ void restore_stack() {
 
 !i32 compile(Allocator a) {
     grow_stack();
+    c_arch = vrt_arch() as i64;
+    c_apple = vrt_os() == 2;
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
     if (arg_count() >= 2 && arg(1) == "cbind") { return cbind_main(a); }
     if (arg_count() >= 2 && arg(1) == "new") {
@@ -368,6 +394,11 @@ void restore_stack() {
             force_llvm = true;
         } else if (x == "--native") {
             force_native = true;
+        } else if (x == "--arch" || x == "--os") {
+            i += 1;
+            auto v = "";
+            if (i < argv.len) { v = argv.get(i); }
+            if (!set_target(x, v)) { return 1; }
         } else if (x == "--fast-math") {
             fast = true;
             fastmath = true;
@@ -412,6 +443,11 @@ void restore_stack() {
         return 1;
     }
 
+    if (!is_ir && cross_target()) {
+        eprintln("error: --arch and --os other than the host only work with `zark ir`");
+        return 1;
+    }
+
     if (src_file.len == 0) { return build_sources(a, &sp, out_path, is_run, opt, prog_args); }
 
     if (safety) { ovf = true; }
@@ -441,6 +477,7 @@ void restore_stack() {
         return 1;
     };
     c_flags = sp.flags;
+    if (cross_target()) { c_flags.push(target_flag())?; }
     loader.load_file(src_file, "") catch {
         g.flush_diag();
         return 1;
@@ -499,6 +536,11 @@ void restore_stack() {
     if (opt) { olevel = "-O2"; }
 
     sp.sources.append(c_inline_sources.slice())?;
+    c_uses = List<str>::init(a);
+    auto it = g.declared.iter();
+    while (it.next()) {
+        if (str_starts_with(it.key(), "zark_var_")) { c_uses.push(str_concat(a, ["ZARK_USE_", it.key()[9..]])?)?; }
+    }
     auto needs_cxx = false;
     auto objs = compile_sources(a, cache, &sp, olevel, &needs_cxx) catch { return 1; };
 

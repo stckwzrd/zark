@@ -95,6 +95,15 @@ int vrt_os(void)
 #endif
 }
 
+int vrt_arch(void)
+{
+#if defined(__aarch64__)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 int vrt_native(void)
 {
 #if defined(__linux__) && defined(__x86_64__)

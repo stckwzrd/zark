@@ -1,0 +1,6 @@
+extern f32x8 atoi(u8* name);
+
+void main() {
+    const auto v = atoi("HOME");
+    println("{v[0]}");
+}

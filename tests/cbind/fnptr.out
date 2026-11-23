@@ -1,4 +1,4 @@
-struct mix { u64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+struct mix { f64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
 struct im { u32[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } }
 struct pt { i32 x; i32 y; }
 struct ald2 { u64[1] storage; }

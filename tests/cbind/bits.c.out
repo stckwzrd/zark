@@ -1,0 +1,21 @@
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "@DIR@/tests/cbind/bits.h"
+unsigned int zark_bf_H_get_flags_0(struct flags* p) { return p->a; }
+void zark_bf_H_set_flags_0(struct flags* p, unsigned int v) { p->a = v; }
+int zark_bf_H_get_flags_1(struct flags* p) { return p->s; }
+void zark_bf_H_set_flags_1(struct flags* p, int v) { p->s = v; }
+_Bool zark_bf_H_get_flags_2(struct flags* p) { return p->on; }
+void zark_bf_H_set_flags_2(struct flags* p, _Bool v) { p->on = v; }
+unsigned long long zark_bf_H_get_flags_4(struct flags* p) { return p->wide; }
+void zark_bf_H_set_flags_4(struct flags* p, unsigned long long v) { p->wide = v; }
+short zark_bf_H_get_flags_7(struct flags* p) { return p->h; }
+void zark_bf_H_set_flags_7(struct flags* p, short v) { p->h = v; }
+unsigned char zark_bf_H_get_nib_t_0(nib_t* p) { return p->lo; }
+void zark_bf_H_set_nib_t_0(nib_t* p, unsigned char v) { p->lo = v; }
+unsigned char zark_bf_H_get_nib_t_1(nib_t* p) { return p->hi; }
+void zark_bf_H_set_nib_t_1(nib_t* p, unsigned char v) { p->hi = v; }
+int zark_bf_H_get_nest_1(struct nest* p) { return p->c; }
+void zark_bf_H_set_nest_1(struct nest* p, int v) { p->c = v; }
+int zark_bf_H_get_anb_2(struct anb* p) { return p->r; }
+void zark_bf_H_set_anb_2(struct anb* p, int v) { p->r = v; }
