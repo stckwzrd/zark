@@ -1110,7 +1110,7 @@ def run_oracle(targets, extra):
                 want = ci.get(item if item != "fnptr" else "export")
                 got = zi.get(item)
                 n += 1
-                if got != want:
+                if got is None or got != want:
                     mism += 1
                     print(f"MISMATCH {target} {case['name']} {item}\n    zark:  {got}\n    clang: {want}")
         print(f"{target}: {len(cases)} signatures, {n} items, {mism} mismatches")

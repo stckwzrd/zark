@@ -12,15 +12,43 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16 vars bits; do
+a64=0
+case "$(uname -m)" in aarch64|arm64) a64=1 ;; esac
+golden() {
+    if [ "$1" = linux ] && [ -f "tests/cbind/$2.a64.out" ]; then echo "$2.a64"
+    elif [ "$1" = macos ] && [ -f "tests/cbind/$2.a64mac.out" ]; then echo "$2.a64mac"
+    elif [ "$1" = macos ] && [ -f "tests/cbind/$2.a64.out" ]; then echo "$2.a64"
+    else echo "$2"; fi
+}
+hostos=linux
+[ "$(uname -s)" = Darwin ] && hostos=macos
+names="scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16 vars bits"
+for name in $names; do
     flags="-fsigned-char"
     [ "$name" = shorten ] && flags="$flags -fshort-enums"
+    exp=$name
+    [ $a64 = 1 ] && exp=$(golden $hostos $name)
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
-    diff -u <(nohid "tests/cbind/$name.out") <(nohid "$name.zk") || fail "$name: output differs"
-    diff -u "tests/cbind/$name.err" "$name.err" || fail "$name: warnings differ"
+    diff -u <(nohid "tests/cbind/$exp.out") <(nohid "$name.zk") || fail "$name: output differs"
+    diff -u "tests/cbind/$exp.err" "$name.err" || fail "$name: warnings differ"
     printf 'import "%s.zk";\nvoid main() {}\n' "$name" > "use_$name.zk"
     "$ZARK" ir "use_$name.zk" > /dev/null || fail "$name: bindings do not compile"
 done
+
+if [ $a64 = 0 ]; then
+    for os in linux macos; do
+        for name in $names; do
+            flags="-fsigned-char"
+            [ "$name" = shorten ] && flags="$flags -fshort-enums"
+            exp=$(golden $os $name)
+            timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags --arch aarch64 --os $os > "a64_$name.zk" 2> "a64_$name.err" || fail "$name aarch64 $os: exit $?: $(cat "a64_$name.err")"
+            diff -u <(nohid "tests/cbind/$exp.out") <(nohid "a64_$name.zk") || fail "$name aarch64 $os: output differs"
+            diff -u "tests/cbind/$exp.err" "a64_$name.err" || fail "$name aarch64 $os: warnings differ"
+            printf 'import "a64_%s.zk";\nvoid main() {}\n' "$name" > "use_a64_$name.zk"
+            "$ZARK" ir --arch aarch64 --os $os "use_a64_$name.zk" > /dev/null || fail "$name aarch64 $os: bindings do not compile"
+        done
+    done
+fi
 
 for sign in signed unsigned; do
     exp=out

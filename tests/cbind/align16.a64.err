@@ -1,0 +1,6 @@
+opaque off16: layout differs
+skipped sum_mix: over-aligned record by value
+skipped sum_has: over-aligned record by value
+opaque od16: layout differs
+skipped mk_od16: over-aligned record by value
+skipped sum_od16: over-aligned record by value

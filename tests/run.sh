@@ -22,6 +22,8 @@ check interop $ZARK run examples/interop/main.zk examples/interop/mathlib.c exam
 if [ $x86 = 1 ] && [ $linux = 1 ]; then
   if ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --quick --strict --backends native,llvm,O >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   abi fuzz"
   else fail=$((fail+1)); echo "FAIL abi fuzz"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --quick --strict --backends native,llvm,O 2>&1 | tail -20; fi
+  if ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   abi ir oracle aarch64"
+  else fail=$((fail+1)); echo "FAIL abi ir oracle aarch64"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple 2>&1 | tail -20; fi
 fi
 for n in ints memory nan move borrow comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
 for f in tests/panics/*.zk; do

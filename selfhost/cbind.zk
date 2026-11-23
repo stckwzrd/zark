@@ -249,6 +249,7 @@ struct CDecl {
     str key;
     bool walked;
     bool opaque;
+    bool inner_attr;
     i64 from;
     i64 at;
 }
@@ -861,6 +862,7 @@ struct CParser {
             if (this->at_eof()) { return error.ParseFailed; }
             this->field(d)?;
         }
+        d.inner_attr = this->attr_layout;
         _ = this->next();
         this->skip_noise();
         d.layout_attr = this->attr_layout || packed;
@@ -1613,6 +1615,13 @@ struct CAbi {
         if (!z && w == 0 && (cls == 1 || this->c0 == 0)) { this->c0 = cls; }
         if (!z && w == 1 && (cls == 1 || this->c1 == 0)) { this->c1 = cls; }
     }
+}
+
+struct CHfa {
+    i64 base;
+    i64 n;
+    bool no;
+    bool unk;
 }
 
 struct CEmit {
@@ -2473,12 +2482,121 @@ struct CEmit {
         }
     }
 
+    !void hfa(CHfa* r, CType* t, bool z) {
+        if (r.no || r.unk) { return; }
+        match t.k {
+            .Float => {
+                const auto w = t.width / 8;
+                if ((w != 4 && w != 8) || (r.base != 0 && r.base != w)) {
+                    r.no = true;
+                    return;
+                }
+                r.base = w;
+                r.n += 1;
+                if (r.n > 4) { r.no = true; }
+            }
+            .Array => {
+                if (t.n <= 0) {
+                    r.no = true;
+                    return;
+                }
+                for (auto _i : 0..t.n) { this->hfa(r, t.elem, z)?; }
+            }
+            .Named => {
+                const auto d = this->rec_of(t);
+                if (d == null) {
+                    if (t.tag == 0) {
+                        const auto x = this->typedefs.get_or(t.name, null);
+                        if (x != null) { return this->hfa(r, x, z); }
+                    }
+                    r.unk = true;
+                    return;
+                }
+                const auto rz = this->size(t);
+                if (rz.size < 0) {
+                    r.unk = true;
+                    return;
+                }
+                if (rz.size == 0) { return; }
+                const auto n0 = r.n;
+                if (z && (d.is_union || d.opaque)) {
+                    const auto l = this->layout(d);
+                    if (l == null) {
+                        r.unk = true;
+                        return;
+                    }
+                    const auto u = this->uclass(d, l)?;
+                    const auto w = min(l.align, 8);
+                    if (u.bad || u.c0 != 2 || (l.size > 8 && u.c1 != 2) || (r.base != 0 && r.base != w)) {
+                        r.no = true;
+                        return;
+                    }
+                    r.base = w;
+                    r.n += l.size / w;
+                    if (r.n > 4) { r.no = true; }
+                    return;
+                }
+                if (d.is_union) {
+                    auto most = 0;
+                    for (auto f : d.fields.slice()) {
+                        auto m = CHfa{ .base = r.base };
+                        if (f.bits) { m.no = true; } else { this->hfa(&m, f.ty, z)?; }
+                        if (m.unk) { r.unk = true; }
+                        if (m.no) { r.no = true; }
+                        if (r.no || r.unk) { return; }
+                        if (m.base != 0) { r.base = m.base; }
+                        most = max(most, m.n);
+                    }
+                    r.n += most;
+                } else {
+                    for (auto f : d.fields.slice()) {
+                        if (f.ty.k == .Array && f.ty.n == -1) {
+                            if (!z) { r.no = true; }
+                            continue;
+                        }
+                        if (f.bits) {
+                            r.no = true;
+                            return;
+                        }
+                        this->hfa(r, f.ty, z)?;
+                    }
+                }
+                if (r.n > 4) { r.no = true; }
+                if (!r.no && !r.unk && (r.base == 0 || (r.n - n0) * r.base != rz.size)) { r.no = true; }
+            }
+            _ => { r.no = true; }
+        }
+    }
+
     !bool abi_ok(CType* t) {
         if (this->rec_of(t) == null) { return true; }
         const auto z = this->size(t);
         if (z.align > 8 && z.size > 16) {
             this->fail("over-aligned record by value");
             return false;
+        }
+        if (c_arch == 1) {
+            auto zh = CHfa{};
+            auto ch = CHfa{};
+            this->hfa(&zh, t, true)?;
+            this->hfa(&ch, t, false)?;
+            if (zh.unk || ch.unk) { return false; }
+            if (zh.no != ch.no || (!zh.no && (zh.base != ch.base || zh.n != ch.n))) { return false; }
+            if (c_apple || z.align < 16 || (zh.no && z.size > 16)) { return true; }
+            const auto d = this->rec_of(t);
+            auto cu = 1;
+            auto zu = 1;
+            for (auto f : d.fields.slice()) {
+                auto ft = f.ty;
+                if (ft.k == .Array && ft.n == -1) { ft = ft.elem; } else { zu = max(zu, this->size(ft).align); }
+                cu = max(cu, this->size(ft).align);
+            }
+            if (d.is_union || d.opaque) { zu = min(z.align, 8); }
+            if (d.inner_attr || (cu >= 16) != (zu >= 16)) {
+                this->fail("over-aligned record by value");
+                return false;
+            }
+            return true;
         }
         if (z.size > 16) { return true; }
         auto r = CAbi{};
@@ -2849,6 +2967,9 @@ struct CBind {
         } else if (x == "--inline-c" && i + 1 < arg_count()) {
             i += 1;
             c_path = arg(i);
+        } else if ((x == "--arch" || x == "--os") && i + 1 < arg_count()) {
+            i += 1;
+            if (!set_target(x, arg(i))) { return 1; }
         } else if (pairs_next(x) && i + 1 < arg_count()) {
             flags.push(x)?;
             i += 1;
@@ -2867,9 +2988,10 @@ struct CBind {
         i += 1;
     }
     if (header.len == 0) {
-        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk] [--inline-c out.c]");
+        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]");
         return 1;
     }
+    if (cross_target()) { flags.push(target_flag())?; }
     const auto b = cbind_header(a, header, ".", flags) catch |e| {
         if (e != error.CompileFailed) { eprintln("error: cannot bind {header}: {e}"); }
         return 1;
