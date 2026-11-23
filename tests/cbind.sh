@@ -195,4 +195,102 @@ grep -qx "skipped M20000: expansion too deep" chain.err || fail "chain: M20000 n
 printf 'struct E {};\nstruct H { struct E a[1000000000]; };\nint f(struct H h);\n' > empty.h
 timeout 5 "$ZARK" cbind empty.h > empty.zk 2>&1 || fail "empty array: exit $?"
 grep -qx "extern i32 f(H h);" empty.zk || fail "empty array: f missing"
+
+cp -r "$R/tests/cbind/interop" interop
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f main.zk lib.c -I. 2>&1) || fail "import_basic $f: $out"
+    [ "$out" = "$(cat interop/main.out)" ] || fail "import_basic $f: got: $out"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    for f in "" --llvm -O; do
+        out=$(cd interop && "$ZARK" run $f byval.zk lib.c -I. 2>&1) || fail "import_byval $f: $out"
+        [ "$out" = "3 1.5 4.5" ] || fail "import_byval $f: got: $out"
+    done
+fi
+
+(cd interop && "$ZARK" cbind lib.h -I. --inline-c ../same.c > ../same.zk 2> /dev/null) || fail "import_same: cbind exit $?"
+cached=$(grep -l "lib_magic" interop/.zark-cache/cbind/*.zk)
+[ "$(echo "$cached" | wc -l)" = 1 ] || fail "import_same: expected one cached binding, got: $cached"
+diff -u same.zk "$cached" || fail "import_same: cbind and import differ"
+diff -u same.c "${cached%.zk}.c" || fail "import_same: inline C files differ"
+
+(cd interop && "$ZARK" ir main.zk -I. > /dev/null) || fail "import_ir: zark ir failed"
+printf 'import "lib.h" as lib;\ntest "magic" { assert(lib::lib_magic() == 42); assert(lib::scaled(1) == 42); }\n' > interop/t.zk
+out=$(cd interop && "$ZARK" test t.zk lib.c -I. 2>&1) || fail "import_test: $out"
+case "$out" in *"1 passed, 0 failed"*) ;; *) fail "import_test: got: $out" ;; esac
+
+mkdir -p shim
+real=$(command -v clang)
+printf '#!/bin/sh\necho "$*" >> "%s/clang.log"\nexec "%s" "$@"\n' "$T" "$real" > shim/clang
+chmod +x shim/clang
+cp -r "$R/tests/cbind/interop" hit
+(cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c > /dev/null 2>&1) || fail "import_cache_hit: first run"
+grep -q -- "-E" clang.log || fail "import_cache_hit: shim not used: $(cat clang.log)"
+: > clang.log
+out=$(cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c 2>&1) || fail "import_cache_hit: second run: $out"
+[ "$out" = "$(cat interop/main.out)" ] || fail "import_cache_hit: got: $out"
+if grep -E -- "(^| )-E( |$)|fdump-record-layouts" clang.log; then fail "import_cache_hit: preprocessed again"; fi
+
+sed -i 's/#define LIB_MAGIC 42/#define LIB_MAGIC 43/' hit/lib.h
+out=$(cd hit && "$ZARK" run main.zk lib.c 2>&1) || fail "import_header_edit: $out"
+[ "$(echo "$out" | head -1)" = "43 interop 43 86" ] || fail "import_header_edit: got: $out"
+
+mkdir -p "tw/my lib" tw/app/sub
+cp interop/lib.h interop/lib.c "tw/my lib/"
+printf 'import "../../my lib/lib.h";\ni32 from_sub() { return lib_magic() + 1; }\n' > tw/app/sub/plain.zk
+printf 'import "lib.h" as other;\ni32 from_other() { return other::scaled(1); }\n' > tw/app/sub/other.zk
+printf 'import "sub/plain.zk";\nimport "lib.h" as lib;\nimport "sub/other.zk";\nimport "lib.h" as again;\nvoid main() { println("{from_sub()} {from_other()} {lib::LIB_MAGIC} {again::sum_ints(2, 1, 2)} {LIB_NAME}"); }\n' > tw/app/main.zk
+for f in "" --llvm; do
+    out=$(cd tw/app && "$ZARK" run $f main.zk "../my lib/lib.c" "-I../my lib" 2>&1) || fail "import_twice $f: $out"
+    [ "$out" = "43 42 42 3 interop" ] || fail "import_twice $f: got: $out"
+done
+[ "$(ls tw/app/.zark-cache/cbind/*.zk | wc -l)" = 1 ] || fail "import_twice: expected one cached binding: $(ls tw/app/.zark-cache/cbind)"
+[ "$(ls tw/app/.zark-cache/cbind/*.c | wc -l)" = 1 ] || fail "import_twice: expected one inline C file: $(ls tw/app/.zark-cache/cbind)"
+
+printf 'import "lib.h" as lib;\nimport "sub/plain.zk";\nvoid main() { println("{lib::LIB_MAGIC}"); }\n' > tw/app/bad.zk
+if out=$(cd tw/app && "$ZARK" run bad.zk "../my lib/lib.c" "-I../my lib" 2>&1); then fail "import_alias_plain: expected failure"; fi
+case "$out" in *"error: '../../my lib/lib.h' is imported as 'lib' elsewhere"*'import "../../my lib/lib.h" as lib;'*) ;; *) fail "import_alias_plain: got: $out" ;; esac
+
+printf 'int f(void);\n' > cpp.hpp
+printf 'import "cpp.hpp";\nvoid main() {}\n' > use_cpp.zk
+out=$("$ZARK" run use_cpp.zk 2>&1); code=$?
+[ $code = 1 ] || fail "import_cpp_header: exit $code: $out"
+[ "$out" = "error: C++ headers are not supported yet (layer 4): cpp.hpp" ] || fail "import_cpp_header: got: $out"
+
+mkdir -p "inc dir"
+printf 'import "nosuch.h";\nvoid main() {}\n' > use_missing.zk
+out=$("$ZARK" run use_missing.zk "-Iinc dir" 2>&1); code=$?
+[ $code = 1 ] || fail "import_missing: exit $code: $out"
+case "$out" in *"error: cannot find C header 'nosuch.h'; searched: ., inc dir, /usr/include"*) ;; *) fail "import_missing: got: $out" ;; esac
+
+mkdir -p mf/src mf/inc
+printf '#ifdef FEATURE\nint feature(void);\n#endif\n#if __STDC_VERSION__ == 201112L\n#define STDV 11\n#endif\n#define CFV CF\n' > mf/inc/feat.h
+printf '#include "feat.h"\nint feature(void) { return 5; }\n' > mf/inc/feat.c
+printf '[package]\nname = "mf"\n\n[build]\nsources = ["inc/feat.c"]\ninclude = ["inc"]\ndefines = ["FEATURE"]\nstd = "c11"\ncflags = ["-DCF=2"]\n' > mf/zark.toml
+printf 'import "feat.h" as f;\nvoid main() { println("{f::feature()} {f::STDV} {f::CFV}"); }\n' > mf/src/main.zk
+out=$(cd mf && "$ZARK" run 2>&1) || fail "import_manifest: $out"
+[ "$out" = "5 11 2" ] || fail "import_manifest: got: $out"
+out=$("$ZARK" run mf/src/main.zk 2>&1) || fail "import_manifest explicit file: $out"
+[ "$out" = "5 11 2" ] || fail "import_manifest explicit file: got: $out"
+sed -i 's/defines = \["FEATURE"\]/defines = []/' mf/zark.toml
+if out=$(cd mf && "$ZARK" run 2>&1); then fail "import_manifest: feature still bound without FEATURE"; fi
+
+{
+    printf 'import "lib.h" as lib;\nvoid main() {\n'
+    for n in $(sed -n 's/^struct \([A-Za-z_0-9]*\) .*/\1/p' same.zk); do printf '    println("{sizeof(lib::%s)}");\n' "$n"; done
+    printf '}\n'
+} > interop/sizes.zk
+{
+    printf '#include <stdio.h>\n#include "lib.h"\nint main(void) {\n'
+    for n in $(sed -n 's/^struct \([A-Za-z_0-9]*\) .*/\1/p' same.zk); do
+        kind=struct
+        grep -q "union $n " interop/lib.h && kind=union
+        printf '    printf("%%zu\\n", sizeof(%s %s));\n' "$kind" "$n"
+    done
+    printf '    return 0;\n}\n'
+} > interop/sizes.c
+[ "$(grep -c sizeof interop/sizes.c)" -ge 3 ] || fail "sizeof_matches: too few structs"
+clang interop/sizes.c -o sizes_c || fail "sizeof_matches: C program"
+out=$(cd interop && "$ZARK" run sizes.zk 2>&1) || fail "sizeof_matches: $out"
+[ "$out" = "$(./sizes_c)" ] || fail "sizeof_matches: zark $out vs C $(./sizes_c)"
 echo "ok   cbind"
