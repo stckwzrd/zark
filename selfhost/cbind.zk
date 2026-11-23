@@ -2136,8 +2136,40 @@ struct CEmit {
         if (l.align == 8) { el = "u64"; }
         sprint(b, "struct ")?;
         this->esc(b, d.name)?;
-        sprint(b, " {{ {el}[{l.size / l.align}] storage; ")?;
+        const auto u = this->uclass(d, l)?;
+        if (u.bad || (u.c0 != 2 && u.c1 != 2)) {
+            sprint(b, " {{ {el}[{l.size / l.align}] storage; ")?;
+            return true;
+        }
+        const auto lo = this->word_el(u.c0, l, el);
+        auto hi = lo;
+        if (l.size > 8) { hi = this->word_el(u.c1, l, el); }
+        if (lo == hi) {
+            sprint(b, " {{ {lo}[{l.size / l.align}] storage; ")?;
+            return true;
+        }
+        sprint(b, " {{ {lo}[{8 / l.align}] storage; {hi}[{(l.size - 8) / l.align}] storage_hi; ")?;
         return true;
+    }
+
+    str word_el(i64 cls, CLayout* l, str el) {
+        if (cls != 2) { return el; }
+        if (l.align == 8) { return "f64"; }
+        return "f32";
+    }
+
+    !CAbi uclass(CDecl* d, CLayout* l) {
+        auto r = CAbi{};
+        if (!d.is_union || d.opaque || l.size > 16 || (l.align != 4 && l.align != 8)) {
+            r.bad = true;
+            return r;
+        }
+        const auto t = this->a.create<CType>()?;
+        t.k = .Named;
+        t.tag = 2;
+        t.rec = d;
+        this->mark(&r, t, 0, false, true)?;
+        return r;
     }
 
     !void opaque(CDecl* d, str why) {
@@ -2253,9 +2285,12 @@ struct CEmit {
                     return;
                 }
                 if (z) {
+                    const auto u = this->uclass(d, l)?;
                     auto o = 0;
                     while (o < l.size) {
-                        r.put(true, off + o, l.align, 1);
+                        auto cls = 1;
+                        if (!u.bad && ((o < 8 && u.c0 == 2) || (o >= 8 && u.c1 == 2))) { cls = 2; }
+                        r.put(true, off + o, l.align, cls);
                         o += l.align;
                     }
                 }

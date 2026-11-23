@@ -1,7 +1,7 @@
 struct U { u64[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
 struct small { u16[1] storage; u8* as_c() { void* p = this; return p; } i16* as_s() { void* p = this; return p; } }
 struct bytes { u8[3] storage; u8[3]* as_b() { void* p = this; return p; } }
-struct mix { u64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+struct mix { f64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
 struct part { u64[2] storage; i32* as_i() { void* p = this; return p; } }
 struct cbu { u64[1] storage; *fn(i32) -> i32 as_f() { void* p = this; return p; } void** as_p() { void* p = this; return p; } }
 struct flags { u32[1] storage; u32* as_all() { void* p = this; return p; } }
@@ -26,6 +26,7 @@ type inc_t = inc;
 extern U pass(U u);
 extern U* pick(U* a, i32 n);
 extern void setd(U* u, f64 d);
+extern f64 mixsum(mix m);
 extern i32 hsum(handle_t h);
 extern f64 vsum(var_t v);
 extern holder make_holder(i32 k);

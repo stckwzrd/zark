@@ -3,7 +3,7 @@ const auto RED = 0;
 const auto GREEN = 1;
 const auto BLUE = 2;
 struct pt { i32 x; i32 y; }
-struct mix { u64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+struct mix { f64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
 type word = u32;
 type myint = i32;
 extern i32 zark_inl_14d941d3a8a86510_add(i32 a0, i32 a1);
@@ -46,4 +46,6 @@ extern i32 zark_inl_14d941d3a8a86510_sq(i32 a0);
 i32 sq(i32 a0) { return zark_inl_14d941d3a8a86510_sq(a0); }
 extern myint zark_inl_14d941d3a8a86510_ident(myint a0);
 myint ident(myint a0) { return zark_inl_14d941d3a8a86510_ident(a0); }
+extern mix zark_inl_14d941d3a8a86510_mixit(mix a0);
+mix mixit(mix a0) { return zark_inl_14d941d3a8a86510_mixit(a0); }
 extern i32 ext(i32 x);

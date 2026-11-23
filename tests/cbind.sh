@@ -12,7 +12,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig inline wrapfix; do
+for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix; do
     flags=""
     [ "$name" = shorten ] && flags="-fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -110,6 +110,43 @@ EOF
     for f in $native --llvm; do
         out=$("$ZARK" run $f use_fnptr2.zk tests/cbind/fnptr.c 2>&1) || fail "fnptr $f: run: $out"
         [ "$out" = "40 7 8 16 16 16" ] || fail "fnptr $f: got: $out"
+    done
+
+cat > use_unionval2.zk <<'EOF'
+import "unionval.zk";
+void main() {
+    ud a;
+    *a.as_d() = 1.5;
+    udi b;
+    *b.as_i() = 41;
+    uff c;
+    *c.as_a() = 2.5;
+    ufd d;
+    *d.as_d() = 3.5;
+    fi3 e;
+    (*e.as_f())[0] = 1.0;
+    (*e.as_f())[1] = 2.0;
+    (*e.as_f())[2] = 3.0;
+    dd f;
+    (*f.as_d())[0] = 0.25;
+    (*f.as_d())[1] = 0.5;
+    sud g;
+    g.k = 7;
+    g.u = a;
+    auto ra = put_ud(a);
+    auto rb = put_udi(b);
+    auto rc = put_uff(c);
+    auto rd = put_ufd(d);
+    auto re = put_fi3(e);
+    auto rf = put_dd(f);
+    auto rg = put_sud(g);
+    println("{*ra.as_d()} {*rb.as_i()} {*rc.as_a()} {*rd.as_d()} {(*re.as_f())[0]} {(*re.as_f())[1]} {(*re.as_f())[2]} {(*rf.as_d())[0]} {(*rf.as_d())[1]} {rg.k} {*rg.u.as_d()}");
+    println("{mix(c, 0.5, b, e, a, 3)} {sizeof(ud)} {sizeof(uff)} {sizeof(fi3)} {alignof(fi3)} {sizeof(dd)} {sizeof(sud)}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_unionval2.zk tests/cbind/unionval.c 2>&1) || fail "unionval $f: run: $out"
+        [ "$out" = "$(printf '2.5 42 3.5 4.5 2 4 6 1.25 2.5 8 2.5\n54.5 8 4 12 4 16 16')" ] || fail "unionval $f: got: $out"
     done
 fi
 
