@@ -28,19 +28,19 @@ struct es { i64 b; i32 o; }
 extern i32 uses_neg(u32 n);
 extern i32 uses_ok(i32 o);
 extern i32 uses_e8(u8 e);
-extern u32 zark_bf_422f291faf6af908_get_bits_0(bits* p);
-extern void zark_bf_422f291faf6af908_set_bits_0(bits* p, u32 v);
-extern u32 zark_bf_422f291faf6af908_get_bits_1(bits* p);
-extern void zark_bf_422f291faf6af908_set_bits_1(bits* p, u32 v);
-struct bits { u64[2] storage; u32 get_a() { return zark_bf_422f291faf6af908_get_bits_0(this); } void set_a(u32 v) { zark_bf_422f291faf6af908_set_bits_0(this, v); } u32 get_b() { return zark_bf_422f291faf6af908_get_bits_1(this); } void set_b(u32 v) { zark_bf_422f291faf6af908_set_bits_1(this, v); } }
+extern u32 zark_bf_H_get_bits_0(bits* p);
+extern void zark_bf_H_set_bits_0(bits* p, u32 v);
+extern u32 zark_bf_H_get_bits_1(bits* p);
+extern void zark_bf_H_set_bits_1(bits* p, u32 v);
+struct bits { u64[2] storage; u32 get_a() { return zark_bf_H_get_bits_0(this); } void set_a(u32 v) { zark_bf_H_set_bits_0(this, v); } u32 get_b() { return zark_bf_H_get_bits_1(this); } void set_b(u32 v) { zark_bf_H_set_bits_1(this, v); } }
 struct pkd { u8[7] storage; }
 struct ald { u64[1] storage; }
 struct alf { u64[2] storage; }
 align(16) struct al16 { i8 c; }
 struct usesbits { bits[2] b; pkd p; alf f; }
-extern i16 zark_bf_422f291faf6af908_get_bitu_1(bitu* p);
-extern void zark_bf_422f291faf6af908_set_bitu_1(bitu* p, i16 v);
-struct bitu { u32[2] storage; i16 get_tail() { return zark_bf_422f291faf6af908_get_bitu_1(this); } void set_tail(i16 v) { zark_bf_422f291faf6af908_set_bitu_1(this, v); } }
+extern i16 zark_bf_H_get_bitu_1(bitu* p);
+extern void zark_bf_H_set_bitu_1(bitu* p, i16 v);
+struct bitu { u32[2] storage; i16 get_tail() { return zark_bf_H_get_bitu_1(this); } void set_tail(i16 v) { zark_bf_H_set_bitu_1(this, v); } }
 extern i32 takebits(bits b);
 extern i32 takebitsp(bits* b);
 extern i32 takepkd(pkd p);
