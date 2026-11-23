@@ -197,7 +197,7 @@ struct CLexer {
 
 enum CK { Int, Float, Bool, Void, Ptr, Array, Func, Named, Bad }
 
-struct CField { str name; CType* ty; bool bits; }
+struct CField { str name; CType* ty; bool bits; i64 at; i64 from; i64 to; }
 
 struct CType {
     CK k;
@@ -242,6 +242,8 @@ struct CDecl {
     str key;
     bool walked;
     bool opaque;
+    i64 from;
+    i64 at;
 }
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
@@ -1064,11 +1066,15 @@ struct CParser {
             return f;
         }
         auto name = "";
-        if (this->peek().k == .Ident) { name = this->next().text; }
+        auto at = -1;
+        if (this->peek().k == .Ident) {
+            at = this->pos;
+            name = this->next().text;
+        }
         this->skip_noise();
         t = this->suffixes(t)?;
         this->skip_noise();
-        return CField{ .name = name, .ty = t };
+        return CField{ .name = name, .ty = t, .at = at };
     }
 
     !CType* suffixes(CType* t) {
@@ -1119,8 +1125,11 @@ struct CParser {
                 f.varargs = true;
                 break;
             }
+            const auto from = this->pos;
             const auto s = this->specs()?;
             auto p = this->declarator(s.ty)?;
+            p.from = from;
+            p.to = this->pos;
             const auto rt = this->resolve(p.ty);
             if (rt.k == .Array) {
                 p.ty = this->ptr(rt.elem)?;
@@ -1242,6 +1251,7 @@ struct CParser {
     !void top() {
         this->attr_why = "";
         const auto rel = this->peek().rel;
+        const auto from = this->pos;
         const auto s = this->specs()?;
         if (this->eat(";")) { return; }
         while (true) {
@@ -1261,6 +1271,8 @@ struct CParser {
                     d.is_extern = s.is_extern;
                     d.asm_label = this->asm_label;
                     d.reason = this->attr_why;
+                    d.from = from;
+                    d.at = f.at;
                     this->decls.push(d)?;
                     if (this->at("{{")) {
                         d.has_body = true;
@@ -1506,6 +1518,18 @@ str cb_known(str name) {
     return "";
 }
 
+!void cb_tok(List<u8>* b, str w, str next) {
+    if (b.len > 0 && w.len > 0) {
+        const auto p = b.get(b.len - 1);
+        const auto c = w[0];
+        auto sp = p == ',';
+        if ((cb_ident_char(p) || p == ')') && (cb_ident_char(c) || c == '*')) { sp = true; }
+        if (cb_ident_char(p) && c == '(' && (next == "*" || next == "^")) { sp = true; }
+        if (sp) { b.push(' ')?; }
+    }
+    sprint(b, "{w}")?;
+}
+
 struct CSize { i64 size; i64 align; }
 
 struct CAbi {
@@ -1549,6 +1573,11 @@ struct CEmit {
     i64 behind;
     str why;
     str cur;
+    CTok[] toks;
+    Map<CMac*> macs;
+    List<u8> c;
+    List<u8> undefs;
+    Map<bool> undone;
 
     void fail(str why) {
         if (this->why.len == 0) { this->why = why; }
@@ -1761,12 +1790,12 @@ struct CEmit {
     }
 
     !void func(CDecl* d) {
-        if (d.is_static && d.is_inline) { return this->warn(d.name, "static inline function"); }
-        if (d.is_static) { return this->warn(d.name, "static function"); }
-        if (d.is_inline && d.has_body) { return this->warn(d.name, "inline function"); }
         if (d.asm_label) { this->relabeled.put(d.name, true)?; }
+        if (d.is_inline && !d.is_extern && !d.has_body) { return; }
+        if (d.is_static && !d.is_inline) { return this->warn(d.name, "static function"); }
         if (this->relabeled.has(d.name)) { return this->warn(d.name, "asm label"); }
         if (d.reason.len > 0) { return this->warn(d.name, d.reason); }
+        if (d.is_inline && d.has_body) { return this->inline_fn(d); }
         if (keyword(d.name) != .ident) { return this->warn(d.name, "Zark keyword"); }
         if (cb_is_prim(d.name)) { return this->warn(d.name, "Zark type name"); }
         if (!this->claim(d.name, 3)?) { return; }
@@ -1795,6 +1824,107 @@ struct CEmit {
         if (!this->abi_ok(f.elem)?) { this->fail("opaque record by value"); }
         for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty)?) { this->fail("opaque record by value"); } }
         _ = this->line(d.name, 3, b.slice())?;
+    }
+
+    !void spell(List<u8>* b, i64 from, i64 to, i64 at, str nm, CField[] ps, List<str>* ids) {
+        const auto ret = nm.len == 0;
+        auto k = from;
+        auto grouped = false;
+        while (k < to) {
+            const auto t = this->toks[k];
+            k += 1;
+            if (ret && (t.text == "__attribute__" || t.text == "__attribute" || t.text == "__declspec")) {
+                auto depth = 0;
+                while (k < to) {
+                    const auto x = this->toks[k].text;
+                    k += 1;
+                    if (x == "(") { depth += 1; }
+                    if (x == ")") {
+                        depth -= 1;
+                        if (depth == 0) { break; }
+                    }
+                }
+                continue;
+            }
+            if (ret && (t.text == "static" || t.text == "inline" || t.text == "__inline" || t.text == "__inline__" || t.text == "__forceinline" || t.text == "extern" || t.text == "_Noreturn" || t.text == "__extension__")) { continue; }
+            if (t.text == "(" || t.text == "[" || t.text == "{{" || t.text == "," || t.text == "=") { grouped = true; }
+            auto w = t.text;
+            if (k - 1 == at) {
+                w = nm;
+                ids.push(nm)?;
+            } else if (t.k == .Ident) {
+                for (auto p : ps) { if (p.name == w) { this->fail("parameter used in a type"); } }
+                ids.push(w)?;
+            }
+            cb_tok(b, w, this->toks[min(k, this->toks.len - 1)].text)?;
+        }
+        if (ret && grouped) { this->fail("cannot wrap"); }
+        if (!ret && at < 0) {
+            if (grouped) { this->fail("unnamed parameter"); }
+            ids.push(nm)?;
+            cb_tok(b, nm, "")?;
+        }
+    }
+
+    !void inline_fn(CDecl* d) {
+        if (!this->claim(d.name, 3)?) { return; }
+        const auto f = d.ty;
+        if (f.varargs) { this->fail("variadic inline function"); }
+        auto ids = List<str>::init(this->a);
+        ids.push(d.name)?;
+        auto r = f.elem;
+        while (r.k == .Named && r.tag == 0) {
+            const auto x = this->typedefs.get_or(r.name, null);
+            if (x == null) { break; }
+            r = x;
+        }
+        auto ret = "return ";
+        if (r.k == .Void) { ret = ""; }
+        auto wn = List<u8>::init(this->a);
+        sprint(&wn, "zark_inl_{d.name}")?;
+        const auto inl = wn.slice();
+        ids.push(inl)?;
+        auto c = List<u8>::init(this->a);
+        if (!d.is_static && !d.is_extern) { sprint(&c, "#pragma weak {d.name}\nextern __typeof__({d.name}) {d.name};\n")?; }
+        this->spell(&c, d.from, d.at, -1, "", f.params.slice(), &ids)?;
+        cb_tok(&c, inl, "(")?;
+        sprint(&c, "(")?;
+        auto zp = List<u8>::init(this->a);
+        auto args = List<u8>::init(this->a);
+        for (auto [i, p] : f.params.slice()) {
+            if (i > 0) {
+                sprint(&c, ", ")?;
+                sprint(&zp, ", ")?;
+                sprint(&args, ", ")?;
+            }
+            auto nb = List<u8>::init(this->a);
+            sprint(&nb, "a{i}")?;
+            this->spell(&c, p.from, p.to, p.at, nb.slice(), f.params.slice(), &ids)?;
+            this->ty(&zp, p.ty)?;
+            sprint(&zp, " a{i}")?;
+            sprint(&args, "a{i}")?;
+        }
+        if (f.params.len == 0) { sprint(&c, "void")?; }
+        const auto zps = zp.slice();
+        const auto argss = args.slice();
+        sprint(&c, ") {{ {ret}{d.name}({argss}); }}\n")?;
+        auto rt = List<u8>::init(this->a);
+        this->ty(&rt, f.elem)?;
+        const auto rts = rt.slice();
+        const auto zn = this->ename(d.name)?;
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "extern {rts} {inl}({zps});\n{rts} {zn}({zps}) {{ {ret}{inl}({argss}); }}")?;
+        if (!this->abi_ok(f.elem)?) { this->fail("opaque record by value"); }
+        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty)?) { this->fail("opaque record by value"); } }
+        if (!this->line(d.name, 3, b.slice())?) { return; }
+        const auto cs = c.slice();
+        sprint(&this->c, "{cs}")?;
+        for (auto id : ids.slice()) {
+            const auto m = this->macs.get_or(id, null);
+            if (m == null || !m.live || this->undone.has(id)) { continue; }
+            this->undone.put(id, true)?;
+            sprint(&this->undefs, "#undef {id}\n")?;
+        }
     }
 
     !void typedef_out(CDecl* d) {
@@ -2211,7 +2341,7 @@ struct CEmit {
         }
         for (auto d : decls.slice()) {
             if (!d.rel) { continue; }
-            if (d.k == .Func && !d.is_static && !(d.is_inline && d.has_body) && !d.asm_label) { this->need(d.ty)?; }
+            if (d.k == .Func && (!d.is_static || (d.is_inline && d.has_body)) && !d.asm_label) { this->need(d.ty)?; }
             if (d.k == .Typedef) { this->need(d.ty)?; }
             if (d.k == .Struct) { this->need_rec(d)?; }
         }
@@ -2272,6 +2402,9 @@ struct CEmit {
             this->owner = Map<str>::init(this->a);
             this->warned = Map<bool>::init(this->a);
             this->typed = Map<bool>::init(this->a);
+            this->c = List<u8>::init(this->a);
+            this->undefs = List<u8>::init(this->a);
+            this->undone = Map<bool>::init(this->a);
             for (auto d : decls.slice()) { this->decl(d)?; }
         }
     }
@@ -2440,7 +2573,7 @@ struct CBind {
         if (f == "-fno-short-enums") { p.short_enums = false; }
     }
     p.parse_all()?;
-    auto e = CEmit{ .a = a, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a) };
+    auto e = CEmit{ .a = a, .toks = p.toks, .macs = p.macs, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a) };
     e.prep(p.decls)?;
     e.force(&body, p.decls)?;
     write_file(stub, body.slice())?;
@@ -2454,12 +2587,20 @@ struct CBind {
     drop(stub);
     e.keys(p.decls)?;
     e.run(p.decls)?;
-    return CBind{ .zk = e.out.slice(), .inline_c = "", .deps = lx.out.deps, .warnings = e.warnings };
+    auto ic = List<u8>::init(a);
+    if (e.c.len > 0) {
+        const auto abs = path::absolute(a, lx.out.header)?;
+        const auto undefs = e.undefs.slice();
+        const auto wraps = e.c.slice();
+        sprint(&ic, "#include \"{abs}\"\n{undefs}{wraps}")?;
+    }
+    return CBind{ .zk = e.out.slice(), .inline_c = ic.slice(), .deps = lx.out.deps, .warnings = e.warnings };
 }
 
 !i32 cbind_main(Allocator a) {
     auto header = "";
     auto out_path = "";
+    auto c_path = "";
     auto flags = List<str>::init(a);
     auto i = 2;
     while (i < arg_count()) {
@@ -2467,6 +2608,9 @@ struct CBind {
         if (x == "-o" && i + 1 < arg_count()) {
             i += 1;
             out_path = arg(i);
+        } else if (x == "--inline-c" && i + 1 < arg_count()) {
+            i += 1;
+            c_path = arg(i);
         } else if ((x == "-include" || x == "-isystem") && i + 1 < arg_count()) {
             flags.push(x)?;
             i += 1;
@@ -2482,7 +2626,7 @@ struct CBind {
         i += 1;
     }
     if (header.len == 0) {
-        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk]");
+        eprintln("usage: zark cbind <header.h> [compile flags] [-o out.zk] [--inline-c out.c]");
         return 1;
     }
     const auto b = cbind_header(a, header, ".", flags) catch |e| {
@@ -2490,6 +2634,7 @@ struct CBind {
         return 1;
     };
     for (auto w : b.warnings.slice()) { eprintln("{w}"); }
+    if (c_path.len > 0) { write_file(c_path, b.inline_c)?; }
     if (out_path.len > 0) {
         write_file(out_path, b.zk)?;
     } else {

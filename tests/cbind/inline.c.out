@@ -1,0 +1,26 @@
+#include "@DIR@/tests/cbind/inline.h"
+#undef sq
+#undef myint
+int zark_inl_add(int a0, int a1) { return add(a0, a1); }
+double zark_inl_half(double a0) { return half(a0); }
+int *zark_inl_nextp(int *a0) { return nextp(a0); }
+unsigned long zark_inl_slen(const char *a0) { return slen(a0); }
+const char *zark_inl_skip(const char *a0, int a1) { return skip(a0, a1); }
+enum color zark_inl_next_color(enum color a0) { return next_color(a0); }
+_Bool zark_inl_is_even(int a0) { return is_even(a0); }
+word zark_inl_mask(word a0, unsigned char a1) { return mask(a0, a1); }
+void zark_inl_pt_move(struct pt *a0, int a1, int a2) { pt_move(a0, a1, a2); }
+struct pt zark_inl_pt_make(int a0, int a1) { return pt_make(a0, a1); }
+void zark_inl_noop(void) { noop(); }
+int zark_inl_forced(int a0 __attribute__((unused))) { return forced(a0); }
+int zark_inl_apply(int (*a0)(int), int a1) { return apply(a0, a1); }
+int zark_inl_sum4(const int a0[4]) { return sum4(a0); }
+int zark_inl_dbl(int a0) { return dbl(a0); }
+int zark_inl_quad(int a0) { return quad(a0); }
+int zark_inl_match(int a0) { return match(a0); }
+int zark_inl_later(int a0) { return later(a0); }
+#pragma weak twice
+extern __typeof__(twice) twice;
+int zark_inl_twice(int a0) { return twice(a0); }
+int zark_inl_sq(int a0) { return sq(a0); }
+myint zark_inl_ident(myint a0) { return ident(a0); }
