@@ -13,6 +13,7 @@ struct JP {
     Allocator a;
     str s;
     i64 i;
+    i64 max;
 
     u8 cur() {
         if (this->i < this->s.len) { return this->s[this->i]; }
@@ -136,7 +137,7 @@ struct JP {
     }
 
     !Json* arr(i64 depth) {
-        if (depth > 64) { return error.BadJson; }
+        if (depth > this->max) { return error.BadJson; }
         this->i += 1;
         const auto j = new_json(this->a, .Arr)?;
         this->ws();
@@ -156,7 +157,7 @@ struct JP {
     }
 
     !Json* obj(i64 depth) {
-        if (depth > 64) { return error.BadJson; }
+        if (depth > this->max) { return error.BadJson; }
         this->i += 1;
         const auto j = new_json(this->a, .Obj)?;
         this->ws();
@@ -214,8 +215,8 @@ struct JP {
     return j;
 }
 
-!Json* json_parse(Allocator a, str s) {
-    auto p = JP{ .a = a, .s = s, .i = 0 };
+!Json* json_parse(Allocator a, str s, i64 max) {
+    auto p = JP{ .a = a, .s = s, .i = 0, .max = max };
     const auto j = p.value(0)?;
     p.ws();
     if (p.i != s.len) { return error.BadJson; }
