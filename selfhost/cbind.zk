@@ -2651,10 +2651,13 @@ struct CBind {
         } else if (x == "--inline-c" && i + 1 < arg_count()) {
             i += 1;
             c_path = arg(i);
-        } else if ((x == "-include" || x == "-isystem") && i + 1 < arg_count()) {
+        } else if (pairs_next(x) && i + 1 < arg_count()) {
             flags.push(x)?;
             i += 1;
             flags.push(arg(i))?;
+        } else if (joins_next(x) && i + 1 < arg_count()) {
+            i += 1;
+            flags.push(str_concat(a, [x, arg(i)])?)?;
         } else if (is_compile_flag(x)) {
             flags.push(x)?;
         } else if (header.len == 0) {
