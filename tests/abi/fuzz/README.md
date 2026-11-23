@@ -48,6 +48,22 @@ on small C parameters and returns; the same case plus `direct_i8_ret`,
 `direct_u8_ret`, `direct_i16_ret`, `direct_u16_ret` and `direct_bool_ret`
 cover the other direction and stay as regressions.
 
+## Layout check
+
+The `layout` case builds one program per backend in which C prints
+`sizeof`, `_Alignof` and `offsetof` of every type in `ORDER` and Zark prints
+`sizeof(T)`, `alignof(T)` and each field offset (`(&s.f as u64) - (&s as u64)`).
+Both are compared with the values the generator computes itself from the C
+layout rules (`layout`, `offsets`); any difference is a `FAIL` that names the
+side, the type and the field. It covers scalars of every size, nested
+structs, arrays in structs, mixed int/float structs, the empty struct and
+unions.
+
+A Zark `union` is tagged, so its C mirror is
+`struct { int32_t tag; _Alignas(8) union { ... } u; }`. The generator checks
+the C offsets of `tag` and `u`; the Zark side has no field to take the
+address of, so only its size and alignment are compared.
+
 ## Matrix
 
 - `PASS` — expected checksum.
@@ -62,8 +78,7 @@ When a fix lands, remove the corresponding `(case, backend)` pair from
 
 ## Not yet covered
 
-- `sizeof`/`alignof`/`offsetof` comparison between C and Zark.
-- Unions, bitfields, packed and over-aligned structs.
+- Bitfields, packed and over-aligned structs.
 - Variadic functions.
 - AArch64. The classifier and the CI matrix are step 4.
 - Random signatures for `indirect`/`export`/`callback`; random mode still

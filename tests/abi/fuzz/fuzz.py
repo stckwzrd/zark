@@ -39,11 +39,27 @@ STRUCTS = {
     "E": [],
 }
 
-ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3", "E"]
+UNIONS = {
+    "UD": [("A", "f64")],
+    "UDI": [("A", "f64"), ("B", "i32")],
+    "UFD": [("A", "f32"), ("B", "f64")],
+    "UFF": [("A", "f32"), ("B", "f32")],
+    "UIF": [("A", "i32"), ("B", "f32")],
+    "UDD": [("A", "f64"), ("B", "f64")],
+    "UF2": [("A", "F2"), ("B", "f64")],
+    "UP": [("A", "P"), ("B", "f32")],
+    "UBig": [("A", "D2"), ("B", "i64")],
+}
+
+ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3", "E",
+         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig"]
+
+SIZES = {"i8": 1, "u8": 1, "bool": 1, "i16": 2, "u16": 2, "i32": 4, "u32": 4, "f32": 4, "i64": 8, "u64": 8, "f64": 8}
 
 KNOWN_BROKEN = set()
 
 QUICK = {
+    "layout",
     "direct_p",
     "direct_24",
     "direct_char",
@@ -76,6 +92,47 @@ def is_struct(t):
     return t in STRUCTS
 
 
+def round_up(n, a):
+    return (n + a - 1) // a * a
+
+
+def layout(t):
+    if t in SIZES:
+        return SIZES[t], SIZES[t]
+    a = array_parts(t)
+    if a is not None:
+        size, align = layout(a[0])
+        return size * a[1], align
+    if t in UNIONS:
+        size = 0
+        align = 8
+        for _, ft in UNIONS[t]:
+            fs, fa = layout(ft)
+            size = max(size, fs)
+            align = max(align, fa)
+        return round_up(4, align) + round_up(size, align), align
+    off = 0
+    align = 1
+    for _, ft in STRUCTS[t]:
+        fs, fa = layout(ft)
+        off = round_up(off, fa) + fs
+        align = max(align, fa)
+    return round_up(off, align), align
+
+
+def offsets(t):
+    if t in UNIONS:
+        return [("tag", 0), ("u", round_up(4, layout(t)[1]))]
+    out = []
+    off = 0
+    for f, ft in STRUCTS[t]:
+        fs, fa = layout(ft)
+        off = round_up(off, fa)
+        out.append((f, off))
+        off += fs
+    return out
+
+
 def ctype(t):
     return SCALARS[t][0] if t in SCALARS else t
 
@@ -97,6 +154,9 @@ def make_value(t, ctr):
     a = array_parts(t)
     if a is not None:
         return [make_value(a[0], ctr) for _ in range(a[1])]
+    if t in UNIONS:
+        tag = ctr[0] % len(UNIONS[t])
+        return {"tag": tag, "p": make_value(UNIONS[t][tag][1], ctr)}
     return {f: make_value(ft, ctr) for f, ft in STRUCTS[t]}
 
 
@@ -121,6 +181,9 @@ def zlit(t, v):
     a = array_parts(t)
     if a is not None:
         return "[" + ", ".join(zlit(a[0], x) for x in v) + "]"
+    if t in UNIONS:
+        f, ft = UNIONS[t][v["tag"]]
+        return f"{t}::{f}({zlit(ft, v['p'])})"
     fields = []
     for f, ft in STRUCTS[t]:
         fields.append(f".{f} = {zlit(ft, v[f])}")
@@ -138,6 +201,9 @@ def clit(t, v):
     a = array_parts(t)
     if a is not None:
         return "{ " + ", ".join(clit(a[0], x) for x in v) + " }"
+    if t in UNIONS:
+        f, ft = UNIONS[t][v["tag"]]
+        return f"({t}){{ .tag = {v['tag']}, .u.{f} = {clit(ft, v['p'])} }}"
     fields = []
     for f, ft in STRUCTS[t]:
         fields.append(f".{f} = {clit(ft, v[f])}")
@@ -150,6 +216,9 @@ def csum(t, var):
     a = array_parts(t)
     if a is not None:
         return "(" + " + ".join(csum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")"
+    if t in UNIONS:
+        arms = [f"{var}.tag == {i} ? ({i} + {csum(ft, f'{var}.u.{f}')})" for i, (f, ft) in enumerate(UNIONS[t])]
+        return "(" + " : ".join(arms) + " : -1000000)"
     parts = [csum(ft, f"{var}.{f}") for f, ft in STRUCTS[t]]
     return "(" + " + ".join(parts) + ")" if parts else "0"
 
@@ -160,6 +229,8 @@ def zsum(t, var):
     a = array_parts(t)
     if a is not None:
         return "(" + " + ".join(zsum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")"
+    if t in UNIONS:
+        return f"usum_{t}({var})"
     parts = [zsum(ft, f"{var}.{f}") for f, ft in STRUCTS[t]]
     return "(" + " + ".join(parts) + ")" if parts else "0"
 
@@ -181,6 +252,10 @@ def z_field(f, ft):
 def c_structs():
     out = []
     for name in ORDER:
+        if name in UNIONS:
+            fields = " ".join(c_field(f, ft) for f, ft in UNIONS[name])
+            out.append(f"typedef struct {{ int32_t tag; _Alignas(8) union {{ {fields} }} u; }} {name};")
+            continue
         fields = " ".join(c_field(f, ft) for f, ft in STRUCTS[name])
         out.append(f"typedef struct {{ {fields} }} {name};")
     return out
@@ -189,9 +264,70 @@ def c_structs():
 def z_structs():
     out = []
     for name in ORDER:
+        if name in UNIONS:
+            fields = " ".join(z_field(f, ft) for f, ft in UNIONS[name])
+            out.append(f"union {name} {{ {fields} }}")
+            continue
         fields = " ".join(z_field(f, ft) for f, ft in STRUCTS[name])
         out.append(f"struct {name} {{ {fields} }}")
+    for name in ORDER:
+        if name in UNIONS:
+            arms = " ".join(f".{f}(x) => {{ return {i} + {zsum(ft, 'x')}; }}" for i, (f, ft) in enumerate(UNIONS[name]))
+            out.append(f"i64 usum_{name}({name} v) {{ match v {{ {arms} }} return -1000000; }}")
     return out
+
+
+def render_layout_zk():
+    lines = z_structs()
+    lines.append("")
+    lines.append("extern void c_layout();")
+    lines.append("void main() {")
+    lines.append("    c_layout();")
+    for name in ORDER:
+        lines.append(f"    println(\"Z size {name} {{sizeof({name})}} {{alignof({name})}}\");")
+        if name in UNIONS:
+            continue
+        lines.append(f"    {name} s_{name};")
+        for f, _ in STRUCTS[name]:
+            lines.append(f"    const u64 o_{name}_{f} = (&s_{name}.{f} as u64) - (&s_{name} as u64);")
+            lines.append(f"    println(\"Z off {name}.{f} {{o_{name}_{f}}}\");")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def render_layout_c():
+    lines = ["#include <stdint.h>", "#include <stdbool.h>", "#include <stddef.h>", "#include <stdio.h>"]
+    lines.extend(c_structs())
+    lines.append("")
+    lines.append("void c_layout(void) {")
+    for name in ORDER:
+        lines.append(f"    printf(\"C size {name} %zu %zu\\n\", sizeof({name}), _Alignof({name}));")
+        for f, _ in offsets(name):
+            lines.append(f"    printf(\"C off {name}.{f} %zu\\n\", offsetof({name}, {f}));")
+    lines.append("    fflush(stdout);")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def check_layout(out):
+    got = {}
+    for line in out.splitlines():
+        p = line.split()
+        if len(p) >= 4 and p[0] in ("C", "Z"):
+            got[(p[0], p[1], p[2])] = " ".join(p[3:])
+    bad = []
+    for name in ORDER:
+        size, align = layout(name)
+        want = {("size", name): f"{size} {align}"}
+        for f, off in offsets(name):
+            want[("off", f"{name}.{f}")] = str(off)
+        for (kind, key), v in want.items():
+            sides = ["C"] if kind == "off" and name in UNIONS else ["C", "Z"]
+            for side in sides:
+                g = got.get((side, kind, key))
+                if g != v:
+                    bad.append(f"{side} {kind} {key} = {g}, expected {v}")
+    return bad
 
 
 def sig_c(params):
@@ -368,6 +504,39 @@ def status_for(result, expected):
     return "FAIL", out
 
 
+def run_layout(backend):
+    case_dir = os.path.join(OUT, "layout")
+    os.makedirs(case_dir, exist_ok=True)
+    os.chmod(case_dir, 0o755)
+    d = os.path.join(case_dir, backend)
+    os.makedirs(d, exist_ok=True)
+    os.chmod(d, 0o755)
+    zk = os.path.join(d, "main.zk")
+    c = os.path.join(d, "side.c")
+    binp = os.path.join(d, "bin")
+    write_file(zk, render_layout_zk())
+    write_file(c, render_layout_c())
+    args = [ZARK, "build", zk, c, "-o", binp]
+    if backend == "llvm":
+        args.append("--llvm")
+    elif backend == "O":
+        args.append("-O")
+    p = subprocess.run(args, capture_output=True, text=True)
+    if p.returncode != 0:
+        return "BUILD", (p.stdout + p.stderr).strip()
+    os.chmod(binp, 0o755)
+    try:
+        r = subprocess.run([binp], capture_output=True, text=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT", ""
+    if r.returncode != 0:
+        return "CRASH", (r.stdout + r.stderr).strip()
+    bad = check_layout(r.stdout)
+    if bad:
+        return "FAIL", "\n".join(bad)
+    return "PASS", ""
+
+
 def run_special(name, backend):
     case_dir = os.path.join(OUT, name)
     os.makedirs(case_dir, exist_ok=True)
@@ -503,6 +672,7 @@ def main():
     args = ap.parse_args()
 
     cases = [
+        {"name": "layout", "mode": "layout", "params": [], "values": [], "expected": 0, "layout": True},
         {"name": "export_struct", "mode": "export_ret", "params": [], "values": [], "expected": 46, "special": True, "dir": "export_struct"},
         {"name": "export_big", "mode": "export_ret", "params": [], "values": [], "expected": 33, "special": True, "dir": "export_big"},
     ]
@@ -528,11 +698,14 @@ def main():
         row = []
         detail = ""
         for backend in backends:
-            if case.get("special"):
-                result = run_special(case["dir"], backend)
+            if case.get("layout"):
+                status, out = run_layout(backend)
             else:
-                result = run_one(case, backend)
-            status, out = status_for(result, case["expected"])
+                if case.get("special"):
+                    result = run_special(case["dir"], backend)
+                else:
+                    result = run_one(case, backend)
+                status, out = status_for(result, case["expected"])
             known = (case["name"], backend) in KNOWN_BROKEN
             if status == "PASS":
                 row.append("FIXED" if known else "PASS")
