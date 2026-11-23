@@ -55,6 +55,8 @@ struct FnInst {
     FnDecl* decl;
     Env env;
     str llname;
+    str cabi;
+    bool needs_thunk;
     List<Type*> params;
     Type* ret;
     bool generated;
@@ -73,6 +75,8 @@ struct Gen {
     bool ovf;
     bool wrapping;
     bool needs_llvm;
+    bool c_abi;
+    List<FnInst*> c_thunks;
     i64 rdepth;
     i64 cdepth;
     List<MoveRec> moved;
@@ -720,6 +724,14 @@ struct Gen {
         const auto fi = this->a.create<FnInst>()?;
         *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };
         this->fn_insts.put(key, fi)?;
+        if (!decl.is_extern && decl.is_export && this->c_abi && this->sig_needs_c(params, ret)) {
+            auto b = this->sb();
+            sprint(&b, "{key}$z")?;
+            fi.llname = b.slice();
+            fi.cabi = key;
+            fi.needs_thunk = true;
+            this->c_thunks.push(fi)?;
+        }
         if (decl.is_extern) {
             auto txt = this->sb();
             auto sret = false;
@@ -830,6 +842,17 @@ struct Gen {
             };
         }
         if (nerr > 0) { return error.CompileFailed; }
+        if (this->c_abi) {
+            auto ti = 0;
+            while (ti < this->c_thunks.len) {
+                const auto tf = this->c_thunks.get(ti);
+                ti += 1;
+                this->gen_c_thunk(tf) catch {
+                    this->flush_diag();
+                    return error.CompileFailed;
+                };
+            }
+        }
         if (this->test_mode) {
             this->gen_test_main(test_insts)?;
         } else if (main_inst != null) {
@@ -939,7 +962,7 @@ struct Gen {
         this->push_scope()?;
         auto hdr = this->sb();
         auto linkage = "internal ";
-        if (decl.is_export || fi.llname == "vb.main") { linkage = ""; }
+        if ((decl.is_export && !fi.needs_thunk) || fi.llname == "vb.main") { linkage = ""; }
         sprint(&hdr, "define {linkage}{this->llty(fi.ret)?} @{fi.llname}(")?;
         if (fi.is_closure) { hdr.append("ptr %ctx")?; }
         for (auto [i, p] : decl.params) {
@@ -1018,6 +1041,7 @@ struct Gen {
     g.globals_out = List<u8>::init(a);
     g.decls_out = List<u8>::init(a);
     g.funcs_out = List<u8>::init(a);
+    g.c_thunks = List<FnInst*>::init(a);
     g.body = List<u8>::init(a);
     g.allocas = List<u8>::init(a);
     g.cts = Map<Expr*>::init(a);

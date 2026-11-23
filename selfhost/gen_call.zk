@@ -195,19 +195,84 @@ bool Gen::names_type(Expr* e) {
     if (sig.k == .Closure) {
         target = this->extract(fv, 0, this->t_ptr_u8)?.v;
         sprint(&argtxt, "ptr {this->extract(fv, 1, this->t_ptr_u8)?.v}")?;
+        for (auto [i, x] : args) {
+            const auto pt = sig.params.get(i);
+            const auto v = this->coerce(this->gen_expr(x, pt)?, pt, x.line)?;
+            if (argtxt.len > 0) { argtxt.append(", ")?; }
+            sprint(&argtxt, "{this->llty(v.ty)?} {v.v}")?;
+        }
+        if (sig.ret.k == .Void) {
+            sprint(this->ins()?, "  call void {target}({argtxt.slice()})\n")?;
+            return Value{ .ty = this->t_void, .v = "" };
+        }
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = call {this->llty(sig.ret)?} {target}({argtxt.slice()})\n")?;
+        return Value{ .ty = sig.ret, .v = t };
     }
+    if (!this->c_abi) {
+        for (auto [i, x] : args) {
+            const auto pt = sig.params.get(i);
+            const auto v = this->coerce(this->gen_expr(x, pt)?, pt, x.line)?;
+            if (argtxt.len > 0) { argtxt.append(", ")?; }
+            sprint(&argtxt, "{this->llty(v.ty)?} {v.v}")?;
+        }
+        if (sig.ret.k == .Void) {
+            sprint(this->ins()?, "  call void {target}({argtxt.slice()})\n")?;
+            return Value{ .ty = this->t_void, .v = "" };
+        }
+        const auto t = this->tmp()?;
+        sprint(this->ins()?, "  {t} = call {this->llty(sig.ret)?} {target}({argtxt.slice()})\n")?;
+        return Value{ .ty = sig.ret, .v = t };
+    }
+
+    const auto modes = this->c_modes(sig.params, sig.ret)?;
+    const auto sret = is_c_agg(sig.ret) && this->classify_c(sig.ret)?.memory;
     for (auto [i, x] : args) {
         const auto pt = sig.params.get(i);
         const auto v = this->coerce(this->gen_expr(x, pt)?, pt, x.line)?;
         if (argtxt.len > 0) { argtxt.append(", ")?; }
-        sprint(&argtxt, "{this->llty(v.ty)?} {v.v}")?;
+        if (i < modes.len && modes.get(i) != 0) {
+            argtxt.append(this->c_arg(v, modes.get(i))?)?;
+        } else {
+            auto ea = c_ext(v.ty);
+            sprint(&argtxt, "{this->llty(v.ty)?}{ea} {v.v}")?;
+        }
+    }
+    if (sret) {
+        const auto slot = this->alloca(sig.ret, "csret")?;
+        auto full = this->sb();
+        sprint(&full, "ptr sret({this->llty(sig.ret)?}) align {max(this->align_of(sig.ret)?, 8 as u64)} {slot}")?;
+        if (argtxt.len > 0) { sprint(&full, ", {argtxt.slice()}")?; }
+        sprint(this->ins()?, "  call ccc void {target}({full.slice()})\n")?;
+        return this->load(sig.ret, slot);
+    }
+    if (is_c_agg(sig.ret)) {
+        const auto c = this->classify_c(sig.ret)?;
+        const auto rt = this->c_ret_ty(sig.ret)?;
+        const auto r = this->tmp()?;
+        sprint(this->ins()?, "  {r} = call ccc {rt} {target}({argtxt.slice()})\n")?;
+        const auto buf = this->c_buf()?;
+        if (c.words == 1) {
+            sprint(this->ins()?, "  store {rt} {r}, ptr {buf}\n")?;
+        } else {
+            for (auto w : 0..2) {
+                auto cls = c.c0;
+                if (w == 1) { cls = c.c1; }
+                const auto part = this->tmp()?;
+                sprint(this->ins()?, "  {part} = extractvalue {rt} {r}, {w}\n")?;
+                const auto dst = this->c_half(buf, w)?;
+                sprint(this->ins()?, "  store {cword_ty(cls)} {part}, ptr {dst}\n")?;
+            }
+        }
+        return this->load(sig.ret, buf);
     }
     if (sig.ret.k == .Void) {
-        sprint(this->ins()?, "  call void {target}({argtxt.slice()})\n")?;
+        sprint(this->ins()?, "  call ccc void {target}({argtxt.slice()})\n")?;
         return Value{ .ty = this->t_void, .v = "" };
     }
+    const auto rt = this->c_ret_ty(sig.ret)?;
     const auto t = this->tmp()?;
-    sprint(this->ins()?, "  {t} = call {this->llty(sig.ret)?} {target}({argtxt.slice()})\n")?;
+    sprint(this->ins()?, "  {t} = call ccc {rt} {target}({argtxt.slice()})\n")?;
     return Value{ .ty = sig.ret, .v = t };
 }
 
@@ -653,6 +718,176 @@ str c_ret_ext(Type* t) {
     const auto p = this->tmp()?;
     sprint(this->ins()?, "  {p} = getelementptr i8, ptr {buf}, i64 8\n")?;
     return p;
+}
+
+bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
+    if (is_c_agg(ret)) { return true; }
+    for (auto p : params) { if (is_c_agg(p)) { return true; } }
+    return false;
+}
+
+!str Gen::func_ptr(FnInst* fi) {
+    if (!this->c_abi || fi.decl.is_extern || fi.is_closure) { return fi.llname; }
+    if (!this->sig_needs_c(fi.params, fi.ret)) { return fi.llname; }
+    if (!fi.needs_thunk) {
+        fi.needs_thunk = true;
+        auto b = this->sb();
+        sprint(&b, "{fi.llname}$c")?;
+        fi.cabi = b.slice();
+        this->c_thunks.push(fi)?;
+    }
+    if (fi.cabi.len == 0) { return fi.llname; }
+    return fi.cabi;
+}
+
+!void Gen::gen_c_thunk(FnInst* fi) {
+    const auto sv_body = this->body;
+    const auto sv_allocas = this->allocas;
+    const auto sv_ntmp = this->ntmp;
+    const auto sv_nlbl = this->nlbl;
+    const auto sv_dbg = this->dbg;
+    const auto sv_last = this->last_line;
+    const auto sv_term = this->terminated;
+    const auto sv_af = this->af;
+    this->body = this->sb();
+    this->allocas = this->sb();
+    this->ntmp = 0;
+    this->nlbl = 0;
+    this->dbg = false;
+    this->last_line = 0;
+    this->terminated = false;
+    this->af = null;
+    defer this->body = sv_body;
+    defer this->allocas = sv_allocas;
+    defer this->ntmp = sv_ntmp;
+    defer this->nlbl = sv_nlbl;
+    defer this->dbg = sv_dbg;
+    defer this->last_line = sv_last;
+    defer this->terminated = sv_term;
+    defer this->af = sv_af;
+
+    const auto ret = fi.ret;
+    const auto params = fi.params;
+    const auto modes = this->c_modes(params, ret)?;
+    const auto sret = is_c_agg(ret) && this->classify_c(ret)?.memory;
+    auto hdr = this->sb();
+    auto linkage = "internal ";
+    if (fi.decl.is_export) { linkage = ""; }
+    sprint(&hdr, "define {linkage}{this->c_ret_ty(ret)?} @{fi.cabi}(")?;
+    auto first = true;
+    if (sret) {
+        sprint(&hdr, "ptr sret({this->llty(ret)?}) align {max(this->align_of(ret)?, 8 as u64)} %c.sret")?;
+        first = false;
+    }
+    auto phys = List<str>::init(this->a);
+    auto starts = List<i64>::init(this->a);
+    for (auto [i, p] : params) {
+        const auto m = modes.get(i);
+        starts.push(phys.len)?;
+        if (m == 0) {
+            if (!first) { hdr.append(", ")?; }
+            sprint(&hdr, "{this->c_param_ty(p, 0)?} %c{i}")?;
+            auto nb = this->sb();
+            sprint(&nb, "%c{i}")?;
+            phys.push(nb.slice())?;
+            first = false;
+        } else if (m == 2) {
+            if (!first) { hdr.append(", ")?; }
+            sprint(&hdr, "{this->c_param_ty(p, 2)?} %c{i}")?;
+            auto nb = this->sb();
+            sprint(&nb, "%c{i}")?;
+            phys.push(nb.slice())?;
+            first = false;
+        } else {
+            const auto c = this->classify_c(p)?;
+            for (auto w : 0..c.words) {
+                auto cls = c.c0;
+                if (w == 1) { cls = c.c1; }
+                if (!first) { hdr.append(", ")?; }
+                sprint(&hdr, "{cword_ty(cls)} %c{i}.{w}")?;
+                auto nb = this->sb();
+                sprint(&nb, "%c{i}.{w}")?;
+                phys.push(nb.slice())?;
+                first = false;
+            }
+        }
+    }
+    hdr.append(") {{\nentry:\n")?;
+
+    auto vals = List<str>::init(this->a);
+    for (auto [i, p] : params) {
+        const auto m = modes.get(i);
+        const auto st = starts.get(i);
+        if (m == 0) {
+            vals.push(phys.get(st))?;
+        } else if (m == 2) {
+            const auto v = this->load(p, phys.get(st))?;
+            vals.push(v.v)?;
+        } else {
+            const auto c = this->classify_c(p)?;
+            const auto buf = this->c_buf()?;
+            for (auto w : 0..c.words) {
+                auto cls = c.c0;
+                if (w == 1) { cls = c.c1; }
+                auto ty = this->t_i64;
+                if (cls == 2) { ty = this->t_f64; }
+                this->store(Value{ .ty = ty, .v = phys.get(st + w) }, this->c_half(buf, w)?)?;
+            }
+            const auto v = this->load(p, buf)?;
+            vals.push(v.v)?;
+        }
+    }
+
+    auto cargs = this->sb();
+    for (auto [i, p] : params) {
+        if (i > 0) { cargs.append(", ")?; }
+        sprint(&cargs, "{this->llty(p)?} {vals.get(i)}")?;
+    }
+
+    if (ret.k == .Void) {
+        sprint(this->ins()?, "  call void @{fi.llname}({cargs.slice()})\n")?;
+        sprint(this->ins()?, "  ret void\n")?;
+    } else if (sret) {
+        const auto r = this->tmp()?;
+        sprint(this->ins()?, "  {r} = call {this->llty(ret)?} @{fi.llname}({cargs.slice()})\n")?;
+        sprint(this->ins()?, "  store {this->llty(ret)?} {r}, ptr %c.sret\n")?;
+        sprint(this->ins()?, "  ret void\n")?;
+    } else if (is_c_agg(ret)) {
+        const auto r = this->tmp()?;
+        sprint(this->ins()?, "  {r} = call {this->llty(ret)?} @{fi.llname}({cargs.slice()})\n")?;
+        const auto c = this->classify_c(ret)?;
+        const auto buf = this->c_buf()?;
+        this->store(Value{ .ty = ret, .v = r }, buf)?;
+        const auto rt = this->c_ret_ty(ret)?;
+        if (c.words == 1) {
+            auto ty = this->t_i64;
+            if (c.c0 == 2) { ty = this->t_f64; }
+            const auto w0 = this->load(ty, buf)?;
+            sprint(this->ins()?, "  ret {rt} {w0.v}\n")?;
+        } else {
+            auto t0 = this->t_i64;
+            if (c.c0 == 2) { t0 = this->t_f64; }
+            auto t1 = this->t_i64;
+            if (c.c1 == 2) { t1 = this->t_f64; }
+            const auto w0 = this->load(t0, buf)?;
+            const auto w1 = this->load(t1, this->c_half(buf, 1)?)?;
+            const auto a0 = this->tmp()?;
+            sprint(this->ins()?, "  {a0} = insertvalue {rt} undef, {cword_ty(c.c0)} {w0.v}, 0\n")?;
+            const auto a1 = this->tmp()?;
+            sprint(this->ins()?, "  {a1} = insertvalue {rt} {a0}, {cword_ty(c.c1)} {w1.v}, 1\n")?;
+            sprint(this->ins()?, "  ret {rt} {a1}\n")?;
+        }
+    } else {
+        const auto r = this->tmp()?;
+        sprint(this->ins()?, "  {r} = call {this->llty(ret)?} @{fi.llname}({cargs.slice()})\n")?;
+        sprint(this->ins()?, "  ret {this->llty(ret)?} {r}\n")?;
+    }
+
+    const auto w = &this->funcs_out;
+    w.append(hdr.slice())?;
+    w.append(this->allocas.slice())?;
+    w.append(this->body.slice())?;
+    w.append("}\n\n")?;
 }
 
 /// the argument text for passing the value `v` of a struct type to C
