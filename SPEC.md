@@ -258,7 +258,7 @@ Anything else is rejected with "bind the result to a variable first": an argumen
 - C varargs follow the usual promotions; slices are rejected.
 - Structs (and slices) are passed to and returned from `extern` functions by value following the System V x86-64 ABI: up to 16 bytes in registers by eightbyte class (INTEGER or SSE), larger or when the registers run out on the stack (`byval`), large results through a hidden pointer (`sret`). Small integer parameters and results (`i8`, `i16`, `u8`, `u16`, `bool`) carry `signext`/`zeroext`.
 - A `fn` value is a C function pointer. When a Zark function whose signature contains an aggregate by value is used as a value, the compiler emits one canonical C-ABI thunk for it (`name$c`); a scalar-only signature uses the function itself. `export` emits the C-ABI thunk under the exported name and keeps the Zark body under `name$z`, so direct Zark calls keep the internal ABI. Indirect calls use the same C ABI; `fn[]` closures are not C function pointers.
-- An empty struct has size 0: it consumes no argument registers and C does not return it through a register. It is omitted from the C signature and the matching Zark argument is still evaluated.
+- An empty struct has size 0: it consumes no argument registers and C does not return it through a register. It is omitted from the C signature and the matching Zark argument is still evaluated. This follows C (GNU), where an empty struct has size 0; C++ gives it size 1.
 - `zark run main.zk x.c y.cpp lib.o -lfoo` compiles and links everything, using `clang++` if C++ is present.
 
 ### Build flags

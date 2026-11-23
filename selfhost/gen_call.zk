@@ -227,7 +227,7 @@ bool Gen::names_type(Expr* e) {
             sprint(&argtxt, "{this->llty(v.ty)?}{ea} {v.v}")?;
         }
     }
-    if (is_c_agg(sig.ret) && !this->classify_c(sig.ret)?.memory && this->classify_c(sig.ret)?.words == 0) {
+    if (this->is_empty_c(sig.ret)?) {
         sprint(this->ins()?, "  call ccc void {target}({argtxt.slice()})\n")?;
         const auto slot = this->alloca(sig.ret, "cempty")?;
         return this->load(sig.ret, slot);
@@ -438,7 +438,7 @@ bool Gen::names_type(Expr* e) {
             sprint(&argtxt, "{this->llty(v.ty)?}{ea} {v.v}")?;
         }
     }
-    if (decl.is_extern && !decl.variadic && is_c_agg(fi.ret) && !this->classify_c(fi.ret)?.memory && this->classify_c(fi.ret)?.words == 0) {
+    if (decl.is_extern && !decl.variadic && this->is_empty_c(fi.ret)?) {
         sprint(this->ins()?, "  call void @{fi.llname}({argtxt.slice()})\n")?;
         const auto slot = this->alloca(fi.ret, "cempty")?;
         return this->load(fi.ret, slot);
@@ -738,6 +738,12 @@ str c_ret_ext(Type* t) {
     return p;
 }
 
+!bool Gen::is_empty_c(Type* t) {
+    if (!is_c_agg(t)) { return false; }
+    const auto c = this->classify_c(t)?;
+    return !c.memory && c.words == 0;
+}
+
 bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
     if (is_c_agg(ret)) { return true; }
     for (auto p : params) { if (is_c_agg(p)) { return true; } }
@@ -802,8 +808,8 @@ bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
     for (auto [i, p] : params) {
         const auto m = modes.get(i);
         starts.push(phys.len)?;
-        if (m == 3) {
-        } else if (m == 0) {
+        if (m == 3) { continue; }
+        if (m == 0) {
             if (!first) { hdr.append(", ")?; }
             sprint(&hdr, "{this->c_param_ty(p, 0)?} %c{i}")?;
             auto nb = this->sb();
@@ -868,7 +874,7 @@ bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
     if (ret.k == .Void) {
         sprint(this->ins()?, "  call void @{fi.llname}({cargs.slice()})\n")?;
         sprint(this->ins()?, "  ret void\n")?;
-    } else if (is_c_agg(ret) && !this->classify_c(ret)?.memory && this->classify_c(ret)?.words == 0) {
+    } else if (this->is_empty_c(ret)?) {
         sprint(this->ins()?, "  call {this->llty(ret)?} @{fi.llname}({cargs.slice()})\n")?;
         sprint(this->ins()?, "  ret void\n")?;
     } else if (sret) {
