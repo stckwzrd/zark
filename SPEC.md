@@ -259,6 +259,73 @@ Anything else is rejected with "bind the result to a variable first": an argumen
 - Structs (and slices) are passed to and returned from `extern` functions by value following the System V x86-64 ABI: up to 16 bytes in registers by eightbyte class (INTEGER or SSE), larger or when the registers run out on the stack (`byval`), large results through a hidden pointer (`sret`). `export` functions and function pointers called from C take aggregates by pointer.
 - `zark run main.zk x.c y.cpp lib.o -lfoo` compiles and links everything, using `clang++` if C++ is present.
 
+### Build flags
+
+`run`, `build` and `test` sort their extra arguments:
+
+- compile flags `-I…`, `-D…`, `-U…`, `-std=…`, `-f…`, `-W…` (not `-Wl,`) and `-pthread` go to every C/C++ source and to every imported header. A C standard (`-std=c11`) applies only to `.c` files and headers, a C++ one (`-std=c++17`) only to `.cpp`, `.cc` and `.cxx` files;
+- link arguments `.o`, `.a`, `.so`, `-l…`, `-L…`, `-Wl,…`, `-T…`, `-nostdlib`, `-static` go to the linker;
+- everything else is a source file.
+
+A Zark file without `main` can be linked with a C `main`, and a set of C/C++ sources needs no Zark file at all.
+
+### Manifest keys
+
+The `[build]` table of `zark.toml` (paths are relative to the manifest):
+
+| Key | Meaning |
+|---|---|
+| `sources` | C/C++ files compiled and linked in |
+| `libs` | libraries, linked as `-lNAME` |
+| `lib-dirs` | library directories, passed as `-L` |
+| `include` | include directories, passed as `-I` |
+| `defines` | macros, passed as `-D` (`"NAME"` or `"NAME=VALUE"`) |
+| `std` | language standard, passed as `-std=` |
+| `cflags` | other compile flags, as written |
+| `pkg-config` | packages whose `pkg-config --cflags --libs` output is added |
+| `flags` | default Zark flags (`-O`, `--release`, …) |
+| `out` | output path of `zark build` |
+
+A project whose `package.main` file does not exist but that lists `sources` is built from those sources alone.
+
+### Object cache
+
+Each C/C++ source is compiled to `.zark-cache/obj/NAME-HASH.o`, at most 8 at a time (`ZARK_JOBS` overrides). The hash covers the compiler (`clang` or `clang++`), the optimization level, the path, the flags and the source text. The headers the source includes (from clang's `-MD` output) are checked as well, so changing a header rebuilds what uses it. Cache entries are written atomically, so parallel builds share them safely.
+
+### `import "x.h"`
+
+`import "x.h";` or `import "x.h" as name;` binds the declarations of a C header. The header is looked up in the directory of the importing file, then the `-I` directories, then the system include path; it is run through `clang -E` with the compile flags of the build (C++ `-std=` flags are dropped). The result is the same Zark text that `zark cbind` prints, compiled as a module; `as name` puts it under `name::`. Static inline functions get a C wrapper that is compiled and linked automatically.
+
+The binding is cached in `.zark-cache/cbind/` and reused while the clang version, the flags and every header it read stay the same. The cache does not track `CPATH` or other environment variables. `import` does not print the warnings for skipped declarations; run `zark cbind` to see them.
+
+Only C headers (`.h`) are accepted. Without `as`, two imported headers that both include the same header are an error (import one header that includes both). With `as`, each import gets its own copy of the shared declarations, and those are different Zark types.
+
+### `zark cbind`
+
+`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions; that file must be compiled into the program next to `out.zk`.
+
+| C | Zark |
+|---|---|
+| `char`, `signed char`, `unsigned char` | `u8`, `i8`, `u8` |
+| `short`, `int`, `long`, `long long` | `i16`, `i32`, `i64`, `i64` (unsigned: `u16`, `u32`, `u64`, `u64`) |
+| `size_t`, `ptrdiff_t` | `usize`, `i64` |
+| `_Bool`, `float`, `double` | `bool`, `f32`, `f64` |
+| `T *`, `const T *`, `void *` | `T*`, `T*`, `void*` |
+| `T a[N]` (field), `T a[]` (parameter) | `T[N]`, `T*` |
+| `R (*)(A, B)` | `fn(A, B) -> R` |
+| `typedef T name;` | `type name = T;` |
+| `struct`, nested anonymous struct | `struct` with the same layout, anonymous parts named `outer__anonN` |
+| incomplete struct | empty struct, used through pointers |
+| `union` | struct `{ uN[k] storage; }` with accessors `as_member()` returning a pointer |
+| `enum E { A, B }` | `type E = i32;` (or the integer type that holds the values) plus `const auto A = 0;` … |
+| `#define N 42`, string, float or char constant | `const auto N = 42;` |
+| function, variadic function | `extern` declaration |
+| `static inline` function | `extern` wrapper `zark_inl_HASH_name` in C plus a Zark function `name` that calls it |
+
+Fields, parameters and types whose names are Zark keywords or type names get a trailing `_` (`type_`, `str_`); functions with such names are skipped. A declaration that uses a skipped one is skipped too.
+
+Limits: C only (no C++ headers); by-value aggregates follow System V x86-64 only. Skipped with a warning: `long double`, `_Complex`, `_Atomic`, bitfield members, alignment above 8, extern variables, function-like macros, variadic static inline functions, plain `static` functions, and records passed by value in function pointer types (an indirect call through a function pointer does not follow the C ABI for aggregates, so a Zark callback cannot take or return a struct by value). A record with a flexible array member loses that member, or becomes opaque storage when its layout would differ.
+
 ## 9. System (prelude)
 
 | Area | Functions |
