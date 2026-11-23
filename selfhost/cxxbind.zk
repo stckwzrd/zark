@@ -1,0 +1,680 @@
+import "cbind.zk";
+import "json.zk";
+import "cbuild.zk";
+import "std/fs" as fs;
+import "std/os" as os;
+
+const auto CX_TODO = "C++ declaration not bound yet";
+
+bool cx_is_header(str p) {
+    return str_ends_with(p, ".hpp") || str_ends_with(p, ".hh") || str_ends_with(p, ".hxx") || str_ends_with(p, ".h++");
+}
+
+bool cx_c_std(str f) {
+    return str_starts_with(f, "-std=") && !str_starts_with(f, "-std=c++") && !str_starts_with(f, "-std=gnu++");
+}
+
+!str cx_qual(Allocator a, str scope, str name) {
+    if (scope.len == 0) { return name; }
+    return str_concat(a, [scope, "::", name]);
+}
+
+!str cx_zname(Allocator a, str scope, str name) {
+    if (scope.len == 0) { return name; }
+    return str_concat(a, [scope, "_", name]);
+}
+
+Json* cx_find(Json* n, str kind) {
+    if (jstr(jget(n, "kind"), "") == kind) { return n; }
+    const auto k = jget(n, "inner");
+    for (auto i : 0..jlen(k)) {
+        const auto r = cx_find(jat(k, i), kind);
+        if (r != null) { return r; }
+    }
+    return null;
+}
+
+!CVal cx_int(str s) {
+    if (s == "true" || s == "false") { return cb_bool(s == "true"); }
+    if (str_starts_with(s, "-")) {
+        const auto v = 0 -% (parse_int_radix(s[1..], 10)? as i64);
+        return CVal{ .v = v, .w = !cb_fits(CVal{ .v = v }, 32, true) };
+    }
+    const auto u = parse_int_radix(s, 10)?;
+    if (u > 0x7fffffffffffffff) { return CVal{ .v = u as i64, .u = true, .w = true }; }
+    return CVal{ .v = u as i64, .w = u > 0x7fffffff };
+}
+
+!List<str> cx_toks(Allocator a, str s) {
+    auto out = List<str>::init(a);
+    auto i = 0;
+    while (i < s.len) {
+        const auto c = s[i];
+        if (c == ' ') {
+            i += 1;
+            continue;
+        }
+        auto j = i + 1;
+        if (cb_ident_char(c) || c == ':') {
+            while (j < s.len && (cb_ident_char(s[j]) || s[j] == ':')) { j += 1; }
+        } else if (str_starts_with(s[i..], "&&")) {
+            j = i + 2;
+        } else if (str_starts_with(s[i..], "...")) {
+            j = i + 3;
+        }
+        out.push(s[i..j])?;
+        i = j;
+    }
+    return out;
+}
+
+struct CxType {
+    CxWalk* w;
+    List<str> toks;
+    i64 i;
+    str scope;
+
+    str peek() {
+        if (this->i < this->toks.len) { return this->toks.get(this->i); }
+        return "";
+    }
+    bool eat(str s) {
+        if (this->peek() != s) { return false; }
+        this->i += 1;
+        return true;
+    }
+    bool quals() {
+        return this->eat("const") || this->eat("volatile") || this->eat("__restrict") || this->eat("restrict");
+    }
+
+    !CType* mk(CK k) {
+        const auto t = this->w.a.create<CType>()?;
+        t.k = k;
+        return t;
+    }
+    !CType* bad() {
+        const auto t = this->mk(.Bad)?;
+        t.name = CX_TODO;
+        return t;
+    }
+    !CType* ptr(CType* e) {
+        const auto t = this->mk(.Ptr)?;
+        t.elem = e;
+        return t;
+    }
+
+    !CType* full() {
+        const auto t = this->ty()?;
+        if (this->i != this->toks.len) { return this->bad(); }
+        return t;
+    }
+
+    !CType* ty() {
+        const auto b = this->base()?;
+        return this->decl(b);
+    }
+
+    !CType* base() {
+        auto nlong = 0;
+        auto nshort = 0;
+        auto nsigned = 0;
+        auto nunsigned = 0;
+        auto base = "";
+        CType* named = null;
+        while (true) {
+            const auto t = this->peek();
+            if (t == "const" || t == "volatile" || t == "struct" || t == "class" || t == "union" || t == "enum" || t == "typename") {
+            } else if (t == "long") {
+                nlong += 1;
+            } else if (t == "short") {
+                nshort += 1;
+            } else if (t == "signed") {
+                nsigned += 1;
+            } else if (t == "unsigned") {
+                nunsigned += 1;
+            } else if (t == "void" || t == "char" || t == "int" || t == "float" || t == "double" || t == "bool") {
+                base = t;
+            } else if (t.len > 0 && (cb_ident_char(t[0]) || t[0] == ':') && named == null && base.len == 0 && nlong + nshort + nsigned + nunsigned == 0) {
+                named = this->w.lookup(t, this->scope)?;
+            } else {
+                break;
+            }
+            this->i += 1;
+        }
+        if (this->peek() == "<") { return this->bad(); }
+        if (named != null) { return named; }
+        if (base == "void") { return this->mk(.Void); }
+        if (base == "bool") { return this->mk(.Bool); }
+        if (base == "float" || base == "double") {
+            if (nlong > 0) { return this->bad(); }
+            const auto t = this->mk(.Float)?;
+            t.width = 32;
+            if (base == "double") { t.width = 64; }
+            return t;
+        }
+        if (base.len == 0 && nlong + nshort + nsigned + nunsigned == 0) { return this->bad(); }
+        const auto t = this->mk(.Int)?;
+        t.signed = nunsigned == 0;
+        t.width = 32;
+        if (base == "char") {
+            t.width = 8;
+            t.signed = nsigned > 0 || (nunsigned == 0 && !this->w.uchar);
+            t.plain = nsigned + nunsigned == 0;
+        } else if (nshort > 0) {
+            t.width = 16;
+        } else if (nlong > 0) {
+            t.width = 64;
+        }
+        return t;
+    }
+
+    !CType* decl(CType* b) {
+        auto t = b;
+        while (true) {
+            if (this->eat("*")) {
+                t = this->ptr(t)?;
+            } else if (!this->quals()) {
+                break;
+            }
+        }
+        if (this->peek() == "&" || this->peek() == "&&") { return this->bad(); }
+        if (this->peek() == "(" && this->i + 1 < this->toks.len && this->toks.get(this->i + 1) == "*") {
+            this->i += 1;
+            auto n = 0;
+            while (true) {
+                if (this->eat("*")) {
+                    n += 1;
+                } else if (!this->quals()) {
+                    break;
+                }
+            }
+            if (!this->eat(")")) { return this->bad(); }
+            t = this->suffix(t)?;
+            for (auto j : 0..n) { t = this->ptr(t)?; }
+            return t;
+        }
+        return this->suffix(t);
+    }
+
+    !CType* suffix(CType* t) {
+        if (this->eat("(")) {
+            const auto f = this->mk(.Func)?;
+            f.elem = t;
+            f.params = List<CField>::init(this->w.a);
+            if (!this->eat(")")) {
+                while (true) {
+                    if (this->eat("...")) {
+                        f.varargs = true;
+                    } else {
+                        f.params.push(CField{ .ty = this->ty()? })?;
+                    }
+                    if (this->eat(")")) { break; }
+                    if (!this->eat(",")) { return this->bad(); }
+                }
+            }
+            _ = this->eat("noexcept");
+            return f;
+        }
+        auto dims = List<i64>::init(this->w.a);
+        while (this->eat("[")) {
+            auto n = -1;
+            if (!this->eat("]")) {
+                n = (parse_int_radix(this->peek(), 10) catch { return this->bad(); }) as i64;
+                this->i += 1;
+                if (!this->eat("]")) { return this->bad(); }
+            }
+            dims.push(n)?;
+        }
+        auto r = t;
+        auto k = dims.len - 1;
+        while (k >= 0) {
+            const auto x = this->mk(.Array)?;
+            x.elem = r;
+            x.n = dims.get(k);
+            r = x;
+            k -= 1;
+        }
+        return r;
+    }
+}
+
+struct CxWalk {
+    Allocator a;
+    str cur;
+    str stub;
+    List<str> sys;
+    List<CDecl*> decls;
+    Map<CType*> typedefs;
+    Map<str> names;
+    Map<CType*> anon;
+    Map<CVal> vals;
+    Map<str> fvals;
+    bool uchar;
+    bool short_enums;
+
+    void at(Json* l) {
+        const auto f = jstr(jget(l, "file"), "");
+        if (f.len > 0) { this->cur = f; }
+    }
+
+    void loc(Json* l) {
+        const auto s = jget(l, "spellingLoc");
+        const auto e = jget(l, "expansionLoc");
+        if (s == null && e == null) {
+            this->at(l);
+            return;
+        }
+        this->at(s);
+        this->at(e);
+    }
+
+    str locs(Json* n) {
+        this->loc(jget(n, "loc"));
+        const auto f = this->cur;
+        const auto r = jget(n, "range");
+        this->loc(jget(r, "begin"));
+        this->loc(jget(r, "end"));
+        return f;
+    }
+
+    void scan(Json* n) {
+        _ = this->locs(n);
+        this->kids(n);
+    }
+
+    void kids(Json* n) {
+        const auto k = jget(n, "inner");
+        for (auto i : 0..jlen(k)) { this->scan(jat(k, i)); }
+    }
+
+    bool rel(str f) {
+        if (f.len == 0 || f == this->stub) { return false; }
+        for (auto d : this->sys.slice()) {
+            if (f.len > d.len && str_starts_with(f, d) && f[d.len] == '/') { return false; }
+        }
+        return true;
+    }
+
+    !CDecl* decl(CDK k, str name) {
+        const auto d = this->a.create<CDecl>()?;
+        d.k = k;
+        d.name = name;
+        d.rel = true;
+        d.fields = List<CField>::init(this->a);
+        d.subs = List<CDecl*>::init(this->a);
+        this->decls.push(d)?;
+        return d;
+    }
+
+    !void skip(str name, str why) {
+        const auto d = this->decl(.Skip, name)?;
+        d.reason = why;
+    }
+
+    !CType* named(str name) {
+        const auto t = this->a.create<CType>()?;
+        t.k = .Named;
+        t.name = name;
+        return t;
+    }
+
+    !CType* lookup(str name, str scope) {
+        auto n = name;
+        auto s = scope;
+        if (str_starts_with(n, "::")) {
+            n = n[2..];
+            s = "";
+        }
+        while (true) {
+            const auto z = this->names.get_or(cx_qual(this->a, s, n)?, "");
+            if (z.len > 0) { return this->named(z); }
+            if (s.len == 0) { break; }
+            const auto k = str_rfind(s, "::");
+            if (k < 0) { s = ""; } else { s = s[0..k]; }
+        }
+        if (str_starts_with(n, "std::")) { n = n[5..]; }
+        if (cb_known(n).len > 0) { return this->named(n); }
+        const auto t = this->a.create<CType>()?;
+        t.k = .Bad;
+        t.name = CX_TODO;
+        return t;
+    }
+
+    !CType* parse(str s, str scope) {
+        auto p = CxType{ .w = this, .toks = cx_toks(this->a, s)?, .scope = scope };
+        return p.full();
+    }
+
+    !CType* type_of(Json* ty, str scope) {
+        const auto t = this->parse(jstr(jget(ty, "qualType"), ""), scope)?;
+        const auto d = jstr(jget(ty, "desugaredQualType"), "");
+        if (t.k != .Bad || d.len == 0) { return t; }
+        return this->parse(d, scope);
+    }
+
+    !CType* btype(Json* ty, str scope) {
+        auto s = jstr(jget(ty, "desugaredQualType"), "");
+        if (s.len == 0) { s = jstr(jget(ty, "qualType"), ""); }
+        return this->expand(this->parse(s, scope)?);
+    }
+
+    CType* expand(CType* t) {
+        auto x = t;
+        while (x.k == .Named) {
+            const auto n = this->typedefs.get_or(x.name, null);
+            if (n == null) { return x; }
+            x = n;
+        }
+        return x;
+    }
+
+    !CVal eval(Json* n) {
+        const auto k = jstr(jget(n, "kind"), "");
+        const auto kids = jget(n, "inner");
+        auto v = CVal{ .v = 0 };
+        if (k == "ConstantExpr" && jget(n, "value") != null) {
+            v = cx_int(jstr(jget(n, "value"), ""))?;
+        } else if (k == "IntegerLiteral") {
+            v = cx_int(jstr(jget(n, "value"), ""))?;
+        } else if (k == "CharacterLiteral") {
+            v = CVal{ .v = jint(jget(n, "value"), 0) };
+        } else if (k == "CXXBoolLiteralExpr") {
+            v = cb_bool(jbool(jget(n, "value"), false));
+        } else if (k == "ParenExpr" || k == "ConstantExpr" || k == "ImplicitCastExpr" || k == "CStyleCastExpr" || k == "CXXStaticCastExpr" || k == "CXXFunctionalCastExpr") {
+            v = this->eval(jat(kids, 0))?;
+        } else if (k == "UnaryOperator") {
+            const auto x = this->eval(jat(kids, 0))?;
+            const auto op = jstr(jget(n, "opcode"), "");
+            if (op == "-") {
+                v = cb_neg(x)?;
+            } else if (op == "+") {
+                v = x;
+            } else if (op == "~") {
+                v = cb_norm(~x.v, x.u, x.w);
+            } else if (op == "!") {
+                v = cb_bool(x.v == 0);
+            } else {
+                return error.ParseFailed;
+            }
+        } else if (k == "BinaryOperator") {
+            v = cb_bin(jstr(jget(n, "opcode"), ""), this->eval(jat(kids, 0))?, this->eval(jat(kids, 1))?)?;
+        } else if (k == "ConditionalOperator") {
+            if (this->eval(jat(kids, 0))?.v != 0) { v = this->eval(jat(kids, 1))?; } else { v = this->eval(jat(kids, 2))?; }
+        } else if (k == "DeclRefExpr") {
+            const auto id = jstr(jget(jget(n, "referencedDecl"), "id"), "");
+            if (!this->vals.has(id)) { return error.ParseFailed; }
+            v = this->vals.get(id)?;
+        } else {
+            return error.ParseFailed;
+        }
+        const auto t = this->btype(jget(n, "type"), "")?;
+        if (t.k == .Int) { return cb_cast(v, t.width, t.signed); }
+        if (t.k == .Bool) { return cb_bool(v.v != 0); }
+        return v;
+    }
+
+    !str evalf(Json* n) {
+        const auto k = jstr(jget(n, "kind"), "");
+        const auto kids = jget(n, "inner");
+        if (k == "FloatingLiteral") { return jstr(jget(n, "value"), ""); }
+        if (k == "ParenExpr" || k == "ConstantExpr" || k == "ImplicitCastExpr" || k == "CStyleCastExpr" || k == "CXXStaticCastExpr" || k == "CXXFunctionalCastExpr") {
+            if (jstr(jget(n, "castKind"), "") == "IntegralToFloating") { return cb_num(this->a, this->eval(jat(kids, 0))?); }
+            return this->evalf(jat(kids, 0));
+        }
+        if (k == "UnaryOperator" && jstr(jget(n, "opcode"), "") == "-") {
+            const auto s = this->evalf(jat(kids, 0))?;
+            if (str_starts_with(s, "-")) { return s[1..]; }
+            return str_concat(this->a, ["-", s]);
+        }
+        if (k == "DeclRefExpr") {
+            const auto id = jstr(jget(jget(n, "referencedDecl"), "id"), "");
+            if (!this->fvals.has(id)) { return error.ParseFailed; }
+            return this->fvals.get(id);
+        }
+        return error.ParseFailed;
+    }
+
+    !void walk(Json* n, str scope, str zs, bool c, bool cls, bool pub0) {
+        const auto k = jget(n, "inner");
+        auto pub = pub0;
+        for (auto i : 0..jlen(k)) {
+            const auto x = jat(k, i);
+            const auto kind = jstr(jget(x, "kind"), "");
+            const auto f = this->locs(x);
+            if (kind == "AccessSpecDecl") { pub = jstr(jget(x, "access"), "") == "public"; }
+            if (f == this->stub && kind == "EnumDecl") { this->uchar = jstr(jget(cx_find(x, "ConstantExpr"), "value"), "") == "false"; }
+            if (!pub || !this->rel(f) || jbool(jget(x, "isImplicit"), false)) {
+                this->kids(x);
+                continue;
+            }
+            this->one(x, kind, scope, zs, c, cls)?;
+        }
+    }
+
+    !void one(Json* x, str kind, str scope, str zs, bool c, bool cls) {
+        const auto name = jstr(jget(x, "name"), "");
+        const auto qn = cx_qual(this->a, scope, name)?;
+        const auto zn = cx_zname(this->a, zs, name)?;
+        if (kind == "NamespaceDecl") {
+            if (name.len == 0) { return this->walk(x, scope, zs, c, false, true); }
+            return this->walk(x, qn, zn, c, false, true);
+        }
+        if (kind == "LinkageSpecDecl") { return this->walk(x, scope, zs, jstr(jget(x, "language"), "") == "C", false, true); }
+        if (kind == "CXXRecordDecl" && name.len > 0) {
+            this->skip(qn, CX_TODO)?;
+            return this->walk(x, qn, zn, false, true, jstr(jget(x, "tagUsed"), "") != "class");
+        }
+        if (kind == "EnumDecl") { return this->enum_decl(x, name, qn, zn, zs); }
+        if (kind == "TypedefDecl" || kind == "TypeAliasDecl") { return this->typedef_decl(x, scope, qn, zn); }
+        if (kind == "VarDecl") { return this->var_decl(x, scope, qn, zn, cls); }
+        if (kind == "FunctionDecl" && c) { return this->func(x, scope, name); }
+        this->kids(x);
+        if (cls || name.len == 0) { return; }
+        for (auto q : ["UsingDecl", "UsingShadowDecl", "UsingDirectiveDecl", "UsingEnumDecl", "NamespaceAliasDecl", "StaticAssertDecl", "EmptyDecl"]) {
+            if (kind == q) { return; }
+        }
+        this->skip(qn, CX_TODO)?;
+    }
+
+    !void enum_decl(Json* x, str name, str qn, str zn, str zs) {
+        const auto id = jstr(jget(x, "id"), "");
+        const auto scoped = jget(x, "scopedEnumTag") != null;
+        CType* fixed = null;
+        const auto fu = jget(x, "fixedUnderlyingType");
+        if (fu != null) { fixed = this->btype(fu, "")?; }
+        auto names = List<str>::init(this->a);
+        auto ids = List<str>::init(this->a);
+        auto vals = List<CVal>::init(this->a);
+        auto why = "";
+        auto v = CVal{ .v = 0 };
+        const auto k = jget(x, "inner");
+        for (auto i : 0..jlen(k)) {
+            const auto e = jat(k, i);
+            _ = this->locs(e);
+            this->kids(e);
+            if (jstr(jget(e, "kind"), "") != "EnumConstantDecl") { continue; }
+            names.push(jstr(jget(e, "name"), ""))?;
+            ids.push(jstr(jget(e, "id"), ""))?;
+            const auto ce = cx_find(e, "ConstantExpr");
+            if (ce != null) {
+                v = this->eval(ce)?;
+            } else if (jlen(jget(e, "inner")) > 0) {
+                why = "enum value not evaluated";
+            } else if (names.len > 1) {
+                v = cb_next(v)?;
+            }
+            if (fixed != null) {
+                v = cb_cast(v, fixed.width, fixed.signed);
+            } else if (cb_fits(v, 32, true)) {
+                v = cb_cast(v, 32, true);
+            }
+            vals.push(v)?;
+        }
+        auto label = qn;
+        if (name.len == 0) { label = names.last() catch "?"; }
+        if (fixed != null && fixed.k != .Int) { why = "enum with fixed underlying type"; }
+        if (why.len > 0) { return this->skip(label, why); }
+        auto t = fixed;
+        if (t == null) {
+            auto p = CParser{ .a = this->a };
+            t = p.enum_type(vals, this->short_enums)?;
+        }
+        if (t.k == .Bad) { return this->skip(label, t.name); }
+        if (name.len > 0) {
+            const auto d = this->decl(.Enum, zn)?;
+            d.ty = t;
+            this->typedefs.put(zn, t)?;
+            this->names.put(qn, zn)?;
+        } else {
+            this->anon.put(id, t)?;
+        }
+        for (auto [i, n] : names.slice()) {
+            auto cv = vals.get(i);
+            if (fixed == null && !cb_fits(cv, 32, true)) { cv = cb_cast(cv, t.width, t.signed && !t.c_unsigned); }
+            this->vals.put(ids.get(i), cv)?;
+            auto cz = cx_zname(this->a, zs, n)?;
+            if (scoped) { cz = cx_zname(this->a, zn, n)?; }
+            const auto d = this->decl(.Const, cz)?;
+            d.body = cb_num(this->a, cv)?;
+            if (cb_big(cv)) {
+                d.ty = this->a.create<CType>()?;
+                d.ty.k = .Int;
+                d.ty.width = 64;
+            }
+        }
+    }
+
+    CType* anon_of(Json* x) {
+        auto c = jat(jget(x, "inner"), 0);
+        while (jstr(jget(c, "kind"), "") == "ElaboratedType") { c = jat(jget(c, "inner"), 0); }
+        if (jstr(jget(c, "kind"), "") != "EnumType") { return null; }
+        return this->anon.get_or(jstr(jget(jget(c, "decl"), "id"), ""), null);
+    }
+
+    !void typedef_decl(Json* x, str scope, str qn, str zn) {
+        this->kids(x);
+        auto t = this->anon_of(x);
+        if (t == null) { t = this->type_of(jget(x, "type"), scope)?; }
+        if (t.k == .Bad) { return this->skip(qn, t.name); }
+        const auto d = this->decl(.Typedef, zn)?;
+        d.ty = t;
+        this->typedefs.put(zn, t)?;
+        this->names.put(qn, zn)?;
+    }
+
+    !void var_decl(Json* x, str scope, str qn, str zn, bool cls) {
+        this->kids(x);
+        const auto ty = jget(x, "type");
+        const auto t = this->btype(ty, scope)?;
+        const auto q = jstr(jget(ty, "qualType"), "");
+        const auto k = jget(x, "inner");
+        const auto init = jat(k, jlen(k) - 1);
+        const auto konst = jbool(jget(x, "constexpr"), false) || str_starts_with(q, "const ");
+        if (init == null || jstr(jget(x, "init"), "").len == 0 || !konst || (t.k != .Int && t.k != .Float && t.k != .Bool)) {
+            if (!cls) { this->skip(qn, CX_TODO)?; }
+            return;
+        }
+        const auto id = jstr(jget(x, "id"), "");
+        auto body = "";
+        if (t.k == .Float) {
+            auto s = this->evalf(init) catch { return this->skip(qn, "not a constant"); };
+            if (str_find(s, "inf") >= 0 || str_find(s, "nan") >= 0) { return this->skip(qn, "not a constant"); }
+            if (str_find(s, ".") < 0) {
+                auto e = str_find(s, "e");
+                if (e < 0) { e = str_find(s, "E"); }
+                if (e < 0) { e = s.len; }
+                s = str_concat(this->a, [s[0..e], ".0", s[e..]])?;
+            }
+            this->fvals.put(id, s)?;
+            body = s;
+        } else {
+            const auto v = this->eval(init) catch { return this->skip(qn, "not a constant"); };
+            this->vals.put(id, v)?;
+            if (t.k == .Bool) {
+                body = "false";
+                if (v.v != 0) { body = "true"; }
+            } else {
+                body = cb_num(this->a, v)?;
+            }
+            if (cb_big(v)) {
+                const auto d = this->decl(.Const, zn)?;
+                d.body = body;
+                d.ty = this->a.create<CType>()?;
+                d.ty.k = .Int;
+                d.ty.width = 64;
+                return;
+            }
+        }
+        const auto d = this->decl(.Const, zn)?;
+        d.body = body;
+    }
+
+    !void func(Json* x, str scope, str name) {
+        this->kids(x);
+        const auto t = this->type_of(jget(x, "type"), scope)?;
+        if (t.k != .Func || jbool(jget(x, "inline"), false) || jstr(jget(x, "storageClass"), "") == "static") { return this->skip(name, CX_TODO); }
+        const auto k = jget(x, "inner");
+        auto n = 0;
+        for (auto i : 0..jlen(k)) {
+            const auto p = jat(k, i);
+            if (jstr(jget(p, "kind"), "") != "ParmVarDecl" || n >= t.params.len) { continue; }
+            t.params.items[n].name = jstr(jget(p, "name"), "");
+            n += 1;
+        }
+        const auto d = this->decl(.Func, name)?;
+        d.ty = t;
+        d.is_extern = true;
+    }
+}
+
+!CBind cxxbind_header(Allocator a, str header, str from_dir, List<str> flags) {
+    const auto dir = ".zark-cache/cbind";
+    fs::make_dirs(dir)?;
+    auto sb = List<u8>::init(a);
+    sprint(&sb, "{dir}/stub-{os::pid()}.cpp")?;
+    const auto stub = sb.slice();
+    const auto dep = str_concat(a, [stub, ".d"])?;
+    auto body = List<u8>::init(a);
+    sprint(&body, "enum zark_char_sign {{ zark_char_v = (char)-1 < 0 }};\n#include \"{header}\"\n")?;
+    write_file(stub, body.slice())?;
+    auto cflags = List<str>::init(a);
+    for (auto f : flags.slice()) { if (!cx_c_std(f)) { cflags.push(f)?; } }
+    auto argv = List<str>::init(a);
+    argv.append(["clang++", "-fsyntax-only", "-Xclang", "-skip-function-bodies", "-Xclang", "-ast-dump=json", "-MD", "-MF", dep, "-iquote", from_dir])?;
+    argv.append(cflags.slice())?;
+    argv.append(["-x", "c++", stub])?;
+    const auto r = os::exec(a, argv.slice()) catch |e| {
+        drop(stub);
+        eprintln("error: cannot run clang++: {e}");
+        return error.CompileFailed;
+    };
+    drop(stub);
+    const auto dtext = cb_text(a, dep)?;
+    drop(dep);
+    if (r.code != 0) {
+        eprint(r.err);
+        return error.CompileFailed;
+    }
+    const auto root = json_parse(a, r.out, 1024) catch {
+        eprintln("error: cannot read the clang++ AST of {header}");
+        return error.CompileFailed;
+    };
+    auto sflags = List<str>::init(a);
+    for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<str>::init(a) };
+    for (auto f : flags.slice()) {
+        if (f == "-fshort-enums") { w.short_enums = true; }
+        if (f == "-fno-short-enums") { w.short_enums = false; }
+    }
+    w.walk(root, "", "", false, false, true)?;
+    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a) };
+    e.run(w.decls)?;
+    auto deps = List<str>::init(a);
+    for (auto d : dep_files(a, dtext)?) { if (d != stub) { deps.push(d)?; } }
+    return CBind{ .zk = e.out.slice(), .deps = deps, .from = List<str>::init(a), .warnings = e.warnings };
+}
+
+!CBind cx_bind(Allocator a, str header, str from_dir, List<str> flags) {
+    if (cx_is_header(header)) { return cxxbind_header(a, header, from_dir, flags); }
+    return cbind_header(a, header, from_dir, flags);
+}
