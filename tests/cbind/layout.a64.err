@@ -25,7 +25,7 @@ skipped takecx: opaque record by value
 opaque hs: _Float16
 skipped takehs: opaque record by value
 opaque lds: long double
-skipped takelds: over-aligned record by value
+skipped takelds: opaque record by value
 skipped f4a: aligned attribute
 opaque fa2: uses skipped f4a
 skipped takefa2: opaque record by value

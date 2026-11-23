@@ -1906,8 +1906,8 @@ struct CEmit {
             sprint(&b, "...")?;
         }
         sprint(&b, ");")?;
-        if (!this->abi_ok(f.elem)?) { this->fail("opaque record by value"); }
-        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty)?) { this->fail("opaque record by value"); } }
+        if (!this->abi_ok(f.elem, true)?) { this->fail("opaque record by value"); }
+        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty, false)?) { this->fail("opaque record by value"); } }
         _ = this->line(d.name, 3, b.slice())?;
     }
 
@@ -2003,8 +2003,8 @@ struct CEmit {
         const auto zn = this->ename(d.name)?;
         auto b = List<u8>::init(this->a);
         sprint(&b, "extern {rts} {inl}({zps});\n{rts} {zn}({zps}) {{ {ret}{inl}({argss}); }}")?;
-        if (!this->abi_ok(f.elem)?) { this->fail("opaque record by value"); }
-        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty)?) { this->fail("opaque record by value"); } }
+        if (!this->abi_ok(f.elem, true)?) { this->fail("opaque record by value"); }
+        for (auto p : f.params.slice()) { if (!this->abi_ok(p.ty, false)?) { this->fail("opaque record by value"); } }
         if (!this->line(d.name, 3, b.slice())?) { return; }
         const auto cs = c.slice();
         sprint(&this->c, "{cs}")?;
@@ -2590,14 +2590,14 @@ struct CEmit {
         return false;
     }
 
-    !bool abi_ok(CType* t) {
+    !bool abi_ok(CType* t, bool ret) {
         if (this->rec_of(t) == null) { return true; }
         if (this->has_vec(t)) {
             this->fail("vector in a record by value");
             return false;
         }
         const auto z = this->size(t);
-        if (z.align > 8 && z.size > 16) {
+        if (z.align > 8 && z.size > 16 && c_arch != 1) {
             this->fail("over-aligned record by value");
             return false;
         }
@@ -2608,7 +2608,7 @@ struct CEmit {
             this->hfa(&ch, t, false)?;
             if (zh.unk || ch.unk) { return false; }
             if (zh.no != ch.no || (!zh.no && (zh.base != ch.base || zh.n != ch.n))) { return false; }
-            if (c_apple || z.align < 16 || (zh.no && z.size > 16)) { return true; }
+            if (c_apple || ret || z.align < 16 || (zh.no && z.size > 16)) { return true; }
             const auto d = this->rec_of(t);
             auto cu = 1;
             auto zu = 1;

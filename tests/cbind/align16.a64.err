@@ -1,8 +1,6 @@
 opaque off16: layout differs
 skipped sum_mix: over-aligned record by value
-skipped sum_has: over-aligned record by value
 opaque od16: layout differs
-skipped mk_od16: over-aligned record by value
 skipped sum_od16: over-aligned record by value
 skipped al16l: aligned attribute
 opaque tal: uses skipped al16l
@@ -15,3 +13,4 @@ skipped td16.a: uses skipped d16
 skipped sum_td16: over-aligned record by value
 opaque i128s: __int128
 skipped sum_i128s: over-aligned record by value
+skipped sum_m4: over-aligned record by value

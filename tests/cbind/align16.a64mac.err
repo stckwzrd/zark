@@ -1,5 +1,4 @@
 opaque off16: layout differs
-skipped sum_has: over-aligned record by value
 opaque od16: layout differs
 skipped al16l: aligned attribute
 opaque tal: uses skipped al16l

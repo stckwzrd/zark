@@ -15,6 +15,7 @@ extern f64 sum_dbl(dbl16 d);
 extern dbl16 mk_dbl(f64 x, f64 y);
 extern i64 sum_mix(mix16 m);
 extern i32 get_a16(a16 a);
+extern i64 sum_has(has16 h);
 extern i64 sum_big(big16* b);
 extern i32 a32_x(a32* p);
 extern i64 sum_has_p(has16* h);
@@ -37,3 +38,11 @@ align(16) struct td16 { u64[2] storage; f64* as_b() { void* p = this; return p; 
 extern f64 sum_td16(td16 u);
 align(16) struct i128s { u64[2] storage; }
 extern i64 sum_i128s(i32 a, i128s s);
+extern tal mk_tal(i64 a, i64 b);
+align(16) struct q4 { f64 a; f64 b; f64 c; f64 d; }
+extern f64 sum_q4(q4 q);
+extern q4 mk_q4(f64 a);
+align(32) struct q8 { f64 a; f64 b; f64 c; f64 d; }
+extern f64 sum_q8(q8 q);
+align(16) struct m4 { f64 a; f64 b; f64 c; f64 d; }
+extern f64 sum_m4(i64 x, m4 m);

@@ -32,3 +32,6 @@ align(16) struct tal { u64[2] storage; }
 align(16) struct tdl { u64[2] storage; }
 align(16) struct td16 { u64[2] storage; f64* as_b() { void* p = this; return p; } }
 align(16) struct i128s { u64[2] storage; }
+align(16) struct q4 { f64 a; f64 b; f64 c; f64 d; }
+align(32) struct q8 { f64 a; f64 b; f64 c; f64 d; }
+align(16) struct m4 { f64 a; f64 b; f64 c; f64 d; }
