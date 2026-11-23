@@ -1,0 +1,192 @@
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
+#include "@DIR@/tests/cxxbind/free.hpp"
+[[noreturn]] static inline void zark_cxx_fail(const char *f) {
+    try {
+        throw;
+    } catch (const std::exception &e) {
+        fprintf(stderr, "zark: uncaught C++ exception in %s: %s\n", f, e.what());
+    } catch (...) {
+        fprintf(stderr, "zark: uncaught C++ exception in %s\n", f);
+    }
+    abort();
+}
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_0)
+extern "C" int zark_cxx_H_0(int a0, int a1) {
+    (void)static_cast<int (*)(int, int)>(&geo::area);
+    try {
+        return geo::area(a0, a1);
+    } catch (...) {
+        zark_cxx_fail("geo::area");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_1)
+extern "C" double zark_cxx_H_1(double a0, float a1) {
+    (void)static_cast<double (*)(double, float)>(&geo::scale);
+    try {
+        return geo::scale(a0, a1);
+    } catch (...) {
+        zark_cxx_fail("geo::scale");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_2)
+extern "C" const char *zark_cxx_H_2(int a0) {
+    (void)static_cast<const char *(*)(int)>(&geo::label);
+    try {
+        return geo::label(a0);
+    } catch (...) {
+        zark_cxx_fail("geo::label");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_3)
+extern "C" long zark_cxx_H_3() {
+    (void)static_cast<long (*)()>(&geo::deep::depth);
+    try {
+        return geo::deep::depth();
+    } catch (...) {
+        zark_cxx_fail("geo::deep::depth");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_4)
+extern "C" int zark_cxx_H_4(int a0, int a1) {
+    (void)static_cast<int (*)(int, int)>(&geo::perimeter);
+    try {
+        return geo::perimeter(a0, a1);
+    } catch (...) {
+        zark_cxx_fail("geo::perimeter");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_5)
+extern "C" int zark_cxx_H_5(const int a0, int *a1) {
+    (void)static_cast<int (*)(const int &, int &)>(&add_ref);
+    try {
+        return add_ref(a0, *a1);
+    } catch (...) {
+        zark_cxx_fail("add_ref");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_6)
+extern "C" int zark_cxx_H_6(int a0) {
+    (void)static_cast<int (*)(int &&)>(&take_rv);
+    try {
+        return take_rv(static_cast<int &&>(a0));
+    } catch (...) {
+        zark_cxx_fail("take_rv");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_7)
+extern "C" const char **zark_cxx_H_7() {
+    (void)static_cast<const char *&(*)()>(&name_ref);
+    try {
+        return &name_ref();
+    } catch (...) {
+        zark_cxx_fail("name_ref");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_8)
+extern "C" int *zark_cxx_H_8(std::size_t a0) {
+    (void)static_cast<int &(*)(std::size_t)>(&slot);
+    try {
+        return &slot(a0);
+    } catch (...) {
+        zark_cxx_fail("slot");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_9)
+extern "C" int zark_cxx_H_9(int a0) {
+    (void)static_cast<int (*)(int)>(&twice);
+    try {
+        return twice(a0);
+    } catch (...) {
+        zark_cxx_fail("twice");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_10)
+extern "C" int zark_cxx_H_10(int a0) {
+    (void)static_cast<int (*)(int)>(&hidden);
+    try {
+        return hidden(a0);
+    } catch (...) {
+        zark_cxx_fail("hidden");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_11)
+extern "C" int zark_cxx_H_11(int (*a0)(int), int a1) {
+    (void)static_cast<int (*)(int (*)(int), int)>(&apply);
+    try {
+        return apply(a0, a1);
+    } catch (...) {
+        zark_cxx_fail("apply");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_12)
+extern "C" int (*zark_cxx_H_12(int a0))(int) {
+    (void)static_cast<int (*(*)(int))(int)>(&pick);
+    try {
+        return pick(a0);
+    } catch (...) {
+        zark_cxx_fail("pick");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_13)
+extern "C" void zark_cxx_H_13(int *a0) {
+    (void)static_cast<void (*)(int *) noexcept>(&reset);
+    reset(a0);
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_14)
+extern "C" bool zark_cxx_H_14(bool a0) {
+    (void)static_cast<bool (*)(bool)>(&flag);
+    try {
+        return flag(a0);
+    } catch (...) {
+        zark_cxx_fail("flag");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_15)
+extern "C" unsigned long long zark_cxx_H_15(long long a0, unsigned short a1) {
+    (void)static_cast<unsigned long long (*)(long long, unsigned short)>(&big);
+    try {
+        return big(a0, a1);
+    } catch (...) {
+        zark_cxx_fail("big");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_16)
+extern "C" int zark_cxx_H_16(int a0) {
+    (void)static_cast<int (*)(int)>(&later);
+    try {
+        return later(a0);
+    } catch (...) {
+        zark_cxx_fail("later");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_20)
+extern "C" int zark_cxx_H_20(int a0) {
+    (void)static_cast<int (*)(int)>(&twice_decl);
+    try {
+        return twice_decl(a0);
+    } catch (...) {
+        zark_cxx_fail("twice_decl");
+    }
+}
+#endif

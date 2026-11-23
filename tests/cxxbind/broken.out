@@ -1,0 +1,5 @@
+type Id = i32;
+type other_Id = i64;
+struct n { }
+extern i32 zark_cxx_H_3(i32 x);
+static i32 n::fine(i32 x) { return zark_cxx_H_3(x); }

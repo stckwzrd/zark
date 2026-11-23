@@ -1,0 +1,38 @@
+struct geo { }
+extern i32 zark_cxx_H_0(i32 w, i32 h);
+static i32 geo::area(i32 w, i32 h) { return zark_cxx_H_0(w, h); }
+extern f64 zark_cxx_H_1(f64 x, f32 f);
+static f64 geo::scale(f64 x, f32 f) { return zark_cxx_H_1(x, f); }
+extern u8* zark_cxx_H_2(i32 id);
+static u8* geo::label(i32 id) { return zark_cxx_H_2(id); }
+struct geo_deep { }
+extern i64 zark_cxx_H_3();
+static i64 geo_deep::depth() { return zark_cxx_H_3(); }
+extern i32 zark_cxx_H_4(i32 w, i32 h);
+static i32 geo::perimeter(i32 w, i32 h) { return zark_cxx_H_4(w, h); }
+extern i32 zark_cxx_H_5(i32 a, i32* out);
+i32 add_ref(i32 a, i32* out) { return zark_cxx_H_5(a, out); }
+extern i32 zark_cxx_H_6(i32 x);
+i32 take_rv(i32 x) { return zark_cxx_H_6(x); }
+extern u8** zark_cxx_H_7();
+u8** name_ref() { return zark_cxx_H_7(); }
+extern i32* zark_cxx_H_8(usize i);
+i32* slot(usize i) { return zark_cxx_H_8(i); }
+extern i32 zark_cxx_H_9(i32 x);
+i32 twice(i32 x) { return zark_cxx_H_9(x); }
+extern i32 zark_cxx_H_10(i32 x);
+i32 hidden(i32 x) { return zark_cxx_H_10(x); }
+extern i32 zark_cxx_H_11(fn(i32) -> i32 f, i32 x);
+i32 apply(fn(i32) -> i32 f, i32 x) { return zark_cxx_H_11(f, x); }
+extern fn(i32) -> i32 zark_cxx_H_12(i32 which);
+fn(i32) -> i32 pick(i32 which) { return zark_cxx_H_12(which); }
+extern void zark_cxx_H_13(i32* p);
+void reset(i32* p) { zark_cxx_H_13(p); }
+extern bool zark_cxx_H_14(bool b);
+bool flag(bool b) { return zark_cxx_H_14(b); }
+extern u64 zark_cxx_H_15(i64 x, u16 s);
+u64 big(i64 x, u16 s) { return zark_cxx_H_15(x, s); }
+extern i32 zark_cxx_H_16(i32 x);
+i32 later(i32 x) { return zark_cxx_H_16(x); }
+extern i32 zark_cxx_H_20(i32 x);
+i32 twice_decl(i32 x) { return zark_cxx_H_20(x); }
