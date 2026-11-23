@@ -555,6 +555,9 @@ bool Gen::names_type(Expr* e) {
 // one or two registers (each eightbyte is INTEGER, or SSE when it holds only floats), larger
 // ones are copied onto the stack (byval) or returned through a hidden pointer (sret).
 
+i64 c_arch = 0;
+bool c_apple = false;
+
 struct CClass {
     bool memory;
     i64 words;
