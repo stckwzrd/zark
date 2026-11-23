@@ -35,3 +35,4 @@ struct bitu { u32[2] storage; }
 extern i32 takebits(bits b);
 extern i32 takebitsp(bits* b);
 extern i32 takeald(ald a);
+struct a3 { u16[5] storage; u8* as_c() { void* p = this; return p; } u8[9]* as_arr() { void* p = this; return p; } }

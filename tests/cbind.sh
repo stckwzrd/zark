@@ -8,7 +8,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions; do
+for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig; do
     flags=""
     [ "$name" = shorten ] && flags="-fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -91,7 +91,36 @@ void main() {
 EOF
     out=$("$ZARK" run use_layout2.zk tests/cbind/layout.c 2>&1) || fail "layout: run: $out"
     [ "$out" = "37151 37151 65 56 8 7" ] || fail "layout: got: $out"
+
+cat > use_fnptr2.zk <<'EOF'
+import "fnptr.zk";
+i32 thrice(im* m) { return *m.as_i() * 3; }
+void main() {
+    auto h = mkp();
+    im q;
+    *q.as_i() = 20;
+    const auto p = h.get();
+    println("{h.cb(&q)} {p.x} {p.y} {callp(thrice, 5)} {sizeof(hasfp)} {sizeof(okfp)}");
+}
+EOF
+    for f in --native --llvm; do
+        out=$("$ZARK" run $f use_fnptr2.zk tests/cbind/fnptr.c 2>&1) || fail "fnptr $f: run: $out"
+        [ "$out" = "40 7 8 16 16 16" ] || fail "fnptr $f: got: $out"
+    done
 fi
+
+cat > use_flex2.zk <<'EOF'
+import "flex.zk";
+void main() {
+    o1 a;
+    o1c b;
+    const auto fa = (&a.f as *u8 as i64) - (&a as *u8 as i64);
+    const auto fb = (&b.f as *u8 as i64) - (&b as *u8 as i64);
+    println("{sizeof(f1)} {alignof(f1)} {sizeof(f1b)} {alignof(f1b)} {sizeof(f1c)} {alignof(f1c)} {sizeof(o1)} {alignof(o1)} {sizeof(o1c)} {fa} {fb} {sizeof(f2)}");
+}
+EOF
+out=$("$ZARK" run use_flex2.zk 2>&1) || fail "flex: run: $out"
+[ "$out" = "8 8 8 8 8 8 16 8 16 8 8 8" ] || fail "flex: got: $out"
 
 mkdir -p sysinc
 printf 'struct inner { int a; };\n#define INNER 1\nint unused_inner(void);\n' > sysinc/inner.h
@@ -110,4 +139,8 @@ done > chain.h
 timeout 10 "$ZARK" cbind chain.h > chain.zk 2> chain.err || fail "chain: exit $?"
 grep -qx "const auto M50 = 1;" chain.zk || fail "chain: M50 missing"
 grep -qx "skipped M20000: expansion too deep" chain.err || fail "chain: M20000 not skipped: $(tail -1 chain.err)"
+
+printf 'struct E {};\nstruct H { struct E a[1000000000]; };\nint f(struct H h);\n' > empty.h
+timeout 5 "$ZARK" cbind empty.h > empty.zk 2>&1 || fail "empty array: exit $?"
+grep -qx "extern i32 f(H h);" empty.zk || fail "empty array: f missing"
 echo "ok   cbind"
