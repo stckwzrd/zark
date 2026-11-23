@@ -114,6 +114,41 @@ cp zl/m.c zp/c/m.c
 out=$(cd zp && "$ZARK" run 2>&1)
 [ "$out" = "42" ] || fail "zark_lib_with_c_main project: expected 42, got: $out"
 
+mkdir -p ip/inc
+printf '#define V 7\n' > ip/inc/v.h
+printf '#include <v.h>\nlong answer(void) { return V; }\n' > ip/a.c
+cp main.zk ip/main.zk
+out=$(cd ip && "$ZARK" run main.zk a.c -isystem inc 2>&1)
+[ "$out" = "7" ] || fail "isystem_pair: expected 7, got: $out"
+out=$(cd ip && "$ZARK" run main.zk -isystem inc a.c 2>&1)
+[ "$out" = "7" ] || fail "isystem_pair before the source: expected 7, got: $out"
+
+mkdir -p ipm/src ipm/inc ipm/inc2
+printf '[package]\nname = "ipm"\n\n[build]\nsources = ["a.c"]\ncflags = ["-isystem", "inc", "-isystem", "inc2", "-include", "pre.h"]\n' > ipm/zark.toml
+printf '#define V 7\n' > ipm/inc/v.h
+printf '#define W 5\n' > ipm/inc2/w.h
+printf '#define PRE 1\n' > ipm/pre.h
+printf '#include <v.h>\n#include <w.h>\nlong answer(void) { return V * 10 + W + PRE; }\n' > ipm/a.c
+printf 'extern i64 answer();\nvoid main() { println("{answer()}"); }\n' > ipm/src/main.zk
+out=$(cd ipm && "$ZARK" run 2>&1)
+[ "$out" = "76" ] || fail "isystem_pair manifest: expected 76, got: $out"
+out=$(cd ipm && "$ZARK" run src/main.zk 2>&1)
+[ "$out" = "76" ] || fail "isystem_pair manifest explicit file: expected 76, got: $out"
+
+mkdir -p inp
+printf '#define V 8\n' > inp/pre.h
+printf 'long answer(void) { return V; }\n' > inp/a.c
+cp main.zk inp/main.zk
+out=$(cd inp && "$ZARK" run main.zk a.c -include pre.h 2>&1)
+[ "$out" = "8" ] || fail "include_pair: expected 8, got: $out"
+
+mkdir -p sd/inc
+printf '#define BASE 40\n' > sd/inc/cfg.h
+printf '#include "cfg.h"\n#ifdef GONE\n#error gone\n#endif\nlong answer(void) { return ANSWER + BASE; }\n' > sd/ans.c
+cp main.zk sd/main.zk
+out=$(cd sd && "$ZARK" run main.zk ans.c -I inc -D ANSWER=2 -D GONE=1 -U GONE 2>&1)
+[ "$out" = "42" ] || fail "I_space_D_space: expected 42, got: $out"
+
 mkdir -p pd
 srcs=""
 decls=""

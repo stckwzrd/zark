@@ -182,6 +182,16 @@ printf '#include <inner.h>\nint top(struct inner* p);\n' > sysinc/top.h
 out=$("$ZARK" cbind top.h -isystem sysinc 2>&1) || fail "system dir: exit $?: $out"
 [ "$out" = "$(printf 'struct inner { i32 a; }\nextern i32 top(inner* p);')" ] || fail "system dir: got: $out"
 
+out=$("$ZARK" cbind flag.h -D VAL=3 2>&1) || fail "flags with a space: exit $?: $out"
+mkdir -p spc
+printf '#define SV 5\n' > spc/sv.h
+printf 'import "sv.h";\nvoid main() { println("{SV}"); }\n' > use_sv.zk
+out=$("$ZARK" run use_sv.zk -isystem spc 2>&1) || fail "import_isystem_pair: $out"
+[ "$out" = 5 ] || fail "import_isystem_pair: got: $out"
+out=$("$ZARK" run use_sv.zk -I spc 2>&1) || fail "import_I_space: $out"
+[ "$out" = 5 ] || fail "import_I_space: got: $out"
+out=$("$ZARK" cbind sv.h -I spc 2>&1) || fail "cbind -I space: exit $?: $out"
+
 printf '#include <stdio.h>\nint put(FILE* f);\n' > file.h
 "$ZARK" cbind file.h > file.zk 2> /dev/null || fail "FILE: exit $?"
 printf 'import "file.zk";\nvoid main() { const auto n = put(null); }\n' > use_file.zk
