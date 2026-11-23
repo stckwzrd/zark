@@ -37,6 +37,9 @@ STRUCTS = {
     "BC": [("b", "bool"), ("c", "i8")],
     "A3": [("a", "i32[3]")],
     "E": [],
+    "SU": [("u", "UD")],
+    "SUA": [("a", "UFF[1]")],
+    "SUX": [("x", "i32"), ("u", "UFD"), ("y", "f32")],
 }
 
 UNIONS = {
@@ -52,7 +55,7 @@ UNIONS = {
 }
 
 ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3", "E",
-         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig"]
+         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUA", "SUX"]
 
 SIZES = {"i8": 1, "u8": 1, "bool": 1, "i16": 2, "u16": 2, "i32": 4, "u32": 4, "f32": 4, "i64": 8, "u64": 8, "f64": 8}
 
@@ -78,6 +81,14 @@ QUICK = {
     "callback_many",
     "callback_f3_ret",
     "callback_e_ret",
+    "direct_ud",
+    "direct_uff_ret",
+    "indirect_ufd",
+    "export_uf2",
+    "export_udd_ret",
+    "callback_su",
+    "callback_sua_ret",
+    "callback_union_mix",
 }
 
 
@@ -400,7 +411,7 @@ def render_zk(case):
             body = zlit(ret, rv)
         lines.append(f"{prefix}{zktype(ret)} f_{name}({sig}) {{ return {body}; }}")
     lines.append("")
-    if ret in STRUCTS or array_parts(ret) is not None:
+    if ret in STRUCTS or ret in UNIONS or array_parts(ret) is not None:
         result = f"RESULT {{{zsum(ret, 'r')}}}"
     else:
         result = "RESULT {(r as i64)}"
@@ -431,7 +442,7 @@ def render_c(case):
     rv = case["ret_value"]
     body = clit(ret, rv) if rv is not None else sum_c(params)
     rt = ctype(ret)
-    if ret in STRUCTS or array_parts(ret) is not None:
+    if ret in STRUCTS or ret in UNIONS or array_parts(ret) is not None:
         run_body = f"{rt} r = "
         run_ret = csum(ret, "r")
     else:
@@ -646,12 +657,24 @@ def fixed_cases():
         build_case("callback_many", "callback", spill),
         build_case("callback_char", "callback", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
         build_case("callback_i8_ret", "callback", [], ret="i8", ret_value=-1),
-    ]
+    ] + union_cases()
+
+
+def union_cases():
+    out = []
+    mix = [("UFF", "a"), ("f64", "x"), ("UDI", "b"), ("UF2", "c"), ("UD", "d"), ("i32", "y")]
+    for mode in ("direct", "indirect", "export", "callback"):
+        for t in list(UNIONS) + ["SU", "SUA", "SUX"]:
+            n = t.lower()
+            out.append(build_case(f"{mode}_{n}", mode, [(t, "a"), (t, "b")]))
+            out.append(build_case(f"{mode}_{n}_ret", mode, [], ret=t, ret_value=make_value(t, [1])))
+        out.append(build_case(f"{mode}_union_mix", mode, mix))
+    return out
 
 
 def random_cases(count, seed):
     rng = random.Random(seed)
-    pool = list(SCALARS.keys()) + list(STRUCTS.keys())
+    pool = list(SCALARS.keys()) + list(STRUCTS.keys()) + list(UNIONS.keys())
     out = []
     for i in range(count):
         n = rng.randint(0, 10)

@@ -567,12 +567,8 @@ void cword(CClass* c, u64 off, u64 size, i64 cls) {
     match t.k {
         .Strct => {
             if (t.si.decl.is_union) {
-                const auto n = this->size_of(t)?;
-                auto o = 0 as u64;
-                while (o < n) {
-                    cword(c, off + o, min(8 as u64, n - o), 1);
-                    o += 8;
-                }
+                cword(c, off, 4, 1);
+                for (auto f : t.si.fields) { this->cmark(f.ty, off + 8, c)?; }
                 return;
             }
             u64 o = 0;

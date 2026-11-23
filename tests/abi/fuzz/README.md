@@ -41,6 +41,15 @@ with more than six integer arguments plus an aggregate that spills to the
 stack. The failures were shape-specific, not direction-wide; the matrix is
 the source of truth.
 
+Unions go by value in all four directions as parameters and results
+(`*_ud`, `*_udi`, `*_ufd`, `*_uff`, `*_uif`, `*_udd`, `*_uf2`, `*_up`,
+`*_ubig`, the struct wrappers `*_su`, `*_sua`, `*_sux` and `*_union_mix`).
+The C side reads the tag and the active member, the Zark side matches on
+the variant, and the generator computes the expected tag plus payload sum.
+The cases whose payload eightbyte is SSE (`ud`, `ufd`, `uff`, `udd`, `uf2`,
+`su`, `sua`, `union_mix`) were red on every backend while unions were
+classified as INTEGER.
+
 `direct_char` sends `i8 -1`, `u8 200`, `bool true`. It was the first real bug
 found by the harness: `-O` returned 456, because the `i8` argument was not
 sign-extended before the C call. The compiler now emits `signext`/`zeroext`
