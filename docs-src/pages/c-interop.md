@@ -2,10 +2,80 @@
 title: Interoperating with C and C++
 order: 30
 section: Interop and tools
-description: extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, structs, callbacks and the extern "C" facade in Zark
+description: import of C headers, zark cbind, extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, build flags and zark.toml keys, structs, callbacks and the extern "C" facade in Zark
 ---
 
-Zark needs no separate "binding layer": a C function is declared in one line, and a C file is passed to the compiler on the command line. This page collects everything you need at the boundary.
+Zark needs no separate "binding layer": a C header is imported like a module, a single C function can be declared in one line, and a C file is passed to the compiler on the command line. This page collects everything you need at the boundary.
+
+## Importing a C header
+
+`import "x.h" as name;` reads a C header and makes its declarations available under `name::`. Without `as`, they land in the importing file's scope.
+
+```c file=shapes.h
+#define SHAPES_MAX 8
+
+typedef struct { float x, y; } Vec2;
+typedef enum { SHAPE_CIRCLE, SHAPE_BOX } ShapeKind;
+
+typedef struct {
+    ShapeKind kind;
+    Vec2 pos;
+    float size;
+} Shape;
+
+float shape_area(const Shape *s);
+Vec2 vec2_add(Vec2 a, Vec2 b);
+
+static inline float sq(float x) { return x * x; }
+```
+
+```c file=shapes.c
+#include "shapes.h"
+
+float shape_area(const Shape *s) {
+    return s->kind == SHAPE_CIRCLE ? 3.0f * sq(s->size) : sq(s->size);
+}
+
+Vec2 vec2_add(Vec2 a, Vec2 b) { Vec2 r = { a.x + b.x, a.y + b.y }; return r; }
+```
+
+```zark run with=shapes.c
+import "shapes.h" as sh;
+
+void main() {
+    auto s = sh::Shape{ .kind = sh::SHAPE_BOX, .size = 3.0 };
+    s.pos = sh::vec2_add(sh::Vec2{ .x = 1.0, .y = 2.0 }, sh::Vec2{ .x = 0.5, .y = 0.5 });
+    println(sh::shape_area(&s), s.pos.x, s.pos.y, sh::SHAPES_MAX, sh::sq(4.0));
+}
+```
+
+What you get:
+
+- functions become `extern` declarations, structs become Zark structs with the same layout, `typedef` becomes `type`;
+- an `enum` becomes an integer type plus one constant per value; a `#define` of a number, a string or a character becomes a constant;
+- a union becomes a struct with raw storage and one accessor per member: `*u.as_d() = 2.5;`;
+- a `static inline` function gets a small C wrapper that the compiler builds and links for you;
+- a field or parameter named like a Zark keyword gets a trailing `_` (`type` becomes `type_`).
+
+The header is looked up next to the importing file, then in the `-I` directories, then in the system include path, and it sees the same `-D` and `-I` flags as the C sources. The result is cached in `.zark-cache/cbind/` and rebuilt when the header, anything it includes, the flags or the clang version change.
+
+Some C constructs have no Zark equivalent yet and are skipped: `long double`, `_Complex`, `_Atomic`, bitfields (a struct that has them becomes opaque storage), function-like macros, extern variables, alignment above 8, and structs passed by value through function pointers. `import` skips them silently; `zark cbind` lists them.
+
+## Seeing the bindings: `zark cbind`
+
+`zark cbind` prints what an import would produce, plus one warning per skipped declaration:
+
+```sh
+zark cbind shapes.h                          # Zark declarations to stdout, warnings to stderr
+zark cbind gl.h -DGL_GLEXT_PROTOTYPES -o gl.zk
+zark cbind shapes.h -o shapes.zk --inline-c shapes_inline.c
+```
+
+The output is a plain `.zk` file you can read and edit. With `--inline-c` the wrappers for `static inline` functions go to a C file that you compile in next to it (`zark run main.zk shapes_inline.c`). That C file includes the header by its absolute path, and the wrapper names in both files are hashed from that path, so the pair only works on the machine and in the checkout where it was made. Use it to inspect what an import produces, and let `import` regenerate the bindings elsewhere. A header without `static inline` functions produces a `.zk` that does not depend on the path.
+
+Only C headers work. A C++ library is reached through a C API, as cimgui does for Dear ImGui (`examples/imgui/`), or through your own `extern "C"` facade (see below).
+
+
 
 ## Calling C from Zark: `extern`
 
@@ -211,6 +281,48 @@ zark build main.zk lib.o -lm -o app        # a ready object and a library
 
 What happens: every `.c` / `.cpp` is compiled with `clang` (`clang++` for C++, the optimization level comes from `-O`), then everything is linked together with your program. If there is at least one `.cpp`, the linker becomes `clang++`.
 
+Compile flags on the same command line go to every C/C++ file and to imported headers: `-I…`, `-D…`, `-U…`, `-std=…`, `-f…`, `-W…`, `-pthread`. A C standard is used for `.c` files and headers, a C++ standard only for C++ files:
+
+```sh
+zark run main.zk lib.c engine.cpp -Ivendor/include -DUSE_FAST=1 -std=c++17
+```
+
+Objects are cached in `.zark-cache/obj/` by the compiler, flags and source text, and rebuilt when a header they include changes. Several files compile in parallel (up to 8; `ZARK_JOBS=N` sets the number).
+
+A Zark file without `main` can be linked with a C `main`, and a program made only of C or C++ files works too.
+
+## Projects with C code
+
+In a project, `zark.toml` holds the same settings. This is the manifest of `examples/imgui/`, which builds Dear ImGui from source and talks to it and to SDL2 through `import`:
+
+```text
+[package]
+name = "imgui-demo"
+main = "main.zk"
+
+[build]
+include = ["deps/cimgui", "deps/cimgui/imgui", "deps/cimgui/imgui/backends"]
+defines = ["CIMGUI_USE_SDL2", "CIMGUI_USE_OPENGL3", "IMGUI_IMPL_API=extern \"C\""]
+std = "c++17"
+cflags = ["-fno-exceptions", "-fno-rtti"]
+sources = ["deps/cimgui/cimgui.cpp", "deps/cimgui/imgui/imgui.cpp", "..."]
+pkg-config = ["sdl2"]
+libs = ["GL", "stdc++"]
+```
+
+| Key | What it does |
+|---|---|
+| `sources` | C/C++ files to compile and link |
+| `libs` | libraries, `-lNAME` |
+| `lib-dirs` | `-L` directories |
+| `include` | `-I` directories |
+| `defines` | `-D` macros, `"NAME"` or `"NAME=VALUE"` |
+| `std` | `-std=` for C or C++ |
+| `cflags` | any other compile flags |
+| `pkg-config` | packages whose `pkg-config --cflags --libs` is added |
+
+Paths are relative to `zark.toml`. More about manifests is in [projects](projects.md).
+
 Details of the modes are in [tooling](tooling.md#compilation-modes).
 
 ## Calling Zark from C: `export`
@@ -322,8 +434,9 @@ Math (`sqrt`, `sin`, `pow`) is linked automatically: `-lm` is already included.
 
 ## Rules and pitfalls
 
-- There is no `@cImport` and no header parsing: you write the signatures by hand. This is a place for mistakes: the type of your `extern` must match C.
-- Structs cross the boundary by value only through `extern` declarations. A C library calling back into Zark (an `export` function or a function pointer) must take structs by pointer.
+- A hand-written `extern` is a place for mistakes: its types must match C. Prefer `import "x.h"` when there is a header.
+- Structs cross the boundary by value only through `extern` declarations. A C library calling back into Zark (an `export` function or a function pointer) must take structs by pointer, which is why `import` skips function pointer types with structs by value.
+- Two headers imported without `as` cannot both include the same header: import the one header that includes both. With `as`, each import has its own copy of the shared types, and they are different Zark types (convert pointers with `as`).
 - `bool` in C is `_Bool`/`uint8_t`. Use `u8` or `i32`, not `bool`, if in doubt.
 - Do not pass a `str` instead of a `u8*`: you need `s.ptr` (and a zero byte, see above).
 - `size_t` is `u64`, `ssize_t` is `i64`.

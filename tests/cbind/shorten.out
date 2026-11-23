@@ -1,0 +1,15 @@
+type E = u8;
+const auto A = 0;
+const auto B = 1;
+type N = i8;
+const auto NA = -1;
+const auto NB = 1;
+type W = u32;
+const auto W1 = 70000;
+type F = i32;
+const auto F1 = 0;
+type L = u64;
+const auto L1 = 4294967296;
+struct S { u8 c; u8 e; u8 d; }
+struct T { i8 n; u32 w; i32 f; u64 l; }
+extern i32 f(u8 e);

@@ -33,7 +33,7 @@ The compiler stops knowing standard-library names and is split into layers: `par
 - [x] `tools/update-seed.sh`
 - [x] `src/*.zig` moved to `legacy/zig-stage0/`, `src/std.zk` moved to `std/std.zk`, `embed` path updated
 - [x] golden token files `tests/tokens/*.tok` replace the Zig lexer comparison
-- [x] language-change workflow documented in `CLAUDE.md`
+- [x] language-change workflow documented in `SPEC.md` and `BOOTSTRAP.md`
 
 ### Phase 2: `Fmt`, `print` and friends move to std
 - [x] `Fmt` type and lowering of literals with `{...}` holes

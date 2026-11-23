@@ -1,0 +1,10 @@
+skipped avx: target attribute
+skipped unav: unavailable attribute
+skipped errf: error attribute
+skipped warnf: warning attribute
+skipped diag: diagnose_if attribute
+skipped a0: name used by the wrapper
+skipped zark_inl_foo: name used by the wrapper
+skipped usea1: name used by the wrapper
+skipped type: Zark keyword
+skipped i32: Zark type name

@@ -19,7 +19,7 @@ check showcase_tests $ZARK test examples/showcase/main.zk $FLAGS
 check showcase_vec $ZARK test examples/showcase/vec.zk $FLAGS
 check interop $ZARK run examples/interop/main.zk examples/interop/mathlib.c examples/interop/engine.cpp $FLAGS
 [ $x86 = 1 ] && check abi $ZARK run tests/abi/main.zk tests/abi/lib.c $FLAGS
-for n in ints memory nan move borrow comptime mulcheck iterate threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
+for n in ints memory nan move borrow comptime mulcheck iterate threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
 for f in tests/panics/*.zk; do
   n=panic_$(basename $f .zk)
   if out=$($ZARK run "$f" $FLAGS 2>&1); then fail=$((fail+1)); echo "FAIL $f (expected a panic)"
@@ -41,6 +41,8 @@ done
 if [ $tok_bad -eq 0 ]; then pass=$((pass+1)); echo "ok   tokens match tests/tokens ($(ls tests/tokens | wc -l) files)"; else fail=$((fail+1)); echo "FAIL tokens"; fi
 if ZARK=$ZARK tests/baremetal.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/project.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/cbuild.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/cbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]

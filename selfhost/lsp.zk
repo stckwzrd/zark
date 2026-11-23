@@ -6,6 +6,7 @@ import "fmt.zk";
 import "textpos.zk";
 import "ide.zk";
 import "project.zk";
+import "std/os" as os;
 
 extern i64 read(i32 fd, u8* buf, u64 n);
 extern i32 dup(i32 fd);
@@ -13,9 +14,6 @@ extern i32 dup2(i32 from, i32 to);
 extern i32 close(i32 fd);
 extern i32 fileno(void* f);
 extern void* tmpfile();
-extern i32 poll(PollFd* fds, u64 n, i32 timeout);
-
-struct PollFd { i32 fd; i16 events; i16 revents; }
 
 struct Reader {
     u8[] buf;
@@ -39,8 +37,8 @@ struct Reader {
 
     bool pending() {
         if (this->pos < this->len) { return true; }
-        auto p = PollFd{ .fd = 0, .events = 1, .revents = 0 };
-        return poll(&p, 1, 0) > 0;
+        auto p = os::PollFd{ .fd = 0, .events = 1, .revents = 0 };
+        return os::poll(&p, 1, 0) > 0;
     }
 
     !str message(Allocator a) {

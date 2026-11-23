@@ -5,6 +5,8 @@ import "native.zk";
 import "resolve.zk";
 import "fmt.zk";
 import "loader.zk";
+import "cbuild.zk";
+import "cbind.zk";
 import "lsp.zk";
 import "project.zk";
 import "std/os" as osm;
@@ -21,6 +23,7 @@ usage:
   zark lsp                          language server on stdin/stdout
   zark ir    <file.zk>            print LLVM IR to stdout
   zark new   NAME                   create a project (zark.toml, src/main.zk)
+  zark cbind <header.h> [-I.. -D..] [-o out.zk] [--inline-c out.c]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
 ");
@@ -166,9 +169,64 @@ void restore_stack() {
     return ob.slice();
 }
 
+!i32 link_program(Allocator a, bool cxx, bool freestanding, str ll_path, bool use_native, str olevel, List<str> objs, List<str> extra, str exe) {
+    auto link = List<str>::init(a);
+    if (cxx) { link.push("clang++")?; } else { link.push("clang")?; }
+    if (freestanding) { link.append(["-nostdlib", "-static", "-ffreestanding"])?; }
+    if (ll_path.len > 0) {
+        if (use_native) {
+            link.append(["-no-pie", ll_path])?;
+        } else {
+            link.append([olevel, "-Wno-override-module", ll_path])?;
+        }
+    }
+    link.append(objs.slice())?;
+    link.append(extra.slice())?;
+    link.append(["-o", exe])?;
+    if (!freestanding) { link.append(["-lm", "-lpthread", "-ldl"])?; }
+    return run(a, link.slice());
+}
+
+!i32 run_exe(Allocator a, str exe, List<str> prog_args) {
+    auto argv = List<str>::init(a);
+    if (str_find_byte(exe, '/') < 0) {
+        auto eb = List<u8>::init(a);
+        sprint(&eb, "./{exe}")?;
+        argv.push(eb.slice())?;
+    } else {
+        argv.push(exe)?;
+    }
+    argv.append(prog_args.slice())?;
+    return run(a, argv.slice());
+}
+
+!i32 build_sources(Allocator a, CSplit* sp, str out_path, bool is_run, bool opt, List<str> prog_args) {
+    const auto cache = ".zark-cache";
+    _ = mkdir(".zark-cache", 493);
+    auto olevel = "-O0";
+    if (opt) { olevel = "-O2"; }
+    auto exe = out_path;
+    if (exe.len == 0) {
+        auto eb = List<u8>::init(a);
+        if (is_run) { sprint(&eb, "{cache}/{stem_of(sp.sources.get(0))}")?; } else { sprint(&eb, "{stem_of(sp.sources.get(0))}")?; }
+        exe = eb.slice();
+    }
+    auto needs_cxx = false;
+    const auto objs = compile_sources(a, cache, sp, olevel, &needs_cxx) catch { return 1; };
+    const auto lc = link_program(a, needs_cxx, false, "", false, olevel, objs, sp.link, exe)?;
+    if (lc != 0) {
+        eprintln("error: link failed");
+        return lc;
+    }
+    restore_stack();
+    if (is_run) { return run_exe(a, exe, prog_args); }
+    return 0;
+}
+
 !i32 compile(Allocator a) {
     grow_stack();
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
+    if (arg_count() >= 2 && arg(1) == "cbind") { return cbind_main(a); }
     if (arg_count() >= 2 && arg(1) == "new") {
         if (arg_count() != 3) {
             eprintln("usage: zark new NAME");
@@ -207,18 +265,20 @@ void restore_stack() {
             i32 worst = 0;
             const auto self = osm::exe_path(a)?;
             const auto files = project_test_files(a, proj)?;
+            if (files.len == 0) { println("no tests"); }
             for (auto f : files) {
                 println("== {pth::relative(a, f, pdir)?}");
                 auto full = List<str>::init(a);
                 full.append([self, "test"])?;
-                full.append(project_args(a, proj, cmd, argv)?.slice())?;
+                const auto pa = project_args(a, proj, cmd, argv) catch { return 1; };
+                full.append(pa.slice())?;
                 full.items[2] = f;
                 const auto code = run(a, full.slice())?;
                 if (code != 0) { worst = code; }
             }
             return worst;
         }
-        argv = project_args(a, proj, cmd, argv)?;
+        argv = project_args(a, proj, cmd, argv) catch { return 1; };
     } else {
         // a file inside a project still sees the project's dependencies
         for (auto x : argv) {
@@ -227,20 +287,25 @@ void restore_stack() {
                 const auto pdir = find_project(a, pth::dir(x)) catch "";
                 if (pdir.len > 0) {
                     const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
-                    auto more = List<str>::init(a);
-                    for (auto src : proj.sources) { more.push(src)?; }
-                    for (auto l : proj.libs) {
-                        auto b = List<u8>::init(a);
-                        sprint(&b, "-l{l}")?;
-                        more.push(b.slice())?;
-                    }
+                    const auto more = project_c_args(a, proj) catch { return 1; };
                     auto at = argv.index_of("--");
                     if (at < 0) { at = argv.len; }
-                    for (auto m : more) {
-                        if (argv.index_of(m) < 0) {
-                            argv.insert(at, m)?;
-                            at += 1;
+                    auto k = 0;
+                    while (k < more.len) {
+                        const auto m = more.get(k);
+                        auto n = 1;
+                        if ((joins_next(m) || pairs_next(m)) && k + 1 < more.len) { n = 2; }
+                        auto dup = false;
+                        for (auto p : 0..argv.len) {
+                            if (argv.get(p) == m && (n == 1 || (p + 1 < argv.len && argv.get(p + 1) == more.get(k + 1)))) { dup = true; }
                         }
+                        if (!dup) {
+                            for (auto q : 0..n) {
+                                argv.insert(at, more.get(k + q))?;
+                                at += 1;
+                            }
+                        }
+                        k += n;
                     }
                 }
                 break;
@@ -341,10 +406,13 @@ void restore_stack() {
         }
         i += 1;
     }
-    if (src_file.len == 0) {
+    auto sp = split_extras(a, extras)?;
+    if (src_file.len == 0 && !(in_project && sp.sources.len > 0)) {
         usage();
         return 1;
     }
+
+    if (src_file.len == 0) { return build_sources(a, &sp, out_path, is_run, opt, prog_args); }
 
     if (safety) { ovf = true; }
     const auto t0 = now_ns();
@@ -371,6 +439,7 @@ void restore_stack() {
         g.flush_diag();
         return 1;
     };
+    c_flags = sp.flags;
     loader.load_file(src_file, "") catch {
         g.flush_diag();
         return 1;
@@ -380,7 +449,7 @@ void restore_stack() {
         if (e != error.CompileFailed) { eprintln("error: internal compiler error: {e}"); }
         return 1;
     };
-    if (!g.fns.has("main") && !is_test && !is_ir && !freestanding) {
+    if (!g.fns.has("main") && !is_test && !is_ir && !freestanding && sp.sources.len == 0) {
         eprintln("error: {src_file} has no 'main' function");
         return 1;
     }
@@ -429,38 +498,13 @@ void restore_stack() {
     auto olevel = "-O0";
     if (opt) { olevel = "-O2"; }
 
-    auto objs = List<str>::init(a);
+    sp.sources.append(c_inline_sources.slice())?;
     auto needs_cxx = false;
-    for (auto x : extras) {
-        if (str_ends_with(x, ".o") || str_ends_with(x, ".a") || str_ends_with(x, ".so") || str_starts_with(x, "-l") || str_starts_with(x, "-L") || str_starts_with(x, "-Wl,") || str_starts_with(x, "-T") || x == "-nostdlib" || x == "-static") {
-            objs.push(x)?;
-            continue;
-        }
-        const auto is_cpp = str_ends_with(x, ".cpp") || str_ends_with(x, ".cc") || str_ends_with(x, ".cxx");
-        if (is_cpp) { needs_cxx = true; }
-        auto ob = List<u8>::init(a);
-        sprint(&ob, "{cache}/{base_of(x)}.o")?;
-        auto cc = "clang";
-        if (is_cpp) { cc = "clang++"; }
-        const auto code = run(a, [cc, olevel, "-c", x, "-o", ob.slice()])?;
-        if (code != 0) { return code; }
-        objs.push(ob.slice())?;
-    }
+    auto objs = compile_sources(a, cache, &sp, olevel, &needs_cxx) catch { return 1; };
 
     objs.push(rt_object(a, cache, freestanding)?)?;
 
-    auto link = List<str>::init(a);
-    if (needs_cxx) { link.push("clang++")?; } else { link.push("clang")?; }
-    if (freestanding) { link.append(["-nostdlib", "-static", "-ffreestanding"])?; }
-    if (use_native) {
-        link.append(["-no-pie", ll_path])?;
-    } else {
-        link.append([olevel, "-Wno-override-module", ll_path])?;
-    }
-    link.append(objs.slice())?;
-    link.append(["-o", exe])?;
-    if (!freestanding) { link.append(["-lm", "-lpthread", "-ldl"])?; }
-    const auto lc = run(a, link.slice())?;
+    const auto lc = link_program(a, needs_cxx, freestanding, ll_path, use_native, olevel, objs, sp.link, exe)?;
     if (lc != 0) {
         eprintln("error: link failed (input kept at {ll_path})");
         return lc;
@@ -475,18 +519,7 @@ void restore_stack() {
     restore_stack();
     if (is_test) { return run_tests(a, exe, g.tests); }
 
-    if (is_run) {
-        auto argv = List<str>::init(a);
-        if (str_find_byte(exe, '/') < 0) {
-            auto eb = List<u8>::init(a);
-            sprint(&eb, "./{exe}")?;
-            argv.push(eb.slice())?;
-        } else {
-            argv.push(exe)?;
-        }
-        argv.append(prog_args.slice())?;
-        return run(a, argv.slice());
-    }
+    if (is_run) { return run_exe(a, exe, prog_args); }
     return 0;
 }
 

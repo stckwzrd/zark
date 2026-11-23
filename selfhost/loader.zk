@@ -2,6 +2,7 @@
 
 import "gen_fmt.zk";
 import "resolve.zk";
+import "cbind.zk";
 
 const auto PRELUDE = embed("../std/std.zk");
 const auto RT_C = embed("../std/rt.c");
@@ -82,6 +83,7 @@ struct Loader {
     Map<str> seen;
     Map<str> prefixes;
     Map<str> overrides;
+    Map<str> ctypes;
 
     !void load_source(str src, str path, str prefix) {
         auto toks = tokenize(this->a, src, path)?;
@@ -89,11 +91,21 @@ struct Loader {
         const auto decls = p.parse_file()?;
         for (auto c : p.cts) { this->g.cts.put(c.name, c)?; }
         for (auto d : decls) { if (d.k == .Check) { this->g.ct_checks.push(d.ct)?; } }
+        if (prefix.len == 0 && c_headers.len > 0 && c_headers.has(path)) { this->claim_c_types(decls, c_headers.get(path)?)?; }
         const auto dir = dir_of(path);
         auto renames = List<str>::init(this->a);
         for (auto d : decls) {
             if (d.k == .Import) {
-                const auto actual = this->load_file(import_target(this->a, dir, d.path)?, d.alias)?;
+                auto target = "";
+                if (is_c_header(d.path)) {
+                    target = cbind_import(this->a, d.path, dir) catch |e| {
+                        if (e != error.CompileFailed) { eprintln("error: cannot bind {d.path}: {e}"); }
+                        return error.CompileFailed;
+                    };
+                } else {
+                    target = import_target(this->a, dir, d.path)?;
+                }
+                const auto actual = this->load_file(target, d.alias)?;
                 if (d.alias.len > 0 && actual != d.alias) {
                     renames.push(d.alias)?;
                     renames.push(actual)?;
@@ -109,6 +121,21 @@ struct Loader {
         this->g.add_decls(decls, path)?;
     }
 
+    !void claim_c_types(List<Decl> decls, str header) {
+        if (this->ctypes.a.alloc_fn == null) { this->ctypes = Map<str>::init(this->a); }
+        for (auto d : decls) {
+            auto name = "";
+            if (d.k == .Struct) { name = d.s.name; }
+            if (d.k == .Alias) { name = d.path; }
+            if (name.len == 0) { continue; }
+            if (this->ctypes.has(name)) {
+                eprintln("error: C headers '{this->ctypes.get(name)?}' and '{header}' both declare '{name}' (from a header they both include); importing both is not supported yet, import the one header that includes both");
+                return error.CompileFailed;
+            }
+            this->ctypes.put(name, header)?;
+        }
+    }
+
     /// loads a file once; returns the name its declarations live under (the first import's)
     !str load_file(str path, str prefix) {
         auto key = path;
@@ -116,13 +143,18 @@ struct Loader {
         if (this->seen.has(key)) {
             const auto old = this->seen.get(key)?;
             if (old != prefix && prefix.len == 0) {
+                if (c_headers.len > 0 && c_headers.has(path)) {
+                    const auto h = c_headers.get(path)?;
+                    eprintln("error: '{h}' is imported as '{old}' elsewhere, so a plain import cannot see its names; write `import \"{h}\" as {old};`");
+                    return error.CompileFailed;
+                }
                 eprintln("error: '{path}' is imported as '{old}' elsewhere, so a plain import cannot see its names; write `import \"...\" as {old};`");
                 return error.CompileFailed;
             }
             return old;
         }
         if (prefix.len > 0 && this->prefixes.has(prefix)) {
-            eprintln("error: the name '{prefix}' is already used for '{this->prefixes.get(prefix)?}'; pick another name for '{path}'");
+            eprintln("error: the name '{prefix}' is already used for '{c_header_name(this->prefixes.get(prefix)?)}'; pick another name for '{c_header_name(path)}'");
             return error.CompileFailed;
         }
         this->seen.put(key, prefix)?;

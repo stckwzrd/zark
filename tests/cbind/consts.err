@@ -1,0 +1,18 @@
+skipped Bad1: enum value not evaluated
+skipped uses_bad: enum value not evaluated
+skipped BV3: enum value not evaluated
+skipped Al: aligned attribute
+skipped Clash: enum value range
+skipped CHANGED: redefined
+skipped USES_CHANGED: not a constant
+skipped TWICE: function-like macro
+skipped EMPTY: empty macro
+skipped CALL: not a constant
+skipped SELF: not a constant
+skipped DIV0: not a constant
+skipped SHNEG: not a constant
+skipped SHBIG: not a constant
+skipped OVF: not a constant
+skipped FLT: not a constant
+skipped UNKNOWN: not a constant
+skipped LSTR: not a constant

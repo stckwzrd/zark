@@ -1,0 +1,5 @@
+struct E { u64[3] storage; }
+struct F { u64[4] storage; }
+struct G__anon0 { u8 a; }
+struct G__anon1 { i32 b; }
+struct G { G__anon0 x; G__anon1 y; }

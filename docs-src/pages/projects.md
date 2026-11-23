@@ -30,6 +30,7 @@ lib = "src/lib.zk"        # what `import "app"` loads in projects that depend on
 [build]
 sources = ["c/fast.c"]      # C or C++ files compiled and linked in
 libs = ["ssl", "m"]         # linked as -lssl -lm
+include = ["c/include"]     # -I for C sources and imported headers; also defines, std, cflags, lib-dirs, pkg-config (see C interop)
 flags = ["-O"]              # default flags; the command line adds to them
 out = "build/app"           # where zark build writes the program (default build/NAME)
 

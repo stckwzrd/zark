@@ -30,6 +30,7 @@
 <span class="line"><span>[build]</span></span>
 <span class="line"><span>sources = ["c/fast.c"]      # C or C++ files compiled and linked in</span></span>
 <span class="line"><span>libs = ["ssl", "m"]         # linked as -lssl -lm</span></span>
+<span class="line"><span>include = ["c/include"]     # -I for C sources and imported headers; also defines, std, cflags, lib-dirs, pkg-config (see C interop)</span></span>
 <span class="line"><span>flags = ["-O"]              # default flags; the command line adds to them</span></span>
 <span class="line"><span>out = "build/app"           # where zark build writes the program (default build/NAME)</span></span>
 <span class="line"><span></span></span>

@@ -1,0 +1,6 @@
+const auto type_ = 5;
+type E = i32;
+const auto match_ = 0;
+type fn_ = i32;
+struct i32_ { i32 a; }
+struct bool_ { u8 c; }

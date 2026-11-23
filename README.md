@@ -13,6 +13,11 @@
 
 A small systems language in the spirit of Zig, with less ceremony: native speed via LLVM, no hidden allocations (explicit `Allocator`), error unions with `?`, `defer`/`errdefer`, generics, tagged unions + `match`, function pointers, string interpolation without allocation, and direct C/C++ linking.
 
+> **Status: alpha.** Zark is pre-1.0: the language, the standard library and
+> `zark.toml` can change between releases. The native backend targets Linux
+> x86-64; macOS, arm64 and Windows/WSL use the LLVM path. C/C++ bindings
+> (`import "x.h"`, `zark cbind`) and the package manager are experimental.
+
 ```zark
 struct Point {
     f64 x;
@@ -132,6 +137,8 @@ extern f64 vec3_dot(Vec3* a, Vec3* b);
 ```
 `zark run main.zk mathlib.c engine.cpp` compiles everything and links with `clang++` automatically. C++ is reached through an `extern "C"` facade: see `examples/interop/`. String literals pass as `const char*` directly.
 
+C headers need no hand-written declarations: `import "SDL2/SDL.h" as sdl;` binds the functions, structs, unions, enums, constant macros and static inline functions of a header (`zark cbind header.h` prints the same bindings as a file). A `zark.toml` sets include directories, defines, the C/C++ standard, `pkg-config` packages and the C/C++ sources; objects are cached by content and compiled in parallel. `examples/imgui/` drives Dear ImGui (through cimgui) and SDL2 this way. Details and limits are in SPEC.md section 8.
+
 ## Drivers and bare metal
 
 `volatile` registers and fields, `packed struct`, `Port`, `Cpu`, `Bits`, `Atomic` and `Spinlock` in the prelude, inline `asm<T>("...", "...", args)`, and `--freestanding` builds without libc. The same code runs on the native and the LLVM backend. `examples/baremetal/` is an x86-64 kernel written in Zark that boots in QEMU (`examples/baremetal/run.sh`): serial output through `Fmt`, an IDT built from a `packed struct`, an exception handled in Zark.
@@ -236,3 +243,17 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [ ] `@cImport` via libclang
 - [x] `async`/`await` as state machines with a single-threaded executor (`std/async`); a multi-threaded executor and `join`/`select` are not done
 - [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `zark test`, `zark fmt`
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in Zark by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or
+conditions.

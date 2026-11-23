@@ -1,0 +1,5 @@
+skipped vt: extern variable
+skipped va: extern variable
+skipped match: Zark keyword
+skipped type: Zark keyword
+skipped usize: Zark type name

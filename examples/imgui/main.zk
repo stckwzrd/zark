@@ -1,5 +1,6 @@
-import "sdl.zk";
-import "imgui.zk";
+import "SDL2/SDL.h" as sdl;
+import "GL/gl.h" as gl;
+import "cimgui_all.h" as ig;
 
 struct App {
     bool show_demo;
@@ -19,67 +20,67 @@ f32 wave(void* data, i32 i) {
 
 void panel(App* app, f32 dt) {
     u8[96] line;
-    igSetNextWindowPos(ImVec2{ .x = 24.0, .y = 24.0 }, 4, ImVec2{ .x = 0.0, .y = 0.0 });
-    igSetNextWindowSize(ImVec2{ .x = 440.0, .y = 0.0 }, 4);
-    igBegin("Zark + Dear ImGui", null, 0);
-    igText("Dear ImGui %s (C++) driven from Zark", igGetVersion());
-    igText("%.1f FPS, frame %.2f ms", (1.0 / dt as f64), dt as f64 * 1000.0);
+    ig::igSetNextWindowPos(ig::ImVec2{ .x = 24.0, .y = 24.0 }, ig::ImGuiCond_FirstUseEver, ig::ImVec2{ .x = 0.0, .y = 0.0 });
+    ig::igSetNextWindowSize(ig::ImVec2{ .x = 440.0, .y = 0.0 }, ig::ImGuiCond_FirstUseEver);
+    ig::igBegin("Zark + Dear ImGui", null, 0);
+    ig::igText("Dear ImGui %s (C++) driven from Zark", ig::igGetVersion());
+    ig::igText("%.1f FPS, frame %.2f ms", (1.0 / dt as f64), dt as f64 * 1000.0);
 
-    igSeparatorText("Widgets");
-    if (igButton("Click me", ImVec2{ .x = 0.0, .y = 0.0 })) { app->clicks += 1; }
-    igSameLine(0.0, 8.0);
+    ig::igSeparatorText("Widgets");
+    if (ig::igButton("Click me", ig::ImVec2{ .x = 0.0, .y = 0.0 })) { app->clicks += 1; }
+    ig::igSameLine(0.0, 8.0);
     const auto label = bprint(line[..], "clicked {app->clicks} times") catch "";
-    igText("%s", label.ptr);
-    igInputText("name", &app->name[0], 64, 0, null, null);
+    ig::igText("%s", label.ptr);
+    ig::igInputText("name", &app->name[0], 64, 0, null, null);
     const auto hello = bprint(line[..], "hello, {cstr(&app->name[0])}!") catch "";
-    igText("%s", hello.ptr);
+    ig::igText("%s", hello.ptr);
 
-    igSeparatorText("Plot driven by a Zark callback");
-    igSliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
-    igSliderFloat("amplitude", &app->amp, 0.1, 1.0, "%.2f", 0);
-    igCheckbox("pause", &app->paused);
-    igPlotLines_FnFloatPtr("wave", wave, app, 120, 0, null, -1.0, 1.0, ImVec2{ .x = 0.0, .y = 80.0 });
-    igProgressBar((app->phase / 6.2831853) as f32, ImVec2{ .x = -1.0, .y = 0.0 }, null);
+    ig::igSeparatorText("Plot driven by a Zark callback");
+    ig::igSliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
+    ig::igSliderFloat("amplitude", &app->amp, 0.1, 1.0, "%.2f", 0);
+    ig::igCheckbox("pause", &app->paused);
+    ig::igPlotLines_FnFloatPtr("wave", wave, app, 120, 0, null, -1.0, 1.0, ig::ImVec2{ .x = 0.0, .y = 80.0 });
+    ig::igProgressBar((app->phase / 6.2831853) as f32, ig::ImVec2{ .x = -1.0, .y = 0.0 }, null);
 
-    igSeparatorText("Window");
-    igColorEdit3("background", &app->clear[0], 0);
-    igCheckbox("show the ImGui demo window", &app->show_demo);
-    igEnd();
-    if (app->show_demo) { igShowDemoWindow(&app->show_demo); }
+    ig::igSeparatorText("Window");
+    ig::igColorEdit3("background", &app->clear[0], 0);
+    ig::igCheckbox("show the ImGui demo window", &app->show_demo);
+    ig::igEnd();
+    if (app->show_demo) { ig::igShowDemoWindow(&app->show_demo); }
 }
 
 !void main() {
-    if (SDL_Init(0x20) != 0) {
-        eprintln("SDL_Init: {cstr(SDL_GetError())}");
+    if (sdl::SDL_Init(sdl::SDL_INIT_VIDEO) != 0) {
+        eprintln("SDL_Init: {cstr(sdl::SDL_GetError())}");
         return error.SdlFailed;
     }
-    defer SDL_Quit();
-    SDL_GL_SetAttribute(21, 1);
-    SDL_GL_SetAttribute(17, 3);
-    SDL_GL_SetAttribute(18, 3);
-    SDL_GL_SetAttribute(5, 1);
-    const auto win = SDL_CreateWindow("Zark + Dear ImGui", 0x2FFF0000, 0x2FFF0000, 1100, 700, 0x2 | 0x20 | 0x2000);
+    defer sdl::SDL_Quit();
+    sdl::SDL_GL_SetAttribute(sdl::SDL_GL_CONTEXT_PROFILE_MASK, sdl::SDL_GL_CONTEXT_PROFILE_CORE);
+    sdl::SDL_GL_SetAttribute(sdl::SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    sdl::SDL_GL_SetAttribute(sdl::SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    sdl::SDL_GL_SetAttribute(sdl::SDL_GL_DOUBLEBUFFER, 1);
+    const auto win = sdl::SDL_CreateWindow("Zark + Dear ImGui", sdl::SDL_WINDOWPOS_CENTERED_MASK, sdl::SDL_WINDOWPOS_CENTERED_MASK, 1100, 700, sdl::SDL_WINDOW_OPENGL | sdl::SDL_WINDOW_RESIZABLE | sdl::SDL_WINDOW_ALLOW_HIGHDPI);
     if (win == null) {
-        eprintln("SDL_CreateWindow: {cstr(SDL_GetError())}");
+        eprintln("SDL_CreateWindow: {cstr(sdl::SDL_GetError())}");
         return error.SdlFailed;
     }
-    defer SDL_DestroyWindow(win);
-    const auto gl = SDL_GL_CreateContext(win);
-    if (gl == null) {
-        eprintln("SDL_GL_CreateContext: {cstr(SDL_GetError())}");
+    defer sdl::SDL_DestroyWindow(win);
+    const auto ctx = sdl::SDL_GL_CreateContext(win);
+    if (ctx == null) {
+        eprintln("SDL_GL_CreateContext: {cstr(sdl::SDL_GetError())}");
         return error.SdlFailed;
     }
-    defer SDL_GL_DeleteContext(gl);
-    SDL_GL_SetSwapInterval(1);
+    defer sdl::SDL_GL_DeleteContext(ctx);
+    sdl::SDL_GL_SetSwapInterval(1);
 
-    igCreateContext(null);
-    const auto io = igGetIO_Nil();
+    ig::igCreateContext(null);
+    const auto io = ig::igGetIO_Nil();
     io->IniFilename = null;
-    igStyleColorsDark(null);
-    ImGui_ImplSDL2_InitForOpenGL(win, gl);
-    ImGui_ImplOpenGL3_Init("#version 130");
-    defer ImGui_ImplOpenGL3_Shutdown();
-    defer ImGui_ImplSDL2_Shutdown();
+    ig::igStyleColorsDark(null);
+    ig::ImGui_ImplSDL2_InitForOpenGL(win as *ig::SDL_Window, ctx);
+    ig::ImGui_ImplOpenGL3_Init("#version 130");
+    defer ig::ImGui_ImplOpenGL3_Shutdown();
+    defer ig::ImGui_ImplSDL2_Shutdown();
 
     auto app = App{ .freq = 1.0, .amp = 0.8, .clear = [0.08, 0.09, 0.12] };
     app.name[0] = 'Z';
@@ -93,28 +94,28 @@ void panel(App* app, f32 dt) {
     auto frames = 0;
     auto running = true;
     while (running) {
-        auto ev = SdlEvent{};
-        while (SDL_PollEvent(&ev) != 0) {
-            ImGui_ImplSDL2_ProcessEvent(&ev);
-            if (ev.kind == 0x100) { running = false; }
+        auto ev = sdl::SDL_Event{};
+        while (sdl::SDL_PollEvent(&ev) != 0) {
+            ig::ImGui_ImplSDL2_ProcessEvent(&ev as *ig::SDL_Event);
+            if (*ev.as_type() == sdl::SDL_QUIT) { running = false; }
         }
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
-        igNewFrame();
+        ig::ImGui_ImplOpenGL3_NewFrame();
+        ig::ImGui_ImplSDL2_NewFrame();
+        ig::igNewFrame();
         const auto dt = io->DeltaTime;
         if (!app.paused) { app.phase += dt as f64 * app.freq as f64 * 2.0; }
         if (app.phase > 6.2831853) { app.phase -= 6.2831853; }
         panel(&app, dt);
-        igRender();
+        ig::igRender();
 
         i32 w = 0;
         i32 h = 0;
-        SDL_GL_GetDrawableSize(win, &w, &h);
-        glViewport(0, 0, w, h);
-        glClearColor(app.clear[0], app.clear[1], app.clear[2], 1.0);
-        glClear(0x4000);
-        ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
-        SDL_GL_SwapWindow(win);
+        sdl::SDL_GL_GetDrawableSize(win, &w, &h);
+        gl::glViewport(0, 0, w, h);
+        gl::glClearColor(app.clear[0], app.clear[1], app.clear[2], 1.0);
+        gl::glClear(gl::GL_COLOR_BUFFER_BIT);
+        ig::ImGui_ImplOpenGL3_RenderDrawData(ig::igGetDrawData());
+        sdl::SDL_GL_SwapWindow(win);
 
         frames += 1;
         if (max_frames >= 0 && frames >= max_frames) { running = false; }

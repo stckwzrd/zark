@@ -156,7 +156,6 @@ Known directions of development (more in `ROADMAP.md`):
 - **The quality of the backend's code.** Debug builds are roughly three times slower than gcc -O0. Next: SSA without `alloca` in the frontend and an in-memory internal representation instead of the textual IR.
 - **An own linker** and a runtime without libc on Linux system calls: so that pure Zark programs build without external tools.
 - **More `comptime`:** reflection over struct fields and generated declarations (expressions and static assertions are done).
-- **`@cImport`:** parsing C headers and passing structs by value across the C boundary.
 - **New platforms:** aarch64 and Windows.
 - **Tools:** DWARF for local variables and types (the line table is already there).
 

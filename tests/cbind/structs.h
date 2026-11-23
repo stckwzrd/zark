@@ -1,0 +1,22 @@
+typedef struct P P;
+struct node { struct node* next; int v; };
+typedef struct W W;
+struct P { int x; double y; };
+struct shape {
+    int kind;
+    struct { float x; float y; } pos;
+    struct { int w; struct { char a; char b; } in; } size;
+    char name[16];
+    int grid[2][3];
+    P points[4];
+    const char* label;
+    int type;
+};
+struct ev { int t; struct { int x; int y; }; };
+typedef struct { int a; int b; } pair_t;
+typedef struct pt { short x, y; } pt_t, *pt_p;
+struct holder { P* p; W* w; struct node** list; void (*on)(struct holder*); };
+struct flex { int n; int data[]; };
+struct flex2 { char n; double data[]; };
+P make_p(int x, double y);
+void walk(struct node* n, struct shape* s);
