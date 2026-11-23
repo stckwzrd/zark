@@ -84,7 +84,7 @@ struct Project {
         this->by_path.put(path, fi)?;
         const auto dir = dir_of(path);
         for (auto d : fi.decls) {
-            if (d.k != .Import) { continue };
+            if (d.k != .Import || is_c_header(d.path)) { continue };
             const auto full = import_target(this->a, dir, d.path)?;
             this->load(full, d.alias)?;
         }

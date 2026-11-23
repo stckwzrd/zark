@@ -1,0 +1,6 @@
+import "lib.h" as lib;
+
+void main() {
+    const auto p = lib::pt_make(3, 1.5);
+    println("{p.x} {p.y} {lib::pt_sum(p)}");
+}

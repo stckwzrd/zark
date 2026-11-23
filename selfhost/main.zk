@@ -427,6 +427,7 @@ void restore_stack() {
         g.flush_diag();
         return 1;
     };
+    c_flags = sp.flags;
     loader.load_file(src_file, "") catch {
         g.flush_diag();
         return 1;
@@ -485,6 +486,7 @@ void restore_stack() {
     auto olevel = "-O0";
     if (opt) { olevel = "-O2"; }
 
+    sp.sources.append(c_inline_sources.slice())?;
     auto needs_cxx = false;
     auto objs = compile_sources(a, cache, &sp, olevel, &needs_cxx) catch { return 1; };
 

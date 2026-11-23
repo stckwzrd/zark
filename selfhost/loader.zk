@@ -2,6 +2,7 @@
 
 import "gen_fmt.zk";
 import "resolve.zk";
+import "cbind.zk";
 
 const auto PRELUDE = embed("../std/std.zk");
 const auto RT_C = embed("../std/rt.c");
@@ -93,7 +94,16 @@ struct Loader {
         auto renames = List<str>::init(this->a);
         for (auto d : decls) {
             if (d.k == .Import) {
-                const auto actual = this->load_file(import_target(this->a, dir, d.path)?, d.alias)?;
+                auto target = "";
+                if (is_c_header(d.path)) {
+                    target = cbind_import(this->a, d.path, dir) catch |e| {
+                        if (e != error.CompileFailed) { eprintln("error: cannot bind {d.path}: {e}"); }
+                        return error.CompileFailed;
+                    };
+                } else {
+                    target = import_target(this->a, dir, d.path)?;
+                }
+                const auto actual = this->load_file(target, d.alias)?;
                 if (d.alias.len > 0 && actual != d.alias) {
                     renames.push(d.alias)?;
                     renames.push(actual)?;
@@ -116,13 +126,18 @@ struct Loader {
         if (this->seen.has(key)) {
             const auto old = this->seen.get(key)?;
             if (old != prefix && prefix.len == 0) {
+                if (c_headers.len > 0 && c_headers.has(path)) {
+                    const auto h = c_headers.get(path)?;
+                    eprintln("error: '{h}' is imported as '{old}' elsewhere, so a plain import cannot see its names; write `import \"{h}\" as {old};`");
+                    return error.CompileFailed;
+                }
                 eprintln("error: '{path}' is imported as '{old}' elsewhere, so a plain import cannot see its names; write `import \"...\" as {old};`");
                 return error.CompileFailed;
             }
             return old;
         }
         if (prefix.len > 0 && this->prefixes.has(prefix)) {
-            eprintln("error: the name '{prefix}' is already used for '{this->prefixes.get(prefix)?}'; pick another name for '{path}'");
+            eprintln("error: the name '{prefix}' is already used for '{c_header_name(this->prefixes.get(prefix)?)}'; pick another name for '{c_header_name(path)}'");
             return error.CompileFailed;
         }
         this->seen.put(key, prefix)?;
