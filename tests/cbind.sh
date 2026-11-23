@@ -8,7 +8,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig; do
+for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig inline; do
     flags=""
     [ "$name" = shorten ] && flags="-fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -121,6 +121,39 @@ void main() {
 EOF
 out=$("$ZARK" run use_flex2.zk 2>&1) || fail "flex: run: $out"
 [ "$out" = "8 8 8 8 8 8 16 8 16 8 8 8" ] || fail "flex: got: $out"
+
+"$ZARK" cbind tests/cbind/inline.h --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
+sed "s|@DIR@|$(realpath "$T")|" tests/cbind/inline.c.out > inline.c.exp
+diff -u inline.c.exp inline.c || fail "inline: C file differs"
+clang -c -Wall -Wextra -Wno-unused-function -Wno-deprecated-non-prototype -Werror inline.c -o inline.o || fail "inline: C file does not compile cleanly"
+cat > use_inline2.zk <<'EOF'
+import "inline.zk";
+i32 neg(i32 x) { return -x; }
+void main() {
+    pt p;
+    p.x = 1;
+    p.y = 2;
+    pt_move(&p, 3, 4);
+    i32[4] arr;
+    arr[0] = 1;
+    arr[1] = 2;
+    arr[2] = 3;
+    arr[3] = 4;
+    const auto s = "hello".ptr;
+    noop();
+    println("{add(2, 3)} {half(5.0)} {nextp(&arr[0]) == &arr[1]} {slen(s)} {slen(skip(s, 2))} {next_color(BLUE)} {is_even(4)} {is_even(3)} {mask(255, 4)}");
+    println("{p.x} {p.y} {forced(1)} {apply(neg, 5)} {sum4(&arr[0])} {quad(3)} {match_(3)} {later(1)} {twice(21)} {sq(5)} {ident(7)}");
+}
+EOF
+out=$("$ZARK" run use_inline2.zk inline.c 2> run.err) || fail "inline: run: $(cat run.err)"
+[ "$out" = "$(printf '5 2.5 true 5 3 0 true false 15\n4 6 7 -5 10 12 -3 101 42 25 7')" ] || fail "inline: got: $out"
+if [ "$(uname -m)" = x86_64 ]; then
+    printf 'import "inline.zk";\nvoid main() { const auto p = pt_make(8, 9); println("{p.x} {p.y}"); }\n' > use_inline3.zk
+    for f in --native --llvm; do
+        out=$("$ZARK" run $f use_inline3.zk inline.c 2> run.err) || fail "inline $f: run: $(cat run.err)"
+        [ "$out" = "8 9" ] || fail "inline $f: got: $out"
+    done
+fi
 
 mkdir -p sysinc
 printf 'struct inner { int a; };\n#define INNER 1\nint unused_inner(void);\n' > sysinc/inner.h

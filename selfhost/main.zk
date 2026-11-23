@@ -23,7 +23,7 @@ usage:
   zark lsp                          language server on stdin/stdout
   zark ir    <file.zk>            print LLVM IR to stdout
   zark new   NAME                   create a project (zark.toml, src/main.zk)
-  zark cbind <header.h> [-I.. -D..] [-o out.zk]  print Zark bindings for a C header
+  zark cbind <header.h> [-I.. -D..] [-o out.zk] [--inline-c out.c]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
 ");

@@ -1,0 +1,10 @@
+skipped sq: function-like macro
+skipped myint: not a constant
+skipped vsum: variadic inline function
+skipped ld: long double
+skipped mixit: opaque record by value
+skipped applyp: record by value in function pointer
+skipped sumn: parameter used in a type
+skipped kr: cannot parse
+skipped ?: cannot parse
+skipped plain_static: static function
