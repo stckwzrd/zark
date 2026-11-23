@@ -1,5 +1,5 @@
-struct __sigset_t { u64[16] __val; }
-struct __jmp_buf_tag { i64[8] __jmpbuf; i32 __mask_was_saved; __sigset_t __saved_mask; }
+struct jbt { i64[8] b; i32 m; }
+type jb_t = jbt[1];
 type vec3 = f32[3];
 type t0 = i32;
 type t1 = t0;
@@ -7,7 +7,7 @@ type t2 = t1*;
 type t3 = t2[4];
 struct cbs { fn(i32) -> i32 cb; *fn(i32) -> i32 cbp; vec3 v; }
 extern void usev(f32* v);
-extern i32 usej(__jmp_buf_tag* b);
+extern i32 usej(jbt* b);
 extern void tcf(t2* arr, t1 v);
 extern void takefn(fn(i32) -> i32 f, fn(i32) -> i32 g, fn(i32) -> i32 h);
 extern fn(i32) -> i32 retfn();
