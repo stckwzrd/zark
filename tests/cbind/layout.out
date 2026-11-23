@@ -47,3 +47,7 @@ extern i32 takeald(ald a);
 struct a3 { u16[5] storage; u8* as_c() { void* p = this; return p; } i8[9]* as_arr() { void* p = this; return p; } }
 align(16) struct fv2 { u64[2] storage; }
 struct fv3 { fv2 in; }
+struct cxs { u64[2] storage; }
+struct hs { u16[2] storage; }
+align(16) struct lds { u64[4] storage; }
+struct fa2 { u32[2] storage; }

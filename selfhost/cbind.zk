@@ -1293,7 +1293,11 @@ struct CParser {
             if (f.name.len == 0) { return error.ParseFailed; }
             if (s.is_typedef) {
                 if (this->is_vol(f.ty, s)) { this->vol_tds.put(f.name, true)?; }
-                if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
+                if (this->attr_why.len > 0) {
+                    const auto orig = f.ty;
+                    f.ty = this->bad(this->attr_why)?;
+                    if (this->attr_why == "aligned attribute") { f.ty.elem = orig; }
+                }
                 this->typedef_decl(f, s.ty, rel)?;
             } else {
                 const auto rt = this->resolve(f.ty);
@@ -2564,6 +2568,10 @@ struct CEmit {
                 if (r.n > 4) { r.no = true; }
                 if (!r.no && !r.unk && (r.base == 0 || (r.n - n0) * r.base != rz.size)) { r.no = true; }
             }
+            .Bad => {
+                if (t.elem != null) { return this->hfa(r, t.elem, z); }
+                if (t.name == "__int128") { r.no = true; } else { r.unk = true; }
+            }
             _ => { r.no = true; }
         }
     }
@@ -2574,7 +2582,7 @@ struct CEmit {
             x = this->typedefs.get_or(x.name, null);
             if (x == null) { return false; }
         }
-        if (x.k == .Bad) { return x.name == "vector_size attribute"; }
+        if (x.k == .Bad) { return x.name == "vector_size attribute" || (x.elem != null && this->has_vec(x.elem)); }
         if (x.k == .Array) { return this->has_vec(x.elem); }
         const auto d = this->rec_of(x);
         if (d == null) { return false; }
