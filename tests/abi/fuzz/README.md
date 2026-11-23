@@ -68,6 +68,28 @@ results (`P`, `F2`, `D2`, `M` in registers, `Big` through `sret`), promoted
 variable part, including one that no longer fits in the registers. They were
 red while the fixed part of a variadic call used the internal ABI.
 
+The arm64 cases (`*_f1`, `*_f4`, `*_d1`, `*_d3`, `*_d4`, `*_nh`, `*_nd`, `*_ha`,
+`*_hda`, `*_he`, `*_hz`, `*_f5`, `*_fd`, `*_al16`, `*_al16f`, `*_b17`, `*_b32`,
+`*_s5`, `*_s6`, `*_s7`, `*_spill_hfa`, `*_spill_fp`, `*_spill_int`,
+`*_al16_odd`, `*_hfa_mix` and the `variadic_*hfa*`, `variadic_*al16`,
+`variadic_var_arm`, `variadic_ret_d4`, `variadic_ret_s6` cases) cover HFAs of
+1 to 4 floats or doubles, nested and with array members, an empty member and a
+zero-length array, non-HFA mixed and 16-aligned structs, 17 to 32 byte structs,
+3 to 7 byte structs and spills past 8 general and 8 vector registers. They run
+everywhere; on arm64 hosts `tests/run.sh` runs the whole fuzzer with
+`--backends llvm,O` (the native backend exists only on Linux x86-64 and is
+skipped elsewhere).
+
+## IR oracle
+
+`--ir-oracle aarch64,arm64-apple` builds every fixed (and `--cases` random)
+signature into one Zark and one C file, runs `zark ir --arch aarch64` and
+`clang --target=aarch64-linux-gnu` / `arm64-apple-macosx -O0` and compares
+the `extern` declaration, the direct call, the indirect call, the `export`
+thunk and the function pointer target: parameter and result types (results
+flattened to their leaf types) and the `sret`, `byval`, `signext`, `zeroext`,
+`inreg` and `alignstack` attributes. `tests/run.sh` runs it on Linux x86-64.
+
 ## Layout check
 
 The `layout` case builds one program per backend in which C prints
@@ -98,7 +120,6 @@ When a fix lands, remove the corresponding `(case, backend)` pair from
 
 ## Not yet covered
 
-- Bitfields, packed and over-aligned structs.
-- AArch64. The classifier and the CI matrix are step 4.
+- Bitfields, packed structs and alignment above 16.
 - Random signatures for `indirect`/`export`/`callback`; random mode still
   generates direct calls only.

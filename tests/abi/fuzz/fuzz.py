@@ -40,7 +40,34 @@ STRUCTS = {
     "SU": [("u", "UD")],
     "SUA": [("a", "UFF[1]")],
     "SUX": [("x", "i32"), ("u", "UFD"), ("y", "f32")],
+    "F1": [("x", "f32")],
+    "F4": [("x", "f32"), ("y", "f32"), ("z", "f32"), ("w", "f32")],
+    "D1": [("x", "f64")],
+    "D3": [("x", "f64"), ("y", "f64"), ("z", "f64")],
+    "D4": [("x", "f64"), ("y", "f64"), ("z", "f64"), ("w", "f64")],
+    "NH": [("p", "F2"), ("z", "f32")],
+    "ND": [("a", "D2"), ("b", "D2")],
+    "HA": [("v", "f32[3]")],
+    "HDA": [("a", "f64"), ("v", "f64[2]")],
+    "HE": [("a", "f32"), ("e", "E"), ("b", "f32")],
+    "HZ": [("a", "f32"), ("b", "f32"), ("z", "f32[0]")],
+    "F5": [("v", "f32[5]")],
+    "FD": [("a", "f32"), ("b", "f64")],
+    "AL16": [("a", "i64"), ("b", "i64")],
+    "AL16F": [("v", "f32[4]")],
+    "AL16N": [("x", "AL16")],
+    "AL16FN": [("v", "AL16F")],
+    "B17": [("a", "u8[17]")],
+    "B32": [("a", "i64"), ("b", "i64"), ("c", "i64"), ("d", "i64")],
+    "S5": [("a", "u8[5]")],
+    "S6": [("a", "i16"), ("b", "i16"), ("c", "i16")],
+    "S7": [("a", "u8[7]")],
 }
+
+ALIGNED = {"AL16": 16, "AL16F": 16}
+
+ARM = ["F1", "F4", "D1", "D3", "D4", "NH", "ND", "HA", "HDA", "HE", "HZ", "F5", "FD", "AL16", "AL16F",
+       "AL16N", "AL16FN", "B17", "B32", "S5", "S6", "S7"]
 
 UNIONS = {
     "UD": [("A", "f64")],
@@ -55,7 +82,7 @@ UNIONS = {
 }
 
 ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3", "E",
-         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUA", "SUX"]
+         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUA", "SUX"] + ARM
 
 SIZES = {"i8": 1, "u8": 1, "bool": 1, "i16": 2, "u16": 2, "i32": 4, "u32": 4, "f32": 4, "i64": 8, "u64": 8, "f64": 8}
 
@@ -99,6 +126,20 @@ QUICK = {
     "variadic_promote",
     "variadic_var_structs",
     "variadic_var_spill",
+    "direct_hfa_mix",
+    "direct_d4",
+    "direct_spill_fp",
+    "direct_al16_odd",
+    "indirect_nh_ret",
+    "indirect_he_ret",
+    "export_al16f",
+    "export_s7_ret",
+    "export_b17",
+    "callback_spill_hfa",
+    "callback_ha_ret",
+    "callback_hz",
+    "variadic_fix_hfa",
+    "variadic_var_hfa",
 }
 
 
@@ -133,7 +174,7 @@ def layout(t):
             align = max(align, fa)
         return round_up(4, align) + round_up(size, align), align
     off = 0
-    align = 1
+    align = ALIGNED.get(t, 1)
     for _, ft in STRUCTS[t]:
         fs, fa = layout(ft)
         off = round_up(off, fa) + fs
@@ -236,7 +277,7 @@ def csum(t, var):
         return f"((int64_t){var})"
     a = array_parts(t)
     if a is not None:
-        return "(" + " + ".join(csum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")"
+        return "(" + " + ".join(csum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")" if a[1] else "0"
     if t in UNIONS:
         arms = [f"{var}.tag == {i} ? ({i} + {csum(ft, f'{var}.u.{f}')})" for i, (f, ft) in enumerate(UNIONS[t])]
         return "(" + " : ".join(arms) + " : -1000000)"
@@ -249,7 +290,7 @@ def zsum(t, var):
         return f"({var} as i64)"
     a = array_parts(t)
     if a is not None:
-        return "(" + " + ".join(zsum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")"
+        return "(" + " + ".join(zsum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")" if a[1] else "0"
     if t in UNIONS:
         return f"usum_{t}({var})"
     parts = [zsum(ft, f"{var}.{f}") for f, ft in STRUCTS[t]]
@@ -278,7 +319,8 @@ def c_structs():
             out.append(f"typedef struct {{ int32_t tag; _Alignas(8) union {{ {fields} }} u; }} {name};")
             continue
         fields = " ".join(c_field(f, ft) for f, ft in STRUCTS[name])
-        out.append(f"typedef struct {{ {fields} }} {name};")
+        attr = f"__attribute__((aligned({ALIGNED[name]}))) " if name in ALIGNED else ""
+        out.append(f"typedef struct {attr}{{ {fields} }} {name};")
     return out
 
 
@@ -290,7 +332,8 @@ def z_structs():
             out.append(f"union {name} {{ {fields} }}")
             continue
         fields = " ".join(z_field(f, ft) for f, ft in STRUCTS[name])
-        out.append(f"struct {name} {{ {fields} }}")
+        prefix = f"align({ALIGNED[name]}) " if name in ALIGNED else ""
+        out.append(f"{prefix}struct {name} {{ {fields} }}")
     for name in ORDER:
         if name in UNIONS:
             arms = " ".join(f".{f}(x) => {{ return {i} + {zsum(ft, 'x')}; }}" for i, (f, ft) in enumerate(UNIONS[name]))
@@ -478,7 +521,7 @@ def render_c(case):
 def va_code(t):
     if t in VA_CODE:
         return VA_CODE[t]
-    return chr(ord("A") + ORDER.index(t))
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$&*+-/:;<=>?@^_~"[ORDER.index(t)]
 
 
 def va_lit(t, v):
@@ -774,7 +817,34 @@ def fixed_cases():
         build_case("callback_many", "callback", spill),
         build_case("callback_char", "callback", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
         build_case("callback_i8_ret", "callback", [], ret="i8", ret_value=-1),
-    ] + union_cases() + variadic_cases()
+    ] + union_cases() + variadic_cases() + arm_cases()
+
+
+def arm_cases():
+    out = []
+    dbl8 = [("f64", f"d{i}") for i in range(8)]
+    int7 = [("i64", f"i{i}") for i in range(7)]
+    for mode in ("direct", "indirect", "export", "callback"):
+        for t in ARM:
+            n = t.lower()
+            out.append(build_case(f"{mode}_{n}", mode, [(t, "a"), (t, "b")]))
+            out.append(build_case(f"{mode}_{n}_ret", mode, [], ret=t, ret_value=make_value(t, [1])))
+        out.append(build_case(f"{mode}_spill_hfa", mode, [("f64", "x"), ("D4", "a"), ("F4", "b"), ("f64", "y"), ("D3", "c"), ("f32", "z")]))
+        out.append(build_case(f"{mode}_spill_fp", mode, dbl8 + [("F2", "a"), ("f32", "x"), ("HA", "b"), ("D1", "c")]))
+        out.append(build_case(f"{mode}_spill_int", mode, int7 + [("AL16", "a"), ("i32", "x"), ("S7", "b"), ("B32", "c"), ("AL16F", "d")]))
+        out.append(build_case(f"{mode}_al16_odd", mode, [("i32", "x"), ("AL16", "a"), ("i64", "y"), ("AL16N", "b"), ("AL16FN", "c")]))
+        out.append(build_case(f"{mode}_hfa_mix", mode, [("F1", "a"), ("i8", "c"), ("D3", "b"), ("u16", "u"), ("NH", "n"), ("FD", "m"), ("B17", "s")], [{"x": 1.0}, -3, {"x": 1.0, "y": 2.0, "z": 3.0}, 60000, {"p": {"x": 1.0, "y": 2.0}, "z": 4.0}, {"a": 2.0, "b": 3.0}, {"a": list(range(1, 18))}]))
+    hfas = [(t, None) for t in ["F1", "F4", "D1", "D3", "D4", "NH", "ND", "HA", "HDA", "HE", "AL16F", "AL16FN"]]
+    others = [(t, None) for t in ["HZ", "F5", "FD", "AL16", "B17", "B32", "S5", "S6", "S7"]]
+    out += [
+        va_case("variadic_fix_hfa", [("D4", "a"), ("F2", "b")], [("f64", None), ("i64", None), ("F4", None), ("f64", None)]),
+        va_case("variadic_fix_al16", [("i32", "x"), ("AL16N", "a")], [("i64", None), ("AL16", None), ("AL16N", None), ("f64", None)]),
+        va_case("variadic_var_hfa", [], hfas),
+        va_case("variadic_var_arm", [], others),
+        va_case("variadic_ret_d4", [], [("f64", None), ("i64", None)], ret="D4", ret_value={"x": 1.0, "y": 2.0, "z": 3.0, "w": 4.0}),
+        va_case("variadic_ret_s6", [], [("i64", None), ("f64", None)], ret="S6", ret_value={"a": 1, "b": 2, "c": 3}),
+    ]
+    return out
 
 
 def union_cases():
