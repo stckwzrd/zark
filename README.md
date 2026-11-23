@@ -137,6 +137,8 @@ extern f64 vec3_dot(Vec3* a, Vec3* b);
 ```
 `zark run main.zk mathlib.c engine.cpp` compiles everything and links with `clang++` automatically. C++ is reached through an `extern "C"` facade: see `examples/interop/`. String literals pass as `const char*` directly.
 
+C headers need no hand-written declarations: `import "SDL2/SDL.h" as sdl;` binds the functions, structs, unions, enums, constant macros and static inline functions of a header (`zark cbind header.h` prints the same bindings as a file). A `zark.toml` sets include directories, defines, the C/C++ standard, `pkg-config` packages and the C/C++ sources; objects are cached by content and compiled in parallel. `examples/imgui/` drives Dear ImGui (through cimgui) and SDL2 this way. Details and limits are in SPEC.md section 8.
+
 ## Drivers and bare metal
 
 `volatile` registers and fields, `packed struct`, `Port`, `Cpu`, `Bits`, `Atomic` and `Spinlock` in the prelude, inline `asm<T>("...", "...", args)`, and `--freestanding` builds without libc. The same code runs on the native and the LLVM backend. `examples/baremetal/` is an x86-64 kernel written in Zark that boots in QEMU (`examples/baremetal/run.sh`): serial output through `Fmt`, an IDT built from a `packed struct`, an exception handled in Zark.
