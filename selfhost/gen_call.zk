@@ -408,7 +408,6 @@ bool Gen::names_type(Expr* e) {
 
     auto argtxt = this->sb();
     auto cmodes = List<i64>::init(this->a);
-    if (decl.is_extern && !decl.variadic) { cmodes = this->c_modes(fi.params, fi.ret)?; }
     if (recv != null) {
         const auto pt = fi.params.get(0);
         if (pt.k == .Ptr) {
@@ -428,6 +427,17 @@ bool Gen::names_type(Expr* e) {
         }
         auto v = vals.get(i);
         if (pi < fi.params.len) { v = this->coerce(v, fi.params.get(pi), x.line)?; } else { v = this->c_promote(v, x.line)?; }
+        vals.set(i, v);
+    }
+    if (decl.is_extern) {
+        auto tys = List<Type*>::init(this->a);
+        for (auto p : fi.params) { tys.push(p)?; }
+        for (auto [i, v] : vals) { if (i + off >= fi.params.len) { tys.push(v.ty)?; } }
+        cmodes = this->c_modes(tys, fi.ret)?;
+    }
+    for (auto [i, x] : args) {
+        const auto pi = i + off;
+        const auto v = vals.get(i);
         if (decl.is_extern && pi < cmodes.len && cmodes.get(pi) == 3) { continue; }
         if (argtxt.len > 0) { argtxt.append(", ")?; }
         if (decl.is_extern && pi < cmodes.len && cmodes.get(pi) != 0) {
@@ -438,12 +448,14 @@ bool Gen::names_type(Expr* e) {
             sprint(&argtxt, "{this->llty(v.ty)?}{ea} {v.v}")?;
         }
     }
-    if (decl.is_extern && !decl.variadic && this->is_empty_c(fi.ret)?) {
-        sprint(this->ins()?, "  call void @{fi.llname}({argtxt.slice()})\n")?;
+    auto vsig = "";
+    if (decl.is_extern && decl.variadic) { vsig = this->c_vsig(fi.params, fi.ret, cmodes)?; }
+    if (decl.is_extern && this->is_empty_c(fi.ret)?) {
+        sprint(this->ins()?, "  call void{vsig} @{fi.llname}({argtxt.slice()})\n")?;
         const auto slot = this->alloca(fi.ret, "cempty")?;
         return this->load(fi.ret, slot);
     }
-    if (decl.is_extern && !decl.variadic && is_c_agg(fi.ret)) {
+    if (decl.is_extern && is_c_agg(fi.ret)) {
         // a struct coming back from C: in registers, or through a hidden pointer
         const auto c = this->classify_c(fi.ret)?;
         if (c.memory) {
@@ -451,12 +463,12 @@ bool Gen::names_type(Expr* e) {
             auto full = this->sb();
             sprint(&full, "ptr sret({this->llty(fi.ret)?}) align {max(this->align_of(fi.ret)?, 8 as u64)} {slot}")?;
             if (argtxt.len > 0) { sprint(&full, ", {argtxt.slice()}")?; }
-            sprint(this->ins()?, "  call void @{fi.llname}({full.slice()})\n")?;
+            sprint(this->ins()?, "  call void{vsig} @{fi.llname}({full.slice()})\n")?;
             return this->load(fi.ret, slot);
         }
         const auto rt = this->c_ret_ty(fi.ret)?;
         const auto r = this->tmp()?;
-        sprint(this->ins()?, "  {r} = call ccc {rt} @{fi.llname}({argtxt.slice()})\n")?;
+        sprint(this->ins()?, "  {r} = call ccc {rt}{vsig} @{fi.llname}({argtxt.slice()})\n")?;
         const auto buf = this->c_buf()?;
         if (c.words == 1) {
             sprint(this->ins()?, "  store {rt} {r}, ptr {buf}\n")?;
@@ -478,13 +490,16 @@ bool Gen::names_type(Expr* e) {
     auto fnty = rty;
     if (decl.variadic) {
         auto ft = this->sb();
-        sprint(&ft, "{rty} (")?;
-        for (auto [i, p] : fi.params) {
-            if (i > 0) { ft.append(", ")?; }
-            ft.append(this->llty(p)?)?;
-            if (decl.is_extern) { ft.append(c_ext(p))?; }
+        if (decl.is_extern) {
+            sprint(&ft, "{rty}{vsig}")?;
+        } else {
+            sprint(&ft, "{rty} (")?;
+            for (auto [i, p] : fi.params) {
+                if (i > 0) { ft.append(", ")?; }
+                ft.append(this->llty(p)?)?;
+            }
+            if (fi.params.len > 0) { ft.append(", ...)")?; } else { ft.append("...)")?; }
         }
-        if (fi.params.len > 0) { ft.append(", ...)")?; } else { ft.append("...)")?; }
         fnty = ft.slice();
     }
     if (fi.ret.k == .Void) {
@@ -504,6 +519,7 @@ bool Gen::names_type(Expr* e) {
     if (v.ty.k == .Bool) { return this->cast(v, this->t_i32, line) };
     if (v.ty.k == .Float && v.ty.bits == 32) { return this->cast(v, this->t_f64, line); }
     if (v.ty.k == .Slice) { this->err(line); eprintln("slices cannot be passed to C varargs; pass .ptr (and .len) explicitly"); return error.CompileFailed };
+    if (v.ty.k == .Array) { this->err(line); eprintln("arrays cannot be passed to C varargs; pass a pointer to the first element"); return error.CompileFailed };
     if (v.ty.k == .Null) { return Value{ .ty = this->t_ptr_u8, .v = "null" } };
     return v;
 }
@@ -715,6 +731,26 @@ str c_ret_ext(Type* t) {
     if (c.words == 1) { return cword_ty(c.c0); }
     auto b = this->sb();
     sprint(&b, "{{ {cword_ty(c.c0)}, {cword_ty(c.c1)} }")?;
+    return b.slice();
+}
+
+!str Gen::c_vsig(List<Type*> params, Type* ret, List<i64> modes) {
+    auto b = this->sb();
+    b.append(" (")?;
+    auto n = 0;
+    if (is_c_agg(ret) && this->classify_c(ret)?.memory) {
+        b.append("ptr")?;
+        n += 1;
+    }
+    for (auto [i, p] : params) {
+        const auto m = modes.get(i);
+        if (m == 3) { continue; }
+        if (n > 0) { b.append(", ")?; }
+        if (m == 0) { b.append(this->llty(p)?)?; } else if (m == 2) { b.append("ptr")?; } else { b.append(this->c_param_ty(p, 1)?)?; }
+        n += 1;
+    }
+    if (n > 0) { b.append(", ")?; }
+    b.append("...)")?;
     return b.slice();
 }
 

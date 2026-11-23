@@ -25,6 +25,7 @@ Generated sources and binaries go to `build/abi_fuzz/` (git-ignored).
 | Zark calls C through `fn` pointer | `indirect_*` | green |
 | C calls Zark `export` | `export_*`, `export_struct` | green |
 | C calls a Zark callback | `callback_*` | green |
+| Zark calls a variadic C function | `variadic_*` | green |
 
 All three backends (`native`, `--llvm`, `-O`) are green, so `KNOWN_BROKEN` is
 empty and `tests/run.sh` runs the quick set with `--strict`.
@@ -57,6 +58,16 @@ on small C parameters and returns; the same case plus `direct_i8_ret`,
 `direct_u8_ret`, `direct_i16_ret`, `direct_u16_ret` and `direct_bool_ret`
 cover the other direction and stay as regressions.
 
+The `variadic_*` cases call `long vsum(int n, ...)` with integers and with
+doubles past the register limits, and a `vformat`-style C function that walks
+a format string with `va_arg`: mixed integers and doubles on the stack, a
+fixed struct before `...` (`P`, `F2`, `D2`, `M`, `Big`, `UD`, also after the
+integer registers ran out), small integers in the fixed part, aggregate
+results (`P`, `F2`, `D2`, `M` in registers, `Big` through `sret`), promoted
+`i8`/`u8`/`i16`/`u16`/`bool`/`f32`/`i32`/`u32`, and structs and unions in the
+variable part, including one that no longer fits in the registers. They were
+red while the fixed part of a variadic call used the internal ABI.
+
 ## Layout check
 
 The `layout` case builds one program per backend in which C prints
@@ -88,7 +99,6 @@ When a fix lands, remove the corresponding `(case, backend)` pair from
 ## Not yet covered
 
 - Bitfields, packed and over-aligned structs.
-- Variadic functions.
 - AArch64. The classifier and the CI matrix are step 4.
 - Random signatures for `indirect`/`export`/`callback`; random mode still
   generates direct calls only.

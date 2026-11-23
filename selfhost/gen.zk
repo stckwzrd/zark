@@ -735,20 +735,11 @@ struct Gen {
         if (decl.is_extern) {
             auto txt = this->sb();
             auto sret = false;
-            if (!decl.variadic && is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
-            if (decl.variadic) {
-                if (is_c_agg(ret)) {
-                    sprint(&txt, "declare {this->llty(ret)?} @{key}(")?;
-                } else {
-                    sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
-                }
-            } else {
-                sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
-            }
+            if (is_c_agg(ret)) { sret = this->classify_c(ret)?.memory; }
+            sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
             auto firstp = true;
             if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; firstp = false; }
-            auto cm = List<i64>::init(this->a);
-            if (!decl.variadic) { cm = this->c_modes(params, ret)?; }
+            const auto cm = this->c_modes(params, ret)?;
             for (auto [i, p] : params) {
                 auto mode = 0;
                 if (i < cm.len) { mode = cm.get(i); }
@@ -758,7 +749,7 @@ struct Gen {
                 firstp = false;
             }
             if (decl.variadic) {
-                if (params.len > 0) { txt.append(", ...")?; } else { txt.append("...")?; }
+                if (!firstp) { txt.append(", ...")?; } else { txt.append("...")?; }
             }
             txt.append(")")?;
             this->declare(key, txt.slice())?;

@@ -59,6 +59,9 @@ ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3
 
 SIZES = {"i8": 1, "u8": 1, "bool": 1, "i16": 2, "u16": 2, "i32": 4, "u32": 4, "f32": 4, "i64": 8, "u64": 8, "f64": 8}
 
+VA_CODE = {"i8": "i", "u8": "i", "bool": "i", "i16": "i", "u16": "i", "i32": "i", "u32": "u",
+           "i64": "l", "u64": "l", "f32": "d", "f64": "d"}
+
 KNOWN_BROKEN = set()
 
 QUICK = {
@@ -89,6 +92,13 @@ QUICK = {
     "callback_su",
     "callback_sua_ret",
     "callback_union_mix",
+    "variadic_vsum_d",
+    "variadic_fix_m",
+    "variadic_fix_big",
+    "variadic_ret_big_many",
+    "variadic_promote",
+    "variadic_var_structs",
+    "variadic_var_spill",
 }
 
 
@@ -465,6 +475,109 @@ def render_c(case):
     return "\n".join(lines) + "\n"
 
 
+def va_code(t):
+    if t in VA_CODE:
+        return VA_CODE[t]
+    return chr(ord("A") + ORDER.index(t))
+
+
+def va_lit(t, v):
+    if t in SCALARS and SCALARS[t][2] != "b":
+        return f"({zlit(t, v)} as {zktype(t)})"
+    return zlit(t, v)
+
+
+def va_case(name, fixed, var, fixed_vals=None, ret="i64", ret_value=None, vsum=None):
+    ctr = [0]
+    fv = fixed_vals if fixed_vals is not None else [make_value(t, ctr) for t, _ in fixed]
+    vals = [make_value(t, ctr) if v is None else v for t, v in var]
+    expected = sum(leaf_sum(v) for v in fv) + sum(leaf_sum(v) for v in vals)
+    if ret_value is not None:
+        expected += leaf_sum(ret_value)
+    return {
+        "name": name,
+        "mode": "variadic",
+        "params": fixed,
+        "values": fv,
+        "var": [t for t, _ in var],
+        "var_values": vals,
+        "ret": ret,
+        "ret_value": ret_value,
+        "expected": expected,
+        "vsum": vsum,
+    }
+
+
+def render_va_zk(case):
+    name = case["name"]
+    params = case["params"]
+    ret = case["ret"]
+    lines = z_structs()
+    lines.append("")
+    if case["vsum"]:
+        lines.append(f"extern i64 f_{name}(i32 n, ...);")
+        head = [str(len(case["var"]))]
+    else:
+        sig = sig_zk(params)
+        if sig:
+            sig += ", "
+        lines.append(f"extern {zktype(ret)} f_{name}({sig}u8* fmt, ...);")
+        fmt = "".join(va_code(t) for t in case["var"])
+        head = [zlit(t, v) for (t, _), v in zip(params, case["values"])] + [f'"{fmt}"']
+    var = [va_lit(t, v) for t, v in zip(case["var"], case["var_values"])]
+    if ret in STRUCTS or ret in UNIONS:
+        result = f"RESULT {{{zsum(ret, 'r')}}}"
+    else:
+        result = "RESULT {r}"
+    lines.append("")
+    lines.append(f"void main() {{ const auto r = f_{name}({', '.join(head + var)}); println(\"{result}\"); }}")
+    return "\n".join(lines) + "\n"
+
+
+def render_va_c(case):
+    name = case["name"]
+    params = case["params"]
+    ret = case["ret"]
+    lines = ["#include <stdint.h>", "#include <stdbool.h>", "#include <stdarg.h>"]
+    lines.extend(c_structs())
+    lines.append("")
+    if case["vsum"]:
+        t = case["vsum"]
+        lines.append(f"int64_t f_{name}(int32_t n, ...) {{")
+        lines.append("    va_list ap; va_start(ap, n); int64_t s = 0;")
+        lines.append(f"    for (int32_t i = 0; i < n; i++) s += (int64_t)va_arg(ap, {t});")
+        lines.append("    va_end(ap); return s;")
+        lines.append("}")
+        return "\n".join(lines) + "\n"
+    sig = sig_c(params)
+    if sig:
+        sig += ", "
+    arms = [
+        "case 'i': s += va_arg(ap, int); break;",
+        "case 'u': s += va_arg(ap, unsigned); break;",
+        "case 'l': s += va_arg(ap, int64_t); break;",
+        "case 'd': s += (int64_t)va_arg(ap, double); break;",
+    ]
+    for t in sorted(set(case["var"])):
+        if t not in VA_CODE:
+            arms.append(f"case '{va_code(t)}': {{ {t} v = va_arg(ap, {t}); s += {csum(t, 'v')}; break; }}")
+    lines.append(f"{ctype(ret)} f_{name}({sig}const char *fmt, ...) {{")
+    lines.append(f"    va_list ap; va_start(ap, fmt); int64_t s = {sum_c(params)};")
+    lines.append("    for (const char *p = fmt; *p; p++) {")
+    lines.append("        switch (*p) {")
+    for a in arms:
+        lines.append(f"        {a}")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("    va_end(ap);")
+    if ret in STRUCTS:
+        lines.append(f"    {ret} r = {clit(ret, case['ret_value'])}; r.{STRUCTS[ret][0][0]} += s; return r;")
+    else:
+        lines.append("    return s;")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
 def write_file(path, text):
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
@@ -480,8 +593,12 @@ def run_one(case, backend):
     zk = os.path.join(d, "main.zk")
     c = os.path.join(d, "side.c")
     binp = os.path.join(d, "bin")
-    write_file(zk, render_zk(case))
-    write_file(c, render_c(case))
+    if case["mode"] == "variadic":
+        write_file(zk, render_va_zk(case))
+        write_file(c, render_va_c(case))
+    else:
+        write_file(zk, render_zk(case))
+        write_file(c, render_c(case))
     args = [ZARK, "build", zk, c, "-o", binp]
     if backend == "llvm":
         args.append("--llvm")
@@ -657,7 +774,7 @@ def fixed_cases():
         build_case("callback_many", "callback", spill),
         build_case("callback_char", "callback", [("i8", "c"), ("u8", "u"), ("bool", "b")], [-1, 200, True]),
         build_case("callback_i8_ret", "callback", [], ret="i8", ret_value=-1),
-    ] + union_cases()
+    ] + union_cases() + variadic_cases()
 
 
 def union_cases():
@@ -670,6 +787,46 @@ def union_cases():
             out.append(build_case(f"{mode}_{n}_ret", mode, [], ret=t, ret_value=make_value(t, [1])))
         out.append(build_case(f"{mode}_union_mix", mode, mix))
     return out
+
+
+def variadic_cases():
+    ints = [("i64", None)] * 10
+    dbls = [("f64", None)] * 12
+    mixed = [("i64" if i % 2 == 0 else "f64", None) for i in range(22)]
+    two = [("i64", None), ("f64", None)]
+    promo = [("i8", -1), ("u8", 200), ("i16", -300), ("u16", 60000), ("bool", True),
+             ("f32", 2.5), ("i32", -7), ("u32", 4000000000)]
+    structs = [(t, None) for t in ["P", "F2", "M", "D2", "Big", "Mix", "F3", "U3", "BC", "Nest", "I3"]]
+    unions = [(t, None) for t in ["UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUX"]]
+    spill = [("i64", None)] * 5 + [("M", None), ("i64", None), ("D2", None), ("F2", None)]
+    six = [("i64", f"a{i}") for i in range(6)]
+    big = {"a": 1, "b": 2, "c": 3}
+    m = {"a": 5, "b": 2.0}
+    return [
+        va_case("variadic_vsum_l", [], ints, vsum="int64_t"),
+        va_case("variadic_vsum_d", [], dbls, vsum="double"),
+        va_case("variadic_mixed", [], mixed),
+        va_case("variadic_fix_p", [("P", "a")], two),
+        va_case("variadic_fix_f2", [("F2", "a")], two),
+        va_case("variadic_fix_d2", [("D2", "a")], two),
+        va_case("variadic_fix_m", [("M", "a")], two),
+        va_case("variadic_fix_big", [("Big", "a")], two),
+        va_case("variadic_fix_ud", [("UD", "a")], two),
+        va_case("variadic_fix_char", [("i8", "c"), ("u8", "u"), ("bool", "b")], [("i16", -3), ("f64", None)], [-1, 200, True]),
+        va_case("variadic_fix_spill", six + [("M", "m")], [("f64", None)] * 3 + [("i64", None), ("P", None)]),
+        va_case("variadic_fix_many", [("D2", "a"), ("M", "b"), ("Big", "c"), ("F2", "d")], mixed),
+        va_case("variadic_ret_p", [], two, ret="P", ret_value={"x": 1, "y": 2}),
+        va_case("variadic_ret_f2", [], two, ret="F2", ret_value={"x": 1.0, "y": 2.0}),
+        va_case("variadic_ret_d2", [], two, ret="D2", ret_value={"x": 1.0, "y": 2.0}),
+        va_case("variadic_ret_m", [], two, ret="M", ret_value=m),
+        va_case("variadic_ret_big", [], two, ret="Big", ret_value=big),
+        va_case("variadic_ret_big_many", [("P", "a")], mixed, ret="Big", ret_value=big),
+        va_case("variadic_ret_m_fix", [("Big", "a"), ("F2", "b")], mixed, ret="M", ret_value=m),
+        va_case("variadic_promote", [], promo),
+        va_case("variadic_var_structs", [], structs),
+        va_case("variadic_var_unions", [], unions),
+        va_case("variadic_var_spill", [], spill),
+    ]
 
 
 def random_cases(count, seed):
