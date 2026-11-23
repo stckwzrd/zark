@@ -1,3 +1,10 @@
 opaque off16: layout differs
 skipped sum_has: over-aligned record by value
 opaque od16: layout differs
+skipped al16l: aligned attribute
+opaque tal: uses skipped al16l
+skipped dl16: aligned attribute
+opaque tdl: uses skipped dl16
+skipped d16: aligned attribute
+skipped td16.a: uses skipped d16
+opaque i128s: __int128

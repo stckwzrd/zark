@@ -2586,13 +2586,15 @@ struct CEmit {
             const auto d = this->rec_of(t);
             auto cu = 1;
             auto zu = 1;
+            auto unk = false;
             for (auto f : d.fields.slice()) {
                 auto ft = f.ty;
                 if (ft.k == .Array && ft.n == -1) { ft = ft.elem; } else { zu = max(zu, this->size(ft).align); }
+                if (this->size(ft).size < 0) { unk = true; }
                 cu = max(cu, this->size(ft).align);
             }
             if (d.is_union || d.opaque) { zu = min(z.align, 8); }
-            if (d.inner_attr || (cu >= 16) != (zu >= 16)) {
+            if (d.inner_attr || unk || (cu >= 16) != (zu >= 16)) {
                 this->fail("over-aligned record by value");
                 return false;
             }

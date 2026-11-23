@@ -28,3 +28,7 @@ extern i64 sum_umix16(umix16 u);
 align(16) struct od16 { u64[2] storage; }
 extern od16 mk_od16(i32 a, i32 b);
 extern i64 sum_od16(i64 a1, i64 a2, i64 a3, i64 a4, i64 a5, od16 o, i64 a6);
+align(16) struct tal { u64[2] storage; }
+align(16) struct tdl { u64[2] storage; }
+align(16) struct td16 { u64[2] storage; f64* as_b() { void* p = this; return p; } }
+align(16) struct i128s { u64[2] storage; }
