@@ -13,6 +13,11 @@
 
 A small systems language in the spirit of Zig, with less ceremony: native speed via LLVM, no hidden allocations (explicit `Allocator`), error unions with `?`, `defer`/`errdefer`, generics, tagged unions + `match`, function pointers, string interpolation without allocation, and direct C/C++ linking.
 
+> **Status: alpha.** Zark is pre-1.0: the language, the standard library and
+> `zark.toml` can change between releases. The native backend targets Linux
+> x86-64; macOS, arm64 and Windows/WSL use the LLVM path. C/C++ bindings
+> (`import "x.h"`, `zark cbind`) and the package manager are experimental.
+
 ```zark
 struct Point {
     f64 x;
@@ -236,3 +241,17 @@ The compiler emits textual LLVM IR and calls `clang`, with no linking against li
 - [ ] `@cImport` via libclang
 - [x] `async`/`await` as state machines with a single-threaded executor (`std/async`); a multi-threaded executor and `join`/`select` are not done
 - [x] closures (explicit captures, context on the stack), `match` as an expression, `?T`/`orelse`, `import as`, `T: Ord` constraints, `zark test`, `zark fmt`
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in Zark by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or
+conditions.
