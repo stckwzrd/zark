@@ -2288,6 +2288,7 @@ struct CEmit {
             if (td != null && td.rec == d) { rt = d.name; }
         }
         const auto zr = this->ename(d.name)?;
+        for (auto s : d.subs.slice()) { this->sub_bits(d, s)?; }
         for (auto [i, f] : d.fields.slice()) {
             if (!f.bits || f.name.len == 0) { continue; }
             auto fb = List<u8>::init(this->a);
@@ -2324,6 +2325,16 @@ struct CEmit {
             sprint(m, "{zt} get_{f.name}() {{ return {g}(this); }} void set_{f.name}({zt} v) {{ {st}(this, v); }} ")?;
             sprint(c, "{ct} {g}({rt}* p) {{ return p->{f.name}; }}\nvoid {st}({rt}* p, {ct} v) {{ p->{f.name} = v; }}\n")?;
         }
+    }
+
+    !void sub_bits(CDecl* d, CDecl* s) {
+        for (auto f : s.fields.slice()) {
+            if (!f.bits || f.name.len == 0) { continue; }
+            auto fb = List<u8>::init(this->a);
+            sprint(&fb, "{d.name}.{f.name}")?;
+            this->warn(fb.slice(), "bitfield in anonymous record")?;
+        }
+        for (auto x : s.subs.slice()) { this->sub_bits(d, x)?; }
     }
 
     bool union_fits(CDecl* d, CLayout* l) {

@@ -16,3 +16,5 @@ long long flags_sump(const struct flags* f);
 void flags_set(struct flags* f);
 struct flags flags_make(void);
 int nib_val(nib_t n);
+struct nest { struct { int b : 2; } an; int c : 5; };
+struct anb { int x; struct { unsigned p : 3; }; int r : 5; };

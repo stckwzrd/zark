@@ -20,3 +20,9 @@ extern i64 flags_sump(flags* f);
 extern void flags_set(flags* f);
 extern flags flags_make();
 extern i32 nib_val(nib_t n);
+extern i32 zark_bf_H_get_nest_1(nest* p);
+extern void zark_bf_H_set_nest_1(nest* p, i32 v);
+struct nest { u32[2] storage; i32 get_c() { return zark_bf_H_get_nest_1(this); } void set_c(i32 v) { zark_bf_H_set_nest_1(this, v); } }
+extern i32 zark_bf_H_get_anb_2(anb* p);
+extern void zark_bf_H_set_anb_2(anb* p, i32 v);
+struct anb { u32[3] storage; i32 get_r() { return zark_bf_H_get_anb_2(this); } void set_r(i32 v) { zark_bf_H_set_anb_2(this, v); } }

@@ -1,2 +1,6 @@
 opaque flags: bitfields
 opaque nib_t: bitfields
+skipped nest.b: bitfield in anonymous record
+opaque nest: bitfields
+skipped anb.p: bitfield in anonymous record
+opaque anb: bitfields

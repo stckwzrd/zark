@@ -15,3 +15,7 @@ unsigned char zark_bf_H_get_nib_t_0(nib_t* p) { return p->lo; }
 void zark_bf_H_set_nib_t_0(nib_t* p, unsigned char v) { p->lo = v; }
 unsigned char zark_bf_H_get_nib_t_1(nib_t* p) { return p->hi; }
 void zark_bf_H_set_nib_t_1(nib_t* p, unsigned char v) { p->hi = v; }
+int zark_bf_H_get_nest_1(struct nest* p) { return p->c; }
+void zark_bf_H_set_nest_1(struct nest* p, int v) { p->c = v; }
+int zark_bf_H_get_anb_2(struct anb* p) { return p->r; }
+void zark_bf_H_set_anb_2(struct anb* p, int v) { p->r = v; }
