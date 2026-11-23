@@ -477,7 +477,11 @@ bool has_main(Manifest* p) {
 
 /// in an editor: register the dependencies of the project that contains `file`
 void project_setup_for(Allocator a, str file) {
+    c_flags = List<str>{};
     const auto dir = find_project(a, path::dir(file)) catch "";
     if (dir.len == 0) { return; }
-    _ = load_project(a, dir, false, 0) catch null;
+    const auto p = load_project(a, dir, false, 0) catch { return; };
+    const auto args = project_c_args(a, p) catch { return; };
+    const auto sp = split_extras(a, args) catch { return; };
+    c_flags = sp.flags;
 }

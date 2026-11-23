@@ -284,6 +284,15 @@ out=$(cd mf && "$ZARK" run 2>&1) || fail "import_manifest: $out"
 [ "$out" = "5 11 2" ] || fail "import_manifest: got: $out"
 out=$("$ZARK" run mf/src/main.zk 2>&1) || fail "import_manifest explicit file: $out"
 [ "$out" = "5 11 2" ] || fail "import_manifest explicit file: got: $out"
+if command -v python3 >/dev/null; then
+    out=$(python3 "$R/tests/cbind/lsp.py" "$ZARK" "$T/mf/src/main.zk" "$T") || fail "lsp_manifest_flags: $out"
+    [ -z "$out" ] || fail "lsp_manifest_flags: false diagnostics: $out"
+    printf 'import "feat.h" as f;\nvoid main() { nope(); }\n' > mf/src/bad.zk
+    out=$(python3 "$R/tests/cbind/lsp.py" "$ZARK" "$T/mf/src/bad.zk" "$T") || fail "lsp_manifest_flags bad: $out"
+    case "$out" in *nope*) ;; *) fail "lsp_manifest_flags: no diagnostic for nope(): $out" ;; esac
+else
+    echo "skip lsp_manifest_flags: python3 is not installed"
+fi
 sed 's/defines = \["FEATURE"\]/defines = []/' mf/zark.toml > mf/zark.toml.new && mv mf/zark.toml.new mf/zark.toml
 if out=$(cd mf && "$ZARK" run 2>&1); then fail "import_manifest: feature still bound without FEATURE"; fi
 
