@@ -1,0 +1,26 @@
+type a_Id = i16;
+struct a { }
+extern a_Id zark_cxx_H_1(a_Id x);
+static a_Id a::first(a_Id x) { return zark_cxx_H_1(x); }
+type b_Id = i64;
+struct b { }
+extern b_Id zark_cxx_H_3(b_Id x);
+static b_Id b::first(b_Id x) { return zark_cxx_H_3(x); }
+extern a_Id zark_cxx_H_4(b_Id x);
+static a_Id b::cross(b_Id x) { return zark_cxx_H_4(x); }
+type Holder_Size = u32;
+extern Holder_Size zark_cxx_H_8(Holder_Size s);
+Holder_Size size_of(Holder_Size s) { return zark_cxx_H_8(s); }
+extern Holder_Size zark_cxx_H_9(Holder_Size s);
+Holder_Size kid_size(Holder_Size s) { return zark_cxx_H_9(s); }
+type Real = f64;
+extern Real zark_cxx_H_11(Real r);
+static Real b::half(Real r) { return zark_cxx_H_11(r); }
+struct b_c { }
+extern b_Id zark_cxx_H_12(b_Id x, a_Id y);
+static b_Id b_c::inner(b_Id x, a_Id y) { return zark_cxx_H_12(x, y); }
+type Mode = u8;
+const auto Mode_Off = 0;
+const auto Mode_On = 1;
+extern Mode zark_cxx_H_16(Mode m, Mode prev);
+Mode toggle(Mode m, Mode prev) { return zark_cxx_H_16(m, prev); }
