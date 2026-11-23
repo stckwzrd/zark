@@ -1,0 +1,16 @@
+struct ud { f64[1] storage; f64* as_d() { void* p = this; return p; } }
+struct udi { u64[1] storage; f64* as_d() { void* p = this; return p; } i32* as_i() { void* p = this; return p; } }
+struct uff { f32[1] storage; f32* as_a() { void* p = this; return p; } f32* as_b() { void* p = this; return p; } }
+struct ufd { f64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+struct fi3 { u32[2] storage; f32[1] storage_hi; f32[3]* as_f() { void* p = this; return p; } i32* as_i() { void* p = this; return p; } }
+struct dd { f64[2] storage; f64[2]* as_d() { void* p = this; return p; } }
+struct pf { u8[4] storage; }
+struct sud { i32 k; ud u; }
+extern ud put_ud(ud u);
+extern udi put_udi(udi u);
+extern uff put_uff(uff u);
+extern ufd put_ufd(ufd u);
+extern fi3 put_fi3(fi3 u);
+extern dd put_dd(dd u);
+extern sud put_sud(sud s);
+extern f64 mix(uff a, f64 x, udi b, fi3 c, ud d, i32 y);

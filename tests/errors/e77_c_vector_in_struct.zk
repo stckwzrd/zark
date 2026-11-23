@@ -1,0 +1,7 @@
+struct Pt { f32x4 v; i32 n; }
+
+extern i32 labs(Pt p);
+
+void main() {
+    println("{labs(Pt{ .n = 1 })}");
+}

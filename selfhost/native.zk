@@ -94,7 +94,7 @@ struct Cur { str s; i64 i;
 }
 
 // ------------------------------------------------------------------ instructions
-struct Arg { LT* ty; str v; i64 id1; LT* byval; i64 ext; }
+struct Arg { LT* ty; str v; i64 id1; LT* byval; i64 ext; i64 al; }
 struct PhiIn { str v; str pred; }
 
 struct Ins {
@@ -842,6 +842,7 @@ struct Native {
     !void record_vars(str fname, i64 start, i64 end, List<str> dvars) {
         auto fnn = fname;
         if (str_starts_with(fnn, "vb.")) { fnn = fnn[3..]; }
+        if (str_ends_with(fnn, "$z") || str_ends_with(fnn, "$c")) { fnn = fnn[0..fnn.len - 2]; }
         auto f = DbgFunc{ .name = fnn, .start = start, .end = end, .vars = List<DbgVar>::init(this->a) };
         for (auto d : dvars) {
             const auto s1 = str_find_byte(d, ' ');
@@ -885,6 +886,7 @@ struct Native {
             const auto pt = this->ty(&c)?;
             LT* bv = null;
             auto ext = 0;
+            auto al = 0;
             while (true) {
                 c.ws();
                 if (c.eat_word("byval(")) {
@@ -895,7 +897,7 @@ struct Native {
                     _ = c.eat(')');
                 } else if (c.eat_word("align")) {
                     c.ws();
-                    _ = c.word();
+                    al = parse_int(c.word())?;
                 } else if (c.eat_word("signext")) {
                     ext = 1;
                 } else if (c.eat_word("zeroext")) {
@@ -906,7 +908,7 @@ struct Native {
             }
             c.ws();
             const auto pn = c.value();
-            params.push(Arg{ .ty = pt, .v = pn, .id1 = 0, .byval = bv, .ext = ext })?;
+            params.push(Arg{ .ty = pt, .v = pn, .id1 = 0, .byval = bv, .ext = ext, .al = al })?;
             _ = c.eat(',');
         }
 
@@ -1083,6 +1085,7 @@ struct Native {
             const auto off = this->loc(p.v);
             const auto pr = this->reg_of(p.v);
             if (p.byval != null) {
+                if (p.al > 8 && nstack % 2 == 1) { nstack += 1; }
                 const auto soff = 16 + 8 * nstack;
                 nstack += (p.byval.size + 7) / 8;
                 asm.lea(R10, RBP, soff)?;
@@ -1263,6 +1266,7 @@ struct Native {
                 // C ABI attributes: byval(T) (copied onto the stack), sret(T), align N
                 LT* bv = null;
                 auto ext = 0;
+                auto al = 0;
                 while (true) {
                     c.ws();
                     if (c.eat_word("byval(")) {
@@ -1273,7 +1277,7 @@ struct Native {
                         _ = c.eat(')');
                     } else if (c.eat_word("align")) {
                         c.ws();
-                        _ = c.word();
+                        al = parse_int(c.word())?;
                     } else if (c.eat_word("signext")) {
                         ext = 1;
                     } else if (c.eat_word("zeroext")) {
@@ -1282,7 +1286,7 @@ struct Native {
                         break;
                     }
                 }
-                ins.args.push(Arg{ .ty = at, .v = c.value(), .id1 = 0, .byval = bv, .ext = ext })?;
+                ins.args.push(Arg{ .ty = at, .v = c.value(), .id1 = 0, .byval = bv, .ext = ext, .al = al })?;
                 _ = c.eat(',');
             }
             if (ins.ty.k == .V) { ins.dest = ""; }
@@ -1988,6 +1992,7 @@ struct Native {
             const auto bv = ins.args.get(k).byval;
             if (bv != null) {
                 // a struct passed in memory: its bytes go into the stack argument area
+                if (ins.args.get(k).al > 8 && nstack % 2 == 1) { nstack += 1; }
                 kind.push(3)?;
                 regno.push(nstack)?;
                 nstack += (bv.size + 7) / 8;

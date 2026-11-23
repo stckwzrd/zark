@@ -7,26 +7,85 @@ fail() { echo "FAIL cbind: $*"; exit 1; }
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
 native=
 if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then native=--native; fi
-nohid() { sed -E 's/zark_inl_[0-9a-f]{16}_/zark_inl_H_/g' "$@"; }
+nohid() { sed -E -e 's/zark_(inl|var|bf)_[0-9a-f]{16}_/zark_\1_H_/g' -e 's/ZARK_USE_[0-9a-f]{16}_/ZARK_USE_H_/g' "$@"; }
 cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig inline wrapfix; do
-    flags=""
-    [ "$name" = shorten ] && flags="-fshort-enums"
+a64=0
+case "$(uname -m)" in aarch64|arm64) a64=1 ;; esac
+golden() {
+    if [ "$1" = linux ] && [ -f "tests/cbind/$2.a64.out" ]; then echo "$2.a64"
+    elif [ "$1" = macos ] && [ -f "tests/cbind/$2.a64mac.out" ]; then echo "$2.a64mac"
+    elif [ "$1" = macos ] && [ -f "tests/cbind/$2.a64.out" ]; then echo "$2.a64"
+    else echo "$2"; fi
+}
+hostos=linux
+[ "$(uname -s)" = Darwin ] && hostos=macos
+names="scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16 vars bits"
+for name in $names; do
+    flags="-fsigned-char"
+    [ "$name" = shorten ] && flags="$flags -fshort-enums"
+    exp=$name
+    [ $a64 = 1 ] && exp=$(golden $hostos $name)
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
-    diff -u <(nohid "tests/cbind/$name.out") <(nohid "$name.zk") || fail "$name: output differs"
-    diff -u "tests/cbind/$name.err" "$name.err" || fail "$name: warnings differ"
+    diff -u <(nohid "tests/cbind/$exp.out") <(nohid "$name.zk") || fail "$name: output differs"
+    diff -u "tests/cbind/$exp.err" "$name.err" || fail "$name: warnings differ"
     printf 'import "%s.zk";\nvoid main() {}\n' "$name" > "use_$name.zk"
     "$ZARK" ir "use_$name.zk" > /dev/null || fail "$name: bindings do not compile"
+done
+
+if [ $a64 = 0 ]; then
+    for os in linux macos; do
+        for name in $names; do
+            flags="-fsigned-char"
+            [ "$name" = shorten ] && flags="$flags -fshort-enums"
+            exp=$(golden $os $name)
+            timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags --arch aarch64 --os $os > "a64_$name.zk" 2> "a64_$name.err" || fail "$name aarch64 $os: exit $?: $(cat "a64_$name.err")"
+            diff -u <(nohid "tests/cbind/$exp.out") <(nohid "a64_$name.zk") || fail "$name aarch64 $os: output differs"
+            diff -u "tests/cbind/$exp.err" "a64_$name.err" || fail "$name aarch64 $os: warnings differ"
+            printf 'import "a64_%s.zk";\nvoid main() {}\n' "$name" > "use_a64_$name.zk"
+            "$ZARK" ir --arch aarch64 --os $os "use_a64_$name.zk" > /dev/null || fail "$name aarch64 $os: bindings do not compile"
+        done
+    done
+fi
+
+for sign in signed unsigned; do
+    exp=out
+    [ "$sign" = unsigned ] && exp=uout
+    "$ZARK" cbind tests/cbind/charsign.h -f$sign-char > charsign.zk 2> charsign.err || fail "charsign $sign: exit $?: $(cat charsign.err)"
+    diff -u <(nohid tests/cbind/charsign.$exp) <(nohid charsign.zk) || fail "charsign $sign: output differs"
+    diff -u tests/cbind/charsign.err charsign.err || fail "charsign $sign: warnings differ"
+done
+exp=out
+want="-56 -55 -56 -56 -56 97 -3 250 3 94 3 98 -56 -55 -54 -53"
+if clang -E -dM -x c /dev/null | grep -q __CHAR_UNSIGNED__; then
+    exp=uout
+    want="200 201 200 200 200 97 -3 250 3 94 3 98 200 201 202 203"
+fi
+"$ZARK" cbind tests/cbind/charsign.h --inline-c charsign_inl.c > charsign.zk 2> /dev/null || fail "charsign: exit $?"
+diff -u <(nohid tests/cbind/charsign.$exp) <(nohid charsign.zk) || fail "charsign: output differs for this target"
+cat > use_charsign.zk <<'EOF'
+import "charsign.zk";
+void main() {
+    cs v;
+    const auto c = first("\xC8x".ptr);
+    fill(&v, c);
+    u8* rest = null;
+    const auto n = count_ch("abc".ptr, &rest);
+    println("{c} {add1(c)} {widen(c)} {v.c} {v.name[0]} {v.name[1]} {v.s} {v.u} {sneg(v.s)} {ubig(v.u)} {n} {*rest} {*gc_ptr()} {*gct_ptr()} {*gs_ptr()} {(*ga_ptr())[0]}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_charsign.zk tests/cbind/charsign.c charsign_inl.c 2>&1) || fail "charsign $f: run: $out"
+    [ "$out" = "$want" ] || fail "charsign $f: got: $out"
 done
 
 printf 'import "params.zk";\ni32 inc(i32 x) { return x; }\nvoid set(cbs* c, vec3 v) { c.cb = inc; usev(&v[0]); }\nvoid main() { set(null, [1.0, 2.0, 3.0]); }\n' > call_params.zk
 "$ZARK" ir call_params.zk > call.ll || fail "params: typed use does not compile"
 grep -q "declare void @usev(ptr)" call.ll || fail "params: usev does not take a pointer"
 
-"$ZARK" cbind tests/cbind/structs.h -o out.zk 2> /dev/null || fail "-o: exit $?"
+"$ZARK" cbind tests/cbind/structs.h -fsigned-char -o out.zk 2> /dev/null || fail "-o: exit $?"
 diff -u tests/cbind/structs.out out.zk || fail "-o: output differs"
 
 printf '#if VAL != 3\n#error no\n#endif\nint v(void);\n' > flag.h
@@ -111,6 +170,107 @@ EOF
         out=$("$ZARK" run $f use_fnptr2.zk tests/cbind/fnptr.c 2>&1) || fail "fnptr $f: run: $out"
         [ "$out" = "40 7 8 16 16 16" ] || fail "fnptr $f: got: $out"
     done
+
+cat > use_unionval2.zk <<'EOF'
+import "unionval.zk";
+void main() {
+    ud a;
+    *a.as_d() = 1.5;
+    udi b;
+    *b.as_i() = 41;
+    uff c;
+    *c.as_a() = 2.5;
+    ufd d;
+    *d.as_d() = 3.5;
+    fi3 e;
+    (*e.as_f())[0] = 1.0;
+    (*e.as_f())[1] = 2.0;
+    (*e.as_f())[2] = 3.0;
+    dd f;
+    (*f.as_d())[0] = 0.25;
+    (*f.as_d())[1] = 0.5;
+    sud g;
+    g.k = 7;
+    g.u = a;
+    auto ra = put_ud(a);
+    auto rb = put_udi(b);
+    auto rc = put_uff(c);
+    auto rd = put_ufd(d);
+    auto re = put_fi3(e);
+    auto rf = put_dd(f);
+    auto rg = put_sud(g);
+    println("{*ra.as_d()} {*rb.as_i()} {*rc.as_a()} {*rd.as_d()} {(*re.as_f())[0]} {(*re.as_f())[1]} {(*re.as_f())[2]} {(*rf.as_d())[0]} {(*rf.as_d())[1]} {rg.k} {*rg.u.as_d()}");
+    println("{mix(c, 0.5, b, e, a, 3)} {sizeof(ud)} {sizeof(uff)} {sizeof(fi3)} {alignof(fi3)} {sizeof(dd)} {sizeof(sud)}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_unionval2.zk tests/cbind/unionval.c 2>&1) || fail "unionval $f: run: $out"
+        [ "$out" = "$(printf '2.5 42 3.5 4.5 2 4 6 1.25 2.5 8 2.5\n54.5 8 4 12 4 16 16')" ] || fail "unionval $f: got: $out"
+    done
+fi
+
+cat > probe16.c <<'EOF'
+#include <stdio.h>
+#include <stddef.h>
+#include "align16.h"
+#define P(T) printf("%zu %zu ", sizeof(T), _Alignof(T))
+int main(void) {
+    P(struct a16); P(struct m16); P(struct pair16); P(struct dbl16); P(struct mix16); P(struct off16);
+    P(union un16); P(struct has16); P(union hu); P(struct a32); P(struct big16);
+    printf("%zu %zu %zu %zu\n", offsetof(struct m16, x), offsetof(struct mix16, n), offsetof(struct has16, p), offsetof(struct big16, c));
+    return 0;
+}
+EOF
+clang -I tests/cbind probe16.c -o probe16 || fail "align16: C probe"
+cat > use_align16.zk <<'EOF'
+import "align16.zk";
+void main() {
+    m16 m;
+    mix16 x;
+    has16 h;
+    big16 b;
+    const auto om = (&m.x as *u8 as i64) - (&m as *u8 as i64);
+    const auto ox = (&x.n as *u8 as i64) - (&x as *u8 as i64);
+    const auto oh = (&h.p as *u8 as i64) - (&h as *u8 as i64);
+    const auto ob = (&b.c as *u8 as i64) - (&b as *u8 as i64);
+    println("{sizeof(a16)} {alignof(a16)} {sizeof(m16)} {alignof(m16)} {sizeof(pair16)} {alignof(pair16)} {sizeof(dbl16)} {alignof(dbl16)} {sizeof(mix16)} {alignof(mix16)} {sizeof(off16)} {alignof(off16)} {sizeof(un16)} {alignof(un16)} {sizeof(has16)} {alignof(has16)} {sizeof(hu)} {alignof(hu)} {sizeof(a32)} {alignof(a32)} {sizeof(big16)} {alignof(big16)} {om} {ox} {oh} {ob}");
+    a32 q;
+    q.x = 5;
+    h.k = 1;
+    h.p.a = 2;
+    h.p.b = 3;
+    b.a = 1;
+    b.b = 2;
+    b.c = 3;
+    un16 u;
+    *u.as_l() = 7;
+    println("{a32_x(&q)} {sum_has_p(&h)} {sum_big(&b)} {read_un16(&u)}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_align16.zk tests/cbind/align16.c 2>&1) || fail "align16 $f: run: $out"
+    [ "$out" = "$(./probe16)
+1005 1006 6 7" ] || fail "align16 $f: got: $out, C layout: $(./probe16)"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    cat > use_align16v.zk <<'EOF'
+import "align16.zk";
+void main() {
+    const auto p = mk_pair(4, 5);
+    const auto d = mk_dbl(1.5, 2.0);
+    mix16 m;
+    m.d = 2.0;
+    m.n = 40;
+    println("{p.a} {p.b} {sum_pair(p)} {sum_dbl(d)} {d.x} {d.y} {sum_mix(m)}");
+    auto u = mk_ud16(1.5, 2.25);
+    auto x = mk_umix16(0.5, 7);
+    println("{(*u.as_d())[0]} {(*u.as_d())[1]} {sum_ud16(u)} {x.as_s().x} {x.as_s().n} {sum_umix16(x)} {sum_od16(1, 2, 3, 4, 5, mk_od16(7, 8), 6)}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_align16v.zk tests/cbind/align16.c 2>&1) || fail "align16 by value $f: run: $out"
+        [ "$out" = "$(printf '4 5 45 5.5 1.5 2 42\n1.5 2.25 24 0.5 7 57 729')" ] || fail "align16 by value $f: got: $out"
+    done
 fi
 
 cat > use_flex2.zk <<'EOF'
@@ -126,7 +286,7 @@ EOF
 out=$("$ZARK" run use_flex2.zk 2>&1) || fail "flex: run: $out"
 [ "$out" = "8 8 8 8 8 8 16 8 16 8 8 8" ] || fail "flex: got: $out"
 
-"$ZARK" cbind tests/cbind/inline.h --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
+"$ZARK" cbind tests/cbind/inline.h -fsigned-char --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/inline.c.out > inline.c.exp
 diff -u <(nohid inline.c.exp) <(nohid inline.c) || fail "inline: C file differs"
 for o in -O0 -O2; do
@@ -161,7 +321,7 @@ if [ "$(uname -m)" = x86_64 ]; then
     done
 fi
 
-"$ZARK" cbind tests/cbind/wrapfix.h --inline-c wrapfix.c > /dev/null 2>&1 || fail "wrapfix: exit $?"
+"$ZARK" cbind tests/cbind/wrapfix.h -fsigned-char --inline-c wrapfix.c > /dev/null 2>&1 || fail "wrapfix: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/wrapfix.c.out > wrapfix.c.exp
 diff -u <(nohid wrapfix.c.exp) <(nohid wrapfix.c) || fail "wrapfix: C file differs"
 for o in -O0 -O2; do
@@ -170,6 +330,182 @@ done
 printf 'import "wrapfix.zk";\nvoid main() { const a1 x = 4; println("{foo(x)} {type_(1)} {g(1)} {*cc("ab".ptr)} {vq(2)} {old(3)}"); }\n' > use_wrapfix.zk
 out=$("$ZARK" run use_wrapfix.zk wrapfix.c 2> run.err) || fail "wrapfix: run: $(cat run.err)"
 [ "$out" = "9 2 3 98 6 30" ] || fail "wrapfix: got: $out"
+
+"$ZARK" cbind tests/cbind/vars.h -fsigned-char --inline-c vars.c > vars.zk 2> /dev/null || fail "vars: exit $?"
+sed "s|@DIR@|$(realpath "$T")|" tests/cbind/vars.c.out > vars.c.exp
+diff -u <(nohid vars.c.exp) <(nohid vars.c) || fail "vars: C file differs"
+for o in -O0 -O2; do
+    clang -c $o -Wall -Wextra -Werror vars.c -o vars.o || fail "vars $o: C file does not compile cleanly"
+done
+cat > use_vars2.zk <<'EOF'
+import "vars.zk";
+i32 twice(i32 x) { return x * 2; }
+void main() {
+    *counter_ptr() += 1;
+    const auto t = table_ptr();
+    t->a = 9;
+    *hook_ptr() = twice;
+    const auto a = arr_ptr();
+    a[1] = 3;
+    (*bytes_ptr())[0] = 4;
+    *type_ptr() = 6;
+    const auto h = *handle_ptr();
+    println("{*counter_ptr()} {read_counter()} {t->b} {call_hook(21)} {(*names_ptr())[2][1]} {a[2]} {(*bytes_ptr())[2]} {h != null}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_vars2.zk vars.c tests/cbind/vardefs.c 2>&1) || fail "vars $f: run: $out"
+    [ "$out" = "42 42913 2.5 42 119 30 250 true" ] || fail "vars $f: got: $out"
+done
+mkdir -p ivars
+cp tests/cbind/vars.h tests/cbind/vardefs.c ivars/
+printf 'import "vars.h" as v;\nvoid main() { *v::counter_ptr() = 2; println("{v::read_counter()}"); }\n' > ivars/m.zk
+out=$(cd ivars && "$ZARK" run m.zk vardefs.c 2>&1) || fail "import_vars: $out"
+[ "$out" = 2726 ] || fail "import_vars: got: $out"
+
+mkdir -p uv
+printf 'extern int missing_var;\nextern int present_var;\nextern int other_missing;\nint get_present(void);\nstatic inline int twice(int x) { return x * 2; }\n' > uv/uv.h
+printf 'int present_var = 5;\nint get_present(void) { return present_var; }\n' > uv/uvdefs.c
+printf 'import "uv.h";\nvoid main() { println("{twice(21)}"); }\n' > uv/none.zk
+printf 'import "uv.h";\nvoid main() { *present_var_ptr() += 2; println("{get_present()} {twice(3)}"); }\n' > uv/one.zk
+printf 'import "uv.h";\ni32 bump() { *present_var_ptr() += 1; return get_present(); }\n' > uv/lib.zk
+printf 'import "uv.h";\nimport "lib.zk";\nvoid main() { println("{bump()} {twice(4)}"); }\n' > uv/two.zk
+printf 'import "uv.h";\ntest "var" { *present_var_ptr() = 9; assert(get_present() == 9); }\ntest "inline" { assert(twice(2) == 4); }\n' > uv/t.zk
+for f in "" --llvm -O; do
+    out=$(cd uv && "$ZARK" run $f none.zk 2>&1) || fail "unused_vars $f: $out"
+    [ "$out" = 42 ] || fail "unused_vars $f: got: $out"
+    out=$(cd uv && "$ZARK" run $f one.zk uvdefs.c 2>&1) || fail "one_var $f: $out"
+    [ "$out" = "7 6" ] || fail "one_var $f: got: $out"
+    out=$(cd uv && "$ZARK" run $f none.zk 2>&1) || fail "unused_vars after one_var $f: $out"
+    [ "$out" = 42 ] || fail "unused_vars after one_var $f: got: $out"
+    out=$(cd uv && "$ZARK" run $f two.zk uvdefs.c 2>&1) || fail "two_files_var $f: $out"
+    [ "$out" = "6 8" ] || fail "two_files_var $f: got: $out"
+    (cd uv && "$ZARK" build $f none.zk -o none > /dev/null 2>&1 && ./none > /dev/null) || fail "unused_vars build $f"
+    out=$(cd uv && "$ZARK" test $f t.zk uvdefs.c 2>&1) || fail "test_vars $f: $out"
+done
+cp uv/none.zk uv/swap.zk
+out=$(cd uv && "$ZARK" run swap.zk 2>&1) || fail "swap none: $out"
+cp uv/one.zk uv/swap.zk
+out=$(cd uv && "$ZARK" run swap.zk uvdefs.c 2>&1) || fail "swap one: $out"
+[ "$out" = "7 6" ] || fail "swap one: got: $out"
+cp uv/none.zk uv/swap.zk
+out=$(cd uv && "$ZARK" run swap.zk 2>&1) || fail "swap back: $out"
+[ "$out" = 42 ] || fail "swap back: got: $out"
+mkdir -p uvp/src
+cp uv/uv.h uv/uvdefs.c uvp/
+printf '[package]\nname = "uvp"\n\n[build]\nsources = ["uvdefs.c"]\ninclude = ["."]\n' > uvp/zark.toml
+printf 'import "uv.h";\nvoid main() { *present_var_ptr() += 1; println("{get_present()}"); }\n' > uvp/src/main.zk
+out=$(cd uvp && "$ZARK" run 2>&1) || fail "project_vars: $out"
+[ "$out" = 6 ] || fail "project_vars: got: $out"
+
+"$ZARK" cbind tests/cbind/bits.h -fsigned-char --inline-c bits_inl.c > bits.zk 2> /dev/null || fail "bits: exit $?"
+sed "s|@DIR@|$(realpath "$T")|" tests/cbind/bits.c.out > bits.c.exp
+diff -u <(nohid bits.c.exp) <(nohid bits_inl.c) || fail "bits: C file differs"
+for o in -O0 -O2; do
+    clang -c $o -Wall -Wextra -Werror bits_inl.c -o bits_inl.o || fail "bits $o: C file does not compile cleanly"
+done
+cat > use_bits2.zk <<'EOF'
+import "bits.zk";
+void main() {
+    flags f;
+    f.storage[0] = 0;
+    f.storage[1] = 0;
+    f.set_a(5);
+    f.set_s(-7);
+    f.set_on(true);
+    f.set_wide(4886718345);
+    f.set_h(-50);
+    println("{f.get_a()} {f.get_s()} {f.get_on()} {f.get_wide()} {f.get_h()} {flags_sump(&f)}");
+    f.set_a(9);
+    f.set_s(17);
+    f.set_wide(8589934595);
+    println("{f.get_a()} {f.get_s()} {f.get_wide()}");
+    flags g;
+    flags_set(&g);
+    println("{g.get_a()} {g.get_s()} {g.get_on()} {g.get_wide()} {g.get_h()}");
+    outer o;
+    o.f.storage[0] = 0;
+    o.f.storage[1] = 0;
+    o.f.set_h(12);
+    o.n = 3;
+    println("{o.f.get_h()} {flags_sump(&o.f)} {sizeof(flags)} {sizeof(outer)}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_bits2.zk bits_inl.c tests/cbind/bits.c 2>&1) || fail "bits $f: run: $out"
+    [ "$out" = "$(printf '5 -7 true 4886718345 -50 4886718344500935\n1 -15 3\n6 -16 false 8589934591 63\n12 120000 16 24')" ] || fail "bits $f: got: $out"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    cat > use_bits3.zk <<'EOF'
+import "bits.zk";
+void main() {
+    flags f;
+    f.storage[0] = 0;
+    f.storage[1] = 0;
+    f.set_a(5);
+    f.set_s(-7);
+    f.set_on(true);
+    f.set_wide(4886718345);
+    f.set_h(-50);
+    auto m = flags_make();
+    nib_t n;
+    n.set_lo(10);
+    n.set_hi(5);
+    println("{flags_sum(f)} {m.get_a()} {m.get_s()} {m.get_on()} {m.get_wide()} {m.get_h()} {nib_val(n)} {n.get_lo()} {n.get_hi()}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_bits3.zk bits_inl.c tests/cbind/bits.c 2>&1) || fail "bits by value $f: run: $out"
+        [ "$out" = "4886718344500935 3 15 true 1 -64 90 10 5" ] || fail "bits by value $f: got: $out"
+    done
+fi
+
+wt=i32
+if clang -E -dM -x c /dev/null | grep -q __WCHAR_UNSIGNED__; then wt=u32; fi
+"$ZARK" cbind tests/cbind/ctypes.h > ctypes.zk 2> ctypes.err || fail "ctypes: exit $?: $(cat ctypes.err)"
+sed "s/@WCHAR@/$wt/g" tests/cbind/ctypes.out > ctypes.exp
+diff -u ctypes.exp ctypes.zk || fail "ctypes: output differs"
+diff -u tests/cbind/ctypes.err ctypes.err || fail "ctypes: warnings differ"
+cat > use_ctypes.zk <<'EOF'
+import "ctypes.zk";
+void main() {
+    i32[2] a;
+    a[0] = 5;
+    a[1] = 6;
+    println("{sizes(1, -2, 3, -4, 5)} {wnext(65)} {flip(true)} {flip(false)} {both(true, true)} {both(true, false)} {vread(vptr(&a[0]))} {sizeof(sz)} {sizeof(w128)} {alignof(w128)}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_ctypes.zk tests/cbind/ctypes.c 2>&1) || fail "ctypes $f: run: $out"
+    [ "$out" = "3 66 false true true false 6 72 16 16" ] || fail "ctypes $f: got: $out"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    cat > use_ctypes2.zk <<'EOF'
+import "ctypes.zk";
+void main() {
+    const auto v = mkbb(true, false);
+    bbi w;
+    w.x = false;
+    w.y = true;
+    w.n = 3;
+    println("{v.x} {v.y} {bbsum(v, w)} {bbsum(mkbb(false, true), w)}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_ctypes2.zk tests/cbind/ctypes.c 2>&1) || fail "ctypes by value $f: run: $out"
+        [ "$out" = "true false 57 58" ] || fail "ctypes by value $f: got: $out"
+    done
+fi
+if printf '#include <uchar.h>\n' | clang -E -x c - > /dev/null 2>&1; then
+    "$ZARK" cbind tests/cbind/uchars.h > uchars.zk 2> uchars.err || fail "uchars: exit $?: $(cat uchars.err)"
+    diff -u tests/cbind/uchars.out uchars.zk || fail "uchars: output differs"
+    diff -u tests/cbind/uchars.err uchars.err || fail "uchars: warnings differ"
+    printf 'import "uchars.zk";\nvoid main() { println("{widen16(65)}"); }\n' > use_uchars.zk
+    out=$("$ZARK" run use_uchars.zk tests/cbind/uchars.c 2>&1) || fail "uchars: run: $out"
+    [ "$out" = 65601 ] || fail "uchars: got: $out"
+else
+    echo "skip uchars: no <uchar.h>"
+fi
 
 for h in dupa dupb; do
     "$ZARK" cbind tests/cbind/$h.h --inline-c $h.c > $h.zk 2> /dev/null || fail "$h: exit $?"
@@ -244,6 +580,27 @@ grep -q -- "-E" clang.log || fail "import_cache_hit: shim not used: $(cat clang.
 out=$(cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c 2>&1) || fail "import_cache_hit: second run: $out"
 [ "$out" = "$(cat interop/main.out)" ] || fail "import_cache_hit: got: $out"
 if grep -E -- "(^| )-E( |$)|fdump-record-layouts" clang.log; then fail "import_cache_hit: preprocessed again"; fi
+if command -v python3 >/dev/null; then
+    python3 - "$ZARK" zark2 <<'EOF' || fail "import_compiler_change: cannot patch the compiler"
+import sys
+b = open(sys.argv[1], "rb").read()
+old = b'CBIND_SRC = embed("cbind.zk")'
+assert b.count(old) == 1, b.count(old)
+open(sys.argv[2], "wb").write(b.replace(old, b'CBIND_SRC = embed("cbind.zz")'))
+EOF
+    chmod +x zark2
+    [ "$(uname -s)" = Darwin ] && codesign -f -s - zark2 2> /dev/null
+    : > clang.log
+    out=$(cd hit && PATH="$T/shim:$PATH" "$T/zark2" run main.zk lib.c 2>&1) || fail "import_compiler_change: $out"
+    [ "$out" = "$(cat interop/main.out)" ] || fail "import_compiler_change: got: $out"
+    grep -qE -- "(^| )-E( |$)" clang.log || fail "import_compiler_change: stale binding reused"
+    [ $(ls hit/.zark-cache/cbind/*.zk | wc -l) -eq 2 ] || fail "import_compiler_change: expected two cached bindings: $(ls hit/.zark-cache/cbind)"
+    : > clang.log
+    (cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c > /dev/null 2>&1) || fail "import_compiler_change: rerun"
+    if grep -E -- "(^| )-E( |$)" clang.log; then fail "import_compiler_change: own binding not reused"; fi
+else
+    echo "skip import_compiler_change: python3 is not installed"
+fi
 
 sed 's/#define LIB_MAGIC 42/#define LIB_MAGIC 43/' hit/lib.h > hit/lib.h.new && mv hit/lib.h.new hit/lib.h
 out=$(cd hit && "$ZARK" run main.zk lib.c 2>&1) || fail "import_header_edit: $out"

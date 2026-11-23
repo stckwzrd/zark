@@ -1,0 +1,28 @@
+extern u32 zark_bf_H_get_flags_0(flags* p);
+extern void zark_bf_H_set_flags_0(flags* p, u32 v);
+extern i32 zark_bf_H_get_flags_1(flags* p);
+extern void zark_bf_H_set_flags_1(flags* p, i32 v);
+extern bool zark_bf_H_get_flags_2(flags* p);
+extern void zark_bf_H_set_flags_2(flags* p, bool v);
+extern u64 zark_bf_H_get_flags_4(flags* p);
+extern void zark_bf_H_set_flags_4(flags* p, u64 v);
+extern i16 zark_bf_H_get_flags_7(flags* p);
+extern void zark_bf_H_set_flags_7(flags* p, i16 v);
+struct flags { u64[2] storage; u32 get_a() { return zark_bf_H_get_flags_0(this); } void set_a(u32 v) { zark_bf_H_set_flags_0(this, v); } i32 get_s() { return zark_bf_H_get_flags_1(this); } void set_s(i32 v) { zark_bf_H_set_flags_1(this, v); } bool get_on() { return zark_bf_H_get_flags_2(this); } void set_on(bool v) { zark_bf_H_set_flags_2(this, v); } u64 get_wide() { return zark_bf_H_get_flags_4(this); } void set_wide(u64 v) { zark_bf_H_set_flags_4(this, v); } i16 get_h() { return zark_bf_H_get_flags_7(this); } void set_h(i16 v) { zark_bf_H_set_flags_7(this, v); } }
+extern u8 zark_bf_H_get_nib_t_0(nib_t* p);
+extern void zark_bf_H_set_nib_t_0(nib_t* p, u8 v);
+extern u8 zark_bf_H_get_nib_t_1(nib_t* p);
+extern void zark_bf_H_set_nib_t_1(nib_t* p, u8 v);
+struct nib_t { u8[1] storage; u8 get_lo() { return zark_bf_H_get_nib_t_0(this); } void set_lo(u8 v) { zark_bf_H_set_nib_t_0(this, v); } u8 get_hi() { return zark_bf_H_get_nib_t_1(this); } void set_hi(u8 v) { zark_bf_H_set_nib_t_1(this, v); } }
+struct outer { flags f; i32 n; }
+extern i64 flags_sum(flags f);
+extern i64 flags_sump(flags* f);
+extern void flags_set(flags* f);
+extern flags flags_make();
+extern i32 nib_val(nib_t n);
+extern i32 zark_bf_H_get_nest_1(nest* p);
+extern void zark_bf_H_set_nest_1(nest* p, i32 v);
+struct nest { u32[2] storage; i32 get_c() { return zark_bf_H_get_nest_1(this); } void set_c(i32 v) { zark_bf_H_set_nest_1(this, v); } }
+extern i32 zark_bf_H_get_anb_2(anb* p);
+extern void zark_bf_H_set_anb_2(anb* p, i32 v);
+struct anb { u32[3] storage; i32 get_r() { return zark_bf_H_get_anb_2(this); } void set_r(i32 v) { zark_bf_H_set_anb_2(this, v); } }

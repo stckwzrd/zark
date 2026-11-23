@@ -1,0 +1,5 @@
+skipped part.z: _Complex
+skipped flags.lo: bitfield
+skipped mixsum: opaque record by value
+skipped byinc: incomplete record by value
+skipped byinc2: incomplete record by value

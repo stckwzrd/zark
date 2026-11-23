@@ -40,3 +40,17 @@ int takeald(struct ald a);
 #pragma pack(2)
 union a3 { char c; int i; double d; char arr[9]; };
 #pragma pack()
+int takefv(struct fv v);
+struct fv2 { v4 a; };
+float takefv2(struct fv2 v);
+struct fv3 { struct fv2 in; };
+struct fv3 mkfv3(void);
+struct cxs { _Complex double z; };
+double takecx(struct cxs c);
+struct hs { _Float16 a, b; };
+int takehs(struct hs h);
+struct lds { long double a, b; };
+int takelds(struct lds l);
+typedef float f4a __attribute__((aligned(4)));
+struct fa2 { f4a x, y; };
+float takefa2(struct fa2 f);

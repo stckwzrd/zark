@@ -1,0 +1,41 @@
+align(16) struct a16 { i8 c; }
+align(16) struct m16 { i8 c; i32 x; }
+align(16) struct pair16 { i64 a; i64 b; }
+align(16) struct dbl16 { f64 x; f64 y; }
+align(16) struct mix16 { f64 d; i64 n; }
+align(16) struct off16 { u64[4] storage; }
+align(16) struct un16 { u64[2] storage; u8* as_c() { void* p = this; return p; } i64* as_l() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+struct has16 { i32 k; pair16 p; }
+align(16) struct hu { u64[2] storage; a16* as_a() { void* p = this; return p; } i32* as_i() { void* p = this; return p; } }
+align(32) struct a32 { i32 x; }
+align(16) struct big16 { i64 a; i64 b; i64 c; }
+extern pair16 mk_pair(i64 a, i64 b);
+extern i64 sum_pair(pair16 p);
+extern f64 sum_dbl(dbl16 d);
+extern dbl16 mk_dbl(f64 x, f64 y);
+extern i32 get_a16(a16 a);
+extern i64 sum_has(has16 h);
+extern i64 sum_big(big16* b);
+extern i32 a32_x(a32* p);
+extern i64 sum_has_p(has16* h);
+extern i32 read_un16(un16* u);
+struct dl { f64 x; i64 n; }
+align(16) struct ud16 { f64[2] storage; f64[2]* as_d() { void* p = this; return p; } }
+align(16) struct umix16 { f64[1] storage; u64[1] storage_hi; dl* as_s() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+extern ud16 mk_ud16(f64 a, f64 b);
+extern f64 sum_ud16(ud16 u);
+extern umix16 mk_umix16(f64 x, i64 n);
+extern i64 sum_umix16(umix16 u);
+align(16) struct od16 { u64[2] storage; }
+extern od16 mk_od16(i32 a, i32 b);
+align(16) struct tal { u64[2] storage; }
+align(16) struct tdl { u64[2] storage; }
+align(16) struct td16 { u64[2] storage; f64* as_b() { void* p = this; return p; } }
+align(16) struct i128s { u64[2] storage; }
+extern tal mk_tal(i64 a, i64 b);
+align(16) struct q4 { f64 a; f64 b; f64 c; f64 d; }
+extern f64 sum_q4(q4 q);
+extern q4 mk_q4(f64 a);
+align(32) struct q8 { f64 a; f64 b; f64 c; f64 d; }
+extern f64 sum_q8(q8 q);
+align(16) struct m4 { f64 a; f64 b; f64 c; f64 d; }

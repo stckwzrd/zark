@@ -1,0 +1,15 @@
+struct P { i64 x; i64 y; }
+
+export i64 addp(P p, i64* q) {
+    return p.x + p.y + *q;
+}
+
+i64 viafn(P p, i64* q) {
+    return addp(p, q);
+}
+
+void main() {
+    i64* q = null;
+    fn(P, i64*) -> i64 f = viafn;
+    println("{f(P{ .x = 1, .y = 2 }, q)}");
+}

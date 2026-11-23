@@ -1,0 +1,17 @@
+union ud { double d; };
+union udi { double d; int i; };
+union uff { float a; float b; };
+union ufd { float f; double d; };
+union fi3 { float f[3]; int i; };
+union dd { double d[2]; };
+union __attribute__((packed)) pf { float f; };
+struct sud { int k; union ud u; };
+union ud put_ud(union ud u);
+union udi put_udi(union udi u);
+union uff put_uff(union uff u);
+union ufd put_ufd(union ufd u);
+union fi3 put_fi3(union fi3 u);
+union dd put_dd(union dd u);
+struct sud put_sud(struct sud s);
+float take_pf(union pf u);
+double mix(union uff a, double x, union udi b, union fi3 c, union ud d, int y);

@@ -1,0 +1,30 @@
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "@DIR@/tests/cbind/vars.h"
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_counter)
+void* zark_var_H_counter(void) { return (void*)&counter; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_names)
+void* zark_var_H_names(void) { return (void*)&names; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_table)
+void* zark_var_H_table(void) { return (void*)&table; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_handle)
+void* zark_var_H_handle(void) { return (void*)&handle; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_arr)
+void* zark_var_H_arr(void) { return (void*)&arr; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_hook)
+void* zark_var_H_hook(void) { return (void*)&hook; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_bytes)
+void* zark_var_H_bytes(void) { return (void*)&bytes; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_type)
+void* zark_var_H_type(void) { return (void*)&type; }
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_pv)
+void* zark_var_H_pv(void) { return (void*)&pv; }
+#endif

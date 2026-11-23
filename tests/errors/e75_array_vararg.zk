@@ -1,0 +1,6 @@
+extern i32 printf(u8* fmt, ...);
+
+void main() {
+    i32[2] a = [1, 2];
+    printf("%d\n", a);
+}

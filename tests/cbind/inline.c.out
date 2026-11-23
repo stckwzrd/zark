@@ -25,3 +25,4 @@ extern __typeof__(twice) twice;
 int zark_inl_14d941d3a8a86510_twice(int a0) { return twice(a0); }
 int zark_inl_14d941d3a8a86510_sq(int a0) { return sq(a0); }
 myint zark_inl_14d941d3a8a86510_ident(myint a0) { return ident(a0); }
+union mix zark_inl_14d941d3a8a86510_mixit(union mix a0) { return mixit(a0); }

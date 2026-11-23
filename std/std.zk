@@ -2241,13 +2241,13 @@ void __crash_handler(i32 sig, i64 code, u64 addr, u64 rip, u64 rsp, u64 bp) {
     _ = dladdr(*(&fp as **void), &self);
     u8[2048] args;
     auto ao = 0;
-    u8*[56] argv;
+    u8*[60] argv;
     auto ac = 0;
     u8[1024] exe;
     const auto el = vrt_exe_path(&exe[0], 1023);
     if (el <= 0) { return; }
     exe[el] = 0;
-    for (auto a : ["addr2line", "-f", "-C", "-i", "-p", "-e"]) {
+    for (auto a : ["sh", "-c", "addr2line \"$@\" 2> /dev/null | sed 's/\\$[zc] at / at /'", "sh", "-f", "-C", "-i", "-p", "-e"]) {
         argv[ac] = a.ptr;
         ac += 1;
     }
@@ -2264,7 +2264,7 @@ void __crash_handler(i32 sig, i64 code, u64 addr, u64 rip, u64 rsp, u64 bp) {
             if (di.fname != null) { file = cstr(di.fname); }
         }
         __crash_write(bprint(line[..], "  #{i} 0x{off:x} in {file}\n") catch "");
-        if (di.fbase == self.fbase && ac < 55) {
+        if (di.fbase == self.fbase && ac < 59) {
             auto o = off;
             if (*((di.fbase as u64 + 16) as *u16) == 2) { o = pc; }   // ET_EXEC: addr2line wants the address
             if (i > 0) { o -= 1; }
@@ -2276,7 +2276,7 @@ void __crash_handler(i32 sig, i64 code, u64 addr, u64 rip, u64 rsp, u64 bp) {
             }
         }
     }
-    if (ac > 7 && vrt_os() == 1) {
+    if (ac > 10 && vrt_os() == 1) {
         argv[ac] = null;
         __crash_write("where (addr2line):\n");
         const auto pid = fork();
