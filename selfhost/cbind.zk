@@ -2568,8 +2568,26 @@ struct CEmit {
         }
     }
 
+    bool has_vec(CType* t) {
+        auto x = t;
+        while (x.k == .Named && x.tag == 0) {
+            x = this->typedefs.get_or(x.name, null);
+            if (x == null) { return false; }
+        }
+        if (x.k == .Bad) { return x.name == "vector_size attribute"; }
+        if (x.k == .Array) { return this->has_vec(x.elem); }
+        const auto d = this->rec_of(x);
+        if (d == null) { return false; }
+        for (auto f : d.fields.slice()) { if (this->has_vec(f.ty)) { return true; } }
+        return false;
+    }
+
     !bool abi_ok(CType* t) {
         if (this->rec_of(t) == null) { return true; }
+        if (this->has_vec(t)) {
+            this->fail("vector in a record by value");
+            return false;
+        }
         const auto z = this->size(t);
         if (z.align > 8 && z.size > 16) {
             this->fail("over-aligned record by value");

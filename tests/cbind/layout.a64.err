@@ -16,3 +16,7 @@ skipped bitu.flag: bitfield in anonymous record
 opaque bitu: bitfields
 skipped a3.i: underaligned member
 skipped a3.d: underaligned member
+skipped takefv: vector in a record by value
+opaque fv2: uses skipped v4
+skipped takefv2: vector in a record by value
+skipped mkfv3: vector in a record by value

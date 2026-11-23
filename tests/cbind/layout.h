@@ -40,3 +40,8 @@ int takeald(struct ald a);
 #pragma pack(2)
 union a3 { char c; int i; double d; char arr[9]; };
 #pragma pack()
+int takefv(struct fv v);
+struct fv2 { v4 a; };
+float takefv2(struct fv2 v);
+struct fv3 { struct fv2 in; };
+struct fv3 mkfv3(void);
