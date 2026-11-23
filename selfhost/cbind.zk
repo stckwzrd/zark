@@ -1,5 +1,6 @@
 import "lexer.zk";
 import "cbuild.zk";
+import "cxxbind.zk";
 import "std/fs" as fs;
 import "std/os" as os;
 import "std/path" as path;
@@ -3020,7 +3021,7 @@ struct CBind {
         return 1;
     }
     if (cross_target()) { flags.push(target_flag())?; }
-    const auto b = cbind_header(a, header, ".", flags) catch |e| {
+    const auto b = cx_bind(a, header, ".", flags) catch |e| {
         if (e != error.CompileFailed) { eprintln("error: cannot bind {header}: {e}"); }
         return 1;
     };
@@ -3098,11 +3099,11 @@ str c_header_name(str p) {
     return read_file(a, p);
 }
 
-!List<str> cb_sys_dirs(Allocator a, List<str> flags) {
+!List<str> cb_sys_dirs(Allocator a, List<str> flags, bool cxx) {
     auto argv = List<str>::init(a);
-    argv.append(["clang", "-E", "-v"])?;
+    if (cxx) { argv.append(["clang++", "-E", "-v"])?; } else { argv.append(["clang", "-E", "-v"])?; }
     argv.append(flags.slice())?;
-    argv.append(["-x", "c", "/dev/null"])?;
+    if (cxx) { argv.append(["-x", "c++", "/dev/null"])?; } else { argv.append(["-x", "c", "/dev/null"])?; }
     const auto r = os::exec(a, argv.slice())?;
     if (r.code != 0) { return error.CompileFailed; }
     auto dirs = List<str>::init(a);
@@ -3130,7 +3131,7 @@ str c_header_name(str p) {
     auto raw = List<str>::init(a);
     raw.push(from_dir)?;
     for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { raw.push(f[2..])?; } }
-    raw.append(cb_sys_dirs(a, flags)?.slice())?;
+    raw.append(cb_sys_dirs(a, flags, false)?.slice())?;
     auto dirs = List<str>::init(a);
     for (auto d : raw.slice()) {
         const auto p = cb_abs_dir(a, d)?;
@@ -3219,7 +3220,7 @@ str c_header_name(str p) {
                 eprintln("error: cannot find C header '{header}'");
                 return error.CompileFailed;
             }
-            const auto sys = cb_sys_dirs(a, flags) catch { return error.CompileFailed; };
+            const auto sys = cb_sys_dirs(a, flags, false) catch { return error.CompileFailed; };
             auto ids = List<str>::init(a);
             for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { ids.push(f[2..])?; } }
             auto sb = List<u8>::init(a);
