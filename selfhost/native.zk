@@ -141,6 +141,7 @@ struct Native {
     Allocator a;
     ObjFile obj;
     Map<LT*> named;
+    Map<str> pending;
     LT* t_i1;
     LT* t_i8;
     LT* t_i32;
@@ -245,10 +246,12 @@ struct Native {
             while (c.peek() != '"') { c.i += 1; }
             const auto name = c.s[st..c.i];
             c.i += 1;
-            return this->named.get(name) catch {
+            if (this->named.has(name)) { return this->named.get(name)?; }
+            const auto ln = this->pending.get(name) catch {
                 eprintln("native: unknown type %\"{name}\"");
                 return error.CompileFailed;
-            }
+            };
+            return this->type_line(ln);
         }
         const auto w = c.word();
         match w {
@@ -332,6 +335,9 @@ struct Native {
             }
         }
         if (st < ir.len) { lines.push(ir[st..])?; }
+        for (auto ln : lines.slice()) {
+            if (str_starts_with(ln, "%\"")) { this->pending.put(ln[2..str_find_byte(ln[2..], '"') + 2], ln)?; }
+        }
         auto i = 0;
         while (i < lines.len) {
             const auto ln = lines.get(i);
@@ -340,12 +346,7 @@ struct Native {
                 continue;
             }
             if (str_starts_with(ln, "%\"")) {
-                const auto q = str_find_byte(ln[2..], '"') + 2;
-                const auto name = ln[2..q];
-                auto c = Cur{ .s = ln, .i = q + 1 };
-                _ = c.eat('=');
-                _ = c.eat_word("type");
-                this->named.put(name, this->ty(&c)?)?;
+                if (!this->named.has(ln[2..str_find_byte(ln[2..], '"') + 2])) { _ = this->type_line(ln)?; }
             } else if (ln[0] == '@') {
                 this->global(ln) catch |e| {
                     eprintln("native: cannot parse global: {ln}");
@@ -360,6 +361,16 @@ struct Native {
             i += 1;
         }
         this->compile_all(defs.slice())?;
+    }
+
+    !LT* type_line(str ln) {
+        const auto q = str_find_byte(ln[2..], '"') + 2;
+        auto c = Cur{ .s = ln, .i = q + 1 };
+        _ = c.eat('=');
+        _ = c.eat_word("type");
+        const auto t = this->ty(&c)?;
+        this->named.put(ln[2..q], t)?;
+        return t;
     }
 
     !void global(str ln) {
@@ -2035,6 +2046,7 @@ void native_worker(Pool* p) {
     n.a = a;
     n.obj = new_obj(a);
     n.named = Map<LT*>::init(a);
+    n.pending = Map<str>::init(a);
     n.t_i1 = n.int_t(1)?;
     n.t_i8 = n.int_t(8)?;
     n.t_i32 = n.int_t(32)?;

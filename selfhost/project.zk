@@ -248,6 +248,9 @@ struct Manifest {
     List<str> sources; // absolute
     List<str> libs;
     List<str> flags;
+    List<str> cflags;
+    List<str> pkgs;
+    List<str> lib_dirs;
 }
 
 /// the directory with a zark.toml, searching upward from `start`; "" when there is none
@@ -280,6 +283,9 @@ struct Manifest {
     p.sources = List<str>::init(a);
     p.libs = List<str>::init(a);
     p.flags = List<str>::init(a);
+    p.cflags = List<str>::init(a);
+    p.pkgs = List<str>::init(a);
+    p.lib_dirs = List<str>::init(a);
     p.name = toml_str(doc, "package.name", path::base(dir), manifest)?;
     p.main = path::join(a, [dir, toml_str(doc, "package.main", "src/main.zk", manifest)?])?;
     p.lib = path::join(a, [dir, toml_str(doc, "package.lib", "src/lib.zk", manifest)?])?;
@@ -291,6 +297,31 @@ struct Manifest {
     for (auto s : srcs) { p.sources.push(path::join(a, [dir, s])?)?; }
     toml_strs(doc, "build.libs", &p.libs, manifest)?;
     toml_strs(doc, "build.flags", &p.flags, manifest)?;
+    auto incs = List<str>::init(a);
+    toml_strs(doc, "build.include", &incs, manifest)?;
+    for (auto i : incs) {
+        auto b = List<u8>::init(a);
+        sprint(&b, "-I{path::join(a, [dir, i])?}")?;
+        p.cflags.push(b.slice())?;
+    }
+    auto defs = List<str>::init(a);
+    toml_strs(doc, "build.defines", &defs, manifest)?;
+    for (auto d : defs) {
+        auto b = List<u8>::init(a);
+        sprint(&b, "-D{d}")?;
+        p.cflags.push(b.slice())?;
+    }
+    const auto std_name = toml_str(doc, "build.std", "", manifest)?;
+    if (std_name.len > 0) {
+        auto b = List<u8>::init(a);
+        sprint(&b, "-std={std_name}")?;
+        p.cflags.push(b.slice())?;
+    }
+    toml_strs(doc, "build.cflags", &p.cflags, manifest)?;
+    toml_strs(doc, "build.pkg-config", &p.pkgs, manifest)?;
+    auto ldirs = List<str>::init(a);
+    toml_strs(doc, "build.lib-dirs", &ldirs, manifest)?;
+    for (auto d : ldirs) { p.lib_dirs.push(path::join(a, [dir, d])?)?; }
     for (auto e : doc.entries) {
         if (!str_starts_with(e.key, "dependencies.")) { continue; }
         const auto name = e.key[13..];
@@ -325,6 +356,9 @@ struct Manifest {
             register_dep(name, path::dir(sub.lib), sub.lib)?;
             for (auto s : sub.sources) { p.sources.push(s)?; }
             for (auto l : sub.libs) { p.libs.push(l)?; }
+            for (auto c : sub.cflags) { p.cflags.push(c)?; }
+            for (auto k : sub.pkgs) { p.pkgs.push(k)?; }
+            for (auto d : sub.lib_dirs) { p.lib_dirs.push(d)?; }
         } else {
             auto lib = path::join(a, [ddir, "src/lib.zk"])?;
             if (!fs::is_file(lib)) { lib = path::join(a, [ddir, "lib.zk"])?; }
@@ -348,17 +382,50 @@ struct Manifest {
     }
 }
 
-/// the arguments `zark run/build/test` gets in a project: main file, sources, libs, flags,
-/// then what was typed
-!List<str> project_args(Allocator a, Manifest* p, str cmd, List<str> typed) {
+!void pkg_flags(Allocator a, str pkg, List<str>* out) {
+    const auto r = os::exec(a, ["pkg-config", "--cflags", "--libs", pkg]) catch |e| {
+        if (e == error.ProgramNotFound) {
+            eprintln("error: pkg-config is not installed (needed for '{pkg}')");
+            return error.CompileFailed;
+        }
+        return e;
+    };
+    if (r.code != 0) {
+        eprintln("error: pkg-config could not find package '{pkg}'");
+        return error.CompileFailed;
+    }
+    auto it = str_fields(r.out);
+    while (it.next()) { out.push(it.part)?; }
+}
+
+!List<str> project_c_args(Allocator a, Manifest* p) {
     auto out = List<str>::init(a);
-    out.push(p.main)?;
     for (auto s : p.sources) { out.push(s)?; }
     for (auto l : p.libs) {
         auto b = List<u8>::init(a);
         sprint(&b, "-l{l}")?;
         out.push(b.slice())?;
     }
+    for (auto c : p.cflags) { out.push(c)?; }
+    for (auto k : p.pkgs) { pkg_flags(a, k, &out)?; }
+    for (auto d : p.lib_dirs) {
+        auto b = List<u8>::init(a);
+        sprint(&b, "-L{d}")?;
+        out.push(b.slice())?;
+    }
+    return out;
+}
+
+bool has_main(Manifest* p) {
+    return fs::is_file(p.main) || p.sources.len == 0;
+}
+
+/// the arguments `zark run/build/test` gets in a project: main file, sources, libs, flags,
+/// then what was typed
+!List<str> project_args(Allocator a, Manifest* p, str cmd, List<str> typed) {
+    auto out = List<str>::init(a);
+    if (cmd == "test" || has_main(p)) { out.push(p.main)?; }
+    out.append(project_c_args(a, p)?.slice())?;
     for (auto f : p.flags) { out.push(f)?; }
     auto has_o = false;
     for (auto t : typed) { if (t == "-o") { has_o = true; } }
@@ -396,7 +463,7 @@ struct Manifest {
 /// the files whose test blocks `zark test` runs in a project: main, lib and tests/*.zk
 !List<str> project_test_files(Allocator a, Manifest* p) {
     auto out = List<str>::init(a);
-    out.push(p.main)?;
+    if (has_main(p)) { out.push(p.main)?; }
     if (p.lib != p.main) { out.push(p.lib)?; }
     const auto tdir = path::join(a, [p.dir, "tests"])?;
     if (fs::is_dir(tdir)) {
@@ -410,7 +477,11 @@ struct Manifest {
 
 /// in an editor: register the dependencies of the project that contains `file`
 void project_setup_for(Allocator a, str file) {
+    c_flags = List<str>{};
     const auto dir = find_project(a, path::dir(file)) catch "";
     if (dir.len == 0) { return; }
-    _ = load_project(a, dir, false, 0) catch null;
+    const auto p = load_project(a, dir, false, 0) catch { return; };
+    const auto args = project_c_args(a, p) catch { return; };
+    const auto sp = split_extras(a, args) catch { return; };
+    c_flags = sp.flags;
 }

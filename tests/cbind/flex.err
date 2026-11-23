@@ -1,0 +1,4 @@
+opaque el: aligned
+opaque f1: flexible array member
+opaque f1b: flexible array member
+skipped f2.e: flexible array member

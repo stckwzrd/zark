@@ -1,0 +1,12 @@
+struct mix { u64[1] storage; f32* as_f() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
+struct im { u32[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } }
+struct pt { i32 x; i32 y; }
+struct ald2 { u64[1] storage; }
+struct hasfp { u64[2] storage; }
+struct okfp { u64[2] storage; }
+struct ptrfp { fn(im*) -> i32 cb; fn() -> pt* get; }
+type cb4 = fn(im*) -> i32;
+extern fn() -> pt* getg();
+extern hasfp mk();
+extern ptrfp mkp();
+extern i32 callp(fn(im*) -> i32 cb, i32 x);

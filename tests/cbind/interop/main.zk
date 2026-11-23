@@ -1,0 +1,18 @@
+import "lib.h" as lib;
+
+i32 mul(i32 a, i32 b) { return a * b; }
+
+void main() {
+    lib::box b;
+    b.w = 3;
+    b.h = 4;
+    b.corner.x = 2;
+    lib::num n;
+    *n.as_i() = 7;
+    const auto ni = lib::num_get(&n, 0);
+    *n.as_d() = 2.5;
+    const auto nd = lib::num_get(&n, 1);
+    println("{lib::LIB_MAGIC} {lib::LIB_NAME} {lib::lib_magic()} {lib::scaled(2)}");
+    println("{lib::RED} {lib::GREEN} {lib::BLUE} {cstr(lib::color_name(lib::GREEN))} {cstr(lib::color_name(lib::BLUE))}");
+    println("{lib::box_area(&b)} {lib::apply(mul, 6, 7)} {lib::sum_ints(4, 1, 2, 3, 4)} {ni} {nd}");
+}

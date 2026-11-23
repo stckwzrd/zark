@@ -1,0 +1,38 @@
+struct fm { u64[1] storage; }
+struct pk { u8[5] storage; }
+struct unpk { u8 c; i32 x; }
+struct pk2 { u16[3] storage; }
+struct unpk2 { u8 c; i32 x; }
+type E8 = u8;
+const auto A8 = 1;
+struct e8s { u8 e; u8 c; }
+type EP = u8;
+const auto AP = 1;
+struct eps { u8 e; u8 c; }
+const auto PX = 1;
+type pe_t = u8;
+type Big = i64;
+const auto BIG = 4294967296;
+type Neg = u32;
+const auto UB = 4294967295;
+type Ok = i32;
+const auto OA = 0;
+const auto OB = 5;
+const auto OC = 20;
+const auto OD = 97;
+const auto OE = -1;
+const auto OF = 16777216;
+struct es { i64 b; i32 o; }
+extern i32 uses_neg(u32 n);
+extern i32 uses_ok(i32 o);
+extern i32 uses_e8(u8 e);
+struct bits { u64[2] storage; }
+struct pkd { u8[7] storage; }
+struct ald { u64[1] storage; }
+struct alf { u64[2] storage; }
+struct usesbits { bits[2] b; pkd p; alf f; }
+struct bitu { u32[2] storage; }
+extern i32 takebits(bits b);
+extern i32 takebitsp(bits* b);
+extern i32 takeald(ald a);
+struct a3 { u16[5] storage; u8* as_c() { void* p = this; return p; } u8[9]* as_arr() { void* p = this; return p; } }

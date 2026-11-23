@@ -1,0 +1,9 @@
+opaque ald2: aligned
+opaque hasfp: record by value in function pointer
+opaque okfp: record by value in function pointer
+skipped cb1: record by value in function pointer
+skipped cb2: record by value in function pointer
+skipped cb3: record by value in function pointer
+skipped cb5: record by value in function pointer
+skipped setcb: record by value in function pointer
+skipped getf: record by value in function pointer
