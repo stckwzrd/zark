@@ -3,6 +3,6 @@ type el_t = el;
 struct f1 { u64[1] storage; }
 struct f1b { u64[1] storage; }
 struct f1c { i32 n; el[0] e; }
-struct o1 { u8 c; f1 f; }
-struct o1c { u8 c; f1c f; }
+struct o1 { i8 c; f1 f; }
+struct o1c { i8 c; f1c f; }
 struct f2 { i64 n; }

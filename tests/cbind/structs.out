@@ -2,9 +2,9 @@ struct node { node* next; i32 v; }
 struct W { }
 struct P { i32 x; f64 y; }
 struct shape__anon0 { f32 x; f32 y; }
-struct shape__anon1__anon0 { u8 a; u8 b; }
+struct shape__anon1__anon0 { i8 a; i8 b; }
 struct shape__anon1 { i32 w; shape__anon1__anon0 in; }
-struct shape { i32 kind; shape__anon0 pos; shape__anon1 size; u8[16] name; i32[2][3] grid; P[4] points; u8* label; i32 type_; }
+struct shape { i32 kind; shape__anon0 pos; shape__anon1 size; i8[16] name; i32[2][3] grid; P[4] points; u8* label; i32 type_; }
 struct ev__anon0 { i32 x; i32 y; }
 struct ev { i32 t; ev__anon0 __anon0; }
 struct pair_t { i32 a; i32 b; }

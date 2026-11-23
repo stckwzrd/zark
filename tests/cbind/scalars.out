@@ -1,7 +1,7 @@
 type u32t = u32;
 type sc_t = i8;
 type uc_t = u8;
-type ch_t = u8;
+type ch_t = i8;
 type s16 = i16;
 type u16t = u16;
 type l64 = i64;
@@ -26,7 +26,7 @@ type type_ = i32;
 type cb_t = fn(void*, i32) -> i32;
 type vcb_t = fn(i32) -> void;
 extern i32 add(i32 a, i32 b);
-extern i32 unnamed(i32 a0, u8 a1);
+extern i32 unnamed(i32 a0, i8 a1);
 extern void nothing();
 extern i32 say(u8* fmt, ...);
 extern u8* name_of(u8 c, i8 d, bool ok);

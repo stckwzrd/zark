@@ -795,7 +795,7 @@ struct CParser {
                 s.ty.width = 64;
             }
         } else if (base == "char") {
-            s.ty = this->int_ty(8, nsigned > 0)?;
+            s.ty = this->int_ty(8, nsigned > 0 || (nunsigned == 0 && !this->uchar))?;
             s.ty.plain = nsigned + nunsigned == 0;
         } else if (nshort > 0) {
             s.ty = this->int_ty(16, nunsigned == 0)?;
@@ -1728,6 +1728,12 @@ struct CEmit {
         const auto e = this->expand(t.elem);
         if (e.k == .Func) {
             this->fn_ty(b, e)?;
+            return;
+        }
+        auto c = e;
+        while (c.k == .Named && c.tag == 0 && this->typedefs.has(c.name)) { c = this->typedefs.get_or(c.name, c); }
+        if (c.k == .Int && c.plain) {
+            sprint(b, "u8*")?;
             return;
         }
         this->behind += 1;

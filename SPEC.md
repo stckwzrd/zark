@@ -308,7 +308,8 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 
 | C | Zark |
 |---|---|
-| `char`, `signed char`, `unsigned char` | `u8`, `i8`, `u8` |
+| `char`, `signed char`, `unsigned char` | `i8` where `char` is signed (x86-64, Apple arm64), `u8` where it is unsigned (Linux arm64; clang defines `__CHAR_UNSIGNED__`, `-funsigned-char` too); `i8`; `u8` |
+| `char *`, `const char *` (also through a typedef of `char`) | `u8*` (C strings) |
 | `short`, `int`, `long`, `long long` | `i16`, `i32`, `i64`, `i64` (unsigned: `u16`, `u32`, `u64`, `u64`) |
 | `size_t`, `ptrdiff_t` | `usize`, `i64` |
 | `_Bool`, `float`, `double` | `bool`, `f32`, `f64` |

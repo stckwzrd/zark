@@ -1,0 +1,9 @@
+typedef char cht;
+struct cs { char c; signed char s; unsigned char u; char name[4]; const char* text; };
+char first(const char* s);
+char add1(char c);
+int widen(char c);
+signed char sneg(signed char x);
+unsigned char ubig(unsigned char x);
+int count_ch(const cht* s, char** rest);
+void fill(struct cs* p, cht c);

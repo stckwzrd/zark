@@ -13,8 +13,8 @@ mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
 for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix; do
-    flags=""
-    [ "$name" = shorten ] && flags="-fshort-enums"
+    flags="-fsigned-char"
+    [ "$name" = shorten ] && flags="$flags -fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
     diff -u <(nohid "tests/cbind/$name.out") <(nohid "$name.zk") || fail "$name: output differs"
     diff -u "tests/cbind/$name.err" "$name.err" || fail "$name: warnings differ"
@@ -22,11 +22,42 @@ for name in scalars structs params layout names consts clash shorten unions unio
     "$ZARK" ir "use_$name.zk" > /dev/null || fail "$name: bindings do not compile"
 done
 
+for sign in signed unsigned; do
+    exp=out
+    [ "$sign" = unsigned ] && exp=uout
+    "$ZARK" cbind tests/cbind/charsign.h -f$sign-char > charsign.zk 2> charsign.err || fail "charsign $sign: exit $?: $(cat charsign.err)"
+    diff -u tests/cbind/charsign.$exp charsign.zk || fail "charsign $sign: output differs"
+    diff -u tests/cbind/charsign.err charsign.err || fail "charsign $sign: warnings differ"
+done
+exp=out
+want="-56 -55 -56 -56 -56 97 -3 250 3 94 3 98"
+if clang -E -dM -x c /dev/null | grep -q __CHAR_UNSIGNED__; then
+    exp=uout
+    want="200 201 200 200 200 97 -3 250 3 94 3 98"
+fi
+"$ZARK" cbind tests/cbind/charsign.h > charsign.zk 2> /dev/null || fail "charsign: exit $?"
+diff -u tests/cbind/charsign.$exp charsign.zk || fail "charsign: output differs for this target"
+cat > use_charsign.zk <<'EOF'
+import "charsign.zk";
+void main() {
+    cs v;
+    const auto c = first("\xC8x".ptr);
+    fill(&v, c);
+    u8* rest = null;
+    const auto n = count_ch("abc".ptr, &rest);
+    println("{c} {add1(c)} {widen(c)} {v.c} {v.name[0]} {v.name[1]} {v.s} {v.u} {sneg(v.s)} {ubig(v.u)} {n} {*rest}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_charsign.zk tests/cbind/charsign.c 2>&1) || fail "charsign $f: run: $out"
+    [ "$out" = "$want" ] || fail "charsign $f: got: $out"
+done
+
 printf 'import "params.zk";\ni32 inc(i32 x) { return x; }\nvoid set(cbs* c, vec3 v) { c.cb = inc; usev(&v[0]); }\nvoid main() { set(null, [1.0, 2.0, 3.0]); }\n' > call_params.zk
 "$ZARK" ir call_params.zk > call.ll || fail "params: typed use does not compile"
 grep -q "declare void @usev(ptr)" call.ll || fail "params: usev does not take a pointer"
 
-"$ZARK" cbind tests/cbind/structs.h -o out.zk 2> /dev/null || fail "-o: exit $?"
+"$ZARK" cbind tests/cbind/structs.h -fsigned-char -o out.zk 2> /dev/null || fail "-o: exit $?"
 diff -u tests/cbind/structs.out out.zk || fail "-o: output differs"
 
 printf '#if VAL != 3\n#error no\n#endif\nint v(void);\n' > flag.h
@@ -163,7 +194,7 @@ EOF
 out=$("$ZARK" run use_flex2.zk 2>&1) || fail "flex: run: $out"
 [ "$out" = "8 8 8 8 8 8 16 8 16 8 8 8" ] || fail "flex: got: $out"
 
-"$ZARK" cbind tests/cbind/inline.h --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
+"$ZARK" cbind tests/cbind/inline.h -fsigned-char --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/inline.c.out > inline.c.exp
 diff -u <(nohid inline.c.exp) <(nohid inline.c) || fail "inline: C file differs"
 for o in -O0 -O2; do
@@ -198,7 +229,7 @@ if [ "$(uname -m)" = x86_64 ]; then
     done
 fi
 
-"$ZARK" cbind tests/cbind/wrapfix.h --inline-c wrapfix.c > /dev/null 2>&1 || fail "wrapfix: exit $?"
+"$ZARK" cbind tests/cbind/wrapfix.h -fsigned-char --inline-c wrapfix.c > /dev/null 2>&1 || fail "wrapfix: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/wrapfix.c.out > wrapfix.c.exp
 diff -u <(nohid wrapfix.c.exp) <(nohid wrapfix.c) || fail "wrapfix: C file differs"
 for o in -O0 -O2; do

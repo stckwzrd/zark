@@ -6,7 +6,7 @@ struct part { u64[2] storage; i32* as_i() { void* p = this; return p; } }
 struct cbu { u64[1] storage; *fn(i32) -> i32 as_f() { void* p = this; return p; } void** as_p() { void* p = this; return p; } }
 struct flags { u32[1] storage; u32* as_all() { void* p = this; return p; } }
 struct holder__anon0 { u32[1] storage; i32* as_x() { void* p = this; return p; } f32* as_y() { void* p = this; return p; } }
-struct holder__anon1 { u8 p; u8 q; }
+struct holder__anon1 { i8 p; i8 q; }
 struct holder { i32 k; holder__anon0 u; holder__anon1 pq; }
 struct ev__anon0__anon0 { i32 a; i32 b; }
 struct ev__anon0 { u64[1] storage; ev__anon0__anon0* as_s() { void* p = this; return p; } i64* as_l() { void* p = this; return p; } }
