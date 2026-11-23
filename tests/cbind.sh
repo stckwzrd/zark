@@ -12,7 +12,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16 vars; do
+for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16 vars bits; do
     flags="-fsigned-char"
     [ "$name" = shorten ] && flags="$flags -fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -331,6 +331,68 @@ cp tests/cbind/vars.h tests/cbind/vardefs.c ivars/
 printf 'import "vars.h" as v;\nvoid main() { *v::counter_ptr() = 2; println("{v::read_counter()}"); }\n' > ivars/m.zk
 out=$(cd ivars && "$ZARK" run m.zk vardefs.c 2>&1) || fail "import_vars: $out"
 [ "$out" = 2726 ] || fail "import_vars: got: $out"
+
+"$ZARK" cbind tests/cbind/bits.h -fsigned-char --inline-c bits_inl.c > bits.zk 2> /dev/null || fail "bits: exit $?"
+sed "s|@DIR@|$(realpath "$T")|" tests/cbind/bits.c.out > bits.c.exp
+diff -u <(nohid bits.c.exp) <(nohid bits_inl.c) || fail "bits: C file differs"
+for o in -O0 -O2; do
+    clang -c $o -Wall -Wextra -Werror bits_inl.c -o bits_inl.o || fail "bits $o: C file does not compile cleanly"
+done
+cat > use_bits2.zk <<'EOF'
+import "bits.zk";
+void main() {
+    flags f;
+    f.storage[0] = 0;
+    f.storage[1] = 0;
+    f.set_a(5);
+    f.set_s(-7);
+    f.set_on(true);
+    f.set_wide(4886718345);
+    f.set_h(-50);
+    println("{f.get_a()} {f.get_s()} {f.get_on()} {f.get_wide()} {f.get_h()} {flags_sump(&f)}");
+    f.set_a(9);
+    f.set_s(17);
+    f.set_wide(8589934595);
+    println("{f.get_a()} {f.get_s()} {f.get_wide()}");
+    flags g;
+    flags_set(&g);
+    println("{g.get_a()} {g.get_s()} {g.get_on()} {g.get_wide()} {g.get_h()}");
+    outer o;
+    o.f.storage[0] = 0;
+    o.f.storage[1] = 0;
+    o.f.set_h(12);
+    o.n = 3;
+    println("{o.f.get_h()} {flags_sump(&o.f)} {sizeof(flags)} {sizeof(outer)}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_bits2.zk bits_inl.c tests/cbind/bits.c 2>&1) || fail "bits $f: run: $out"
+    [ "$out" = "$(printf '5 -7 true 4886718345 -50 4886718344500935\n1 -15 3\n6 -16 false 8589934591 63\n12 120000 16 24')" ] || fail "bits $f: got: $out"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    cat > use_bits3.zk <<'EOF'
+import "bits.zk";
+void main() {
+    flags f;
+    f.storage[0] = 0;
+    f.storage[1] = 0;
+    f.set_a(5);
+    f.set_s(-7);
+    f.set_on(true);
+    f.set_wide(4886718345);
+    f.set_h(-50);
+    auto m = flags_make();
+    nib_t n;
+    n.set_lo(10);
+    n.set_hi(5);
+    println("{flags_sum(f)} {m.get_a()} {m.get_s()} {m.get_on()} {m.get_wide()} {m.get_h()} {nib_val(n)} {n.get_lo()} {n.get_hi()}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_bits3.zk bits_inl.c tests/cbind/bits.c 2>&1) || fail "bits by value $f: run: $out"
+        [ "$out" = "4886718344500935 3 15 true 1 -64 90 10 5" ] || fail "bits by value $f: got: $out"
+    done
+fi
 
 for h in dupa dupb; do
     "$ZARK" cbind tests/cbind/$h.h --inline-c $h.c > $h.zk 2> /dev/null || fail "$h: exit $?"

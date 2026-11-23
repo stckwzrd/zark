@@ -1555,6 +1555,23 @@ bool cb_wrap_name(str s) {
     sprint(b, "{w}")?;
 }
 
+str cb_cint(i64 width, bool signed) {
+    if (width == 8) {
+        if (signed) { return "signed char"; }
+        return "unsigned char";
+    }
+    if (width == 16) {
+        if (signed) { return "short"; }
+        return "unsigned short";
+    }
+    if (width == 64) {
+        if (signed) { return "long long"; }
+        return "unsigned long long";
+    }
+    if (signed) { return "int"; }
+    return "unsigned int";
+}
+
 struct CSize { i64 size; i64 align; }
 
 struct CAbi {
@@ -2220,8 +2237,62 @@ struct CEmit {
         auto b = List<u8>::init(this->a);
         if (!this->storage(&b, d, l)?) { return; }
         d.opaque = true;
+        auto ext = List<u8>::init(this->a);
+        auto c = List<u8>::init(this->a);
+        if (d.bitfields) { this->bit_access(d, &ext, &b, &c)?; }
         sprint(&b, "}")?;
-        if (this->line(d.name, 1, b.slice())?) { this->note(d.name, why)?; }
+        ext.append(b.slice())?;
+        if (this->line(d.name, 1, ext.slice())?) {
+            this->note(d.name, why)?;
+            this->c.append(c.slice())?;
+        }
+    }
+
+    !void bit_access(CDecl* d, List<u8>* ext, List<u8>* m, List<u8>* c) {
+        auto rt = "";
+        if (d.file.len == 0) {
+            rt = str_concat(this->a, ["struct ", d.name])?;
+        } else {
+            const auto td = this->typedefs.get_or(d.name, null);
+            if (td != null && td.rec == d) { rt = d.name; }
+        }
+        const auto zr = this->ename(d.name)?;
+        for (auto [i, f] : d.fields.slice()) {
+            if (!f.bits || f.name.len == 0) { continue; }
+            auto fb = List<u8>::init(this->a);
+            sprint(&fb, "{d.name}.{f.name}")?;
+            if (rt.len == 0) {
+                this->warn(fb.slice(), "bitfield in anonymous record")?;
+                continue;
+            }
+            auto x = f.ty;
+            while (x.k == .Named && x.tag == 0 && this->typedefs.has(x.name)) { x = this->typedefs.get_or(x.name, x); }
+            auto ct = "_Bool";
+            if (x.k == .Int) {
+                ct = cb_cint(x.width, x.signed && !x.c_unsigned);
+            } else if (x.k != .Bool) {
+                this->warn(fb.slice(), "bitfield type")?;
+                continue;
+            }
+            this->why = "";
+            auto zb = List<u8>::init(this->a);
+            this->ty(&zb, f.ty)?;
+            if (this->why.len > 0) {
+                this->warn(fb.slice(), this->why)?;
+                this->why = "";
+                continue;
+            }
+            const auto zt = zb.slice();
+            auto gb = List<u8>::init(this->a);
+            sprint(&gb, "zark_bf_{this->hid}_get_{d.name}_{i}")?;
+            auto sb = List<u8>::init(this->a);
+            sprint(&sb, "zark_bf_{this->hid}_set_{d.name}_{i}")?;
+            const auto g = gb.slice();
+            const auto st = sb.slice();
+            sprint(ext, "extern {zt} {g}({zr}* p);\nextern void {st}({zr}* p, {zt} v);\n")?;
+            sprint(m, "{zt} get_{f.name}() {{ return {g}(this); }} void set_{f.name}({zt} v) {{ {st}(this, v); }} ")?;
+            sprint(c, "{ct} {g}({rt}* p) {{ return p->{f.name}; }}\nvoid {st}({rt}* p, {ct} v) {{ p->{f.name} = v; }}\n")?;
+        }
     }
 
     bool union_fits(CDecl* d, CLayout* l) {

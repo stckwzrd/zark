@@ -1,0 +1,2 @@
+opaque flags: bitfields
+opaque nib_t: bitfields
