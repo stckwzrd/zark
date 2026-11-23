@@ -1,0 +1,17 @@
+struct Wrap {
+    Node node;
+    i32 tag;
+}
+
+struct Node {
+    Wrap* next;
+    i64 v;
+}
+
+void main() {
+    auto n = Node{ .v = 1 };
+    auto w = Wrap{ .tag = 7 };
+    w.node.v = 35;
+    n.next = &w;
+    println("{n.v + n.next->node.v + n.next->tag} {sizeof(Wrap)}");
+}
