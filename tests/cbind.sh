@@ -8,7 +8,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten; do
+for name in scalars structs params layout names consts clash shorten unions; do
     flags=""
     [ "$name" = shorten ] && flags="-fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -50,6 +50,59 @@ out=$("$ZARK" cbind undef.h -isystem sysd 2>&1) || fail "system undef: exit $?: 
 printf '#define A "abc\n#define B "ok"\n' > unterm.h
 out=$("$ZARK" cbind unterm.h 2>&1) || fail "unterminated string: exit $?: $out"
 [ "$out" = "$(printf 'skipped A: not a constant\nconst auto B = "ok";')" ] || fail "unterminated string: got: $out"
+
+cat > use_unions2.zk <<'EOF'
+import "unions.zk";
+void main() {
+    auto u = U{};
+    *u.as_d() = 2.5;
+    setd(&u, 4.0);
+    const auto d = *u.as_d();
+    *u.as_i() = 41;
+    const auto r = pass(u);
+    U[3] arr;
+    const auto picked = pick(&arr[0], 2) == &arr[2];
+    handle_t h;
+    *h.as_a() = 9;
+    var_t v;
+    v.tag = 2;
+    *v.v.as_d() = 0.5;
+    auto m = make_holder(6);
+    const auto bd = mkbind(5);
+    println("{d} {*r.as_i()} {picked} {hsum(h)} {vsum(v)} {m.k} {*m.u.as_y()} {m.pq.p} {m.pq.q} {bd.kind} {bd.v.as_p().x} {bd.v.as_p().y}");
+    println("{csize(0)} {csize(1)} {csize(2)} {csize(3)} {csize(4)} {csize(5)} {csize(6)} {csize(7)} {csize(8)} {csize(9)} {csize(10)}");
+    println("{sizeof(U)} {sizeof(small)} {sizeof(bytes)} {sizeof(holder)} {sizeof(ev)} {sizeof(handle_t)} {sizeof(var_t)} {sizeof(list)} {sizeof(cbu)} {sizeof(part)} {alignof(list)}");
+}
+EOF
+if [ "$(uname -m)" = x86_64 ]; then
+    out=$("$ZARK" run use_unions2.zk tests/cbind/unions.c 2>&1) || fail "unions: run: $out"
+    [ "$out" = "$(printf '4 42 true 9 2.5 6 3 97 98 5 6 7\n8 2 3 12 16 8 16 32 8 16 8\n8 2 3 12 16 8 16 32 8 16 8')" ] || fail "unions: got: $out"
+
+cat > use_layout2.zk <<'EOF'
+import "layout.zk";
+void main() {
+    bits b;
+    b.storage[0] = 0x0000000700000129;
+    b.storage[1] = 3;
+    ald a;
+    a.storage[0] = 65;
+    println("{takebits(b)} {takebitsp(&b)} {takeald(a)} {sizeof(usesbits)} {sizeof(bitu)} {sizeof(pkd)}");
+}
+EOF
+    out=$("$ZARK" run use_layout2.zk tests/cbind/layout.c 2>&1) || fail "layout: run: $out"
+    [ "$out" = "37151 37151 65 56 8 7" ] || fail "layout: got: $out"
+fi
+
+mkdir -p sysinc
+printf 'struct inner { int a; };\n#define INNER 1\nint unused_inner(void);\n' > sysinc/inner.h
+printf '#include <inner.h>\nint top(struct inner* p);\n' > sysinc/top.h
+out=$("$ZARK" cbind top.h -isystem sysinc 2>&1) || fail "system dir: exit $?: $out"
+[ "$out" = "$(printf 'struct inner { i32 a; }\nextern i32 top(inner* p);')" ] || fail "system dir: got: $out"
+
+printf '#include <stdio.h>\nint put(FILE* f);\n' > file.h
+"$ZARK" cbind file.h > file.zk 2> /dev/null || fail "FILE: exit $?"
+printf 'import "file.zk";\nvoid main() { const auto n = put(null); }\n' > use_file.zk
+"$ZARK" ir use_file.zk > /dev/null || fail "FILE: pointer type does not resolve"
 
 for i in $(seq 1 20000); do
     if [ "$i" = 1 ]; then echo "#define M1 1"; else echo "#define M$i M$((i - 1))"; fi
