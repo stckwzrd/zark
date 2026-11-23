@@ -7,12 +7,12 @@ fail() { echo "FAIL cbind: $*"; exit 1; }
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
 native=
 if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then native=--native; fi
-nohid() { sed -E 's/zark_inl_[0-9a-f]{16}_/zark_inl_H_/g' "$@"; }
+nohid() { sed -E 's/zark_(inl|var|bf)_[0-9a-f]{16}_/zark_\1_H_/g' "$@"; }
 cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16; do
+for name in scalars structs params layout names consts clash shorten unions unionval fnptr flex ambig inline wrapfix align16 vars; do
     flags="-fsigned-char"
     [ "$name" = shorten ] && flags="$flags -fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -299,6 +299,38 @@ done
 printf 'import "wrapfix.zk";\nvoid main() { const a1 x = 4; println("{foo(x)} {type_(1)} {g(1)} {*cc("ab".ptr)} {vq(2)} {old(3)}"); }\n' > use_wrapfix.zk
 out=$("$ZARK" run use_wrapfix.zk wrapfix.c 2> run.err) || fail "wrapfix: run: $(cat run.err)"
 [ "$out" = "9 2 3 98 6 30" ] || fail "wrapfix: got: $out"
+
+"$ZARK" cbind tests/cbind/vars.h -fsigned-char --inline-c vars.c > vars.zk 2> /dev/null || fail "vars: exit $?"
+sed "s|@DIR@|$(realpath "$T")|" tests/cbind/vars.c.out > vars.c.exp
+diff -u <(nohid vars.c.exp) <(nohid vars.c) || fail "vars: C file differs"
+for o in -O0 -O2; do
+    clang -c $o -Wall -Wextra -Werror vars.c -o vars.o || fail "vars $o: C file does not compile cleanly"
+done
+cat > use_vars2.zk <<'EOF'
+import "vars.zk";
+i32 twice(i32 x) { return x * 2; }
+void main() {
+    *counter_ptr() += 1;
+    const auto t = table_ptr();
+    t->a = 9;
+    *hook_ptr() = twice;
+    const auto a = arr_ptr();
+    a[1] = 3;
+    (*bytes_ptr())[0] = 4;
+    *type_ptr() = 6;
+    const auto h = *handle_ptr();
+    println("{*counter_ptr()} {read_counter()} {t->b} {call_hook(21)} {(*names_ptr())[2][1]} {a[2]} {(*bytes_ptr())[2]} {h != null}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_vars2.zk vars.c tests/cbind/vardefs.c 2>&1) || fail "vars $f: run: $out"
+    [ "$out" = "42 42913 2.5 42 119 30 250 true" ] || fail "vars $f: got: $out"
+done
+mkdir -p ivars
+cp tests/cbind/vars.h tests/cbind/vardefs.c ivars/
+printf 'import "vars.h" as v;\nvoid main() { *v::counter_ptr() = 2; println("{v::read_counter()}"); }\n' > ivars/m.zk
+out=$(cd ivars && "$ZARK" run m.zk vardefs.c 2>&1) || fail "import_vars: $out"
+[ "$out" = 2726 ] || fail "import_vars: got: $out"
 
 for h in dupa dupb; do
     "$ZARK" cbind tests/cbind/$h.h --inline-c $h.c > $h.zk 2> /dev/null || fail "$h: exit $?"

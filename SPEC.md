@@ -296,7 +296,7 @@ Each C/C++ source is compiled to `.zark-cache/obj/NAME-HASH.o`, at most 8 at a t
 
 ### `import "x.h"`
 
-`import "x.h";` or `import "x.h" as name;` binds the declarations of a C header. The header is looked up in the directory of the importing file, then the `-I` directories, then the system include path; it is run through `clang -E` with the compile flags of the build (C++ `-std=` flags are dropped). The result is the same Zark text that `zark cbind` prints, compiled as a module; `as name` puts it under `name::`. Static inline functions get a C wrapper that is compiled and linked automatically.
+`import "x.h";` or `import "x.h" as name;` binds the declarations of a C header. The header is looked up in the directory of the importing file, then the `-I` directories, then the system include path; it is run through `clang -E` with the compile flags of the build (C++ `-std=` flags are dropped). The result is the same Zark text that `zark cbind` prints, compiled as a module; `as name` puts it under `name::`. Static inline functions get a C wrapper and extern variables a C accessor; that C file is compiled and linked automatically.
 
 The binding is cached in `.zark-cache/cbind/` and reused while the clang version, the flags and every header it read stay the same. The cache does not track `CPATH` or other environment variables. `import` does not print the warnings for skipped declarations; run `zark cbind` to see them.
 
@@ -304,7 +304,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 
 ### `zark cbind`
 
-`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions; that file must be compiled into the program next to `out.zk`. The C file includes the header by its absolute path and the wrapper names hash that path, so the pair is specific to the machine and checkout that produced it: it is for inspection, not for committing.
+`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions and the accessors of extern variables; that file must be compiled into the program next to `out.zk`. The C file includes the header by its absolute path and the wrapper names hash that path, so the pair is specific to the machine and checkout that produced it: it is for inspection, not for committing.
 
 | C | Zark |
 |---|---|
@@ -325,10 +325,11 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 | `#define N 42`, string, float or char constant | `const auto N = 42;` |
 | function, variadic function | `extern` declaration |
 | `static inline` function | `extern` wrapper `zark_inl_HASH_name` in C plus a Zark function `name` that calls it |
+| `extern T name;` | `T* name_ptr()`, the address of the variable from a C accessor `zark_var_HASH_name`; `extern T name[];` gives `T* name_ptr()` to the first element; `const` is dropped as for pointers |
 
 Fields, parameters and types whose names are Zark keywords or type names get a trailing `_` (`type_`, `str_`); functions with such names are skipped. A declaration that uses a skipped one is skipped too.
 
-Limits: C only (no C++ headers); by-value aggregates follow System V x86-64 only. Skipped with a warning: `long double`, `_Complex`, `_Atomic`, bitfield members of unions (a struct with bitfields becomes opaque storage), extern variables, function-like macros, variadic static inline functions, variadic function pointer types, plain `static` functions, records passed by value whose System V class the binding does not reproduce exactly (`opaque record by value`), records aligned above 8 passed or returned by value when they are larger than 16 bytes or leave an eightbyte without a class (`over-aligned record by value`), and records passed by value in function pointer types. A record with a flexible array member loses that member, or becomes opaque storage when its layout would differ.
+Limits: C only (no C++ headers); by-value aggregates follow System V x86-64 only. Skipped with a warning: `long double`, `_Complex`, `_Atomic`, bitfield members of unions (a struct with bitfields becomes opaque storage), thread-local variables (`_Thread_local`, `__thread`: TLS is not supported), `static` variables (each C file has its own copy) and variables declared without `extern`, a variable whose `name_ptr` is already taken, function-like macros, variadic static inline functions, variadic function pointer types, plain `static` functions, records passed by value whose System V class the binding does not reproduce exactly (`opaque record by value`), records aligned above 8 passed or returned by value when they are larger than 16 bytes or leave an eightbyte without a class (`over-aligned record by value`), and records passed by value in function pointer types. A record with a flexible array member loses that member, or becomes opaque storage when its layout would differ.
 
 ## 9. System (prelude)
 

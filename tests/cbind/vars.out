@@ -1,0 +1,21 @@
+struct S { i32 a; f64 b; }
+struct opq { }
+extern i32* zark_var_H_counter();
+i32* counter_ptr() { return zark_var_H_counter(); }
+extern u8*[4]* zark_var_H_names();
+u8*[4]* names_ptr() { return zark_var_H_names(); }
+extern S* zark_var_H_table();
+S* table_ptr() { return zark_var_H_table(); }
+extern opq** zark_var_H_handle();
+opq** handle_ptr() { return zark_var_H_handle(); }
+extern i32* zark_var_H_arr();
+i32* arr_ptr() { return zark_var_H_arr(); }
+extern *fn(i32) -> i32 zark_var_H_hook();
+*fn(i32) -> i32 hook_ptr() { return zark_var_H_hook(); }
+extern u8[3]* zark_var_H_bytes();
+u8[3]* bytes_ptr() { return zark_var_H_bytes(); }
+extern i32* zark_var_H_type();
+i32* type_ptr() { return zark_var_H_type(); }
+extern i32 dup_ptr();
+extern i32 read_counter();
+extern i32 call_hook(i32 x);

@@ -1,0 +1,11 @@
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "@DIR@/tests/cbind/vars.h"
+void* zark_var_H_counter(void) { return (void*)&counter; }
+void* zark_var_H_names(void) { return (void*)&names; }
+void* zark_var_H_table(void) { return (void*)&table; }
+void* zark_var_H_handle(void) { return (void*)&handle; }
+void* zark_var_H_arr(void) { return (void*)&arr; }
+void* zark_var_H_hook(void) { return (void*)&hook; }
+void* zark_var_H_bytes(void) { return (void*)&bytes; }
+void* zark_var_H_type(void) { return (void*)&type; }

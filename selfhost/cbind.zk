@@ -233,6 +233,7 @@ struct CDecl {
     bool is_extern;
     bool is_static;
     bool is_inline;
+    bool is_tls;
     bool has_body;
     bool asm_label;
     bool func_like;
@@ -252,7 +253,7 @@ struct CDecl {
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
 
-struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; }
+struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; bool is_tls; }
 
 bool cb_is_qualifier(str w) {
     for (auto q : ["const", "volatile", "restrict", "__restrict", "__restrict__", "__const", "__volatile", "__volatile__", "__extension__", "_Nullable", "_Nonnull", "_Null_unspecified", "_Nullable_result", "__nullable", "__nonnull", "__null_unspecified", "__unaligned", "__ptr32", "__ptr64", "__w64", "__cdecl", "__stdcall", "__fastcall"]) {
@@ -728,7 +729,9 @@ struct CParser {
                 s.is_static = true;
             } else if (w == "inline" || w == "__inline" || w == "__inline__" || w == "__forceinline") {
                 s.is_inline = true;
-            } else if (w == "_Thread_local" || w == "__thread" || w == "thread_local" || w == "register" || w == "auto" || w == "_Noreturn" || w == "constexpr") {
+            } else if (w == "_Thread_local" || w == "__thread" || w == "thread_local") {
+                s.is_tls = true;
+            } else if (w == "register" || w == "auto" || w == "_Noreturn" || w == "constexpr") {
             } else if (w == "long") {
                 nlong += 1;
             } else if (w == "short") {
@@ -1293,8 +1296,11 @@ struct CParser {
                     }
                 } else {
                     const auto d = this->decl(.Var, f.name, rel)?;
+                    d.ty = f.ty;
+                    if (this->attr_why.len > 0 && this->attr_why != "aligned attribute") { d.ty = this->bad(this->attr_why)?; }
                     d.is_extern = s.is_extern;
                     d.is_static = s.is_static;
+                    d.is_tls = s.is_tls;
                     this->decls.push(d)?;
                     if (this->eat("=")) { this->skip_until_comma(); }
                 }
@@ -1531,7 +1537,7 @@ str cb_known(str name) {
 }
 
 bool cb_wrap_name(str s) {
-    if (str_starts_with(s, "zark_inl_")) { return true; }
+    if (str_starts_with(s, "zark_inl_") || str_starts_with(s, "zark_var_") || str_starts_with(s, "zark_bf_")) { return true; }
     if (s.len < 2 || s[0] != 'a') { return false; }
     for (auto c : s[1..]) { if (!is_digit(c)) { return false; } }
     return true;
@@ -1960,6 +1966,34 @@ struct CEmit {
         }
     }
 
+    !void var(CDecl* d) {
+        if (d.is_tls) { return this->warn(d.name, "thread-local variable"); }
+        if (d.is_static) { return this->warn(d.name, "static variable"); }
+        if (!d.is_extern) { return this->warn(d.name, "variable"); }
+        auto nb = List<u8>::init(this->a);
+        sprint(&nb, "{d.name}_ptr")?;
+        const auto name = nb.slice();
+        const auto k = this->done.get_or(name, 0);
+        if (k == 5) { return; }
+        if (k != 0) { return this->warn(d.name, "name clash"); }
+        const auto pt = this->a.create<CType>()?;
+        pt.k = .Ptr;
+        pt.elem = d.ty;
+        const auto x = this->expand(d.ty);
+        if (x.k == .Array && x.n == -1) { pt.elem = x.elem; }
+        auto tb = List<u8>::init(this->a);
+        this->ty(&tb, pt)?;
+        if (this->why.len > 0) { return this->warn(d.name, this->why); }
+        const auto ts = tb.slice();
+        auto wn = List<u8>::init(this->a);
+        sprint(&wn, "zark_var_{this->hid}_{d.name}")?;
+        const auto w = wn.slice();
+        auto b = List<u8>::init(this->a);
+        sprint(&b, "extern {ts} {w}();\n{ts} {name}() {{ return {w}(); }}")?;
+        if (!this->line(name, 5, b.slice())?) { return; }
+        sprint(&this->c, "void* {w}(void) {{ return (void*)&{d.name}; }}\n")?;
+    }
+
     !void typedef_out(CDecl* d) {
         const auto t = d.ty;
         if (cb_known(d.name).len > 0) { return; }
@@ -2368,9 +2402,7 @@ struct CEmit {
                 const auto x = this->typedefs.get_or(d.name, null);
                 if (x != null && x != d.ty) { this->warn(d.name, "name clash")?; } else { this->typedef_out(d)?; }
             }
-            .Var => {
-                if (d.is_extern) { this->warn(d.name, "extern variable")?; } else { this->warn(d.name, "variable")?; }
-            }
+            .Var => { this->var(d)?; }
             .Skip => { this->warn(d.name, d.reason)?; }
             .Func => { this->func(d)?; }
             .Typedef => { this->typedef_out(d)?; }
@@ -2422,6 +2454,7 @@ struct CEmit {
             if (d.k == .Func && (!d.is_static || (d.is_inline && d.has_body)) && !d.asm_label) { this->need(d.ty)?; }
             if (d.k == .Typedef) { this->need(d.ty)?; }
             if (d.k == .Struct) { this->need_rec(d)?; }
+            if (d.k == .Var && d.is_extern && !d.is_tls && !d.is_static) { this->need(d.ty)?; }
         }
     }
 

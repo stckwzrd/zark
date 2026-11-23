@@ -2,5 +2,4 @@ skipped renamed: asm label
 skipped ld: long double
 skipped cplx: _Complex
 skipped counter_get: _Atomic
-skipped global_x: extern variable
 skipped TWICE: function-like macro

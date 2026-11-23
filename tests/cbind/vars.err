@@ -1,0 +1,5 @@
+skipped tls_a: thread-local variable
+skipped tls_b: thread-local variable
+skipped hidden: static variable
+skipped ld_var: long double
+skipped dup: name clash

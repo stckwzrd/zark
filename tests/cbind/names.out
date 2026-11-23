@@ -2,6 +2,10 @@ type T = i32;
 type A = i32;
 type B = A;
 struct q { T t; A a; B b; }
+extern T* zark_var_H_vt();
+T* vt_ptr() { return zark_var_H_vt(); }
+extern A* zark_var_H_va();
+A* va_ptr() { return zark_var_H_va(); }
 type i8_ = i32;
 type u32_ = u32;
 struct str_ { i32 len; }
