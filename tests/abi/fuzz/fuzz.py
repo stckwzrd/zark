@@ -1155,6 +1155,9 @@ def main():
         return 2
 
     backends = [b for b in args.backends.split(",") if b]
+    if "native" in backends and (sys.platform != "linux" or os.uname().machine != "x86_64"):
+        print("native backend not available on this host: skipped")
+        backends.remove("native")
     os.makedirs(OUT, exist_ok=True)
     os.chmod(OUT, 0o755)
     unexpected = 0

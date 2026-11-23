@@ -8,6 +8,11 @@ on:
       - "editors/**"
       - "**.md"
   workflow_dispatch:
+    inputs:
+      scope:
+        type: choice
+        options: [all, arm64, macos, linux]
+        default: all
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -15,6 +20,7 @@ concurrency:
 
 jobs:
   core:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope == 'all' || inputs.scope == 'linux'
     name: ${{ matrix.image }} x86_64
     runs-on: ubuntu-latest
     strategy:
@@ -26,28 +32,31 @@ jobs:
       - run: docker run --rm -v "$PWD":/src -w /src ${{ matrix.image }} sh -c "sh scripts/install-deps.sh && bash ./bootstrap.sh"
 
   linux:
-    if: github.event_name == 'workflow_dispatch'
-    name: ${{ matrix.image }} ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    if: github.event_name == 'workflow_dispatch' && (inputs.scope == 'all' || inputs.scope == 'linux')
+    name: ${{ matrix.image }} x86_64
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64]
-        runner: [ubuntu-latest]
         image: [ubuntu:24.04, fedora:latest, archlinux:latest, opensuse/tumbleweed]
-        include:
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            image: debian:stable
-          - arch: aarch64
-            runner: ubuntu-24.04-arm
-            image: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run --rm -v "$PWD":/src -w /src ${{ matrix.image }} sh -c "sh scripts/install-deps.sh && bash ./bootstrap.sh"
+
+  arm64:
+    if: github.event_name == 'workflow_dispatch' && (inputs.scope == 'all' || inputs.scope == 'linux' || inputs.scope == 'arm64')
+    name: ${{ matrix.image }} aarch64
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [debian:stable, alpine:latest]
     steps:
       - uses: actions/checkout@v4
       - run: docker run --rm -v "$PWD":/src -w /src ${{ matrix.image }} sh -c "sh scripts/install-deps.sh && bash ./bootstrap.sh"
 
   macos:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && (inputs.scope == 'all' || inputs.scope == 'macos')
     name: macos ${{ matrix.runner }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -59,7 +68,7 @@ jobs:
       - run: ./bootstrap.sh
 
   windows:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'all'
     name: windows wsl
     runs-on: windows-latest
     steps:

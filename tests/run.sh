@@ -18,12 +18,16 @@ check showcase $ZARK run examples/showcase/main.zk $FLAGS
 check showcase_tests $ZARK test examples/showcase/main.zk $FLAGS
 check showcase_vec $ZARK test examples/showcase/vec.zk $FLAGS
 check interop $ZARK run examples/interop/main.zk examples/interop/mathlib.c examples/interop/engine.cpp $FLAGS
-[ $x86 = 1 ] && check abi $ZARK run tests/abi/main.zk tests/abi/lib.c $FLAGS
+{ [ $x86 = 1 ] || [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; } && check abi $ZARK run tests/abi/main.zk tests/abi/lib.c $FLAGS
 if [ $x86 = 1 ] && [ $linux = 1 ]; then
   if ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --quick --strict --backends native,llvm,O >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   abi fuzz"
   else fail=$((fail+1)); echo "FAIL abi fuzz"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --quick --strict --backends native,llvm,O 2>&1 | tail -20; fi
   if ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   abi ir oracle aarch64"
   else fail=$((fail+1)); echo "FAIL abi ir oracle aarch64"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple 2>&1 | tail -20; fi
+fi
+if [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; then
+  if out=$(ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --strict --backends llvm,O 2>&1); then pass=$((pass+1)); echo "ok   abi fuzz"
+  else fail=$((fail+1)); echo "FAIL abi fuzz"; echo "$out" | grep -v "PASS     PASS" | tail -40; fi
 fi
 for n in ints memory nan move borrow comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
 for f in tests/panics/*.zk; do
