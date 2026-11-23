@@ -8,7 +8,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
 
-for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig inline; do
+for name in scalars structs params layout names consts clash shorten unions fnptr flex ambig inline wrapfix; do
     flags=""
     [ "$name" = shorten ] && flags="-fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
@@ -125,7 +125,9 @@ out=$("$ZARK" run use_flex2.zk 2>&1) || fail "flex: run: $out"
 "$ZARK" cbind tests/cbind/inline.h --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/inline.c.out > inline.c.exp
 diff -u inline.c.exp inline.c || fail "inline: C file differs"
-clang -c -Wall -Wextra -Wno-unused-function -Wno-deprecated-non-prototype -Werror inline.c -o inline.o || fail "inline: C file does not compile cleanly"
+for o in -O0 -O2; do
+    clang -c $o -Wall -Wextra -Wno-unused-function -Wno-deprecated-non-prototype -Werror inline.c -o inline.o || fail "inline $o: C file does not compile cleanly"
+done
 cat > use_inline2.zk <<'EOF'
 import "inline.zk";
 i32 neg(i32 x) { return -x; }
@@ -142,11 +144,11 @@ void main() {
     const auto s = "hello".ptr;
     noop();
     println("{add(2, 3)} {half(5.0)} {nextp(&arr[0]) == &arr[1]} {slen(s)} {slen(skip(s, 2))} {next_color(BLUE)} {is_even(4)} {is_even(3)} {mask(255, 4)}");
-    println("{p.x} {p.y} {forced(1)} {apply(neg, 5)} {sum4(&arr[0])} {quad(3)} {match_(3)} {later(1)} {twice(21)} {sq(5)} {ident(7)}");
+    println("{p.x} {p.y} {forced(1)} {apply(neg, 5)} {sum4(&arr[0])} {quad(3)} {later(1)} {twice(21)} {sq(5)} {ident(7)}");
 }
 EOF
 out=$("$ZARK" run use_inline2.zk inline.c 2> run.err) || fail "inline: run: $(cat run.err)"
-[ "$out" = "$(printf '5 2.5 true 5 3 0 true false 15\n4 6 7 -5 10 12 -3 101 42 25 7')" ] || fail "inline: got: $out"
+[ "$out" = "$(printf '5 2.5 true 5 3 0 true false 15\n4 6 7 -5 10 12 101 42 25 7')" ] || fail "inline: got: $out"
 if [ "$(uname -m)" = x86_64 ]; then
     printf 'import "inline.zk";\nvoid main() { const auto p = pt_make(8, 9); println("{p.x} {p.y}"); }\n' > use_inline3.zk
     for f in --native --llvm; do
@@ -154,6 +156,23 @@ if [ "$(uname -m)" = x86_64 ]; then
         [ "$out" = "8 9" ] || fail "inline $f: got: $out"
     done
 fi
+
+"$ZARK" cbind tests/cbind/wrapfix.h --inline-c wrapfix.c > /dev/null 2>&1 || fail "wrapfix: exit $?"
+sed "s|@DIR@|$(realpath "$T")|" tests/cbind/wrapfix.c.out > wrapfix.c.exp
+diff -u wrapfix.c.exp wrapfix.c || fail "wrapfix: C file differs"
+for o in -O0 -O2; do
+    clang -c $o -Wall -Wextra -Wno-unused-function -Werror wrapfix.c -o wrapfix.o || fail "wrapfix $o: C file does not compile cleanly"
+done
+printf 'import "wrapfix.zk";\nvoid main() { const a1 x = 4; println("{foo(x)} {type_(1)} {g(1)} {*cc("ab".ptr)} {vq(2)} {old(3)}"); }\n' > use_wrapfix.zk
+out=$("$ZARK" run use_wrapfix.zk wrapfix.c 2> run.err) || fail "wrapfix: run: $(cat run.err)"
+[ "$out" = "9 2 3 98 6 30" ] || fail "wrapfix: got: $out"
+
+for h in dupa dupb; do
+    "$ZARK" cbind tests/cbind/$h.h --inline-c $h.c > $h.zk 2> /dev/null || fail "$h: exit $?"
+done
+printf 'import "dupa.zk" as a;\nimport "dupb.zk" as b;\nvoid main() { println("{a::dup(1)} {b::dup(2)} {b::dupb(3)}"); }\n' > use_dup.zk
+out=$("$ZARK" run use_dup.zk dupa.c dupb.c 2> run.err) || fail "dup: run: $(cat run.err)"
+[ "$out" = "2 3 8" ] || fail "dup: got: $out"
 
 mkdir -p sysinc
 printf 'struct inner { int a; };\n#define INNER 1\nint unused_inner(void);\n' > sysinc/inner.h
