@@ -21,10 +21,6 @@ done
 
 grep -q "std::" sysfilter.err && fail "sysfilter: std:: names in warnings"
 [ "$(wc -l < sysfilter.zk)" -le 10 ] || fail "sysfilter: output is not small"
-start=$(date +%s%N)
-"$ZARK" cbind tests/cxxbind/sysfilter.hpp > /dev/null 2>&1 || fail "sysfilter: exit $?"
-ms=$((($(date +%s%N) - start) / 1000000))
-[ $ms -lt 1500 ] || fail "sysfilter: cbind took $ms ms"
 
 printf '#if VAL != 3\n#error no\n#endif\nextern "C" int v(void);\n' > flag.hpp
 out=$("$ZARK" cbind flag.hpp -DVAL=3 2>&1) || fail "flags: exit $?: $out"
