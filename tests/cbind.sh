@@ -267,7 +267,7 @@ printf 'int f(void);\n' > cpp.hpp
 printf 'import "cpp.hpp";\nvoid main() {}\n' > use_cpp.zk
 out=$("$ZARK" run use_cpp.zk 2>&1); code=$?
 [ $code = 1 ] || fail "import_cpp_header: exit $code: $out"
-[ "$out" = "error: C++ headers are not supported yet (layer 4): cpp.hpp" ] || fail "import_cpp_header: got: $out"
+[ "$out" = "error: C++ headers are not supported yet: cpp.hpp" ] || fail "import_cpp_header: got: $out"
 
 mkdir -p "inc dir"
 printf 'import "nosuch.h";\nvoid main() {}\n' > use_missing.zk

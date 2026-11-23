@@ -2805,7 +2805,7 @@ str c_header_name(str p) {
 
 !str cbind_import(Allocator a, str header, str from_dir) {
     if (!str_ends_with(header, ".h")) {
-        eprintln("error: C++ headers are not supported yet (layer 4): {header}");
+        eprintln("error: C++ headers are not supported yet: {header}");
         return error.CompileFailed;
     }
     if (c_headers.a.alloc_fn == null) {

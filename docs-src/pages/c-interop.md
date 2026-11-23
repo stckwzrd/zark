@@ -59,7 +59,7 @@ What you get:
 
 The header is looked up next to the importing file, then in the `-I` directories, then in the system include path, and it sees the same `-D` and `-I` flags as the C sources. The result is cached in `.zark-cache/cbind/` and rebuilt when the header, anything it includes, the flags or the clang version change.
 
-Some C constructs have no Zark equivalent yet and are skipped: `long double`, `_Complex`, `_Atomic`, bitfields, function-like macros, extern variables, alignment above 8, and structs passed by value through function pointers. `import` skips them silently; `zark cbind` lists them.
+Some C constructs have no Zark equivalent yet and are skipped: `long double`, `_Complex`, `_Atomic`, bitfields (a struct that has them becomes opaque storage), function-like macros, extern variables, alignment above 8, and structs passed by value through function pointers. `import` skips them silently; `zark cbind` lists them.
 
 ## Seeing the bindings: `zark cbind`
 
