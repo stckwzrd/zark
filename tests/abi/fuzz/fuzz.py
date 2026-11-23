@@ -79,10 +79,14 @@ UNIONS = {
     "UF2": [("A", "F2"), ("B", "f64")],
     "UP": [("A", "P"), ("B", "f32")],
     "UBig": [("A", "D2"), ("B", "i64")],
+    "UN": [("A", "f64"), ("N", None)],
+    "UNI": [("N", None), ("A", "i64"), ("M", None), ("B", "f32")],
+    "UNF": [("N", None), ("A", "F2")],
+    "UNB": [("A", "Big"), ("N", None)],
 }
 
 ORDER = ["P", "M", "D2", "Big", "Mix", "Nest", "F2", "F3", "U3", "I3", "BC", "A3", "E",
-         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUA", "SUX"] + ARM
+         "UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "UN", "UNI", "UNF", "UNB", "SU", "SUA", "SUX"] + ARM
 
 VECS = {
     "f32x4": ("float", 4, "f"),
@@ -192,6 +196,8 @@ def layout(t):
         size = 0
         align = 8
         for _, ft in UNIONS[t]:
+            if ft is None:
+                continue
             fs, fa = layout(ft)
             size = max(size, fs)
             align = max(align, fa)
@@ -251,7 +257,11 @@ def make_value(t, ctr):
         return [make_value(a[0], ctr) for _ in range(a[1])]
     if t in UNIONS:
         tag = ctr[0] % len(UNIONS[t])
-        return {"tag": tag, "p": make_value(UNIONS[t][tag][1], ctr)}
+        ft = UNIONS[t][tag][1]
+        if ft is None:
+            ctr[0] += 1
+            return {"tag": tag, "p": None}
+        return {"tag": tag, "p": make_value(ft, ctr)}
     return {f: make_value(ft, ctr) for f, ft in STRUCTS[t]}
 
 
@@ -267,7 +277,7 @@ def nleaves(t):
     if a is not None:
         return nleaves(a[0]) * a[1]
     if t in UNIONS:
-        return 1 + max(nleaves(ft) for _, ft in UNIONS[t])
+        return 1 + max(nleaves(ft) if ft else 0 for _, ft in UNIONS[t])
     return sum(nleaves(ft) for _, ft in STRUCTS[t])
 
 
@@ -287,7 +297,8 @@ def wsum(t, v, k):
         n = nleaves(a[0])
         return sum(wsum(a[0], x, k + i * n) for i, x in enumerate(v))
     if t in UNIONS:
-        return v["tag"] * k + wsum(UNIONS[t][v["tag"]][1], v["p"], k + 1)
+        ft = UNIONS[t][v["tag"]][1]
+        return (v["tag"] + 1) * k + (wsum(ft, v["p"], k + 1) if ft else 0)
     out = 0
     for f, ft in STRUCTS[t]:
         out += wsum(ft, v[f], k)
@@ -319,6 +330,8 @@ def zlit(t, v):
         return "[" + ", ".join(zlit(a[0], x) for x in v) + "]"
     if t in UNIONS:
         f, ft = UNIONS[t][v["tag"]]
+        if ft is None:
+            return f"{t}::{f}"
         return f"{t}::{f}({zlit(ft, v['p'])})"
     fields = []
     for f, ft in STRUCTS[t]:
@@ -342,6 +355,8 @@ def clit(t, v):
         return "{ " + ", ".join(clit(a[0], x) for x in v) + " }"
     if t in UNIONS:
         f, ft = UNIONS[t][v["tag"]]
+        if ft is None:
+            return f"({t}){{ .tag = {v['tag']} }}"
         return f"({t}){{ .tag = {v['tag']}, .u.{f} = {clit(ft, v['p'])} }}"
     fields = []
     for f, ft in STRUCTS[t]:
@@ -359,7 +374,7 @@ def csum(t, var, k=1):
         n = nleaves(a[0])
         return "(" + " + ".join(csum(a[0], f"{var}[{i}]", plus(k, i * n)) for i in range(a[1])) + ")" if a[1] else "0"
     if t in UNIONS:
-        arms = [f"{var}.tag == {i} ? ({i} * {k} + {csum(ft, f'{var}.u.{f}', plus(k, 1))})" for i, (f, ft) in enumerate(UNIONS[t])]
+        arms = [f"{var}.tag == {i} ? ({i + 1} * {k}" + (f" + {csum(ft, f'{var}.u.{f}', plus(k, 1))})" if ft else ")") for i, (f, ft) in enumerate(UNIONS[t])]
         return "(" + " : ".join(arms) + " : -1000000)"
     parts = []
     for f, ft in STRUCTS[t]:
@@ -394,6 +409,8 @@ def c_field(f, ft):
 
 
 def z_field(f, ft):
+    if ft is None:
+        return f"{f};"
     a = array_parts(ft)
     if a is not None:
         return f"{zktype(a[0])}[{a[1]}] {f};"
@@ -404,7 +421,7 @@ def c_structs():
     out = [f"typedef {c} v_{t} __attribute__((vector_size({n * SIZES[t[:t.index('x')]]})));" for t, (c, n, _) in ALL_VECS.items()]
     for name in ORDER:
         if name in UNIONS:
-            fields = " ".join(c_field(f, ft) for f, ft in UNIONS[name])
+            fields = " ".join(c_field(f, ft) for f, ft in UNIONS[name] if ft)
             out.append(f"typedef struct {{ int32_t tag; _Alignas(8) union {{ {fields} }} u; }} {name};")
             continue
         fields = " ".join(c_field(f, ft) for f, ft in STRUCTS[name])
@@ -425,9 +442,37 @@ def z_structs():
         out.append(f"{prefix}struct {name} {{ {fields} }}")
     for name in ORDER:
         if name in UNIONS:
-            arms = " ".join(f".{f}(x) => {{ return {i} * k + {zsum(ft, 'x', plus('k', 1))}; }}" for i, (f, ft) in enumerate(UNIONS[name]))
+            arms = " ".join(f".{f}(x) => {{ return {i + 1} * k + {zsum(ft, 'x', plus('k', 1))}; }}" if ft else f".{f} => {{ return {i + 1} * k; }}" for i, (f, ft) in enumerate(UNIONS[name]))
             out.append(f"i64 usum_{name}({name} v, i64 k) {{ match v {{ {arms} }} return -1000000; }}")
     return out
+
+
+def first_leaf(t):
+    if t in SCALARS:
+        return t, 1000.5 if SCALARS[t][2] == "f" else 1000
+    a = array_parts(t)
+    if a is not None:
+        return first_leaf(a[0])
+    return first_leaf(STRUCTS[t][0][1])
+
+
+def set_first_leaf(t, v):
+    if t in SCALARS:
+        return first_leaf(t)[1]
+    a = array_parts(t)
+    if a is not None:
+        return [set_first_leaf(a[0], v[0])] + v[1:]
+    f, ft = STRUCTS[t][0]
+    return {**v, f: set_first_leaf(ft, v[f])}
+
+
+def union_probe(name):
+    for i in reversed(range(len(UNIONS[name]))):
+        ft = UNIONS[name][i][1]
+        if ft is not None:
+            v = {"tag": i, "p": set_first_leaf(ft, make_value(ft, [0]))}
+            lt, x = first_leaf(ft)
+            return i, v, lt, x
 
 
 def render_layout_zk():
@@ -439,6 +484,16 @@ def render_layout_zk():
     for name in ORDER:
         lines.append(f"    println(\"Z size {name} {{sizeof({name})}} {{alignof({name})}}\");")
         if name in UNIONS:
+            i, v, lt, x = union_probe(name)
+            size = layout(name)[0]
+            w = SIZES[lt]
+            lines.append(f"    {name} s_{name} = {zlit(name, v)};")
+            lines.append(f"    u64 o_{name}_u = 0;")
+            lines.append(f"    for (auto o : 0..{size // w}) {{ if (o_{name}_u == 0 && *((&s_{name} as u64 + (o as u64) * {w}) as *{zktype(lt)}) == {zlit(lt, x)}) {{ o_{name}_u = (o as u64) * {w}; }} }}")
+            lines.append(f"    u64 o_{name}_tag = 99;")
+            lines.append(f"    if (*(&s_{name} as *i32) == {i}) {{ o_{name}_tag = 0; }}")
+            lines.append(f"    println(\"Z off {name}.tag {{o_{name}_tag}}\");")
+            lines.append(f"    println(\"Z off {name}.u {{o_{name}_u}}\");")
             continue
         lines.append(f"    {name} s_{name};")
         for f, _ in STRUCTS[name]:
@@ -475,8 +530,7 @@ def check_layout(out):
         for f, off in offsets(name):
             want[("off", f"{name}.{f}")] = str(off)
         for (kind, key), v in want.items():
-            sides = ["C"] if kind == "off" and name in UNIONS else ["C", "Z"]
-            for side in sides:
+            for side in ["C", "Z"]:
                 g = got.get((side, kind, key))
                 if g != v:
                     bad.append(f"{side} {kind} {key} = {g}, expected {v}")
@@ -971,6 +1025,9 @@ def union_cases():
             n = t.lower()
             out.append(build_case(f"{mode}_{n}", mode, [(t, "a"), (t, "b")]))
             out.append(build_case(f"{mode}_{n}_ret", mode, [], ret=t, ret_value=make_value(t, [1])))
+        for t in UNIONS:
+            for i in range(len(UNIONS[t])):
+                out.append(build_case(f"{mode}_{t.lower()}_ret{i}", mode, [], ret=t, ret_value=make_value(t, [i])))
         out.append(build_case(f"{mode}_union_mix", mode, mix))
     return out
 
@@ -983,7 +1040,7 @@ def variadic_cases():
     promo = [("i8", -1), ("u8", 200), ("i16", -300), ("u16", 60000), ("bool", True),
              ("f32", 2.5), ("i32", -7), ("u32", 4000000000)]
     structs = [(t, None) for t in ["P", "F2", "M", "D2", "Big", "Mix", "F3", "U3", "BC", "Nest", "I3"]]
-    unions = [(t, None) for t in ["UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "SU", "SUX"]]
+    unions = [(t, None) for t in ["UD", "UDI", "UFD", "UFF", "UIF", "UDD", "UF2", "UP", "UBig", "UN", "UNI", "UNF", "UNB", "SU", "SUX"]]
     spill = [("i64", None)] * 5 + [("M", None), ("i64", None), ("D2", None), ("F2", None)]
     six = [("i64", f"a{i}") for i in range(6)]
     big = {"a": 1, "b": 2, "c": 3}

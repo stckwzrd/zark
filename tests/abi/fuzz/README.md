@@ -47,8 +47,12 @@ the source of truth.
 Unions go by value in all four directions as parameters and results
 (`*_ud`, `*_udi`, `*_ufd`, `*_uff`, `*_uif`, `*_udd`, `*_uf2`, `*_up`,
 `*_ubig`, the struct wrappers `*_su`, `*_sua`, `*_sux` and `*_union_mix`).
+`*_un`, `*_uni`, `*_unf` and `*_unb` mix in variants without a payload
+(the C side sets only the tag), and `*_<union>_ret<i>` returns variant `i`
+of every union, so each tag value crosses the boundary in every direction.
 The C side reads the tag and the active member, the Zark side matches on
-the variant, and the generator computes the expected weighted tag plus payload sum.
+the variant, and the generator computes the expected sum of the tag plus one
+(so tag 0 still counts) and the payload, weighted by position.
 The cases whose payload eightbyte is SSE (`ud`, `ufd`, `uff`, `udd`, `uf2`,
 `su`, `sua`, `union_mix`) were red on every backend while unions were
 classified as INTEGER.
@@ -112,8 +116,11 @@ unions.
 
 A Zark `union` is tagged, so its C mirror is
 `struct { int32_t tag; _Alignas(8) union { ... } u; }`. The generator checks
-the C offsets of `tag` and `u`; the Zark side has no field to take the
-address of, so only its size and alignment are compared.
+the C offsets of `tag` and `u`. The Zark side has no field to take the
+address of, so it builds the last variant that has a payload with a marker
+value in its first scalar leaf, reports the offset where it finds the marker
+as `u`, and reports `tag` as 0 when the `i32` at offset 0 holds the variant
+index.
 
 ## Matrix
 
