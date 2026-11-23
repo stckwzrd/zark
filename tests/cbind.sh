@@ -4,6 +4,7 @@ ZARK=$(realpath "${ZARK:-$R/build/zark}")
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL cbind: $*"; exit 1; }
+nohid() { sed -E 's/zark_inl_[0-9a-f]{16}_/zark_inl_H_/g' "$@"; }
 cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
@@ -12,7 +13,7 @@ for name in scalars structs params layout names consts clash shorten unions fnpt
     flags=""
     [ "$name" = shorten ] && flags="-fshort-enums"
     timeout 20 "$ZARK" cbind "tests/cbind/$name.h" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
-    diff -u "tests/cbind/$name.out" "$name.zk" || fail "$name: output differs"
+    diff -u <(nohid "tests/cbind/$name.out") <(nohid "$name.zk") || fail "$name: output differs"
     diff -u "tests/cbind/$name.err" "$name.err" || fail "$name: warnings differ"
     printf 'import "%s.zk";\nvoid main() {}\n' "$name" > "use_$name.zk"
     "$ZARK" ir "use_$name.zk" > /dev/null || fail "$name: bindings do not compile"
@@ -124,7 +125,7 @@ out=$("$ZARK" run use_flex2.zk 2>&1) || fail "flex: run: $out"
 
 "$ZARK" cbind tests/cbind/inline.h --inline-c inline.c > /dev/null 2>&1 || fail "inline: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/inline.c.out > inline.c.exp
-diff -u inline.c.exp inline.c || fail "inline: C file differs"
+diff -u <(nohid inline.c.exp) <(nohid inline.c) || fail "inline: C file differs"
 for o in -O0 -O2; do
     clang -c $o -Wall -Wextra -Wno-unused-function -Wno-deprecated-non-prototype -Werror inline.c -o inline.o || fail "inline $o: C file does not compile cleanly"
 done
@@ -159,7 +160,7 @@ fi
 
 "$ZARK" cbind tests/cbind/wrapfix.h --inline-c wrapfix.c > /dev/null 2>&1 || fail "wrapfix: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/wrapfix.c.out > wrapfix.c.exp
-diff -u wrapfix.c.exp wrapfix.c || fail "wrapfix: C file differs"
+diff -u <(nohid wrapfix.c.exp) <(nohid wrapfix.c) || fail "wrapfix: C file differs"
 for o in -O0 -O2; do
     clang -c $o -Wall -Wextra -Wno-unused-function -Werror wrapfix.c -o wrapfix.o || fail "wrapfix $o: C file does not compile cleanly"
 done
@@ -261,7 +262,7 @@ mkdir -p "inc dir"
 printf 'import "nosuch.h";\nvoid main() {}\n' > use_missing.zk
 out=$("$ZARK" run use_missing.zk "-Iinc dir" 2>&1); code=$?
 [ $code = 1 ] || fail "import_missing: exit $code: $out"
-case "$out" in *"error: cannot find C header 'nosuch.h'; searched: ., inc dir, /usr/include"*) ;; *) fail "import_missing: got: $out" ;; esac
+case "$out" in *"error: cannot find C header 'nosuch.h'; searched: ., inc dir, "*/usr/include*) ;; *) fail "import_missing: got: $out" ;; esac
 
 mkdir -p mf/src mf/inc
 printf '#ifdef FEATURE\nint feature(void);\n#endif\n#if __STDC_VERSION__ == 201112L\n#define STDV 11\n#endif\n#define CFV CF\n' > mf/inc/feat.h
@@ -293,4 +294,66 @@ if out=$(cd mf && "$ZARK" run 2>&1); then fail "import_manifest: feature still b
 clang interop/sizes.c -o sizes_c || fail "sizeof_matches: C program"
 out=$(cd interop && "$ZARK" run sizes.zk 2>&1) || fail "sizeof_matches: $out"
 [ "$out" = "$(./sizes_c)" ] || fail "sizeof_matches: zark $out vs C $(./sizes_c)"
+cp -r "$R/tests/cbind/interop" cor
+(cd cor && "$ZARK" run main.zk lib.c > /dev/null 2>&1) || fail "import_corrupt: first run"
+zk=$(ls cor/.zark-cache/cbind/*.zk)
+for damage in "truncate -s 100 $zk" "truncate -s 0 $zk" "cp cor/lib.c $zk" "rm ${zk%.zk}.c" "truncate -s 0 ${zk%.zk}.c" "cp cor/lib.c ${zk%.zk}.c"; do
+    $damage
+    out=$(cd cor && "$ZARK" run main.zk lib.c 2>&1) || fail "import_corrupt ($damage): $out"
+    [ "$out" = "$(cat interop/main.out)" ] || fail "import_corrupt ($damage): got: $out"
+done
+
+mkdir -p sh/inc2 sh/d sh/q
+printf '#include <dep.h>\n' > sh/d/a.h
+printf '#define DEPV 1\n' > sh/inc2/dep.h
+printf 'import "d/a.h";\nvoid main() { println("{DEPV}"); }\n' > sh/m.zk
+out=$(cd sh && "$ZARK" run m.zk -Iinc1 -Iinc2 2>&1) || fail "import_shadow: $out"
+[ "$out" = 1 ] || fail "import_shadow: got: $out"
+mkdir -p sh/inc1
+printf '#define DEPV 77\n' > sh/inc1/dep.h
+out=$(cd sh && "$ZARK" run m.zk -Iinc1 -Iinc2 2>&1) || fail "import_shadow -I: $out"
+[ "$out" = 77 ] || fail "import_shadow -I: stale binding: $out"
+printf '#include "x.h"\n' > sh/q/b.h
+printf '#define XV 1\n' > sh/inc2/x.h
+printf 'import "q/b.h";\nvoid main() { println("{XV}"); }\n' > sh/n.zk
+out=$(cd sh && "$ZARK" run n.zk -Iinc2 2>&1) || fail "import_shadow quote: $out"
+[ "$out" = 1 ] || fail "import_shadow quote: got: $out"
+printf '#define XV 5\n' > sh/q/x.h
+out=$(cd sh && "$ZARK" run n.zk -Iinc2 2>&1) || fail "import_shadow quote: $out"
+[ "$out" = 5 ] || fail "import_shadow quote: stale binding: $out"
+
+mkdir -p shared
+printf 'struct cm { int v; };\n' > shared/common.h
+printf '#include "common.h"\nint fa(void);\n' > shared/a.h
+printf '#include "common.h"\nint fb(void);\n' > shared/b.h
+printf 'import "a.h";\nimport "b.h";\nvoid main() {}\n' > shared/m.zk
+if out=$(cd shared && "$ZARK" run m.zk 2>&1); then fail "import_shared: expected failure"; fi
+case "$out" in *"'a.h' and 'b.h' both declare 'cm'"*) ;; *) fail "import_shared: got: $out" ;; esac
+case "$out" in *zark-cache*) fail "import_shared: names the cache: $out" ;; esac
+
+mkdir -p vend/d1 vend/d2
+printf 'static inline int tw(int x) { return x * 2; }\n' | tee vend/d1/v.h > vend/d2/v.h
+printf 'import "d1/v.h" as p;\nimport "d2/v.h" as q;\nvoid main() { println("{p::tw(1) + q::tw(2)}"); }\n' > vend/m.zk
+out=$(cd vend && "$ZARK" run m.zk 2>&1) || fail "import_vendored: $out"
+[ "$out" = 6 ] || fail "import_vendored: got: $out"
+
+printf 'import "stdio.h";\nvoid main() {}\n' > use_stdio.zk
+if out=$("$ZARK" run use_stdio.zk -std=bogus 2>&1); then fail "import_bad_flag: expected failure"; fi
+case "$out" in *bogus*) ;; *) fail "import_bad_flag: no clang error: $out" ;; esac
+case "$out" in *"cannot find"*) fail "import_bad_flag: claims missing: $out" ;; esac
+printf 'import "/nonexistent/x.h";\nvoid main() {}\n' > use_abs.zk
+if out=$("$ZARK" run use_abs.zk 2>&1); then fail "import_abs_missing: expected failure"; fi
+case "$out" in *"error: cannot find C header '/nonexistent/x.h'"*) ;; *) fail "import_abs_missing: got: $out" ;; esac
+case "$out" in *searched*) fail "import_abs_missing: lists search dirs: $out" ;; esac
+
+if [ "$(id -u)" != 0 ]; then
+    mkdir -p unr
+    printf 'int un(void);\n' > unr/un.h
+    printf 'import "un.h";\nvoid main() {}\n' > unr/m.zk
+    (cd unr && "$ZARK" build m.zk -o m > /dev/null 2>&1) || fail "import_unreadable: first run"
+    chmod 000 unr/un.h
+    if out=$(cd unr && "$ZARK" build m.zk -o m 2>&1); then fail "import_unreadable: expected failure"; fi
+    chmod 644 unr/un.h
+    case "$out" in *"un.h"*"Permission denied"*) ;; *) fail "import_unreadable: got: $out" ;; esac
+fi
 echo "ok   cbind"

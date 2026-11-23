@@ -83,6 +83,7 @@ struct Loader {
     Map<str> seen;
     Map<str> prefixes;
     Map<str> overrides;
+    Map<str> ctypes;
 
     !void load_source(str src, str path, str prefix) {
         auto toks = tokenize(this->a, src, path)?;
@@ -90,6 +91,7 @@ struct Loader {
         const auto decls = p.parse_file()?;
         for (auto c : p.cts) { this->g.cts.put(c.name, c)?; }
         for (auto d : decls) { if (d.k == .Check) { this->g.ct_checks.push(d.ct)?; } }
+        if (prefix.len == 0 && c_headers.len > 0 && c_headers.has(path)) { this->claim_c_types(decls, c_headers.get(path)?)?; }
         const auto dir = dir_of(path);
         auto renames = List<str>::init(this->a);
         for (auto d : decls) {
@@ -117,6 +119,21 @@ struct Loader {
             k += 2;
         }
         this->g.add_decls(decls, path)?;
+    }
+
+    !void claim_c_types(List<Decl> decls, str header) {
+        if (this->ctypes.a.alloc_fn == null) { this->ctypes = Map<str>::init(this->a); }
+        for (auto d : decls) {
+            auto name = "";
+            if (d.k == .Struct) { name = d.s.name; }
+            if (d.k == .Alias) { name = d.path; }
+            if (name.len == 0) { continue; }
+            if (this->ctypes.has(name)) {
+                eprintln("error: C headers '{this->ctypes.get(name)?}' and '{header}' both declare '{name}' (from a header they both include); importing both is not supported yet, import the one header that includes both");
+                return error.CompileFailed;
+            }
+            this->ctypes.put(name, header)?;
+        }
     }
 
     /// loads a file once; returns the name its declarations live under (the first import's)

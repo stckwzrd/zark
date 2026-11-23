@@ -14,6 +14,7 @@ struct CLex {
     List<CTok> toks;
     List<CDef> defs;
     List<str> deps;
+    List<str> from;
     str header;
 }
 
@@ -73,6 +74,7 @@ struct CLexer {
         auto sys = false;
         auto it = str_fields(line[min(j + 1, line.len)..]);
         while (it.next()) { if (it.part == "3") { sys = true; } }
+        const auto prev = this->file;
         this->file = file;
         const auto was_stub = this->in_stub;
         this->in_stub = file == this->stub;
@@ -87,6 +89,7 @@ struct CLexer {
         if (!this->seen.has(file)) {
             this->seen.put(file, true)?;
             this->out.deps.push(file)?;
+            this->out.from.push(prev)?;
         }
         const auto top = this->hsys && str_find(this->name, "/") < 0;
         this->rel = file == this->out.header || !sys || (!top && path::dir(file) == path::dir(this->out.header));
@@ -1376,7 +1379,7 @@ struct CParser {
         if (hide.len > 64) { return error.TooDeep; }
         if (!c.lexed) {
             if (c.body.len > 0 && c.body[0] == '#') { return error.ParseFailed; }
-            auto lx = CLexer{ .a = this->a, .src = c.body, .packs = List<i64>::init(this->a), .seen = Map<bool>::init(this->a), .out = CLex{ .toks = List<CTok>::init(this->a), .defs = List<CDef>::init(this->a), .deps = List<str>::init(this->a) } };
+            auto lx = CLexer{ .a = this->a, .src = c.body, .packs = List<i64>::init(this->a), .seen = Map<bool>::init(this->a), .out = CLex{ .toks = List<CTok>::init(this->a), .defs = List<CDef>::init(this->a), .deps = List<str>::init(this->a), .from = List<str>::init(this->a) } };
             lx.run()?;
             c.toks = lx.out.toks;
             c.lexed = true;
@@ -2569,6 +2572,7 @@ struct CBind {
     str zk;
     str inline_c;
     List<str> deps;
+    List<str> from;
     List<str> warnings;
 }
 
@@ -2595,7 +2599,7 @@ struct CBind {
         eprint(r.err);
         return error.CompileFailed;
     }
-    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a) } };
+    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a), .from = List<str>::init(a) } };
     lx.run()?;
     auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
@@ -2617,7 +2621,8 @@ struct CBind {
     };
     drop(stub);
     e.keys(p.decls)?;
-    auto h = fnv64(0xcbf29ce484222325 as u64, read_file(a, lx.out.header)?);
+    const auto abs = path::absolute(a, lx.out.header)?;
+    auto h = fnv64(fnv64(0xcbf29ce484222325 as u64, abs), read_file(a, lx.out.header)?);
     for (auto f : flags.slice()) { h = fnv64(h, f); }
     auto hb = List<u8>::init(a);
     sprint(&hb, "{h:016x}")?;
@@ -2625,12 +2630,11 @@ struct CBind {
     e.run(p.decls)?;
     auto ic = List<u8>::init(a);
     if (e.c.len > 0) {
-        const auto abs = path::absolute(a, lx.out.header)?;
         const auto undefs = e.undefs.slice();
         const auto wraps = e.c.slice();
         sprint(&ic, "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"\n#include \"{abs}\"\n{undefs}{wraps}")?;
     }
-    return CBind{ .zk = e.out.slice(), .inline_c = ic.slice(), .deps = lx.out.deps, .warnings = e.warnings };
+    return CBind{ .zk = e.out.slice(), .inline_c = ic.slice(), .deps = lx.out.deps, .from = lx.out.from, .warnings = e.warnings };
 }
 
 !i32 cbind_main(Allocator a) {
@@ -2722,11 +2726,78 @@ str c_header_name(str p) {
     return "";
 }
 
-!u64 cb_key(Allocator a, List<str> flags, List<str> deps) {
+!str cb_key(Allocator a, List<str> flags, List<str> deps) {
     auto h = fnv64(0xcbf29ce484222325 as u64, c_version);
     for (auto f : flags.slice()) { h = fnv64(h, f); }
     for (auto d : deps.slice()) { h = fnv64(fnv64(h, d), read_file(a, d)?); }
-    return h;
+    return cb_hex(a, h);
+}
+
+!str cb_sum(Allocator a, str zk, str c) {
+    auto b = List<u8>::init(a);
+    b.append(cb_hex(a, fnv64(0xcbf29ce484222325 as u64, zk))?)?;
+    if (c.len > 0) { sprint(&b, " {cb_hex(a, fnv64(0xcbf29ce484222325 as u64, c))?}")?; }
+    return b.slice();
+}
+
+!str cb_text(Allocator a, str p) {
+    if (!fs::is_file(p)) { return ""; }
+    return read_file(a, p);
+}
+
+!List<str> cb_sys_dirs(Allocator a, List<str> flags) {
+    auto argv = List<str>::init(a);
+    argv.append(["clang", "-E", "-v"])?;
+    argv.append(flags.slice())?;
+    argv.append(["-x", "c", "/dev/null"])?;
+    const auto r = os::exec(a, argv.slice())?;
+    if (r.code != 0) { return error.CompileFailed; }
+    auto dirs = List<str>::init(a);
+    auto on = false;
+    auto it = str_lines(r.err);
+    while (it.next()) {
+        if (it.line == "End of search list.") { on = false; }
+        if (on) {
+            auto d = str_trim(it.line);
+            if (str_ends_with(d, " (framework directory)")) { d = d[0..d.len - 22]; }
+            dirs.push(d)?;
+        }
+        if (it.line == "#include <...> search starts here:") { on = true; }
+    }
+    return dirs;
+}
+
+!str cb_abs_dir(Allocator a, str d) {
+    const auto p = path::join(a, [fs::cwd(a)?, d])?;
+    if (fs::is_dir(p)) { return path::absolute(a, p); }
+    return p;
+}
+
+!List<str> cb_probes(Allocator a, str from_dir, List<str> flags, List<str> deps, List<str> from) {
+    auto raw = List<str>::init(a);
+    raw.push(from_dir)?;
+    for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { raw.push(f[2..])?; } }
+    raw.append(cb_sys_dirs(a, flags)?.slice())?;
+    auto dirs = List<str>::init(a);
+    for (auto d : raw.slice()) {
+        const auto p = cb_abs_dir(a, d)?;
+        if (dirs.index_of(p) < 0) { dirs.push(p)?; }
+    }
+    auto out = List<str>::init(a);
+    for (auto [i, d] : deps) {
+        auto l = List<str>::init(a);
+        l.push(from.get(i))?;
+        l.append(dirs.slice())?;
+        for (auto [x, xd] : l) {
+            if (d.len <= xd.len + 1 || !str_starts_with(d, xd) || d[xd.len] != '/') { continue; }
+            const auto rel = d[xd.len + 1..];
+            for (auto e : l.slice()[0..x]) {
+                const auto p = path::join(a, [e, rel])?;
+                if (p != d && !fs::is_file(p) && out.index_of(p) < 0) { out.push(p)?; }
+            }
+        }
+    }
+    return out;
 }
 
 !str cbind_import(Allocator a, str header, str from_dir) {
@@ -2761,42 +2832,75 @@ str c_header_name(str p) {
     auto key = "";
     if (fs::is_file(index)) {
         auto head = "";
+        auto check = "";
+        auto n = 0;
         auto deps = List<str>::init(a);
+        auto probes = List<str>::init(a);
         auto it = str_lines(read_file(a, index)?);
         while (it.next()) {
-            if (head.len == 0) { head = it.line; } else if (it.line.len > 0) { deps.push(it.line)?; }
+            n += 1;
+            if (n == 1) {
+                head = it.line;
+            } else if (n == 2) {
+                check = it.line;
+            } else if (str_starts_with(it.line, "?")) {
+                probes.push(it.line[1..])?;
+            } else if (it.line.len > 0) {
+                deps.push(it.line)?;
+            }
         }
         auto fresh = deps.len > 0 && (found.len == 0 || found == head);
         for (auto d : deps.slice()) { if (!fs::is_file(d)) { fresh = false; } }
+        for (auto p : probes.slice()) { if (fs::is_file(p)) { fresh = false; } }
         if (fresh) {
-            const auto k = cb_hex(a, cb_key(a, flags, deps)?)?;
-            if (fs::is_file(path::join(a, [dir, str_concat(a, [k, ".zk"])?])?)) { key = k; }
+            const auto k = cb_key(a, flags, deps) catch "";
+            const auto zk = path::join(a, [dir, str_concat(a, [k, ".zk"])?])?;
+            const auto c = path::join(a, [dir, str_concat(a, [k, ".c"])?])?;
+            if (k.len > 0 && fs::is_file(zk) && cb_sum(a, cb_text(a, zk) catch "", cb_text(a, c) catch "")? == check) { key = k; }
         }
     }
     if (key.len == 0) {
         const auto b = cbind_header(a, header, from_dir, flags) catch |e| {
-            if (found.len == 0) {
-                auto sb = List<u8>::init(a);
-                sb.append(from_dir)?;
-                for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { sprint(&sb, ", {f[2..]}")?; } }
-                eprintln("error: cannot find C header '{header}'; searched: {sb.slice()}, /usr/include");
+            if (found.len > 0) { return e; }
+            if (header[0] == '/') {
+                eprintln("error: cannot find C header '{header}'");
                 return error.CompileFailed;
             }
-            return e;
+            const auto sys = cb_sys_dirs(a, flags) catch { return error.CompileFailed; };
+            auto ids = List<str>::init(a);
+            for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { ids.push(f[2..])?; } }
+            auto sb = List<u8>::init(a);
+            sb.append(from_dir)?;
+            for (auto d : ids.slice()) { sprint(&sb, ", {d}")?; }
+            for (auto d : sys.slice()) {
+                if (fs::is_file(path::join(a, [d, header])?)) { return e; }
+                if (ids.index_of(d) < 0) { sprint(&sb, ", {d}")?; }
+            }
+            eprintln("error: cannot find C header '{header}'; searched: {sb.slice()}");
+            return error.CompileFailed;
         };
         auto deps = List<str>::init(a);
-        auto lines = List<u8>::init(a);
-        for (auto d : b.deps.slice()) {
+        auto from = List<str>::init(a);
+        for (auto [i, d] : b.deps) {
             const auto p = path::absolute(a, d)?;
-            deps.push(p)?;
+            if (deps.index_of(p) < 0) {
+                deps.push(p)?;
+                from.push(cb_abs_dir(a, path::dir(b.from.get(i)))?)?;
+            }
         }
+        const auto probes = cb_probes(a, from_dir, flags, deps, from) catch |e| {
+            eprintln("error: cannot read the include search path of clang for {header}: {e}");
+            return error.CompileFailed;
+        };
         auto head = found;
         if (head.len == 0) { head = deps.get(0); }
-        sprint(&lines, "{head}\n")?;
+        auto lines = List<u8>::init(a);
+        sprint(&lines, "{head}\n{cb_sum(a, b.zk, b.inline_c)?}\n")?;
         for (auto d : deps.slice()) { sprint(&lines, "{d}\n")?; }
-        key = cb_hex(a, cb_key(a, flags, deps)?)?;
+        for (auto p : probes.slice()) { sprint(&lines, "?{p}\n")?; }
+        key = cb_key(a, flags, deps)?;
         const auto c = path::join(a, [dir, str_concat(a, [key, ".c"])?])?;
-        if (b.inline_c.len > 0) { cb_put(a, c, b.inline_c)?; }
+        if (b.inline_c.len > 0) { cb_put(a, c, b.inline_c)?; } else if (!drop(c)) { return error.CompileFailed; }
         cb_put(a, path::join(a, [dir, str_concat(a, [key, ".zk"])?])?, b.zk)?;
         cb_put(a, index, lines.slice())?;
     }
