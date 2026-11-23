@@ -4,6 +4,7 @@ ZARK=$(realpath "${ZARK:-$R/build/zark}")
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL cbind: $*"; exit 1; }
+command -v timeout >/dev/null || timeout() { shift; "$@"; }
 nohid() { sed -E 's/zark_inl_[0-9a-f]{16}_/zark_inl_H_/g' "$@"; }
 cd "$T"
 mkdir -p tests
@@ -211,7 +212,7 @@ fi
 
 (cd interop && "$ZARK" cbind lib.h -I. --inline-c ../same.c > ../same.zk 2> /dev/null) || fail "import_same: cbind exit $?"
 cached=$(grep -l "lib_magic" interop/.zark-cache/cbind/*.zk)
-[ "$(echo "$cached" | wc -l)" = 1 ] || fail "import_same: expected one cached binding, got: $cached"
+[ $(echo "$cached" | wc -l) -eq 1 ] || fail "import_same: expected one cached binding, got: $cached"
 diff -u same.zk "$cached" || fail "import_same: cbind and import differ"
 diff -u same.c "${cached%.zk}.c" || fail "import_same: inline C files differ"
 
@@ -232,7 +233,7 @@ out=$(cd hit && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.c 2>&1) || fail "im
 [ "$out" = "$(cat interop/main.out)" ] || fail "import_cache_hit: got: $out"
 if grep -E -- "(^| )-E( |$)|fdump-record-layouts" clang.log; then fail "import_cache_hit: preprocessed again"; fi
 
-sed -i 's/#define LIB_MAGIC 42/#define LIB_MAGIC 43/' hit/lib.h
+sed 's/#define LIB_MAGIC 42/#define LIB_MAGIC 43/' hit/lib.h > hit/lib.h.new && mv hit/lib.h.new hit/lib.h
 out=$(cd hit && "$ZARK" run main.zk lib.c 2>&1) || fail "import_header_edit: $out"
 [ "$(echo "$out" | head -1)" = "43 interop 43 86" ] || fail "import_header_edit: got: $out"
 
@@ -245,8 +246,8 @@ for f in "" --llvm; do
     out=$(cd tw/app && "$ZARK" run $f main.zk "../my lib/lib.c" "-I../my lib" 2>&1) || fail "import_twice $f: $out"
     [ "$out" = "43 42 42 3 interop" ] || fail "import_twice $f: got: $out"
 done
-[ "$(ls tw/app/.zark-cache/cbind/*.zk | wc -l)" = 1 ] || fail "import_twice: expected one cached binding: $(ls tw/app/.zark-cache/cbind)"
-[ "$(ls tw/app/.zark-cache/cbind/*.c | wc -l)" = 1 ] || fail "import_twice: expected one inline C file: $(ls tw/app/.zark-cache/cbind)"
+[ $(ls tw/app/.zark-cache/cbind/*.zk | wc -l) -eq 1 ] || fail "import_twice: expected one cached binding: $(ls tw/app/.zark-cache/cbind)"
+[ $(ls tw/app/.zark-cache/cbind/*.c | wc -l) -eq 1 ] || fail "import_twice: expected one inline C file: $(ls tw/app/.zark-cache/cbind)"
 
 printf 'import "lib.h" as lib;\nimport "sub/plain.zk";\nvoid main() { println("{lib::LIB_MAGIC}"); }\n' > tw/app/bad.zk
 if out=$(cd tw/app && "$ZARK" run bad.zk "../my lib/lib.c" "-I../my lib" 2>&1); then fail "import_alias_plain: expected failure"; fi
@@ -273,7 +274,7 @@ out=$(cd mf && "$ZARK" run 2>&1) || fail "import_manifest: $out"
 [ "$out" = "5 11 2" ] || fail "import_manifest: got: $out"
 out=$("$ZARK" run mf/src/main.zk 2>&1) || fail "import_manifest explicit file: $out"
 [ "$out" = "5 11 2" ] || fail "import_manifest explicit file: got: $out"
-sed -i 's/defines = \["FEATURE"\]/defines = []/' mf/zark.toml
+sed 's/defines = \["FEATURE"\]/defines = []/' mf/zark.toml > mf/zark.toml.new && mv mf/zark.toml.new mf/zark.toml
 if out=$(cd mf && "$ZARK" run 2>&1); then fail "import_manifest: feature still bound without FEATURE"; fi
 
 {
@@ -297,8 +298,14 @@ out=$(cd interop && "$ZARK" run sizes.zk 2>&1) || fail "sizeof_matches: $out"
 cp -r "$R/tests/cbind/interop" cor
 (cd cor && "$ZARK" run main.zk lib.c > /dev/null 2>&1) || fail "import_corrupt: first run"
 zk=$(ls cor/.zark-cache/cbind/*.zk)
-for damage in "truncate -s 100 $zk" "truncate -s 0 $zk" "cp cor/lib.c $zk" "rm ${zk%.zk}.c" "truncate -s 0 ${zk%.zk}.c" "cp cor/lib.c ${zk%.zk}.c"; do
-    $damage
+for damage in "cut $zk" "empty $zk" "copy $zk" "remove ${zk%.zk}.c" "empty ${zk%.zk}.c" "copy ${zk%.zk}.c"; do
+    set -- $damage
+    case "$1" in
+        cut) head -c 100 "$2" > "$2.t" && mv "$2.t" "$2" ;;
+        empty) : > "$2" ;;
+        copy) cp cor/lib.c "$2" ;;
+        remove) rm "$2" ;;
+    esac
     out=$(cd cor && "$ZARK" run main.zk lib.c 2>&1) || fail "import_corrupt ($damage): $out"
     [ "$out" = "$(cat interop/main.out)" ] || fail "import_corrupt ($damage): got: $out"
 done

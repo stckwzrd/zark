@@ -21,7 +21,7 @@ out=$("$ZARK" run main.zk "a b/ans.c" "-Ia b/inc" -DANSWER=42 2>&1)
 out=$("$ZARK" run main.zk "a b/ans.c" "-Ia b/inc" -DANSWER=BASE+2 2>&1)
 [ "$out" = "42" ] || fail "flags_cli macro: expected 42, got: $out"
 mkdir -p mf/src "mf/inc dir" mf/c
-printf '[package]\nname = "mf"\n\n[build]\nsources = ["c/s.cpp"]\ninclude = ["inc dir"]\ndefines = ["N=3"]\nstd = "c++17"\ncflags = ["-DM=5"]\nlibs = ["stdc++"]\n' > mf/zark.toml
+printf '[package]\nname = "mf"\n\n[build]\nsources = ["c/s.cpp"]\ninclude = ["inc dir"]\ndefines = ["N=3"]\nstd = "c++17"\ncflags = ["-DM=5"]\n' > mf/zark.toml
 printf '#define BASE 10\n' > "mf/inc dir/val.h"
 printf '#include <string_view>\n#include "val.h"\nextern "C" long cxx_len() { std::string_view s("hello"); return s.size() + N + M + BASE; }\n' > mf/c/s.cpp
 printf 'extern i64 cxx_len();\nvoid main() { println("{cxx_len()}"); }\n' > mf/src/main.zk
@@ -86,7 +86,7 @@ out=$(cd sb && "$ZARK" run main.zk a/util.c b/util.c 2>&1)
 [ "$out" = "3" ] || fail "same_base_name: expected 3, got: $out"
 
 mkdir -p co/c
-printf '[package]\nname = "co"\n\n[build]\nsources = ["c/app.cpp"]\nstd = "c++17"\nlibs = ["stdc++"]\n' > co/zark.toml
+printf '[package]\nname = "co"\n\n[build]\nsources = ["c/app.cpp"]\nstd = "c++17"\n' > co/zark.toml
 printf '#include <string>\n#include <cstdio>\nint main(int argc, char** argv) { std::string s = std::to_string(argc - 1); std::printf("%%s\\n", s.c_str()); return 0; }\n' > co/c/app.cpp
 out=$(cd co && "$ZARK" run -- a b 2>&1)
 [ "$out" = "2" ] || fail "cpp_only_project run: expected 2, got: $out"
