@@ -13,5 +13,6 @@ type pt_t = pt;
 type pt_p = pt*;
 struct holder { P* p; W* w; node** list; fn(holder*) -> void on; }
 struct flex { i32 n; }
+struct flex2 { u64[1] storage; }
 extern P make_p(i32 x, f64 y);
 extern void walk(node* n, shape* s);

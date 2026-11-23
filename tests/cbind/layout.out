@@ -1,4 +1,7 @@
+struct fm { u64[1] storage; }
+struct pk { u8[5] storage; }
 struct unpk { u8 c; i32 x; }
+struct pk2 { u16[3] storage; }
 struct unpk2 { u8 c; i32 x; }
 type E8 = u8;
 const auto A8 = 1;
@@ -23,3 +26,12 @@ struct es { i64 b; i32 o; }
 extern i32 uses_neg(u32 n);
 extern i32 uses_ok(i32 o);
 extern i32 uses_e8(u8 e);
+struct bits { u64[2] storage; }
+struct pkd { u8[7] storage; }
+struct ald { u64[1] storage; }
+struct alf { u64[2] storage; }
+struct usesbits { bits[2] b; pkd p; alf f; }
+struct bitu { u32[2] storage; }
+extern i32 takebits(bits b);
+extern i32 takebitsp(bits* b);
+extern i32 takeald(ald a);
