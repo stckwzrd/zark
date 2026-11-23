@@ -1999,7 +1999,14 @@ struct CEmit {
         const auto x = this->expand(d.ty);
         if (x.k == .Array && x.n == -1) { pt.elem = x.elem; }
         auto tb = List<u8>::init(this->a);
-        this->ty(&tb, pt)?;
+        auto c = pt.elem;
+        while (c.k == .Named && c.tag == 0 && this->typedefs.has(c.name)) { c = this->typedefs.get_or(c.name, c); }
+        if (c.k == .Int && c.plain) {
+            this->ty(&tb, pt.elem)?;
+            sprint(&tb, "*")?;
+        } else {
+            this->ty(&tb, pt)?;
+        }
         if (this->why.len > 0) { return this->warn(d.name, this->why); }
         const auto ts = tb.slice();
         auto wn = List<u8>::init(this->a);

@@ -7,3 +7,7 @@ signed char sneg(signed char x);
 unsigned char ubig(unsigned char x);
 int count_ch(const cht* s, char** rest);
 void fill(struct cs* p, cht c);
+extern char gc;
+extern cht gct;
+extern char gs[];
+extern char ga[4];

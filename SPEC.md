@@ -328,7 +328,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 | function, variadic function | `extern` declaration |
 | `static inline` function | `extern` wrapper `zark_inl_HASH_name` in C plus a Zark function `name` that calls it |
 | struct with bitfields | opaque storage of the same size and alignment with `get_f()` and `set_f(v)` for each named bitfield `f`, through C accessors `zark_bf_HASH_…` in the inline C file; the value has the declared type (`_Bool` is `bool`), C does the masking and sign extension; unnamed and zero-width bitfields get none |
-| `extern T name;` | `T* name_ptr()`, the address of the variable from a C accessor `zark_var_HASH_name`; `extern T name[];` gives `T* name_ptr()` to the first element; `const` is dropped as for pointers |
+| `extern T name;` | `T* name_ptr()`, the address of the variable from a C accessor `zark_var_HASH_name`; `extern T name[];` gives `T* name_ptr()` to the first element; `T` follows the `char` row for a plain `char` variable (`extern char c;` gives `i8* c_ptr()` where `char` is signed), the `u8*` string rule applies only to a variable that is itself a `char*`; `const` is dropped as for pointers |
 
 Fields, parameters and types whose names are Zark keywords or type names get a trailing `_` (`type_`, `str_`); functions with such names are skipped. A declaration that uses a skipped one is skipped too.
 

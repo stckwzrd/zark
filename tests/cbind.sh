@@ -26,17 +26,17 @@ for sign in signed unsigned; do
     exp=out
     [ "$sign" = unsigned ] && exp=uout
     "$ZARK" cbind tests/cbind/charsign.h -f$sign-char > charsign.zk 2> charsign.err || fail "charsign $sign: exit $?: $(cat charsign.err)"
-    diff -u tests/cbind/charsign.$exp charsign.zk || fail "charsign $sign: output differs"
+    diff -u <(nohid tests/cbind/charsign.$exp) <(nohid charsign.zk) || fail "charsign $sign: output differs"
     diff -u tests/cbind/charsign.err charsign.err || fail "charsign $sign: warnings differ"
 done
 exp=out
-want="-56 -55 -56 -56 -56 97 -3 250 3 94 3 98"
+want="-56 -55 -56 -56 -56 97 -3 250 3 94 3 98 -56 -55 -54 -53"
 if clang -E -dM -x c /dev/null | grep -q __CHAR_UNSIGNED__; then
     exp=uout
-    want="200 201 200 200 200 97 -3 250 3 94 3 98"
+    want="200 201 200 200 200 97 -3 250 3 94 3 98 200 201 202 203"
 fi
-"$ZARK" cbind tests/cbind/charsign.h > charsign.zk 2> /dev/null || fail "charsign: exit $?"
-diff -u tests/cbind/charsign.$exp charsign.zk || fail "charsign: output differs for this target"
+"$ZARK" cbind tests/cbind/charsign.h --inline-c charsign_inl.c > charsign.zk 2> /dev/null || fail "charsign: exit $?"
+diff -u <(nohid tests/cbind/charsign.$exp) <(nohid charsign.zk) || fail "charsign: output differs for this target"
 cat > use_charsign.zk <<'EOF'
 import "charsign.zk";
 void main() {
@@ -45,11 +45,11 @@ void main() {
     fill(&v, c);
     u8* rest = null;
     const auto n = count_ch("abc".ptr, &rest);
-    println("{c} {add1(c)} {widen(c)} {v.c} {v.name[0]} {v.name[1]} {v.s} {v.u} {sneg(v.s)} {ubig(v.u)} {n} {*rest}");
+    println("{c} {add1(c)} {widen(c)} {v.c} {v.name[0]} {v.name[1]} {v.s} {v.u} {sneg(v.s)} {ubig(v.u)} {n} {*rest} {*gc_ptr()} {*gct_ptr()} {*gs_ptr()} {(*ga_ptr())[0]}");
 }
 EOF
 for f in "" --llvm -O; do
-    out=$("$ZARK" run $f use_charsign.zk tests/cbind/charsign.c 2>&1) || fail "charsign $f: run: $out"
+    out=$("$ZARK" run $f use_charsign.zk tests/cbind/charsign.c charsign_inl.c 2>&1) || fail "charsign $f: run: $out"
     [ "$out" = "$want" ] || fail "charsign $f: got: $out"
 done
 
