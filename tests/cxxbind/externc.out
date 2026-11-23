@@ -1,0 +1,18 @@
+extern i32 add(i32 a, i32 b);
+extern f64 scale(f64 x, f32 f);
+extern u8* name_of(i32 id);
+extern void fill(u8* buf, usize n);
+extern void* raw();
+extern u64 big(i64 x, u16 s);
+extern i32 apply(fn(i32) -> i32 f, i32 x);
+extern bool flag(bool b);
+extern i32 say(u8* fmt, ...);
+extern i32 quiet(i32 x);
+type Kind = i32;
+const auto KA = 0;
+const auto KB = 1;
+extern Kind kind_of(i32 x);
+type net_Proto = u16;
+const auto net_Proto_Tcp = 6;
+const auto net_Proto_Udp = 17;
+extern i32 net_port(net_Proto p, u8* host);
