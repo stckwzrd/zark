@@ -255,14 +255,52 @@ def make_value(t, ctr):
     return {f: make_value(ft, ctr) for f, ft in STRUCTS[t]}
 
 
-def leaf_sum(v):
-    if isinstance(v, dict):
-        return sum(leaf_sum(x) for x in v.values())
-    if isinstance(v, list):
-        return sum(leaf_sum(x) for x in v)
-    if isinstance(v, bool):
-        return 1 if v else 0
-    return int(v)
+VA_STRIDE = 32
+
+
+def nleaves(t):
+    if t in SCALARS:
+        return 1
+    if t in ALL_VECS:
+        return ALL_VECS[t][1]
+    a = array_parts(t)
+    if a is not None:
+        return nleaves(a[0]) * a[1]
+    if t in UNIONS:
+        return 1 + max(nleaves(ft) for _, ft in UNIONS[t])
+    return sum(nleaves(ft) for _, ft in STRUCTS[t])
+
+
+def plus(k, j):
+    if isinstance(k, int):
+        return k + j
+    return f"({k} + {j})"
+
+
+def wsum(t, v, k):
+    if t in SCALARS:
+        return k * int(v)
+    if t in ALL_VECS:
+        return sum((k + i) * int(x) for i, x in enumerate(v))
+    a = array_parts(t)
+    if a is not None:
+        n = nleaves(a[0])
+        return sum(wsum(a[0], x, k + i * n) for i, x in enumerate(v))
+    if t in UNIONS:
+        return v["tag"] * k + wsum(UNIONS[t][v["tag"]][1], v["p"], k + 1)
+    out = 0
+    for f, ft in STRUCTS[t]:
+        out += wsum(ft, v[f], k)
+        k += nleaves(ft)
+    return out
+
+
+def wsums(types, vals, k=1):
+    out = 0
+    for t, v in zip(types, vals):
+        out += wsum(t, v, k)
+        k += nleaves(t)
+    return out
 
 
 def zlit(t, v):
@@ -311,32 +349,40 @@ def clit(t, v):
     return "(" + t + "){ " + ", ".join(fields) + " }"
 
 
-def csum(t, var):
+def csum(t, var, k=1):
     if t in SCALARS:
-        return f"((int64_t){var})"
+        return f"((int64_t){var} * {k})"
     if t in ALL_VECS:
-        return "(" + " + ".join(f"((int64_t){var}[{i}])" for i in range(ALL_VECS[t][1])) + ")"
+        return "(" + " + ".join(f"((int64_t){var}[{i}] * {plus(k, i)})" for i in range(ALL_VECS[t][1])) + ")"
     a = array_parts(t)
     if a is not None:
-        return "(" + " + ".join(csum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")" if a[1] else "0"
+        n = nleaves(a[0])
+        return "(" + " + ".join(csum(a[0], f"{var}[{i}]", plus(k, i * n)) for i in range(a[1])) + ")" if a[1] else "0"
     if t in UNIONS:
-        arms = [f"{var}.tag == {i} ? ({i} + {csum(ft, f'{var}.u.{f}')})" for i, (f, ft) in enumerate(UNIONS[t])]
+        arms = [f"{var}.tag == {i} ? ({i} * {k} + {csum(ft, f'{var}.u.{f}', plus(k, 1))})" for i, (f, ft) in enumerate(UNIONS[t])]
         return "(" + " : ".join(arms) + " : -1000000)"
-    parts = [csum(ft, f"{var}.{f}") for f, ft in STRUCTS[t]]
+    parts = []
+    for f, ft in STRUCTS[t]:
+        parts.append(csum(ft, f"{var}.{f}", k))
+        k = plus(k, nleaves(ft))
     return "(" + " + ".join(parts) + ")" if parts else "0"
 
 
-def zsum(t, var):
+def zsum(t, var, k=1):
     if t in SCALARS:
-        return f"({var} as i64)"
+        return f"({var} as i64) * {k}"
     if t in ALL_VECS:
-        return "(" + " + ".join(f"({var}[{i}] as i64)" for i in range(ALL_VECS[t][1])) + ")"
+        return "(" + " + ".join(f"({var}[{i}] as i64) * {plus(k, i)}" for i in range(ALL_VECS[t][1])) + ")"
     a = array_parts(t)
     if a is not None:
-        return "(" + " + ".join(zsum(a[0], f"{var}[{i}]") for i in range(a[1])) + ")" if a[1] else "0"
+        n = nleaves(a[0])
+        return "(" + " + ".join(zsum(a[0], f"{var}[{i}]", plus(k, i * n)) for i in range(a[1])) + ")" if a[1] else "0"
     if t in UNIONS:
-        return f"usum_{t}({var})"
-    parts = [zsum(ft, f"{var}.{f}") for f, ft in STRUCTS[t]]
+        return f"usum_{t}({var}, {k})"
+    parts = []
+    for f, ft in STRUCTS[t]:
+        parts.append(zsum(ft, f"{var}.{f}", k))
+        k = plus(k, nleaves(ft))
     return "(" + " + ".join(parts) + ")" if parts else "0"
 
 
@@ -379,8 +425,8 @@ def z_structs():
         out.append(f"{prefix}struct {name} {{ {fields} }}")
     for name in ORDER:
         if name in UNIONS:
-            arms = " ".join(f".{f}(x) => {{ return {i} + {zsum(ft, 'x')}; }}" for i, (f, ft) in enumerate(UNIONS[name]))
-            out.append(f"i64 usum_{name}({name} v) {{ match v {{ {arms} }} return -1000000; }}")
+            arms = " ".join(f".{f}(x) => {{ return {i} * k + {zsum(ft, 'x', plus('k', 1))}; }}" for i, (f, ft) in enumerate(UNIONS[name]))
+            out.append(f"i64 usum_{name}({name} v, i64 k) {{ match v {{ {arms} }} return -1000000; }}")
     return out
 
 
@@ -450,12 +496,20 @@ def fn_ty(params, ret="i64"):
 
 
 def sum_c(params):
-    parts = [csum(t, n) for t, n in params]
+    parts = []
+    k = 1
+    for t, n in params:
+        parts.append(csum(t, n, k))
+        k += nleaves(t)
     return " + ".join(parts) if parts else "0"
 
 
 def sum_zk(params):
-    parts = [zsum(t, n) for t, n in params]
+    parts = []
+    k = 1
+    for t, n in params:
+        parts.append(zsum(t, n, k))
+        k += nleaves(t)
     return " + ".join(parts) if parts else "0"
 
 
@@ -474,9 +528,9 @@ def build_case(name, mode, params, values=None, ret="i64", ret_value=None):
     else:
         vals = values
     if ret_value is None:
-        expected = sum(leaf_sum(v) for v in vals)
+        expected = wsums([t for t, _ in params], vals)
     else:
-        expected = leaf_sum(ret_value)
+        expected = wsum(ret, ret_value, 1)
     return {
         "name": name,
         "mode": mode,
@@ -577,9 +631,13 @@ def va_case(name, fixed, var, fixed_vals=None, ret="i64", ret_value=None, vsum=N
     ctr = [0]
     fv = fixed_vals if fixed_vals is not None else [make_value(t, ctr) for t, _ in fixed]
     vals = [make_value(t, ctr) if v is None else v for t, v in var]
-    expected = sum(leaf_sum(v) for v in fv) + sum(leaf_sum(v) for v in vals)
+    k = 1 + sum(nleaves(t) for t, _ in fixed)
+    if vsum:
+        expected = sum((i + 1) * wsum(t, v, 1) for i, ((t, _), v) in enumerate(zip(var, vals)))
+    else:
+        expected = wsums([t for t, _ in fixed], fv) + sum(wsum(t, v, k + i * VA_STRIDE) for i, ((t, _), v) in enumerate(zip(var, vals)))
     if ret_value is not None:
-        expected += leaf_sum(ret_value)
+        expected += wsum(ret, ret_value, 1)
     return {
         "name": name,
         "mode": "variadic",
@@ -631,7 +689,7 @@ def render_va_c(case):
         t = case["vsum"]
         lines.append(f"int64_t f_{name}(int32_t n, ...) {{")
         lines.append("    va_list ap; va_start(ap, n); int64_t s = 0;")
-        lines.append(f"    for (int32_t i = 0; i < n; i++) s += (int64_t)va_arg(ap, {t});")
+        lines.append(f"    for (int32_t i = 0; i < n; i++) s += (int64_t)va_arg(ap, {t}) * (i + 1);")
         lines.append("    va_end(ap); return s;")
         lines.append("}")
         return "\n".join(lines) + "\n"
@@ -639,17 +697,19 @@ def render_va_c(case):
     if sig:
         sig += ", "
     arms = [
-        "case 'i': s += va_arg(ap, int); break;",
-        "case 'u': s += va_arg(ap, unsigned); break;",
-        "case 'l': s += va_arg(ap, int64_t); break;",
-        "case 'd': s += (int64_t)va_arg(ap, double); break;",
+        "case 'i': s += (int64_t)va_arg(ap, int) * w; break;",
+        "case 'u': s += (int64_t)va_arg(ap, unsigned) * w; break;",
+        "case 'l': s += (int64_t)va_arg(ap, int64_t) * w; break;",
+        "case 'd': s += (int64_t)va_arg(ap, double) * w; break;",
     ]
     for t in sorted(set(case["var"])):
         if t not in VA_CODE:
-            arms.append(f"case '{va_code(t)}': {{ {t} v = va_arg(ap, {t}); s += {csum(t, 'v')}; break; }}")
+            arms.append(f"case '{va_code(t)}': {{ {t} v = va_arg(ap, {t}); s += {csum(t, 'v', 'w')}; break; }}")
+    k = 1 + sum(nleaves(t) for t, _ in params)
     lines.append(f"{ctype(ret)} f_{name}({sig}const char *fmt, ...) {{")
     lines.append(f"    va_list ap; va_start(ap, fmt); int64_t s = {sum_c(params)};")
     lines.append("    for (const char *p = fmt; *p; p++) {")
+    lines.append(f"        int64_t w = {k} + (p - fmt) * {VA_STRIDE};")
     lines.append("        switch (*p) {")
     for a in arms:
         lines.append(f"        {a}")

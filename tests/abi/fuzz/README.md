@@ -3,7 +3,9 @@
 Generates C and Zark sides of the same signatures independently, builds them
 with the selected Zark backends, runs them and compares the checksums. It does
 not use `cbind` to generate the Zark side, so a `cbind` bug cannot mask an ABI
-bug.
+bug. The checksum weights every scalar leaf by its position in the argument
+list (a variable argument by its index in the format string), so swapped
+arguments, members or registers of the same type change it.
 
 ## Run
 
@@ -46,7 +48,7 @@ Unions go by value in all four directions as parameters and results
 (`*_ud`, `*_udi`, `*_ufd`, `*_uff`, `*_uif`, `*_udd`, `*_uf2`, `*_up`,
 `*_ubig`, the struct wrappers `*_su`, `*_sua`, `*_sux` and `*_union_mix`).
 The C side reads the tag and the active member, the Zark side matches on
-the variant, and the generator computes the expected tag plus payload sum.
+the variant, and the generator computes the expected weighted tag plus payload sum.
 The cases whose payload eightbyte is SSE (`ud`, `ufd`, `uff`, `udd`, `uf2`,
 `su`, `sua`, `union_mix`) were red on every backend while unions were
 classified as INTEGER.
