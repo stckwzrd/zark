@@ -9,6 +9,7 @@ int arr[3] = { 10, 20, 30 };
 int (*hook)(int) = 0;
 unsigned char bytes[3] = { 1, 2, 250 };
 int type = 5;
+volatile int* pv = 0;
 int dup_ptr(void) { return 0; }
 int read_counter(void) { return counter * 1000 + table.a * 100 + arr[1] + bytes[0] + type; }
 int call_hook(int x) { return hook(x); }

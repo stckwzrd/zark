@@ -215,6 +215,7 @@ struct CType {
     CDecl* rec;
     bool c_unsigned;
     bool plain;
+    bool vol;
 }
 
 enum CDK { Func, Struct, Typedef, Macro, Var, Skip, Enum, Const }
@@ -234,6 +235,7 @@ struct CDecl {
     bool is_static;
     bool is_inline;
     bool is_tls;
+    bool vol;
     bool has_body;
     bool asm_label;
     bool func_like;
@@ -253,7 +255,7 @@ struct CDecl {
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
 
-struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; bool is_tls; }
+struct CSpecs { CType* ty; bool is_typedef; bool is_extern; bool is_static; bool is_inline; bool is_tls; bool vol; }
 
 bool cb_is_qualifier(str w) {
     for (auto q : ["const", "volatile", "restrict", "__restrict", "__restrict__", "__const", "__volatile", "__volatile__", "__extension__", "_Nullable", "_Nonnull", "_Null_unspecified", "_Nullable_result", "__nullable", "__nonnull", "__null_unspecified", "__unaligned", "__ptr32", "__ptr64", "__w64", "__cdecl", "__stdcall", "__fastcall"]) {
@@ -586,6 +588,8 @@ struct CParser {
     i64 di;
     Map<CType*> typedefs;
     Map<bool> tags;
+    Map<bool> vol_tds;
+    i64 vols;
     List<CDecl*> decls;
     bool attr_layout;
     str layout_why;
@@ -701,6 +705,7 @@ struct CParser {
                 continue;
             }
             if (!cb_is_qualifier(t)) { return; }
+            if (t == "volatile" || t == "__volatile" || t == "__volatile__") { this->vols += 1; }
             _ = this->next();
         }
     }
@@ -717,7 +722,9 @@ struct CParser {
         auto why = "";
         auto any = false;
         while (true) {
+            const auto v0 = this->vols;
             this->skip_noise();
+            if (this->vols > v0) { s.vol = true; }
             const auto t = this->peek();
             if (t.k != .Ident) { break; }
             const auto w = t.text;
@@ -1064,7 +1071,9 @@ struct CParser {
             } else {
                 t = this->ptr(t)?;
             }
+            const auto v0 = this->vols;
             this->skip_noise();
+            t.vol = this->vols > v0;
         }
         if (this->at("(") && this->grouped()) {
             const auto inner = this->pos + 1;
@@ -1248,6 +1257,14 @@ struct CParser {
         return x;
     }
 
+    bool is_vol(CType* t, CSpecs s) {
+        auto x = t;
+        while (x.k == .Array) { x = x.elem; }
+        if (x.k == .Ptr) { return x.vol; }
+        if (x != s.ty) { return false; }
+        return s.vol || (x.k == .Named && x.tag == 0 && this->vol_tds.has(x.name));
+    }
+
     !void typedef_decl(CField f, CType* base, bool rel) {
         if (!this->typedefs.has(f.name)) { this->typedefs.put(f.name, f.ty)?; }
         if (base.rec != null && base.rec.name.len == 0 && f.ty == base) {
@@ -1273,6 +1290,7 @@ struct CParser {
             auto f = this->declarator(s.ty)?;
             if (f.name.len == 0) { return error.ParseFailed; }
             if (s.is_typedef) {
+                if (this->is_vol(f.ty, s)) { this->vol_tds.put(f.name, true)?; }
                 if (this->attr_why.len > 0) { f.ty = this->bad(this->attr_why)?; }
                 this->typedef_decl(f, s.ty, rel)?;
             } else {
@@ -1301,6 +1319,7 @@ struct CParser {
                     d.is_extern = s.is_extern;
                     d.is_static = s.is_static;
                     d.is_tls = s.is_tls;
+                    d.vol = this->is_vol(f.ty, s);
                     d.nowrap = this->nowrap;
                     this->decls.push(d)?;
                     if (this->eat("=")) { this->skip_until_comma(); }
@@ -1988,6 +2007,7 @@ struct CEmit {
         if (d.is_tls) { return this->warn(d.name, "thread-local variable"); }
         if (d.is_static) { return this->warn(d.name, "static variable"); }
         if (!d.is_extern) { return this->warn(d.name, "variable"); }
+        if (d.vol) { return this->warn(d.name, "volatile variable"); }
         const auto nw = this->nowrap.get_or(d.name, "");
         if (nw.len > 0) { return this->warn(d.name, nw); }
         auto nb = List<u8>::init(this->a);
@@ -2766,7 +2786,7 @@ struct CBind {
     }
     auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a), .from = List<str>::init(a) } };
     lx.run()?;
-    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { p.short_enums = true; }

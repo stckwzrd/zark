@@ -6,3 +6,10 @@ skipped dup: name clash
 skipped gone: unavailable attribute
 skipped gone2: unavailable attribute
 skipped gone3: unavailable attribute
+skipped vflag: volatile variable
+skipped vp: volatile variable
+skipped vti: volatile variable
+skipped varr: volatile variable
+skipped vfp: volatile variable
+skipped vafter: volatile variable
+skipped vst: volatile variable

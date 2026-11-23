@@ -25,3 +25,6 @@ void* zark_var_H_bytes(void) { return (void*)&bytes; }
 #if !defined(ZARK_PICK) || defined(ZARK_USE_H_type)
 void* zark_var_H_type(void) { return (void*)&type; }
 #endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_H_pv)
+void* zark_var_H_pv(void) { return (void*)&pv; }
+#endif

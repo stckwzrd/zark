@@ -17,5 +17,8 @@ u8[3]* bytes_ptr() { return zark_var_H_bytes(); }
 extern i32* zark_var_H_type();
 i32* type_ptr() { return zark_var_H_type(); }
 extern i32 dup_ptr();
+extern i32** zark_var_H_pv();
+i32** pv_ptr() { return zark_var_H_pv(); }
+type vint = i32;
 extern i32 read_counter();
 extern i32 call_hook(i32 x);
