@@ -55,11 +55,12 @@ What you get:
 - an `enum` becomes an integer type plus one constant per value; a `#define` of a number, a string or a character becomes a constant;
 - a union becomes a struct with raw storage and one accessor per member: `*u.as_d() = 2.5;`;
 - a `static inline` function gets a small C wrapper that the compiler builds and links for you;
+- an `extern` variable becomes a function `name_ptr()` that returns its address, a struct with bitfields gets `get_f()` and `set_f(v)` for each bitfield, and a struct aligned above 8 becomes an `align(N) struct` (see [variables, bitfields and alignment](#c-variables-bitfields-and-alignment));
 - a field or parameter named like a Zark keyword gets a trailing `_` (`type` becomes `type_`).
 
-The header is looked up next to the importing file, then in the `-I` directories, then in the system include path, and it sees the same `-D` and `-I` flags as the C sources. The result is cached in `.zark-cache/cbind/` and rebuilt when the header, anything it includes, the flags or the clang version change.
+The header is looked up next to the importing file, then in the `-I` directories, then in the system include path, and it sees the same `-D` and `-I` flags as the C sources. The result is cached in `.zark-cache/cbind/` and rebuilt when the header, anything it includes, the flags, the clang version or the Zark compiler change.
 
-Some C constructs have no Zark equivalent yet and are skipped: `long double`, `_Complex`, `_Atomic`, bitfields (a struct that has them becomes opaque storage), function-like macros, extern variables, alignment above 8, and structs passed by value through function pointers. `import` skips them silently; `zark cbind` lists them.
+Some C constructs have no Zark equivalent yet and are skipped: `long double`, `_Complex`, `_Atomic`, `__int128`, SIMD vector types, function-like macros, thread-local, `static` and `volatile` variables, bitfields inside unions, and structs passed by value through function pointer types. `import` skips them silently; `zark cbind` lists them.
 
 ## Seeing the bindings: `zark cbind`
 
@@ -87,7 +88,8 @@ Only C headers work. A C++ library is reached through a C API, as cimgui does fo
 | `long`, `int64_t`, `ssize_t` | `i64` |
 | `unsigned`, `uint32_t` | `u32` |
 | `size_t`, `uint64_t` | `u64` |
-| `char`, `uint8_t` | `u8` |
+| `char` | `i8` where `char` is signed (x86-64, Apple arm64), `u8` where it is unsigned (Linux arm64) |
+| `signed char`, `int8_t` / `unsigned char`, `uint8_t` | `i8` / `u8` |
 | `double` / `float` | `f64` / `f32` |
 | `char *`, `const char *` | `u8*` |
 | `void *` | `void*` |
@@ -199,7 +201,7 @@ void main() {
 
 ## Variable number of arguments
 
-`...` in an `extern` allows variadic functions. The types are promoted by the usual C rules: integers are widened, `f32` → `f64`. Slices are not allowed.
+`...` in an `extern` allows variadic functions. The types are promoted by the usual C rules: integers are widened, `f32` → `f64`. Structs and unions among the variable arguments travel as C passes them. Slices and arrays are not allowed, and a variadic function cannot be used as a `fn` value, so it is only called directly.
 
 ```zark run
 extern i32 printf(u8* fmt, ...);
@@ -215,7 +217,7 @@ For output from Zark itself, `println` is better: it is safer. `printf` is handy
 
 Zark structs lie in memory the same way as C structs (the same sizes and alignment). So the description on the Zark side is a copy of the description in C.
 
-Structs can be passed to `extern` functions and returned from them **by value**, as in C: the compiler follows the System V x86-64 rules (small structs travel in registers, larger ones on the stack or through a hidden pointer), on every backend. This is what libraries like raylib need: `extern void DrawCircleV(Vector2 center, f32 radius, Color color);` works as written. Passing by pointer works as well:
+Structs can be passed to `extern` functions and returned from them **by value**, as in C: on x86-64 the compiler follows the System V rules (small structs travel in registers, larger ones on the stack or through a hidden pointer) on every backend, and on arm64 (Linux and Apple) the AAPCS64 rules, which only the LLVM path implements; there is no native backend for arm64, so every arm64 build goes through LLVM. The same holds for `export` functions and for function pointers in both directions. This is what libraries like raylib need: `extern void DrawCircleV(Vector2 center, f32 radius, Color color);` works as written. Passing by pointer works as well:
 
 ```zark file=vec.c
 typedef struct { double x, y, z; } Vec3;
@@ -268,6 +270,86 @@ void main() {
     println(fade(Color{ .r = 255, .g = 128, .b = 0, .a = 200 }, 0.5));
 }
 ```
+
+A Zark `union` crosses the boundary by value too. C sees it as `struct { int32_t tag; _Alignas(8) union { ... } payload; }`, and the tag is the zero-based index of the variant in declaration order:
+
+```c file=shape.c
+#include <stdint.h>
+
+typedef struct { double w, h; } Box;
+typedef struct {
+    int32_t tag;
+    _Alignas(8) union { double r; Box box; } u;
+} Shape;
+
+double area(Shape s) { return s.tag == 0 ? 3.0 * s.u.r * s.u.r : s.u.box.w * s.u.box.h; }
+Shape unit_box(void) { Shape s = { .tag = 1, .u.box = { 1.0, 1.0 } }; return s; }
+```
+
+```zark run with=shape.c
+struct Box { f64 w; f64 h; }
+union Shape { f64 Circle; Box Rect; }
+
+extern f64 area(Shape s);
+extern Shape unit_box();
+
+void main() {
+    println(area(Shape::Circle(2.0)), area(Shape::Rect(Box{ .w = 2.0, .h = 5.0 })));
+    println(unit_box() is .Rect);
+}
+```
+
+SIMD vectors pass as the C vector type of the same size (`f32x4` is `float __attribute__((vector_size(16)))`): 16-byte vectors on every target and 8-byte ones on arm64. Other sizes, and vectors inside a struct or union passed by value, are rejected at compile time.
+
+## C variables, bitfields and alignment
+
+An `extern` variable of a header becomes `name_ptr()`, which returns its address, so reads and writes go straight to the C variable. A struct with bitfields becomes opaque storage of the same size with `get_f()` and `set_f(v)` for each named bitfield; C does the masking and sign extension. A struct aligned above 8 (`__attribute__((aligned(16)))`, an `_Alignas` member) becomes an `align(N) struct` with the same layout:
+
+```c file=dev.h
+extern int dev_count;
+extern const char *dev_name;
+
+struct flags {
+    unsigned ready : 1;
+    unsigned mode : 3;
+    int level : 4;
+};
+
+typedef struct __attribute__((aligned(16))) { float x, y, z, w; } Vec4;
+
+int dev_tick(int by);
+float vec4_sum(Vec4 v);
+```
+
+```c file=dev.c
+#include "dev.h"
+
+int dev_count = 41;
+const char *dev_name = "lamp";
+
+int dev_tick(int by) { dev_count += by; return dev_count; }
+float vec4_sum(Vec4 v) { return v.x + v.y + v.z + v.w; }
+```
+
+```zark run with=dev.c
+import "dev.h" as dev;
+
+void main() {
+    *dev::dev_count_ptr() += 1;
+    println(*dev::dev_count_ptr(), dev::dev_tick(8), cstr(*dev::dev_name_ptr()));
+
+    dev::flags f;
+    f.set_ready(1);
+    f.set_mode(5);
+    f.set_level(-3);
+    println(f.get_ready(), f.get_mode(), f.get_level(), sizeof(dev::flags));
+
+    const auto v = dev::Vec4{ .x = 1.0, .y = 2.0, .z = 3.0, .w = 4.0 };
+    println(alignof(dev::Vec4), dev::vec4_sum(v));
+}
+```
+
+The accessor of a variable is linked only when the program calls its `name_ptr()`, so a declared variable the program never touches need not exist. A plain `char` follows the signedness of the target: `i8` on x86-64 and Apple arm64, `u8` on Linux arm64 (and with `-funsigned-char`); pass the same `-fsigned-char`/`-funsigned-char` to `zark cbind` and to the C files.
 
 ## Bringing in C files
 
@@ -435,7 +517,7 @@ Math (`sqrt`, `sin`, `pow`) is linked automatically: `-lm` is already included.
 ## Rules and pitfalls
 
 - A hand-written `extern` is a place for mistakes: its types must match C. Prefer `import "x.h"` when there is a header.
-- Structs cross the boundary by value only through `extern` declarations. A C library calling back into Zark (an `export` function or a function pointer) must take structs by pointer, which is why `import` skips function pointer types with structs by value.
+- Structs and unions cross the boundary by value through `extern`, `export` and function pointers. `import` still skips C function pointer types with a struct passed by value; declare such a type by hand if you need it.
 - Two headers imported without `as` cannot both include the same header: import the one header that includes both. With `as`, each import has its own copy of the shared types, and they are different Zark types (convert pointers with `as`).
 - `bool` in C is `_Bool`/`uint8_t`. Use `u8` or `i32`, not `bool`, if in doubt.
 - Do not pass a `str` instead of a `u8*`: you need `s.ptr` (and a zero byte, see above).
