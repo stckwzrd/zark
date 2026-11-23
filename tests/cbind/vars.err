@@ -13,3 +13,8 @@ skipped varr: volatile variable
 skipped vfp: volatile variable
 skipped vafter: volatile variable
 skipped vst: volatile variable
+skipped oa: name clash
+skipped ob: name clash
+skipped oc: name clash
+skipped od: name clash
+skipped oe: name clash

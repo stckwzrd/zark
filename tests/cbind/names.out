@@ -2,10 +2,6 @@ type T = i32;
 type A = i32;
 type B = A;
 struct q { T t; A a; B b; }
-extern T* zark_var_H_vt();
-T* vt_ptr() { return zark_var_H_vt(); }
-extern A* zark_var_H_va();
-A* va_ptr() { return zark_var_H_va(); }
 type i8_ = i32;
 type u32_ = u32;
 struct str_ { i32 len; }
@@ -13,3 +9,7 @@ struct bool_ { i8 b; }
 struct uses_prim { i8_ a; u32_ b; str_ s; str_* p; bool_* q; }
 extern i8_ small(u32_ x, str_* s);
 struct kw { i32 fn_; i32 i32_; }
+extern T* zark_var_H_vt();
+T* vt_ptr() { return zark_var_H_vt(); }
+extern A* zark_var_H_va();
+A* va_ptr() { return zark_var_H_va(); }

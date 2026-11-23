@@ -2624,7 +2624,8 @@ struct CEmit {
             this->c = List<u8>::init(this->a);
             this->undefs = List<u8>::init(this->a);
             this->undone = Map<bool>::init(this->a);
-            for (auto d : decls.slice()) { this->decl(d)?; }
+            for (auto d : decls.slice()) { if (d.k != .Var) { this->decl(d)?; } }
+            for (auto d : decls.slice()) { if (d.k == .Var) { this->decl(d)?; } }
         }
     }
 }

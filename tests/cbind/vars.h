@@ -30,3 +30,14 @@ extern int volatile vafter;
 extern const volatile struct S vst;
 int read_counter(void);
 int call_hook(int x);
+extern int oa;
+struct oa_ptr { int q; };
+struct usesoa { struct oa_ptr p; };
+extern int ob;
+typedef int ob_ptr;
+extern int oc;
+enum { oc_ptr = 3 };
+extern int od;
+#define od_ptr 4
+extern int oe;
+int oe_ptr(void);

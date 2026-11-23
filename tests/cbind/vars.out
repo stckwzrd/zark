@@ -1,5 +1,15 @@
 struct S { i32 a; f64 b; }
 struct opq { }
+extern i32 dup_ptr();
+type vint = i32;
+extern i32 read_counter();
+extern i32 call_hook(i32 x);
+struct oa_ptr { i32 q; }
+struct usesoa { oa_ptr p; }
+type ob_ptr = i32;
+const auto oc_ptr = 3;
+const auto od_ptr = 4;
+extern i32 oe_ptr();
 extern i32* zark_var_H_counter();
 i32* counter_ptr() { return zark_var_H_counter(); }
 extern u8*[4]* zark_var_H_names();
@@ -16,9 +26,5 @@ extern u8[3]* zark_var_H_bytes();
 u8[3]* bytes_ptr() { return zark_var_H_bytes(); }
 extern i32* zark_var_H_type();
 i32* type_ptr() { return zark_var_H_type(); }
-extern i32 dup_ptr();
 extern i32** zark_var_H_pv();
 i32** pv_ptr() { return zark_var_H_pv(); }
-type vint = i32;
-extern i32 read_counter();
-extern i32 call_hook(i32 x);
