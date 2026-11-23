@@ -1,0 +1,12 @@
+struct sz { usize n; i64 s; i64 d; i64 ip; u64 up; @WCHAR@ w; bool a; bool b; i32 v; i32* vp; u8[2] vb; }
+struct bb { bool x; bool y; }
+struct bbi { bool x; bool y; i32 n; }
+extern usize sizes(usize n, i64 s, i64 d, i64 ip, u64 up);
+extern @WCHAR@ wnext(@WCHAR@ c);
+extern bool flip(bool b);
+extern bool both(bool a, bool b);
+extern bb mkbb(bool x, bool y);
+extern i32 bbsum(bb v, bbi w);
+extern i32* vptr(i32* p);
+extern i32 vread(i32* p);
+align(16) struct w128 { u64[2] storage; }

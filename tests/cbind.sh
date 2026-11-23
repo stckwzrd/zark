@@ -394,6 +394,53 @@ EOF
     done
 fi
 
+wt=i32
+if clang -E -dM -x c /dev/null | grep -q __WCHAR_UNSIGNED__; then wt=u32; fi
+"$ZARK" cbind tests/cbind/ctypes.h > ctypes.zk 2> ctypes.err || fail "ctypes: exit $?: $(cat ctypes.err)"
+sed "s/@WCHAR@/$wt/g" tests/cbind/ctypes.out > ctypes.exp
+diff -u ctypes.exp ctypes.zk || fail "ctypes: output differs"
+diff -u tests/cbind/ctypes.err ctypes.err || fail "ctypes: warnings differ"
+cat > use_ctypes.zk <<'EOF'
+import "ctypes.zk";
+void main() {
+    i32[2] a;
+    a[0] = 5;
+    a[1] = 6;
+    println("{sizes(1, -2, 3, -4, 5)} {wnext(65)} {flip(true)} {flip(false)} {both(true, true)} {both(true, false)} {vread(vptr(&a[0]))} {sizeof(sz)} {sizeof(w128)} {alignof(w128)}");
+}
+EOF
+for f in "" --llvm -O; do
+    out=$("$ZARK" run $f use_ctypes.zk tests/cbind/ctypes.c 2>&1) || fail "ctypes $f: run: $out"
+    [ "$out" = "3 66 false true true false 6 72 16 16" ] || fail "ctypes $f: got: $out"
+done
+if [ "$(uname -m)" = x86_64 ]; then
+    cat > use_ctypes2.zk <<'EOF'
+import "ctypes.zk";
+void main() {
+    const auto v = mkbb(true, false);
+    bbi w;
+    w.x = false;
+    w.y = true;
+    w.n = 3;
+    println("{v.x} {v.y} {bbsum(v, w)} {bbsum(mkbb(false, true), w)}");
+}
+EOF
+    for f in $native --llvm -O; do
+        out=$("$ZARK" run $f use_ctypes2.zk tests/cbind/ctypes.c 2>&1) || fail "ctypes by value $f: run: $out"
+        [ "$out" = "true false 57 58" ] || fail "ctypes by value $f: got: $out"
+    done
+fi
+if printf '#include <uchar.h>\n' | clang -E -x c - > /dev/null 2>&1; then
+    "$ZARK" cbind tests/cbind/uchars.h > uchars.zk 2> uchars.err || fail "uchars: exit $?: $(cat uchars.err)"
+    diff -u tests/cbind/uchars.out uchars.zk || fail "uchars: output differs"
+    diff -u tests/cbind/uchars.err uchars.err || fail "uchars: warnings differ"
+    printf 'import "uchars.zk";\nvoid main() { println("{widen16(65)}"); }\n' > use_uchars.zk
+    out=$("$ZARK" run use_uchars.zk tests/cbind/uchars.c 2>&1) || fail "uchars: run: $out"
+    [ "$out" = 65601 ] || fail "uchars: got: $out"
+else
+    echo "skip uchars: no <uchar.h>"
+fi
+
 for h in dupa dupb; do
     "$ZARK" cbind tests/cbind/$h.h --inline-c $h.c > $h.zk 2> /dev/null || fail "$h: exit $?"
 done

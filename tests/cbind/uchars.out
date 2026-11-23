@@ -1,0 +1,2 @@
+struct u16s { u16 a; u32 b; }
+extern u32 widen16(u16 c);
