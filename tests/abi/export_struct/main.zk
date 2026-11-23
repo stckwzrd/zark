@@ -1,0 +1,12 @@
+struct P { i32 x; i32 y; }
+
+export P addp(P a, P b) {
+    return P{ .x = a.x + b.x, .y = a.y + b.y };
+}
+
+extern i32 run_export_addp();
+
+void main() {
+    const auto r = run_export_addp();
+    println("RESULT {r}");
+}
