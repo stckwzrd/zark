@@ -1232,9 +1232,7 @@ struct Native {
             c.ws();
             if (c.eat_word("ccc")) { ins.cabi = true; }
             c.ws();
-            if (c.eat_word("signext")) {
-            } else if (c.eat_word("zeroext")) {
-            }
+            if (!c.eat_word("signext")) { _ = c.eat_word("zeroext"); }
             ins.ty = this->ty(&c)?;
             c.ws();
             if (c.peek() == '(') {
@@ -1613,6 +1611,12 @@ struct Native {
             if (ins.ty.k != .V) {
                 if (is_agg(ins.ty)) {
                     if (this->c_abi && ins.ty.size <= 16) {
+                        for (auto wt : ins.ty.fields) {
+                            if (wt.size != 8) {
+                                eprintln("native: a C aggregate return must consist of 8-byte words");
+                                return error.CompileFailed;
+                            }
+                        }
                         const auto base = this->agg_loc(ins.ty, ins.a)?;
                         auto gi = 0;
                         auto fi = 0;
