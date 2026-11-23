@@ -296,7 +296,7 @@ Each C/C++ source is compiled to `.zark-cache/obj/NAME-HASH.o`, at most 8 at a t
 
 ### `import "x.h"`
 
-`import "x.h";` or `import "x.h" as name;` binds the declarations of a C header. The header is looked up in the directory of the importing file, then the `-I` directories, then the system include path; it is run through `clang -E` with the compile flags of the build (C++ `-std=` flags are dropped). The result is the same Zark text that `zark cbind` prints, compiled as a module; `as name` puts it under `name::`. Static inline functions get a C wrapper, extern variables and bitfields C accessors; that C file is compiled and linked automatically.
+`import "x.h";` or `import "x.h" as name;` binds the declarations of a C header. The header is looked up in the directory of the importing file, then the `-I` directories, then the system include path; it is run through `clang -E` with the compile flags of the build (C++ `-std=` flags are dropped). The result is the same Zark text that `zark cbind` prints, compiled as a module; `as name` puts it under `name::`. Static inline functions get a C wrapper, extern variables and bitfields C accessors; that C file is compiled and linked automatically. Each variable accessor is compiled only when the program uses its `name_ptr()`, so a declared variable that the program never touches need not exist at link time.
 
 The binding is cached in `.zark-cache/cbind/` and reused while the clang version, the flags and every header it read stay the same. The cache does not track `CPATH` or other environment variables. `import` does not print the warnings for skipped declarations; run `zark cbind` to see them.
 
@@ -304,7 +304,7 @@ Only C headers (`.h`) are accepted. Without `as`, two imported headers that both
 
 ### `zark cbind`
 
-`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions and the accessors of extern variables and bitfields; that file must be compiled into the program next to `out.zk`. The C file includes the header by its absolute path and the wrapper names hash that path, so the pair is specific to the machine and checkout that produced it: it is for inspection, not for committing.
+`zark cbind header.h [compile flags] [-o out.zk] [--inline-c out.c]` prints the bindings for one header (to stdout or `out.zk`) and a warning on stderr for each declaration it skips. `--inline-c` writes the C wrappers for static inline functions and the accessors of extern variables and bitfields; that file must be compiled into the program next to `out.zk`. Compiled as it is, it defines every variable accessor; with `-DZARK_PICK` it defines only those whose `ZARK_USE_HASH_name` macro is also defined, which is how `import` links only the used ones. The C file includes the header by its absolute path and the wrapper names hash that path, so the pair is specific to the machine and checkout that produced it: it is for inspection, not for committing.
 
 | C | Zark |
 |---|---|

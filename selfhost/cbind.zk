@@ -2008,7 +2008,7 @@ struct CEmit {
         auto b = List<u8>::init(this->a);
         sprint(&b, "extern {ts} {w}();\n{ts} {name}() {{ return {w}(); }}")?;
         if (!this->line(name, 5, b.slice())?) { return; }
-        sprint(&this->c, "void* {w}(void) {{ return (void*)&{d.name}; }}\n")?;
+        sprint(&this->c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{this->hid}_{d.name})\nvoid* {w}(void) {{ return (void*)&{d.name}; }}\n#endif\n")?;
     }
 
     !void typedef_out(CDecl* d) {
@@ -2844,6 +2844,7 @@ struct CBind {
 List<str> c_flags = List<str>{};
 str c_cache = ".zark-cache";
 List<str> c_inline_sources = List<str>{};
+List<str> c_uses = List<str>{};
 Map<str> c_headers = Map<str>{};
 str c_version = "";
 

@@ -7,7 +7,7 @@ fail() { echo "FAIL cbind: $*"; exit 1; }
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
 native=
 if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ]; then native=--native; fi
-nohid() { sed -E 's/zark_(inl|var|bf)_[0-9a-f]{16}_/zark_\1_H_/g' "$@"; }
+nohid() { sed -E -e 's/zark_(inl|var|bf)_[0-9a-f]{16}_/zark_\1_H_/g' -e 's/ZARK_USE_[0-9a-f]{16}_/ZARK_USE_H_/g' "$@"; }
 cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cbind" tests/
@@ -331,6 +331,41 @@ cp tests/cbind/vars.h tests/cbind/vardefs.c ivars/
 printf 'import "vars.h" as v;\nvoid main() { *v::counter_ptr() = 2; println("{v::read_counter()}"); }\n' > ivars/m.zk
 out=$(cd ivars && "$ZARK" run m.zk vardefs.c 2>&1) || fail "import_vars: $out"
 [ "$out" = 2726 ] || fail "import_vars: got: $out"
+
+mkdir -p uv
+printf 'extern int missing_var;\nextern int present_var;\nextern int other_missing;\nint get_present(void);\nstatic inline int twice(int x) { return x * 2; }\n' > uv/uv.h
+printf 'int present_var = 5;\nint get_present(void) { return present_var; }\n' > uv/uvdefs.c
+printf 'import "uv.h";\nvoid main() { println("{twice(21)}"); }\n' > uv/none.zk
+printf 'import "uv.h";\nvoid main() { *present_var_ptr() += 2; println("{get_present()} {twice(3)}"); }\n' > uv/one.zk
+printf 'import "uv.h";\ni32 bump() { *present_var_ptr() += 1; return get_present(); }\n' > uv/lib.zk
+printf 'import "uv.h";\nimport "lib.zk";\nvoid main() { println("{bump()} {twice(4)}"); }\n' > uv/two.zk
+printf 'import "uv.h";\ntest "var" { *present_var_ptr() = 9; assert(get_present() == 9); }\ntest "inline" { assert(twice(2) == 4); }\n' > uv/t.zk
+for f in "" --llvm -O; do
+    out=$(cd uv && "$ZARK" run $f none.zk 2>&1) || fail "unused_vars $f: $out"
+    [ "$out" = 42 ] || fail "unused_vars $f: got: $out"
+    out=$(cd uv && "$ZARK" run $f one.zk uvdefs.c 2>&1) || fail "one_var $f: $out"
+    [ "$out" = "7 6" ] || fail "one_var $f: got: $out"
+    out=$(cd uv && "$ZARK" run $f none.zk 2>&1) || fail "unused_vars after one_var $f: $out"
+    [ "$out" = 42 ] || fail "unused_vars after one_var $f: got: $out"
+    out=$(cd uv && "$ZARK" run $f two.zk uvdefs.c 2>&1) || fail "two_files_var $f: $out"
+    [ "$out" = "6 8" ] || fail "two_files_var $f: got: $out"
+    (cd uv && "$ZARK" build $f none.zk -o none > /dev/null 2>&1 && ./none > /dev/null) || fail "unused_vars build $f"
+    out=$(cd uv && "$ZARK" test $f t.zk uvdefs.c 2>&1) || fail "test_vars $f: $out"
+done
+cp uv/none.zk uv/swap.zk
+out=$(cd uv && "$ZARK" run swap.zk 2>&1) || fail "swap none: $out"
+cp uv/one.zk uv/swap.zk
+out=$(cd uv && "$ZARK" run swap.zk uvdefs.c 2>&1) || fail "swap one: $out"
+[ "$out" = "7 6" ] || fail "swap one: got: $out"
+cp uv/none.zk uv/swap.zk
+out=$(cd uv && "$ZARK" run swap.zk 2>&1) || fail "swap back: $out"
+[ "$out" = 42 ] || fail "swap back: got: $out"
+mkdir -p uvp/src
+cp uv/uv.h uv/uvdefs.c uvp/
+printf '[package]\nname = "uvp"\n\n[build]\nsources = ["uvdefs.c"]\ninclude = ["."]\n' > uvp/zark.toml
+printf 'import "uv.h";\nvoid main() { *present_var_ptr() += 1; println("{get_present()}"); }\n' > uvp/src/main.zk
+out=$(cd uvp && "$ZARK" run 2>&1) || fail "project_vars: $out"
+[ "$out" = 6 ] || fail "project_vars: got: $out"
 
 "$ZARK" cbind tests/cbind/bits.h -fsigned-char --inline-c bits_inl.c > bits.zk 2> /dev/null || fail "bits: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cbind/bits.c.out > bits.c.exp
