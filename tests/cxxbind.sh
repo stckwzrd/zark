@@ -241,6 +241,32 @@ out=$(cd proj && "$ZARK" run 2>&1) || fail "import_manifest: $out"
 [ "$out" = "3 3 1" ] || fail "import_manifest: got: $out"
 grep -q "try\|zark_cxx_fail" proj/.zark-cache/cbind/*.cpp && fail "import_manifest: exception handling with -fno-exceptions"
 
+"$ZARK" cbind tests/cxxbind/byvalue.hpp > bv_none.zk 2> /dev/null || fail "by_value: cbind exit $?"
+grep -q "i32 bump(V\* a, S\* s)" bv_none.zk || fail "by_value: bump is not a pointer by default"
+grep -q "i32 g::fill(g_Q\* a, g_R\* r)" bv_none.zk || fail "by_value: fill is not a pointer by default"
+for list in V,g::Q V,Q; do
+    "$ZARK" cbind tests/cxxbind/byvalue.hpp --by-value=$list > bv.zk 2> /dev/null || fail "by_value $list: cbind exit $?"
+    grep -q "i32 bump(V a, S\* s)" bv.zk || fail "by_value $list: bump is not by value"
+    grep -q "i32 store(V a, void\* p)" bv.zk || fail "by_value $list: store is not by value"
+    grep -q "void Own::poke(V a)" bv.zk || fail "by_value $list: poke is not by value"
+    grep -q "i32 g::fill(g_Q a, g_R\* r)" bv.zk || fail "by_value $list: fill is not by value"
+done
+"$ZARK" cbind tests/cxxbind/byvalue.hpp --by-value=V > bv_v.zk 2> /dev/null || fail "by_value V: cbind exit $?"
+grep -q "i32 g::fill(g_Q\* a, g_R\* r)" bv_v.zk || fail "by_value V: unlisted Q is not a pointer"
+
+mkdir -p bvp/src
+cp tests/cxxbind/byvalue.hpp bvp/src/
+printf '[package]\nname = "bvp"\n\n[build]\nby_value = ["V"]\n' > bvp/zark.toml
+printf 'import "byvalue.hpp" as b;\nvoid main() { auto s = b::S{ .v = b::V{ .x = 1 }, .y = 2 }; println(b::bump(b::V{ .x = 5 }, &s)); }\n' > bvp/src/main.zk
+out=$(cd bvp && "$ZARK" run 2>&1) || fail "by_value manifest: $out"
+[ "$out" = 7 ] || fail "by_value manifest: got: $out"
+grep -q "i32 bump(V a, S\* s)" bvp/.zark-cache/cbind/*.zk || fail "by_value manifest: bump is not by value"
+printf '[package]\nname = "bvp"\n\n[build]\nby_value = ["g::Q"]\n' > bvp/zark.toml
+printf 'import "byvalue.hpp" as b;\nvoid main() { auto s = b::S{ .v = b::V{ .x = 1 }, .y = 2 }; auto v = b::V{ .x = 5 }; println(b::bump(&v, &s)); }\n' > bvp/src/main.zk
+out=$(cd bvp && "$ZARK" run 2>&1) || fail "by_value cache: $out"
+[ "$out" = 7 ] || fail "by_value cache: got: $out"
+[ $(ls bvp/.zark-cache/cbind/*.zk | wc -l) -eq 2 ] || fail "by_value cache: expected two cached bindings: $(ls bvp/.zark-cache/cbind)"
+
 mkdir -p hdr
 printf 'namespace n { inline int f() { return 7; } }\n' > hdr/cx.h
 printf 'import "cx.h";\nvoid main() {}\n' > hdr/bad.zk
