@@ -41,3 +41,14 @@ Done: `zark lsp` (language server), `zark test`, `zark fmt` (token based: it kee
 
 ## 8. Platforms
 An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.zk` stays the same; only the encoder and the ABI change.
+
+## 9. FFI
+Done: C headers (`import "x.h"`, `zark cbind`), the C ABI for structs, unions, variadics and arm64, and layer 4, C++ headers (`import "x.hpp"`: classes, methods, overloads, templates and the `std::string`/`std::vector`/`std::unique_ptr` shims through generated C++ shims; SPEC section 8).
+Deferred from layer 4:
+- **Subclassing C++ classes from Zark** and overriding virtual functions. One way is a generated C++ subclass whose overrides call Zark `fn` pointers with a context pointer.
+- **Exceptions as `!T`.** Today a C++ exception aborts with a message. An opt-in error mode (a manifest key or a `cbind` flag) would map it to an error value.
+- **Direct calls by mangled name** for C-shaped signatures, with an `extern` that takes a link name, instead of going through a shim.
+- **Lambdas and `std::function`** crossing into C++. Only plain `fn` pointers do today.
+- **An `instantiate` key in `zark.toml`** to ask for template specializations without a wrapper `.hpp`.
+- **Cross targets and macOS CI for C++ headers.** Only the aarch64 Linux bindings of one header are compared in tests, and the `std::` shims are not checked against libc++.
+- **A no-copy marker for owned structs,** so that copying a non-trivial C++ object in Zark (`auto x = *p;`) is a compile error.
