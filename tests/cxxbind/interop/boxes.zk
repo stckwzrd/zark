@@ -1,0 +1,33 @@
+import "boxes.hpp" as f;
+
+!void main() {
+    i32 n = 21;
+    auto i = f::mk_i();
+    auto ci = f::mk_ci();
+    auto vi = f::mk_vi();
+    auto cvi = f::mk_cvi();
+    auto x = f::mk_x();
+    auto fo = f::mk_f();
+    auto cf = f::mk_cf(c_allocator())?;
+    defer cf.deinit();
+    auto cfoo = f::mk_cfoo();
+    auto p = f::mk_p(&n);
+    auto pc = f::mk_pc(&n);
+    auto cp = f::mk_cp(&n);
+    auto bbc = f::mk_bbc();
+    auto bbx = f::mk_bbx();
+    auto bbi = f::mk_bbi();
+    auto e = f::mk_e();
+    auto ce = f::mk_ce();
+    auto my = f::mk_my();
+    auto cint = f::mk_cint();
+    auto ip = f::mk_ip(&n);
+    auto cft = f::mk_cft(c_allocator())?;
+    defer cft.deinit();
+    println(sizeof(f::BI), sizeof(f::BCI), sizeof(f::BVI), sizeof(f::BCVI), sizeof(f::BX), sizeof(f::BF), sizeof(f::BCF), sizeof(f::BCFOO));
+    println(sizeof(f::BP), sizeof(f::BPC), sizeof(f::BCP), sizeof(f::BBC), sizeof(f::BBX), sizeof(f::BBI), sizeof(f::BE), sizeof(f::BCE), sizeof(f::Boxi32));
+    println(i.v, ci.v, vi.v, cvi.v, x.v.q, x.v.r, fo.v.a, fo.v.b, cf.get().v.a, cf.get().v.b);
+    println(cfoo.v.s[0], cfoo.v.s[1], cfoo.v.s[2], *p.v, *pc.v, *cp.v, bbc.v.v, bbx.v.v.q, bbx.v.v.r, bbi.v.v);
+    println(e.v, ce.v, my.v, cint.v, *ip.v, cft.get().v.a, cft.get().v.b);
+    println(f::sum_ci(ci), f::sum_x(x));
+}

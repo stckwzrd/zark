@@ -1,0 +1,3 @@
+struct i32p { f64 d; }
+struct Foo { i64 q; }
+align(8) struct Use { u8[40] __pad0; }
