@@ -1,0 +1,10 @@
+skipped Vec<unsigned short>: methods of template specializations are not bound yet
+skipped Vec<Cmd>: methods of template specializations are not bound yet
+skipped IO::list: C++ declaration not bound yet
+skipped Vec<float>: methods of template specializations are not bound yet
+skipped Vec<Key>: methods of template specializations are not bound yet
+skipped Vec<int>: methods of template specializations are not bound yet
+skipped Vec<n::Pair>: methods of template specializations are not bound yet
+skipped HasArr::a: C++ declaration not bound yet
+skipped Unused: class templates are not bound yet
+skipped Arr: class templates are not bound yet
