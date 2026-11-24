@@ -1,0 +1,33 @@
+struct ImplicitOwn { i32 n; }
+owned struct ImplicitOwn_own { ImplicitOwn* ptr; void* mem; u64 size; Allocator a; static Self init(ImplicitOwn* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(ImplicitOwn* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } ImplicitOwn* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_826af670715c418b_6(this->ptr); } else { zark_cxx_826af670715c418b_1(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } ImplicitOwn* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<ImplicitOwn>()?; zark_cxx_826af670715c418b_3(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(ImplicitOwn), .a = a }; } }
+struct WithArg { i32 n; }
+owned struct WithArg_own { WithArg* ptr; void* mem; u64 size; Allocator a; static Self init(WithArg* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(WithArg* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } WithArg* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_826af670715c418b_14(this->ptr); } else { zark_cxx_826af670715c418b_9(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } WithArg* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<WithArg>()?; zark_cxx_826af670715c418b_11(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(WithArg), .a = a }; } }
+struct ClassOwn { i32 n; }
+owned struct ClassOwn_own { ClassOwn* ptr; void* mem; u64 size; Allocator a; static Self init(ClassOwn* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(ClassOwn* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } ClassOwn* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_826af670715c418b_22(this->ptr); } else { zark_cxx_826af670715c418b_17(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } ClassOwn* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<ClassOwn>()?; zark_cxx_826af670715c418b_19(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(ClassOwn), .a = a }; } }
+extern void zark_cxx_826af670715c418b_1(ImplicitOwn* __self);
+extern void zark_cxx_826af670715c418b_2(ImplicitOwn* __self);
+static !ImplicitOwn_own ImplicitOwn::create(Allocator __a) { const auto __p = __a.create<ImplicitOwn>()?; zark_cxx_826af670715c418b_2(__p); return ImplicitOwn_own::init(__p, sizeof(ImplicitOwn), __a); }
+extern void zark_cxx_826af670715c418b_3(ImplicitOwn* __self, ImplicitOwn* a0);
+extern void zark_cxx_826af670715c418b_4(ImplicitOwn* __self, ImplicitOwn* __other);
+void ImplicitOwn::assign(ImplicitOwn* __other) { zark_cxx_826af670715c418b_4(this, __other); }
+extern void zark_cxx_826af670715c418b_5(ImplicitOwn* __self, ImplicitOwn* __other);
+void ImplicitOwn::assign_move(ImplicitOwn* __other) { zark_cxx_826af670715c418b_5(this, __other); }
+extern void zark_cxx_826af670715c418b_6(ImplicitOwn* __self);
+extern void zark_cxx_826af670715c418b_9(WithArg* __self);
+extern void zark_cxx_826af670715c418b_10(WithArg* __self, i32 a0);
+static !WithArg_own WithArg::create(Allocator __a, i32 a0) { const auto __p = __a.create<WithArg>()?; zark_cxx_826af670715c418b_10(__p, a0); return WithArg_own::init(__p, sizeof(WithArg), __a); }
+extern void zark_cxx_826af670715c418b_11(WithArg* __self, WithArg* a0);
+extern void zark_cxx_826af670715c418b_12(WithArg* __self, WithArg* __other);
+void WithArg::assign(WithArg* __other) { zark_cxx_826af670715c418b_12(this, __other); }
+extern void zark_cxx_826af670715c418b_13(WithArg* __self, WithArg* __other);
+void WithArg::assign_move(WithArg* __other) { zark_cxx_826af670715c418b_13(this, __other); }
+extern void zark_cxx_826af670715c418b_14(WithArg* __self);
+extern void zark_cxx_826af670715c418b_17(ClassOwn* __self);
+extern void zark_cxx_826af670715c418b_18(ClassOwn* __self);
+static !ClassOwn_own ClassOwn::create(Allocator __a) { const auto __p = __a.create<ClassOwn>()?; zark_cxx_826af670715c418b_18(__p); return ClassOwn_own::init(__p, sizeof(ClassOwn), __a); }
+extern void zark_cxx_826af670715c418b_19(ClassOwn* __self, ClassOwn* a0);
+extern void zark_cxx_826af670715c418b_20(ClassOwn* __self, ClassOwn* __other);
+void ClassOwn::assign(ClassOwn* __other) { zark_cxx_826af670715c418b_20(this, __other); }
+extern void zark_cxx_826af670715c418b_21(ClassOwn* __self, ClassOwn* __other);
+void ClassOwn::assign_move(ClassOwn* __other) { zark_cxx_826af670715c418b_21(this, __other); }
+extern void zark_cxx_826af670715c418b_22(ClassOwn* __self);

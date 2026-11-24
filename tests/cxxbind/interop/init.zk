@@ -1,0 +1,8 @@
+import "init.hpp" as f;
+
+!void main() {
+    println(f::Val{}.x, f::Val::make().x, f::cpp_val());
+    auto o = f::Own::create(c_allocator())?;
+    defer o.deinit();
+    println(o.get().x, o.get().get(), f::cpp_own());
+}

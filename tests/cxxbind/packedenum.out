@@ -1,0 +1,6 @@
+type PE8 = u8;
+const auto PE8a = 1;
+const auto PE8b = 2;
+type PE16 = u16;
+const auto PE16a = 300;
+struct HoldsPacked { PE8 e; u8[1] __pad0; PE16 f; }
