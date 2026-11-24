@@ -1,0 +1,297 @@
+skipped ImGui::TextV: va_list parameter
+skipped ImGui::TextColoredV: va_list parameter
+skipped ImGui::TextDisabledV: va_list parameter
+skipped ImGui::TextWrappedV: va_list parameter
+skipped ImGui::LabelTextV: va_list parameter
+skipped ImGui::BulletTextV: va_list parameter
+skipped ImGui::TreeNodeV: va_list parameter
+skipped ImGui::TreeNodeExV: va_list parameter
+skipped ImGui::SetTooltipV: va_list parameter
+skipped ImGui::SetItemTooltipV: va_list parameter
+skipped ImGui::LogTextV: va_list parameter
+skipped ImGui::DebugLogV: va_list parameter
+skipped IM_DELETE: template without an instantiation; add 'template ... NAME<...>(...);' to a wrapper header
+skipped ImGuiTextBuffer::appendfv: va_list parameter
+skipped ImDrawList::_DrawFlagsStack: template specialization ImSmallStack_<ImDrawFlags, 3> is not instantiated; add 'template struct ImSmallStack_<...>;' to a wrapper header
+skipped IMGUI_HAS_TABLE: empty macro
+skipped IMGUI_HAS_TEXTURES: empty macro
+skipped IMGUI_API: empty macro
+skipped IMGUI_IMPL_API: empty macro
+skipped IM_ASSERT: function-like macro
+skipped IM_COUNTOF: function-like macro
+skipped IM_UNUSED: function-like macro
+skipped IM_STRINGIFY_HELPER: function-like macro
+skipped IM_STRINGIFY: function-like macro
+skipped IMGUI_CHECKVERSION: function-like macro
+skipped IM_FMTARGS: function-like macro
+skipped IM_FMTLIST: function-like macro
+skipped IM_MSVC_RUNTIME_CHECKS_OFF: empty macro
+skipped IM_MSVC_RUNTIME_CHECKS_RESTORE: empty macro
+skipped IM_NODEBUGSTEP: not a constant
+skipped ImTextureID_Invalid: not a constant
+skipped IMGUI_DEBUG_LOG: function-like macro
+skipped IM_ALLOC: function-like macro
+skipped IM_FREE: function-like macro
+skipped IM_PLACEMENT_NEW: function-like macro
+skipped IM_NEW: function-like macro
+skipped IM_COL32: function-like macro
+skipped IM_COL32_WHITE: not a constant
+skipped IM_COL32_BLACK: not a constant
+skipped IM_COL32_BLACK_TRANS: not a constant
+skipped ImDrawCallback_ResetRenderState: not a constant
+skipped IM_ARRAYSIZE: not a constant
+skipped ImVec2::operator[] const: same parameters as the non-const overload
+skipped operator new: operator new is not supported
+skipped operator delete: operator delete is not supported
+skipped ImVector<unsigned short>::operator=: operator = is not supported
+skipped ImVector<unsigned short>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<unsigned short>::operator[] const: same parameters as the non-const overload
+skipped ImVector<unsigned short>::begin const: same parameters as the non-const overload
+skipped ImVector<unsigned short>::end const: same parameters as the non-const overload
+skipped ImVector<unsigned short>::front const: same parameters as the non-const overload
+skipped ImVector<unsigned short>::back const: same parameters as the non-const overload
+skipped ImVector<unsigned short>::find const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::ImVector: copying this class is not supported
+skipped ImVector<ImGuiTextFilterItem>::operator=: operator = is not supported
+skipped ImVector<ImGuiTextFilterItem>::clear_delete: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::clear_destruct: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::size_in_bytes: shim does not compile: invalid application of 'sizeof' to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::max_size: shim does not compile: invalid application of 'sizeof' to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::operator[]: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::begin const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::end: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::end const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::front: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::front const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::back: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::back const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::resize: shim does not compile: invalid application of 'sizeof' to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::resize: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::reserve: shim does not compile: invalid application of 'sizeof' to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::reserve_discard: shim does not compile: invalid application of 'sizeof' to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::push_back: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::push_front: shim does not compile: subscript of pointer to incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::erase: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::erase_unsorted: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::insert: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::contains: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::find: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::find const: same parameters as the non-const overload
+skipped ImVector<ImGuiTextFilterItem>::find_index: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::find_erase: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::find_erase_unsorted: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImVector<ImGuiTextFilterItem>::index_from_ptr: shim does not compile: arithmetic on a pointer to an incomplete type 'ImGuiTextFilterItem'
+skipped ImGuiTextBuffer::EmptyString: shim does not compile: brackets are not allowed here; to declare an array, place the brackets after the name
+skipped ImVector<char>::operator=: operator = is not supported
+skipped ImVector<char>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<char>::operator[] const: same parameters as the non-const overload
+skipped ImVector<char>::begin const: same parameters as the non-const overload
+skipped ImVector<char>::end const: same parameters as the non-const overload
+skipped ImVector<char>::front const: same parameters as the non-const overload
+skipped ImVector<char>::back const: same parameters as the non-const overload
+skipped ImVector<char>::find const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::operator=: operator = is not supported
+skipped ImVector<ImGuiStoragePair>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImGuiStoragePair>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::begin const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::end const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::front const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::back const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::contains: shim does not compile: invalid operands to binary expression ('const ImGuiStoragePair' and 'const ImGuiStoragePair')
+skipped ImVector<ImGuiStoragePair>::find: shim does not compile: invalid operands to binary expression ('ImGuiStoragePair' and 'const ImGuiStoragePair')
+skipped ImVector<ImGuiStoragePair>::find const: same parameters as the non-const overload
+skipped ImVector<ImGuiStoragePair>::find_index: shim does not compile: invalid operands to binary expression ('const ImGuiStoragePair' and 'const ImGuiStoragePair')
+skipped ImVector<ImGuiStoragePair>::find_erase: shim does not compile: invalid operands to binary expression ('ImGuiStoragePair' and 'const ImGuiStoragePair')
+skipped ImVector<ImGuiStoragePair>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImGuiStoragePair' and 'const ImGuiStoragePair')
+skipped ImVector<ImGuiSelectionRequest>::ImVector: copying this class is not supported
+skipped ImVector<ImGuiSelectionRequest>::operator=: operator = is not supported
+skipped ImVector<ImGuiSelectionRequest>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImGuiSelectionRequest>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImGuiSelectionRequest>::begin const: same parameters as the non-const overload
+skipped ImVector<ImGuiSelectionRequest>::end const: same parameters as the non-const overload
+skipped ImVector<ImGuiSelectionRequest>::front const: same parameters as the non-const overload
+skipped ImVector<ImGuiSelectionRequest>::back const: same parameters as the non-const overload
+skipped ImVector<ImGuiSelectionRequest>::contains: shim does not compile: invalid operands to binary expression ('const ImGuiSelectionRequest' and 'const ImGuiSelectionRequest')
+skipped ImVector<ImGuiSelectionRequest>::find: shim does not compile: invalid operands to binary expression ('ImGuiSelectionRequest' and 'const ImGuiSelectionRequest')
+skipped ImVector<ImGuiSelectionRequest>::find const: same parameters as the non-const overload
+skipped ImVector<ImGuiSelectionRequest>::find_index: shim does not compile: invalid operands to binary expression ('const ImGuiSelectionRequest' and 'const ImGuiSelectionRequest')
+skipped ImVector<ImGuiSelectionRequest>::find_erase: shim does not compile: invalid operands to binary expression ('ImGuiSelectionRequest' and 'const ImGuiSelectionRequest')
+skipped ImVector<ImGuiSelectionRequest>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImGuiSelectionRequest' and 'const ImGuiSelectionRequest')
+skipped ImVector<ImDrawCmd>::operator=: operator = is not supported
+skipped ImVector<ImDrawCmd>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImDrawCmd>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImDrawCmd>::begin const: same parameters as the non-const overload
+skipped ImVector<ImDrawCmd>::end const: same parameters as the non-const overload
+skipped ImVector<ImDrawCmd>::front const: same parameters as the non-const overload
+skipped ImVector<ImDrawCmd>::back const: same parameters as the non-const overload
+skipped ImVector<ImDrawCmd>::contains: shim does not compile: invalid operands to binary expression ('const ImDrawCmd' and 'const ImDrawCmd')
+skipped ImVector<ImDrawCmd>::find: shim does not compile: invalid operands to binary expression ('ImDrawCmd' and 'const ImDrawCmd')
+skipped ImVector<ImDrawCmd>::find const: same parameters as the non-const overload
+skipped ImVector<ImDrawCmd>::find_index: shim does not compile: invalid operands to binary expression ('const ImDrawCmd' and 'const ImDrawCmd')
+skipped ImVector<ImDrawCmd>::find_erase: shim does not compile: invalid operands to binary expression ('ImDrawCmd' and 'const ImDrawCmd')
+skipped ImVector<ImDrawCmd>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImDrawCmd' and 'const ImDrawCmd')
+skipped ImVector<ImDrawChannel>::operator=: operator = is not supported
+skipped ImVector<ImDrawChannel>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImDrawChannel>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImDrawChannel>::begin const: same parameters as the non-const overload
+skipped ImVector<ImDrawChannel>::end const: same parameters as the non-const overload
+skipped ImVector<ImDrawChannel>::front const: same parameters as the non-const overload
+skipped ImVector<ImDrawChannel>::back const: same parameters as the non-const overload
+skipped ImVector<ImDrawChannel>::contains: shim does not compile: invalid operands to binary expression ('const ImDrawChannel' and 'const ImDrawChannel')
+skipped ImVector<ImDrawChannel>::find: shim does not compile: invalid operands to binary expression ('ImDrawChannel' and 'const ImDrawChannel')
+skipped ImVector<ImDrawChannel>::find const: same parameters as the non-const overload
+skipped ImVector<ImDrawChannel>::find_index: shim does not compile: invalid operands to binary expression ('const ImDrawChannel' and 'const ImDrawChannel')
+skipped ImVector<ImDrawChannel>::find_erase: shim does not compile: invalid operands to binary expression ('ImDrawChannel' and 'const ImDrawChannel')
+skipped ImVector<ImDrawChannel>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImDrawChannel' and 'const ImDrawChannel')
+skipped ImVector<ImDrawVert>::operator=: operator = is not supported
+skipped ImVector<ImDrawVert>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImDrawVert>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImDrawVert>::begin const: same parameters as the non-const overload
+skipped ImVector<ImDrawVert>::end const: same parameters as the non-const overload
+skipped ImVector<ImDrawVert>::front const: same parameters as the non-const overload
+skipped ImVector<ImDrawVert>::back const: same parameters as the non-const overload
+skipped ImVector<ImDrawVert>::contains: shim does not compile: invalid operands to binary expression ('const ImDrawVert' and 'const ImDrawVert')
+skipped ImVector<ImDrawVert>::find: shim does not compile: invalid operands to binary expression ('ImDrawVert' and 'const ImDrawVert')
+skipped ImVector<ImDrawVert>::find const: same parameters as the non-const overload
+skipped ImVector<ImDrawVert>::find_index: shim does not compile: invalid operands to binary expression ('const ImDrawVert' and 'const ImDrawVert')
+skipped ImVector<ImDrawVert>::find_erase: shim does not compile: invalid operands to binary expression ('ImDrawVert' and 'const ImDrawVert')
+skipped ImVector<ImDrawVert>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImDrawVert' and 'const ImDrawVert')
+skipped ImVector<ImVec2>::operator=: operator = is not supported
+skipped ImVector<ImVec2>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImVec2>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImVec2>::begin const: same parameters as the non-const overload
+skipped ImVector<ImVec2>::end const: same parameters as the non-const overload
+skipped ImVector<ImVec2>::front const: same parameters as the non-const overload
+skipped ImVector<ImVec2>::back const: same parameters as the non-const overload
+skipped ImVector<ImVec2>::contains: shim does not compile: invalid operands to binary expression ('const ImVec2' and 'const ImVec2')
+skipped ImVector<ImVec2>::find: shim does not compile: invalid operands to binary expression ('ImVec2' and 'const ImVec2')
+skipped ImVector<ImVec2>::find const: same parameters as the non-const overload
+skipped ImVector<ImVec2>::find_index: shim does not compile: invalid operands to binary expression ('const ImVec2' and 'const ImVec2')
+skipped ImVector<ImVec2>::find_erase: shim does not compile: invalid operands to binary expression ('ImVec2' and 'const ImVec2')
+skipped ImVector<ImVec2>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImVec2' and 'const ImVec2')
+skipped ImVector<ImVec4>::operator=: operator = is not supported
+skipped ImVector<ImVec4>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImVec4>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImVec4>::begin const: same parameters as the non-const overload
+skipped ImVector<ImVec4>::end const: same parameters as the non-const overload
+skipped ImVector<ImVec4>::front const: same parameters as the non-const overload
+skipped ImVector<ImVec4>::back const: same parameters as the non-const overload
+skipped ImVector<ImVec4>::contains: shim does not compile: invalid operands to binary expression ('const ImVec4' and 'const ImVec4')
+skipped ImVector<ImVec4>::find: shim does not compile: invalid operands to binary expression ('ImVec4' and 'const ImVec4')
+skipped ImVector<ImVec4>::find const: same parameters as the non-const overload
+skipped ImVector<ImVec4>::find_index: shim does not compile: invalid operands to binary expression ('const ImVec4' and 'const ImVec4')
+skipped ImVector<ImVec4>::find_erase: shim does not compile: invalid operands to binary expression ('ImVec4' and 'const ImVec4')
+skipped ImVector<ImVec4>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImVec4' and 'const ImVec4')
+skipped ImVector<ImTextureRef>::operator=: operator = is not supported
+skipped ImVector<ImTextureRef>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImTextureRef>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImTextureRef>::begin const: same parameters as the non-const overload
+skipped ImVector<ImTextureRef>::end const: same parameters as the non-const overload
+skipped ImVector<ImTextureRef>::front const: same parameters as the non-const overload
+skipped ImVector<ImTextureRef>::back const: same parameters as the non-const overload
+skipped ImVector<ImTextureRef>::contains: shim does not compile: invalid operands to binary expression ('const ImTextureRef' and 'const ImTextureRef')
+skipped ImVector<ImTextureRef>::find: shim does not compile: invalid operands to binary expression ('ImTextureRef' and 'const ImTextureRef')
+skipped ImVector<ImTextureRef>::find const: same parameters as the non-const overload
+skipped ImVector<ImTextureRef>::find_index: shim does not compile: invalid operands to binary expression ('const ImTextureRef' and 'const ImTextureRef')
+skipped ImVector<ImTextureRef>::find_erase: shim does not compile: invalid operands to binary expression ('ImTextureRef' and 'const ImTextureRef')
+skipped ImVector<ImTextureRef>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImTextureRef' and 'const ImTextureRef')
+skipped ImVector<unsigned char>::operator=: operator = is not supported
+skipped ImVector<unsigned char>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<unsigned char>::operator[] const: same parameters as the non-const overload
+skipped ImVector<unsigned char>::begin const: same parameters as the non-const overload
+skipped ImVector<unsigned char>::end const: same parameters as the non-const overload
+skipped ImVector<unsigned char>::front const: same parameters as the non-const overload
+skipped ImVector<unsigned char>::back const: same parameters as the non-const overload
+skipped ImVector<unsigned char>::find const: same parameters as the non-const overload
+skipped ImVector<ImDrawList *>::operator=: operator = is not supported
+skipped ImVector<ImDrawList *>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImDrawList *>::begin const: same parameters as the non-const overload
+skipped ImVector<ImDrawList *>::end const: same parameters as the non-const overload
+skipped ImVector<ImDrawList *>::front const: same parameters as the non-const overload
+skipped ImVector<ImDrawList *>::back const: same parameters as the non-const overload
+skipped ImVector<ImDrawList *>::find const: same parameters as the non-const overload
+skipped ImVector<ImTextureData *>::operator=: operator = is not supported
+skipped ImVector<ImTextureData *>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImTextureData *>::begin const: same parameters as the non-const overload
+skipped ImVector<ImTextureData *>::end const: same parameters as the non-const overload
+skipped ImVector<ImTextureData *>::front const: same parameters as the non-const overload
+skipped ImVector<ImTextureData *>::back const: same parameters as the non-const overload
+skipped ImVector<ImTextureData *>::find const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::operator=: operator = is not supported
+skipped ImVector<ImTextureRect>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImTextureRect>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::begin const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::end const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::front const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::back const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::contains: shim does not compile: invalid operands to binary expression ('const ImTextureRect' and 'const ImTextureRect')
+skipped ImVector<ImTextureRect>::find: shim does not compile: invalid operands to binary expression ('ImTextureRect' and 'const ImTextureRect')
+skipped ImVector<ImTextureRect>::find const: same parameters as the non-const overload
+skipped ImVector<ImTextureRect>::find_index: shim does not compile: invalid operands to binary expression ('const ImTextureRect' and 'const ImTextureRect')
+skipped ImVector<ImTextureRect>::find_erase: shim does not compile: invalid operands to binary expression ('ImTextureRect' and 'const ImTextureRect')
+skipped ImVector<ImTextureRect>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImTextureRect' and 'const ImTextureRect')
+skipped ImVector<unsigned int>::operator=: operator = is not supported
+skipped ImVector<unsigned int>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<unsigned int>::operator[] const: same parameters as the non-const overload
+skipped ImVector<unsigned int>::begin const: same parameters as the non-const overload
+skipped ImVector<unsigned int>::end const: same parameters as the non-const overload
+skipped ImVector<unsigned int>::front const: same parameters as the non-const overload
+skipped ImVector<unsigned int>::back const: same parameters as the non-const overload
+skipped ImVector<unsigned int>::find const: same parameters as the non-const overload
+skipped ImVector<ImFont *>::operator=: operator = is not supported
+skipped ImVector<ImFont *>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImFont *>::begin const: same parameters as the non-const overload
+skipped ImVector<ImFont *>::end const: same parameters as the non-const overload
+skipped ImVector<ImFont *>::front const: same parameters as the non-const overload
+skipped ImVector<ImFont *>::back const: same parameters as the non-const overload
+skipped ImVector<ImFont *>::find const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::operator=: operator = is not supported
+skipped ImVector<ImFontConfig>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImFontConfig>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::begin const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::end const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::front const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::back const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::contains: shim does not compile: invalid operands to binary expression ('const ImFontConfig' and 'const ImFontConfig')
+skipped ImVector<ImFontConfig>::find: shim does not compile: invalid operands to binary expression ('ImFontConfig' and 'const ImFontConfig')
+skipped ImVector<ImFontConfig>::find const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig>::find_index: shim does not compile: invalid operands to binary expression ('const ImFontConfig' and 'const ImFontConfig')
+skipped ImVector<ImFontConfig>::find_erase: shim does not compile: invalid operands to binary expression ('ImFontConfig' and 'const ImFontConfig')
+skipped ImVector<ImFontConfig>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImFontConfig' and 'const ImFontConfig')
+skipped ImVector<ImDrawListSharedData *>::operator=: operator = is not supported
+skipped ImVector<ImDrawListSharedData *>::clear_delete: shim does not compile: member access into incomplete type 'ImDrawListSharedData'
+skipped ImVector<ImDrawListSharedData *>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImDrawListSharedData *>::begin const: same parameters as the non-const overload
+skipped ImVector<ImDrawListSharedData *>::end const: same parameters as the non-const overload
+skipped ImVector<ImDrawListSharedData *>::front const: same parameters as the non-const overload
+skipped ImVector<ImDrawListSharedData *>::back const: same parameters as the non-const overload
+skipped ImVector<ImDrawListSharedData *>::find const: same parameters as the non-const overload
+skipped ImVector<float>::operator=: operator = is not supported
+skipped ImVector<float>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<float>::operator[] const: same parameters as the non-const overload
+skipped ImVector<float>::begin const: same parameters as the non-const overload
+skipped ImVector<float>::end const: same parameters as the non-const overload
+skipped ImVector<float>::front const: same parameters as the non-const overload
+skipped ImVector<float>::back const: same parameters as the non-const overload
+skipped ImVector<float>::find const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::operator=: operator = is not supported
+skipped ImVector<ImFontGlyph>::clear_delete: shim does not compile: no matching function for call to 'IM_DELETE'
+skipped ImVector<ImFontGlyph>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::begin const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::end const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::front const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::back const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::contains: shim does not compile: invalid operands to binary expression ('const ImFontGlyph' and 'const ImFontGlyph')
+skipped ImVector<ImFontGlyph>::find: shim does not compile: invalid operands to binary expression ('ImFontGlyph' and 'const ImFontGlyph')
+skipped ImVector<ImFontGlyph>::find const: same parameters as the non-const overload
+skipped ImVector<ImFontGlyph>::find_index: shim does not compile: invalid operands to binary expression ('const ImFontGlyph' and 'const ImFontGlyph')
+skipped ImVector<ImFontGlyph>::find_erase: shim does not compile: invalid operands to binary expression ('ImFontGlyph' and 'const ImFontGlyph')
+skipped ImVector<ImFontGlyph>::find_erase_unsorted: shim does not compile: invalid operands to binary expression ('const ImFontGlyph' and 'const ImFontGlyph')
+skipped ImVector<ImFontConfig *>::operator=: operator = is not supported
+skipped ImVector<ImFontConfig *>::operator[] const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig *>::begin const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig *>::end const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig *>::front const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig *>::back const: same parameters as the non-const overload
+skipped ImVector<ImFontConfig *>::find const: same parameters as the non-const overload
