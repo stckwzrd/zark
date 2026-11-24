@@ -1,0 +1,28 @@
+type a_E = i8;
+const auto a_X = 0;
+type a_TE = a_E;
+type E = i64;
+const auto G = 0;
+type b_T = a_TE;
+struct b { }
+extern i64 zark_cxx_96e9366db8d97169_6(b_T* p);
+static i64 b::second(b_T* p) { return zark_cxx_96e9366db8d97169_6(p); }
+extern i64 zark_cxx_96e9366db8d97169_7(b_T t);
+static i64 b::viat(b_T t) { return zark_cxx_96e9366db8d97169_7(t); }
+type n_K = i8;
+const auto n_K_Z = 0;
+type K = i64;
+const auto K_Z = 5;
+extern i64 zark_cxx_96e9366db8d97169_13(K k);
+i64 get(K k) { return zark_cxx_96e9366db8d97169_13(k); }
+extern i8 zark_cxx_96e9366db8d97169_14(n_K k);
+i8 getn(n_K k) { return zark_cxx_96e9366db8d97169_14(k); }
+type u_V = i16;
+const auto u_V0 = 3;
+const auto u_V1 = 4;
+extern i16 zark_cxx_96e9366db8d97169_18(u_V v);
+i16 getv(u_V v) { return zark_cxx_96e9366db8d97169_18(v); }
+type Cb = i32;
+const auto CB0 = 7;
+extern i32 zark_cxx_96e9366db8d97169_23(Cb c);
+i32 getcb(Cb c) { return zark_cxx_96e9366db8d97169_23(c); }

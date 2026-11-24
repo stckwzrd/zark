@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <exception>
 #include "@DIR@/tests/cxxbind/free.hpp"
+#pragma clang diagnostic ignored "-Weverything"
 [[noreturn]] static inline void zark_cxx_fail(const char *f) {
     fflush(stdout);
     try {
