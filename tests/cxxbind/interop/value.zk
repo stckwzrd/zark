@@ -1,0 +1,79 @@
+import "value_b.zk" as vb;
+
+i64 off(void* b, void* f) { return ((f as u64) - (b as u64)) as i64; }
+
+i64[6] cxx(i32 which) {
+    i64[6] o;
+    vb::geo::lay(which, &o[0]);
+    return o;
+}
+
+void main() {
+    vb::geo_V v;
+    vb::geo_Vec vec;
+    vb::geo_Priv p;
+    vb::geo_TP tp;
+    vb::geo_Circle c;
+    vb::geo_A16 a;
+    vb::geo_MM mm;
+    vb::geo_An an;
+    vb::geo_Bits bits;
+    auto o = cxx(0);
+    println("V c++ {o[0]} {o[1]} {o[2]} {o[3]}");
+    println("V zark {sizeof(vb::geo_V)} {alignof(vb::geo_V)} {off(&v, &v.x)} {off(&v, &v.y)}");
+    o = cxx(1);
+    println("Vec c++ {o[0]} {o[1]} {o[2]} {o[3]} {o[4]}");
+    println("Vec zark {sizeof(vb::geo_Vec)} {alignof(vb::geo_Vec)} {off(&vec, &vec.x)} {off(&vec, &vec.y)} {off(&vec, &vec.k)}");
+    o = cxx(2);
+    println("Priv c++ {o[0]} {o[1]} {o[2]}");
+    println("Priv zark {sizeof(vb::geo_Priv)} {alignof(vb::geo_Priv)} {off(&p, &p.pub)}");
+    o = cxx(3);
+    println("TP c++ {o[0]} {o[1]} {o[2]} {o[3]} {o[4]}");
+    println("TP zark {sizeof(vb::geo_TP)} {alignof(vb::geo_TP)} {off(&tp, &tp.n)} {off(&tp, &tp.c)} {off(&tp, &tp.t)}");
+    o = cxx(4);
+    println("Circle c++ {o[0]} {o[1]} {o[2]} {o[3]}");
+    println("Circle zark {sizeof(vb::geo_Circle)} {alignof(vb::geo_Circle)} {off(&c, &c.id)} {off(&c, &c.r)}");
+    o = cxx(5);
+    println("A16 c++ {o[0]} {o[1]} {o[2]} {o[3]}");
+    println("A16 zark {sizeof(vb::geo_A16)} {alignof(vb::geo_A16)} {off(&a, &a.c)} {off(&a, &a.v)}");
+    o = cxx(6);
+    println("MM c++ {o[0]} {o[1]} {o[2]} {o[3]} {o[4]}");
+    println("MM zark {sizeof(vb::geo_MM)} {alignof(vb::geo_MM)} {off(&mm, &mm.a)} {off(&mm, &mm.b)} {off(&mm, &mm.c)}");
+    o = cxx(7);
+    println("An c++ {o[0]} {o[1]} {o[2]} {o[3]} {o[4]} {o[5]}");
+    println("An zark {sizeof(vb::geo_An)} {alignof(vb::geo_An)} {off(&an, &an.tag)} {off(&an, an.__anon0.as_i())} {off(&an, &an.pr.lo)} {off(&an, &an.pr.hi)}");
+    o = cxx(8);
+    println("Bits c++ {o[0]} {o[1]}");
+    println("Bits zark {sizeof(vb::geo_Bits)} {alignof(vb::geo_Bits)}");
+
+    vb::geo::fill(&mm, &tp, &c, &bits, &an, &p, &a);
+    println("{mm.a} {mm.b} {mm.c} {tp.n} {tp.c} {tp.t} {c.id} {c.r} {bits.get_a()} {bits.get_s()} {bits.get_b()} {an.tag} {*an.__anon0.as_f()} {an.pr.lo} {an.pr.hi} {p.pub} {a.c} {a.v}");
+    mm.a = 1;
+    mm.b = 2;
+    mm.c = 3;
+    tp.n = 4;
+    tp.c = 'a';
+    tp.t = 'b';
+    c.id = 5;
+    c.r = 0.5;
+    bits.set_a(6);
+    bits.set_s(-8);
+    bits.set_b(9);
+    an.tag = 1;
+    *an.__anon0.as_i() = 7;
+    an.pr.lo = 2;
+    an.pr.hi = 3;
+    p.pub = 1;
+    a.c = 'z';
+    a.v = 2;
+    println("{vb::geo::check(&mm, &tp, &c, &bits, &an, &p, &a)}");
+
+    const auto s = vb::geo::add(vb::geo_V{ .x = 1.0, .y = 2.0 }, vb::geo_V{ .x = 3.0, .y = 4.5 });
+    const auto t = vb::geo::scale(s, 2.0);
+    vb::geo_V d;
+    println("{s.x} {s.y} {t.x} {t.y} {vb::geo::len2(t)} {d.x} {d.y}");
+    const auto h = vb::geo::newcircle(1.25);
+    println("{h.id} {h.r}");
+    void* hv = h;
+    vb::geo::del(hv);
+}

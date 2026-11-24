@@ -1,0 +1,31 @@
+type geo_Kind = u8;
+const auto geo_Kind_A = 0;
+const auto geo_Kind_B = 1;
+struct geo_V { f32 x = 0.0; f32 y = 1.5; }
+struct geo_W { i32 k = 7; bool on = true; u8[3] __pad0; f64 d = 0.25; geo_V v; i32* p; i64 q = 3; geo_Kind kd = 1; u8[3] __pad1; i32 n; }
+struct geo { }
+extern void zark_cxx_H_7(geo_V* a, geo_V* b, geo_V* __r);
+static geo_V geo::add(geo_V a, geo_V b) { geo_V __r; zark_cxx_H_7(&a, &b, &__r); return __r; }
+extern geo_V* zark_cxx_H_8(geo_V* a);
+static geo_V* geo::first(geo_V* a) { return zark_cxx_H_8(a); }
+extern geo_V* zark_cxx_H_9(geo_V* a, geo_V* b);
+static geo_V* geo::pick(geo_V* a, geo_V* b) { return zark_cxx_H_9(a, b); }
+extern geo_V* zark_cxx_H_10(geo_V* a);
+static geo_V* geo::ref(geo_V* a) { return zark_cxx_H_10(a); }
+extern f32 zark_cxx_H_11(geo_V* v);
+static f32 geo::len2(geo_V v) { return zark_cxx_H_11(&v); }
+extern void zark_cxx_H_12(i32 k, geo_W* __r);
+static geo_W geo::make(i32 k) { geo_W __r; zark_cxx_H_12(k, &__r); return __r; }
+extern void zark_cxx_H_13(geo_V* v);
+static void geo::put(geo_V v) { zark_cxx_H_13(&v); }
+struct geo_NT { i32 n; }
+extern i32 zark_cxx_H_18(geo_NT* x);
+static i32 geo::nt(geo_NT* x) { return zark_cxx_H_18(x); }
+extern i32 zark_cxx_H_19(geo_NT* x);
+static i32 geo::ntp(geo_NT* x) { return zark_cxx_H_19(x); }
+struct geo_Fwd { }
+extern geo_Fwd* zark_cxx_H_21();
+static geo_Fwd* geo::getfwd() { return zark_cxx_H_21(); }
+extern void zark_cxx_H_23(geo_V* a, geo_V* b, geo_V* __r);
+geo_V cmid(geo_V a, geo_V b) { geo_V __r; zark_cxx_H_23(&a, &b, &__r); return __r; }
+extern i32 cptr(geo_V* a);

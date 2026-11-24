@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -84,6 +84,14 @@ done
 for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f scope.zk scope.cpp scope_b.cpp 2>&1) || fail "interop scope $f: $out"
     [ "$out" = "$(cat interop/scope.out)" ] || fail "interop scope $f: got: $out"
+done
+
+(cd interop && "$ZARK" cbind value.hpp -o value_b.zk --inline-c value_b.cpp 2> /dev/null) || fail "interop value: cbind exit $?"
+grep -E '^extern "C" ([^(]*geo::|.*[(,] *(const )?geo::[A-Za-z0-9_]+ +[a-z_])' interop/value_b.cpp && fail "interop value: a class crosses a shim by value"
+grep -E '^extern .*geo_(V|Vec|Priv|NP|TP|Shape|Circle|A16|M1|M2|MM|Bits|An)[^*A-Za-z0-9_]' interop/value_b.zk && fail "interop value: a struct crosses a shim by value"
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f value.zk value.cpp value_b.cpp 2>&1) || fail "interop value $f: $out"
+    [ "$out" = "$(cat interop/value.out)" ] || fail "interop value $f: got: $out"
 done
 
 cp -r "$R/tests/cxxbind/interop/imp" imp

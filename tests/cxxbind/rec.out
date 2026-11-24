@@ -1,0 +1,20 @@
+struct Outer_Inner { i32 i; }
+type Outer_K = i32;
+const auto Outer_K0 = 0;
+const auto Outer_N = 3;
+struct Outer { Outer_Inner in; Outer_K k; u8[4] __pad0; }
+extern i32 zark_cxx_H_20(Outer_Inner* p);
+i32 useinner(Outer_Inner* p) { return zark_cxx_H_20(p); }
+struct r_S { i32 s; }
+type r_S_In = i32;
+const auto r_S_I0 = 0;
+extern i32 zark_cxx_H_25(r_S* s);
+i32 user(r_S* s) { return zark_cxx_H_25(s); }
+struct u_T { i32 t; }
+extern i32 zark_cxx_H_28(u_T* t);
+i32 taket(u_T* t) { return zark_cxx_H_28(t); }
+type UT = u_T;
+extern i32 zark_cxx_H_30(UT* x);
+i32 takeut(UT* x) { return zark_cxx_H_30(x); }
+struct Self { Self* next; i32 v; u8[4] __pad0; }
+struct type_ { i32 match_; }

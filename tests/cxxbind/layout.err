@@ -1,0 +1,6 @@
+skipped geo::NP::NP: constructors are not bound yet
+skipped geo::Shape::~Shape: destructors are not bound yet
+skipped geo::M2::f: methods are not bound yet
+skipped geo::Ref::r: reference member
+opaque geo::Pk: packed
+skipped geo::NU::e: overlapping member
