@@ -1635,6 +1635,18 @@ struct CHfa {
     bool unk;
 }
 
+!str cb_pname(Allocator a, CField[] ps, i64 i) {
+    auto b = List<u8>::init(a);
+    sprint(&b, "a{i}")?;
+    auto taken = true;
+    while (taken) {
+        taken = false;
+        for (auto p : ps) { if (p.name == b.slice()) { taken = true; } }
+        if (taken) { sprint(&b, "_")?; }
+    }
+    return b.slice();
+}
+
 struct CEmit {
     Allocator a;
     List<u8> out;
@@ -1662,14 +1674,16 @@ struct CEmit {
     Map<bool> undone;
     Map<str> nowrap;
     Map<bool> inl;
+    Map<str> cxn;
     str hid;
 
     void fail(str why) {
         if (this->why.len == 0) { this->why = why; }
     }
     !void uses(str name) {
+        const auto n = this->cxn.get_or(name, name);
         auto b = List<u8>::init(this->a);
-        sprint(&b, "uses skipped {name}")?;
+        sprint(&b, "uses skipped {n}")?;
         this->fail(b.slice());
     }
     !void warn(str name, str why) {
@@ -1702,14 +1716,17 @@ struct CEmit {
     }
     !bool claim(str name, i64 kind) {
         const auto key = this->ename(name)?;
+        auto lab = name;
+        if (kind == 2) { lab = this->cxn.get_or(name, name); }
         if (this->owner.get_or(key, name) != name) {
-            this->skip(name, "name clash")?;
+            this->warn(lab, "name clash")?;
+            this->bad.put(name, true)?;
             return false;
         }
         const auto k = this->done.get_or(key, 0);
         if (k == kind) { return false; }
         if (k != 0) {
-            this->warn(name, "name clash")?;
+            this->warn(lab, "name clash")?;
             return false;
         }
         return true;
@@ -1718,6 +1735,9 @@ struct CEmit {
         if (this->why.len > 0) {
             if (kind == 3) {
                 this->warn(name, this->why)?;
+            } else if (kind == 2) {
+                this->warn(this->cxn.get_or(name, name), this->why)?;
+                this->bad.put(name, true)?;
             } else {
                 this->skip(name, this->why)?;
             }
@@ -1891,6 +1911,10 @@ struct CEmit {
         if (keyword(d.name) != .ident) { return this->warn(d.name, "Zark keyword"); }
         if (cb_is_prim(d.name)) { return this->warn(d.name, "Zark type name"); }
         if (d.is_inline && d.has_body) { return this->inline_fn(d); }
+        if (d.cxx.len > 0 && (this->bad.has(d.name) || this->done.get_or(d.name, 0) == 3)) {
+            this->bad.put(d.name, true)?;
+            return this->warn(d.cxx, "name clash");
+        }
         if (!this->claim(d.name, 3)?) { return; }
         const auto f = d.ty;
         auto b = List<u8>::init(this->a);
@@ -1903,7 +1927,8 @@ struct CEmit {
             if (i > 0) { sprint(&b, ", ")?; }
             this->ty(&b, p.ty)?;
             if (p.name.len == 0) {
-                sprint(&b, " a{i}")?;
+                const auto pn = cb_pname(this->a, f.params.slice(), i)?;
+                sprint(&b, " {pn}")?;
             } else {
                 sprint(&b, " ")?;
                 this->esc(&b, p.name)?;
@@ -2667,7 +2692,7 @@ struct CEmit {
             .Macro, .Const => { this->konst(d)?; }
             .Enum => {
                 const auto x = this->typedefs.get_or(d.name, null);
-                if (x != null && x != d.ty) { this->warn(d.name, "name clash")?; } else { this->typedef_out(d)?; }
+                if (x != null && x != d.ty) { this->warn(this->cxn.get_or(d.name, d.name), "name clash")?; } else { this->typedef_out(d)?; }
             }
             .Var => { this->var(d)?; }
             .Skip => { this->warn(d.name, d.reason)?; }
