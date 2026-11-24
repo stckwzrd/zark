@@ -3671,41 +3671,14 @@ bool cx_is_operator(str n) {
         auto nm = 0;
         for (auto d : live.slice()) { if (!d.cx_zctor && d.reason.len == 0) { nm += 1; } }
         if (nm > 1) {
-            auto vop = List<CDecl*>::init(w.a);
-            auto vt = List<str>::init(w.a);
             for (auto d : live.slice()) {
                 if (d.cx_zctor || d.reason.len > 0) { continue; }
                 if (d.cx_opname.len > 0 && d.cx_rec != null && d.cx_rec.value && cx_isop(str_trim(d.cx_opname[8..]))) {
-                    vop.push(d)?;
-                    vt.push(cx_ptokens(w, d.ty)?)?;
-                }
-            }
-            auto best = 0 - 1;
-            for (auto [i, d] : vop.slice()) {
-                if (best < 0) { best = i; continue; }
-                const auto bd = vop.get(best);
-                auto ds = d.ty.params.len * 1000;
-                for (auto pp : d.ty.params.slice()) {
-                    const auto xx = w.expand(pp.ty);
-                    if (xx.k == .Named && xx.rec != null && xx.rec == d.cx_rec.d) { ds += 1; }
-                }
-                auto bs = bd.ty.params.len * 1000;
-                for (auto pp : bd.ty.params.slice()) {
-                    const auto xx = w.expand(pp.ty);
-                    if (xx.k == .Named && xx.rec != null && xx.rec == bd.cx_rec.d) { bs += 1; }
-                }
-                if (ds > bs) { best = i; }
-                else if (ds == bs) {
-                    const auto hi = fnv64(0xcbf29ce484222325 as u64, vt.get(i));
-                    const auto hb = fnv64(0xcbf29ce484222325 as u64, vt.get(best));
-                    if (hi < hb) { best = i; }
-                }
-            }
-            for (auto [i, d] : live.slice()) {
-                if (d.cx_zctor || d.reason.len > 0) { continue; }
-                if (d.cx_opname.len > 0 && d.cx_rec != null && d.cx_rec.value && cx_isop(str_trim(d.cx_opname[8..]))) {
-                    const auto at = vop.index_of(d);
-                    if (at != best) {
+                    auto same = 0;
+                    for (auto o : g.slice()) {
+                        if (o.cx_opname.len > 0 && o.cx_rec == d.cx_rec && (o.reason.len == 0 || o.cx_deleted)) { same += 1; }
+                    }
+                    if (same > 1) {
                         const auto sym = str_trim(d.cx_opname[8..]);
                         const auto tk = cx_ptokens(w, d.ty)?;
                         if (tk.len == 0) { d.reason = "overload parameter type is not supported"; continue; }
