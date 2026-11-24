@@ -15,3 +15,12 @@ struct Buf {
     const float& at(int i) const;
 };
 }
+namespace ui {
+struct S {
+    static int pick(int a, int b = 3);
+    static int pick(double d);
+    static int one(int a, int b = 4);
+};
+int refs(int* p);
+int refs(int& r);
+}

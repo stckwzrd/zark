@@ -25,3 +25,8 @@ struct Hide : Shape {
 };
 struct Hide2 : Hide { int f(); };
 }
+namespace geo {
+struct A2 { int a; int ga() const; };
+struct B2 : A2 { int b; };
+struct D2 : B2 { int d; };
+}

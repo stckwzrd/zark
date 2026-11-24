@@ -17,7 +17,7 @@ static i32 cfg::both_i32_i32(i32 a, i32 b) { return zark_cxx_24d3f078610e885f_10
 extern i32 zark_cxx_24d3f078610e885f_11(i32 a, i32 b, i32 c);
 static i32 cfg::both_i32_i32_i32(i32 a, i32 b, i32 c) { return zark_cxx_24d3f078610e885f_11(a, b, c); }
 extern i32 zark_cxx_24d3f078610e885f_12(u8* s);
-static i32 cfg::both_u8p(u8* s) { return zark_cxx_24d3f078610e885f_12(s); }
+static i32 cfg::both_u8pc(u8* s) { return zark_cxx_24d3f078610e885f_12(s); }
 extern i32 zark_cxx_24d3f078610e885f_13(i32 a);
 static i32 cfg::literal_1(i32 a) { return zark_cxx_24d3f078610e885f_13(a); }
 extern i32 zark_cxx_24d3f078610e885f_15(i32 a);

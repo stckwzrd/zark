@@ -22,3 +22,8 @@ struct Box {
     Box operator++(int);
 };
 }
+namespace op {
+struct W { float x; };
+W operator+(W a, int k);
+W operator+(W a, W b);
+}
