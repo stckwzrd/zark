@@ -3,20 +3,17 @@ name = "imgui-demo"
 main = "main.zk"
 
 [build]
-include = ["deps/cimgui", "deps/cimgui/imgui", "deps/cimgui/imgui/backends"]
-defines = ["CIMGUI_USE_SDL2", "CIMGUI_USE_OPENGL3", "IMGUI_IMPL_API=extern \"C\""]
+include = ["deps/imgui"]
 std = "c++17"
 cflags = ["-fno-exceptions", "-fno-rtti"]
 sources = [
-    "deps/cimgui/cimgui.cpp",
-    "deps/cimgui/cimgui_impl.cpp",
-    "deps/cimgui/imgui/imgui.cpp",
-    "deps/cimgui/imgui/imgui_draw.cpp",
-    "deps/cimgui/imgui/imgui_demo.cpp",
-    "deps/cimgui/imgui/imgui_tables.cpp",
-    "deps/cimgui/imgui/imgui_widgets.cpp",
-    "deps/cimgui/imgui/backends/imgui_impl_sdl2.cpp",
-    "deps/cimgui/imgui/backends/imgui_impl_opengl3.cpp",
+    "deps/imgui/imgui.cpp",
+    "deps/imgui/imgui_draw.cpp",
+    "deps/imgui/imgui_demo.cpp",
+    "deps/imgui/imgui_tables.cpp",
+    "deps/imgui/imgui_widgets.cpp",
+    "deps/imgui/backends/imgui_impl_sdl2.cpp",
+    "deps/imgui/backends/imgui_impl_opengl3.cpp",
 ]
 pkg-config = ["sdl2"]
-libs = ["GL", "stdc++"]
+libs = ["GL"]
