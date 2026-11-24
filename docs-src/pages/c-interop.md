@@ -2,7 +2,7 @@
 title: Interoperating with C and C++
 order: 30
 section: Interop and tools
-description: import of C headers, zark cbind, extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, build flags and zark.toml keys, structs, callbacks and the extern "C" facade in Zark
+description: import of C and C++ headers, zark cbind, extern, export, strings and pointers at the boundary with C, bringing in .c, .cpp and libraries, build flags and zark.toml keys, structs, callbacks and the extern "C" facade in Zark
 ---
 
 Zark needs no separate "binding layer": a C header is imported like a module, a single C function can be declared in one line, and a C file is passed to the compiler on the command line. This page collects everything you need at the boundary.
@@ -74,9 +74,236 @@ zark cbind shapes.h -o shapes.zk --inline-c shapes_inline.c
 
 The output is a plain `.zk` file you can read and edit. With `--inline-c` the wrappers for `static inline` functions go to a C file that you compile in next to it (`zark run main.zk shapes_inline.c`). That C file includes the header by its absolute path, and the wrapper names in both files are hashed from that path, so the pair only works on the machine and in the checkout where it was made. Use it to inspect what an import produces, and let `import` regenerate the bindings elsewhere. A header without `static inline` functions produces a `.zk` that does not depend on the path.
 
-Only C headers work. A C++ library is reached through a C API, as cimgui does for Dear ImGui (`examples/imgui/`), or through your own `extern "C"` facade (see below).
+A header with a C++ extension (`.hpp`, `.hh`, `.hxx`, `.h++`) is bound as C++, see [C++ headers](#c-headers); a `.h` file is always read as C.
 
 
+## C++ headers
+
+`import "x.hpp" as name;` binds a C++ header, and `zark cbind x.hpp` prints the bindings. A header is C++ when its extension is `.hpp`, `.hh`, `.hxx` or `.h++`. clang++ reads the header, and the compiler writes two things: a Zark module and a small C++ file of `extern "C"` functions (shims) that make the real calls. Zark never calls a C++ function by its mangled name, and a class never crosses the C boundary by value: classes travel as pointers, and Zark copies the simple ones in and out. The C++ file is compiled and linked for you, and only the shims your program uses are compiled, so a function that the header declares but no file defines is harmless while you do not call it.
+
+```cpp file=shapes.hpp
+#pragma once
+#include <string>
+
+namespace shapes {
+
+enum class Kind { Circle, Box };
+
+struct Vec {
+    float x = 0;
+    float y = 0;
+    Vec(float a, float b) : x(a), y(b) {}
+};
+
+Vec operator+(const Vec& a, const Vec& b);
+float dot(const Vec& a, const Vec& b);
+float scale(float v, float k = 2.0f);
+float scale(Vec v);
+
+class Counter {
+public:
+    explicit Counter(int start);
+    ~Counter();
+    int next();
+    static int alive();
+private:
+    int n;
+    std::string log;
+};
+
+}
+```
+
+```cpp file=shapes.cpp
+#include "shapes.hpp"
+
+namespace shapes {
+
+static int live = 0;
+
+Vec operator+(const Vec& a, const Vec& b) { return Vec(a.x + b.x, a.y + b.y); }
+float dot(const Vec& a, const Vec& b) { return a.x * b.x + a.y * b.y; }
+float scale(float v, float k) { return v * k; }
+float scale(Vec v) { return v.x * v.y; }
+
+Counter::Counter(int start) : n(start) { live += 1; }
+Counter::~Counter() { live -= 1; }
+int Counter::next() { return n++; }
+int Counter::alive() { return live; }
+
+}
+```
+
+```zark run with=shapes.cpp
+import "shapes.hpp" as sh;
+
+!void main() {
+    const auto a = sh::shapes_Vec(1.0, 2.0);
+    const auto b = a + sh::shapes_Vec(3.0, 4.0);
+    println(b.x, b.y, sh::shapes::dot(a, b), sh::shapes_Kind_Box);
+    println(sh::shapes::scale_f32_f32(1.5, 4.0), sh::shapes::scale_f32_f32_1(1.5));
+
+    auto c = sh::shapes_Counter::create(c_allocator(), 10)?;
+    defer c.deinit();
+    println(c.get().next(), c.get().next(), sh::shapes_Counter::alive());
+}
+```
+
+How the names come out:
+
+| In C++ | In Zark, under `import "shapes.hpp" as sh;` |
+|---|---|
+| namespace `shapes`, function `dot` | an empty struct `shapes` with a static method: `sh::shapes::dot(a, b)`; a function outside any namespace is a plain `sh::f(x)` |
+| class `shapes::Vec`, nested `Outer::Inner` | `sh::shapes_Vec`, `Outer_Inner`: the path is joined with `_`, types are not nested |
+| `enum class Kind` in `shapes`, a `constexpr` constant `N` | `sh::shapes_Kind_Box`, `sh::shapes_N`, plain integers |
+| method, `const` method, `static` method | a method of the struct, a `const` method, a `static` method: `c.get().next()`, `sh::shapes_Counter::alive()` |
+| overloaded function | one function per overload with a suffix of parameter tokens: `scale_f32_f32`, `scale_shapes_Vec` (`const char*` is `u8pc`, a pointer adds `p`, a reference `pr`); a name that is not overloaded stays as it is |
+| default arguments | the full name, plus `name_k` for each shorter call C++ accepts (`k` is the number of arguments); C++ fills in the defaults |
+| `operator+`, `==`, `<` and the like on a value type | Zark operators: `a + b`, `a == b` |
+| other operators | named methods: `op_index` for `[]`, `op_call` for `()`, `op_add_assign` for `+=`, `to_bool()` for `operator bool` |
+| `T&`, `T*` | `T*`; a `const T&` parameter of a number, enum or value type is taken by value (unless the function returns a reference or a pointer) |
+| `static` data member, global variable | `name_ptr()`, as for C variables |
+| `Box<int>` (an instantiated template) | `Box_i32` |
+| `std::string`, `std::string_view` in a parameter or result | `str` (a `std::string` result is copied with an allocator you pass first) |
+| `std::vector<T>` of numbers or small structs | `T[]` |
+| `std::unique_ptr<T>` | a `T_own` handle (below) |
+| printf-style `Text(const char* fmt, ...)` | `Text(u8* fmt)`: the text is printed as it is, format it in Zark with `bprint` |
+
+Two kinds of classes need different handling:
+
+- A **value type** is trivially copyable, like `Vec` or Dear ImGui's `ImVec2`. It is an ordinary Zark struct with the C++ layout, you can copy it, return it and store it, and `T{}` or `T(args)` build it.
+- Any other class, like `Counter`, is **non-trivial**: it has a destructor, a copy constructor or virtual functions. Zark holds such an object only through a pointer. To make one, call `T::create(allocator, args)`, which allocates the object with the allocator and runs the constructor. It returns `!T_own`, an owned handle with `get()` (the pointer, a borrow), `deinit()` (runs the destructor and frees the memory), `release()` (gives up the pointer without destroying) and, when the class has a copy constructor, `clone(allocator)`. The compiler checks the handle like any owned value, so the pattern is always
+
+  ```zark
+  auto c = sh::shapes_Counter::create(c_allocator(), 10)?;
+  defer c.deinit();
+  ```
+
+  and leaving the `defer` out is the error `'c' holds a 'sh.shapes_Counter_own' that is not consumed on every path out of its scope`. A pointer that C++ returns (`GetIO()`, a method that returns `Foo*`) is borrowed and is never destroyed by Zark. A non-trivial result returned by value takes an allocator first and returns `!T_own`; one passed by value takes a pointer, and C++ copies it.
+
+> **Warning:** Zark does not know that a non-trivial object must not be copied. `auto copy = *c.get();` compiles and makes a bitwise copy that C++ knows nothing about (a libstdc++ `std::string` that points into itself, a pointer that two destructors free). To copy, use `clone()` (when the class has a copy constructor), and keep the object behind its handle or pointer.
+
+Inheritance works through pointers: a derived class has `as_Base()` (for example `c.get().as_geo_Shape()`), the public methods of its bases are repeated on it, and a virtual function is called with its normal dispatch, so `shape.area()` runs the override. An abstract class has no `create`, and `into_Base()` turns an owned handle into a handle of the base when the base has a virtual destructor. Subclassing a C++ class from Zark is not supported.
+
+An exception never reaches Zark code. A shim catches it, prints `zark: uncaught C++ exception in shapes::fn: what()` to stderr and aborts the process; `noexcept` functions, and every shim bound with `-fno-exceptions`, have no `try` at all. Zark callbacks passed to C++ are plain `fn` pointers.
+
+Every shim names the function it wraps with its exact signature, and the binding step compiles the shims. A declaration that cannot be bound is dropped with a reason on stderr and the rest of the header is still usable; run `zark cbind x.hpp` to see them:
+
+```text
+skipped m::ld: type 'long double' is not supported yet
+skipped fx::TextV: va_list parameter
+skipped ui::Buf::at const: same parameters as the non-const overload
+```
+
+### A C++ `.h` header and templates
+
+A header that ends in `.h` is read as C. A C++ `.h` header is imported through a one-line `.hpp` wrapper that includes it. The error for a C++ `.h` ends with the hint `if this is a C++ header, import it through a .hpp file that includes it`.
+
+A template is bound only through specializations that exist, so a bare `Stack<T>` gives `skipped Stack: template without an instantiation; add 'template struct Stack<...>;' to a wrapper header`. The wrapper is also the place to ask for the ones you need, with an explicit instantiation (for a function, `template double twice<double>(double);`):
+
+```cpp file=stack.h
+#pragma once
+template<class T> struct Stack {
+    T items[8];
+    int n = 0;
+    void push(T v) { items[n++] = v; }
+    T pop() { return items[--n]; }
+};
+template<class T> T twice(T x) { return x + x; }
+```
+
+```cpp file=stack.hpp
+#include "stack.h"
+template struct Stack<int>;
+template double twice<double>(double);
+```
+
+```zark run
+import "stack.hpp" as st;
+
+void main() {
+    auto s = st::Stack_i32{};
+    s.push(4);
+    s.push(5);
+    println(s.pop(), s.pop(), st::twice(1.5));
+}
+```
+
+### Dear ImGui without a C wrapper
+
+`examples/imgui/` drives Dear ImGui 1.93.0 and its SDL2 and OpenGL3 backends straight from the C++ headers. The wrapper header is
+
+```cpp
+#pragma once
+#include "imgui.h"
+#include "backends/imgui_impl_sdl2.h"
+#include "backends/imgui_impl_opengl3.h"
+```
+
+and these are excerpts of `main.zk` (the full program is in the example):
+
+```zark
+import "imgui_all.hpp" as ig;
+
+struct App {
+    f32 freq;
+    i64 clicks;
+    u8[64] name;
+}
+
+!void panel(App* app, f32 dt) {
+    u8[96] line;
+    ig::ImGui::SetNextWindowPos(ig::ImVec2(24.0, 24.0), ig::ImGuiCond_FirstUseEver, ig::ImVec2(0.0, 0.0));
+    ig::ImGui::Begin("Zark + Dear ImGui", null, 0);
+
+    const auto timing = bprint(line[..], "{1.0 / dt as f64:.1} FPS") catch "";
+    ig::ImGui::Text(timing.ptr);
+    if (ig::ImGui::Button_1("Click me")) { app->clicks += 1; }
+    ig::ImGui::InputText("name", &app->name[0], 64, 0, null, null);
+    ig::ImGui::SliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
+
+    const auto dl = ig::ImGui::GetWindowDrawList();
+    const auto p = ig::ImGui::GetCursorScreenPos();
+    dl.AddLine_4(ig::ImVec2(p.x, p.y), ig::ImVec2(p.x + 240.0, p.y + 24.0), 0xFF00FFFF, 2.0);
+
+    auto clipper = ig::ImGuiListClipper::create(c_allocator())?;
+    defer clipper.deinit();
+    clipper.get().Begin(1000, -1.0);
+    while (clipper.get().Step()) {
+        const auto row = bprint(line[..], "row {clipper.get().DisplayStart}") catch "";
+        ig::ImGui::Text(row.ptr);
+    }
+    ig::ImGui::End();
+}
+
+!void main() {
+    ig::ImGui::CreateContext(null);
+    const auto io = ig::ImGui::GetIO();
+    io->IniFilename = null;
+    ig::ImGui::StyleColorsDark(null);
+    auto app = App{ .freq = 1.0 };
+    ig::ImGui::NewFrame();
+    panel(&app, io->DeltaTime)?;
+    ig::ImGui::Render();
+}
+```
+
+`Begin("…", null, 0)` and `Begin_1("clicks")` are the same C++ function with all and with one argument. `ImGuiListClipper` is non-trivial, so it is created with `create` and released with `defer clipper.deinit()`, while `GetIO()` and `GetWindowDrawList()` return pointers that Zark does not own. `zark cbind imgui_all.hpp -I deps/imgui` prints 297 warnings for this header, all of the form `skipped NAME: reason` (most are `const` duplicates of methods, members of `ImVector` that cannot be instantiated for some element types, and function-like macros); they are kept in `tests/cxxbind/imgui.err`.
+
+### What is not supported
+
+These are limits of the C++ binding, and `zark cbind` reports the declarations they hit:
+
+- subclassing a C++ class from Zark, and overriding a virtual function;
+- `dynamic_cast`, downcasts and RTTI;
+- lambdas, closures and `std::function` passed to C++ (only plain `fn` pointers);
+- exceptions as `!T` errors: they abort;
+- templates without an instantiation, partial specializations and member templates;
+- `std::` types other than `std::string`, `std::string_view`, `std::vector` and `std::unique_ptr` (`shared_ptr`, `map`, `function`, `optional`, streams), and non-`const` references to them;
+- `va_list` parameters and variadic functions without a printf format attribute;
+- `wchar_t`, `char8_t`, `char16_t`, `char32_t`, `long double` and `__int128`;
+- the operators `= | & ^ ~ -> , && || <=>`, postfix `++` and `--`, `new`, `delete` and user-defined literals;
+- bitfields of unions, reference members, flexible array members and `[[no_unique_address]]` members.
 
 ## Calling C from Zark: `extern`
 
@@ -383,13 +610,12 @@ name = "imgui-demo"
 main = "main.zk"
 
 [build]
-include = ["deps/cimgui", "deps/cimgui/imgui", "deps/cimgui/imgui/backends"]
-defines = ["CIMGUI_USE_SDL2", "CIMGUI_USE_OPENGL3", "IMGUI_IMPL_API=extern \"C\""]
+include = ["deps/imgui"]
 std = "c++17"
 cflags = ["-fno-exceptions", "-fno-rtti"]
-sources = ["deps/cimgui/cimgui.cpp", "deps/cimgui/imgui/imgui.cpp", "..."]
+sources = ["deps/imgui/imgui.cpp", "deps/imgui/imgui_draw.cpp", "..."]
 pkg-config = ["sdl2"]
-libs = ["GL", "stdc++"]
+libs = ["GL"]
 ```
 
 | Key | What it does |
@@ -463,7 +689,7 @@ A closure `fn[](...) -> R` cannot be passed to C: it has a context, and C expect
 
 ## C++ through an `extern "C"` facade
 
-Zark does not know the C++ ABI (templates, overloads, classes). So C++ is hidden behind a small C interface where an object is an opaque pointer.
+When a header is awkward to bind, or you only need a few calls, hide the C++ behind a small C interface where an object is an opaque pointer.
 
 ```zark file=engine.cpp
 #include <vector>
