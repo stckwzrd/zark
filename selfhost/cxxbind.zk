@@ -169,6 +169,7 @@ struct CxRec {
     str no_own_why;
     bool nocopy;
     bool user_default;
+    str alt;
     bool deleted_copy;
     CDecl* dtor_decl;
     CDecl* copy_decl;
@@ -1716,13 +1717,66 @@ struct CxWalk {
         const auto b = this->tok(t)?;
         if (b.len == 0) { return ""; }
         if (q.len == 0) { return b; }
+        return str_concat(this->a, [b, "__", q])?;
+    }
+
+    !str ckey(CType* t) {
+        auto x = t;
+        auto q = "";
+        if (t.konst) { q = "K"; }
+        if (t.vol) { q = str_concat(this->a, [q, "V"])?; }
+        while (x.k == .Named && x.rec == null && x.stdk == 0) {
+            const auto d = this->zd.get_or(x.name, null);
+            if (d != null && d.k == .Enum) { break; }
+            if (x.name.len > 0 && ((x.name[0] >= '0' && x.name[0] <= '9') || x.name[0] == '-')) {
+                auto n = x.name;
+                while (n.len > 1 && (n[n.len - 1] == 'u' || n[n.len - 1] == 'U' || n[n.len - 1] == 'l' || n[n.len - 1] == 'L')) { n = n[0..n.len - 1]; }
+                return str_concat(this->a, [q, "T:", n])?;
+            }
+            if (cb_known(x.name).len > 0) {
+                x = this->scalar(x)?;
+            } else {
+                x = this->typedefs.get_or(x.name, null);
+                if (x == null) { return ""; }
+                if (x.konst) { q = str_concat(this->a, [q, "K"])?; }
+                if (x.vol) { q = str_concat(this->a, [q, "V"])?; }
+            }
+        }
+        auto b = "";
+        if (x.stdk == 0 && x.k == .Ptr) {
+            const auto e = this->ckey(x.elem)?;
+            if (e.len == 0) { return ""; }
+            auto m = "*";
+            if (x.ref && x.rvalue) { m = "&&"; } else if (x.ref) { m = "&"; }
+            b = str_concat(this->a, [m, e])?;
+        } else if (x.stdk == 0 && x.k == .Array) {
+            const auto e = this->ckey(x.elem)?;
+            if (e.len == 0) { return ""; }
+            b = str_concat(this->a, ["[", cb_num(this->a, CVal{ .v = x.n })?, "]", e])?;
+        } else if (x.stdk == 0 && x.k == .Func) {
+            auto ps = List<str>::init(this->a);
+            for (auto p : x.params.slice()) {
+                const auto e = this->ckey(p.ty)?;
+                if (e.len == 0) { return ""; }
+                ps.push(e)?;
+            }
+            const auto r = this->ckey(x.elem)?;
+            if (r.len == 0) { return ""; }
+            b = str_concat(this->a, ["F(", str_join(this->a, ps.slice(), ",")?, ")", r])?;
+        } else if (x.stdk == 0 && x.k == .Named && x.rec != null) {
+            if (x.rec.cx != null) { b = str_concat(this->a, ["R:", x.rec.cx.qn])?; } else { b = str_concat(this->a, ["R:", x.name])?; }
+        } else {
+            const auto tk = this->tok(x)?;
+            if (tk.len == 0) { return ""; }
+            b = str_concat(this->a, ["T:", tk])?;
+        }
         return str_concat(this->a, [q, b])?;
     }
 
     !CType* tnode(Json* n) {
         const auto kind = jstr(jget(n, "kind"), "");
         const auto in = jat(jget(n, "inner"), 0);
-        if (kind == "ElaboratedType") { return this->tnode(in); }
+        if (kind == "ElaboratedType" || kind == "TypedefType") { return this->tnode(in); }
         if (kind == "QualType") {
             const auto t = this->tnode(in)?;
             if (t == null) { return null; }
@@ -1750,10 +1804,13 @@ struct CxWalk {
 
     !CType* tlookup(str name, str scope, List<CType*> args) {
         auto ks = List<str>::init(this->a);
+        auto cks = List<str>::init(this->a);
         for (auto x : args.slice()) {
             const auto k = this->tok_arg(x)?;
-            if (k.len == 0) { return this->badt(CX_TODO); }
+            const auto ck = this->ckey(x)?;
+            if (k.len == 0 || ck.len == 0) { return this->badt(CX_TODO); }
             ks.push(k)?;
+            cks.push(ck)?;
         }
         auto n = name;
         auto s = scope;
@@ -1767,7 +1824,7 @@ struct CxWalk {
             if (q.len > 0 || s.len == 0) { break; }
             s = cx_up(s);
         }
-        const auto key = str_concat(this->a, [q, "<", str_join(this->a, ks.slice(), ",")?, ">"])?;
+        const auto key = str_concat(this->a, [q, "<", str_join(this->a, cks.slice(), ",")?, ">"])?;
         auto r = this->specs.get_or(key, null);
         if (r == null) {
             auto n = 0;
@@ -1788,6 +1845,10 @@ struct CxWalk {
             for (auto x : args.slice()) { cs.push(cx_spell(this->a, x, "")?)?; }
             const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
             const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", cx_zn(this->a, ks)?])?;
+            if (this->zq.has(zn)) {
+                _ = this->claim(zn, cxx)?;
+                return this->badt(str_concat(this->a, ["uses skipped ", cxx])?);
+            }
             r = this->newrec(cxx)?;
             r.d = this->decl(.Struct, zn)?;
             r.d.cxx = cxx;
@@ -1803,7 +1864,9 @@ struct CxWalk {
         if (this->bad.has(r.d.name)) { return this->badt(str_concat(this->a, ["uses skipped ", r.qn])?); }
         auto kcs = List<str>::init(this->a);
         for (auto x : args.slice()) { kcs.push(cx_spell(this->a, x, "")?)?; }
-        r.key = cx_tkey(this->a, str_concat(this->a, [q, "<", str_join(this->a, kcs.slice(), ", ")?, ">"])?)?;
+        const auto nk = cx_tkey(this->a, str_concat(this->a, [q, "<", str_join(this->a, kcs.slice(), ", ")?, ">"])?)?;
+        if (r.alt.len == 0 && r.key != nk) { r.alt = r.key; }
+        r.key = nk;
         const auto t = this->named(r.d.name)?;
         t.rec = r.d;
         t.tag = 1;
@@ -1814,6 +1877,7 @@ struct CxWalk {
     !CxRec* spec(Json* c, str q, str want) {
         this->skey = "";
         auto ks = List<str>::init(this->a);
+        auto cks = List<str>::init(this->a);
         auto cs = List<str>::init(this->a);
         auto atys = List<CType*>::init(this->a);
         const auto k = jget(c, "inner");
@@ -1828,11 +1892,16 @@ struct CxWalk {
                 const auto tp = this->tparms.get_or(q, List<str>{});
                 if (ks.len < tp.len) {
                     const auto pt = tp.get(ks.len);
+                    if (pt == "auto" || str_starts_with(pt, "decltype(auto")) {
+                        if (want.len == 0) { this->skip(q, "non-type template parameter of a deduced type is not supported")?; }
+                        return null;
+                    }
                     if (pt.len > 0 && pt != "int" && pt != "unsigned int" && pt != "bool" && pt != "long" && pt != "unsigned long" && pt != "long long" && pt != "unsigned long long" && pt != "short" && pt != "unsigned short") {
                         cvs = str_concat(this->a, ["(", pt, ")", v])?;
                     }
                 }
                 ks.push(v)?;
+                cks.push(str_concat(this->a, ["T:", v])?)?;
                 cs.push(cvs)?;
                 continue;
             }
@@ -1840,13 +1909,15 @@ struct CxWalk {
             const auto t = this->tnode(jat(jget(x, "inner"), 0))?;
             if (t == null) { return null; }
             const auto tk = this->tok_arg(t)?;
-            if (tk.len == 0) { return null; }
+            const auto ck = this->ckey(t)?;
+            if (tk.len == 0 || ck.len == 0) { return null; }
             atys.push(t)?;
             ks.push(tk)?;
+            cks.push(ck)?;
             cs.push(cx_spell(this->a, t, "")?)?;
         }
         if (ks.len == 0) { return null; }
-        const auto key = str_concat(this->a, [q, "<", str_join(this->a, ks.slice(), ",")?, ">"])?;
+        const auto key = str_concat(this->a, [q, "<", str_join(this->a, cks.slice(), ",")?, ">"])?;
         this->skey = key;
         if (key != want || this->specs.has(key)) { return null; }
         const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
@@ -1924,7 +1995,8 @@ struct CxWalk {
             }
             .Named => {
                 if (t.rec != null) {
-                    const auto l = this->lays.get_or(t.rec.cx.key, null);
+                    auto l = this->lays.get_or(t.rec.cx.key, null);
+                    if (l == null && t.rec.cx.alt.len > 0) { l = this->lays.get_or(t.rec.cx.alt, null); }
                     if (l != null && !l.dup) { return CSize{ .size = l.size, .align = l.align }; }
                 }
             }
@@ -1952,7 +2024,8 @@ struct CxWalk {
     !void flat(CxRec* r) {
         if (r.flat || r.skip.len > 0) { return; }
         r.flat = true;
-        const auto l = this->lays.get_or(r.key, null);
+        auto l = this->lays.get_or(r.key, null);
+        if (l == null && r.alt.len > 0) { l = this->lays.get_or(r.alt, null); }
         if (l == null) {
             r.why = "layout not found";
             r.need = "layout not found";
@@ -4088,6 +4161,7 @@ bool cx_is_operator(str n) {
     }
     for (auto r : w.rlist.slice()) {
         r.key = w.dkey(r.key)?;
+        if (r.alt.len > 0) { r.alt = w.dkey(r.alt)?; }
         w.bykey.put(r.key, r)?;
     }
     w.layouts(header, from_dir, cflags)?;
