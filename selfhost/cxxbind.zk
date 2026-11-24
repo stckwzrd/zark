@@ -1018,6 +1018,15 @@ struct CxWalk {
         const auto stat = jstr(jget(x, "storageClass"), "") == "static";
         const auto t = this->type_of(jget(x, "type"), scope)?;
         if (t.k != .Func) { return this->skip(qn, cx_why(t)); }
+        const auto pk = jget(x, "inner");
+        auto pn = 0;
+        for (auto i : 0..jlen(pk)) {
+            const auto p = jat(pk, i);
+            if (jstr(jget(p, "kind"), "") != "ParmVarDecl" || pn >= t.params.len) { continue; }
+            t.params.items[pn].name = jstr(jget(p, "name"), "");
+            t.params.items[pn].def = jlen(jget(p, "inner")) > 0 || jbool(jget(p, "hasDefaultArg"), false);
+            pn += 1;
+        }
         if (kind == "CXXDestructorDecl") {
             const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::~dtor"])?)?;
             d.cx_meth = true;
@@ -1063,13 +1072,13 @@ struct CxWalk {
         d.cx_rec = r;
         d.cx_self = r.qn;
         d.cx_mname = name;
+        d.cx_cname = name;
         d.cxx = qn;
         d.ty = t;
         d.is_static = stat;
         d.cx_deleted = deleted;
         d.cx_implicit = implicit;
         if (jbool(jget(x, "pure"), false)) { d.cx_assign = false; }
-        if (str_starts_with(name, "operator") && (name.len == 8 || !cb_ident_char(name[8]))) { d.reason = "operator functions are not bound yet"; }
         r.meths.push(d)?;
     }
 
@@ -1358,18 +1367,24 @@ struct CxWalk {
         }
         match x.k {
             .Int => {
+                if (x.plain && x.width == 8) { return "u8"; }
                 if (x.signed) { return str_concat(this->a, ["i", cb_num(this->a, CVal{ .v = x.width })?]); }
                 return str_concat(this->a, ["u", cb_num(this->a, CVal{ .v = x.width })?]);
             }
             .Float => { return str_concat(this->a, ["f", cb_num(this->a, CVal{ .v = x.width })?]); }
             .Bool => { return "bool"; }
             .Ptr => {
-                if (x.ref) { return ""; }
                 const auto e = this->tok(x.elem)?;
                 if (e.len == 0) { return ""; }
                 return str_concat(this->a, [e, "p"]);
             }
-            .Named => { return x.rec.name; }
+            .Array => {
+                const auto e = this->tok(x.elem)?;
+                if (e.len == 0) { return ""; }
+                return str_concat(this->a, [e, "a"]);
+            }
+            .Void => { return "void"; }
+            .Named => { if (x.rec != null) { return x.rec.name; } return x.name; }
             .Func => { return "fn"; }
         }
         return "";
@@ -1889,7 +1904,6 @@ struct CxWalk {
         auto label = qn;
         if (c) { label = name; }
         if (str_starts_with(name, "operator\"\"")) { return this->skip(label, "user-defined literals are not bound"); }
-        if (str_starts_with(name, "operator") && (name.len == 8 || !cb_ident_char(name[8]))) { return this->skip(label, "operator functions are not bound yet"); }
         const auto t = this->type_of(jget(x, "type"), scope)?;
         if (t.k == .Bad) { return this->skip(label, t.name); }
         if (t.k != .Func) { return this->skip(label, CX_TODO); }
@@ -1900,11 +1914,13 @@ struct CxWalk {
             if (jstr(jget(p, "kind"), "") != "ParmVarDecl" || n >= t.params.len) { continue; }
             t.params.items[n].name = jstr(jget(p, "name"), "");
             t.params.items[n].ty = this->type_of(jget(p, "type"), scope)?;
+            t.params.items[n].def = jlen(jget(p, "inner")) > 0 || jbool(jget(p, "hasDefaultArg"), false);
             n += 1;
         }
         const auto d = this->decl(.Func, label)?;
         d.ty = t;
         d.cxx = qn;
+        if (cx_is_operator(name)) { d.cx_mname = name; }
         d.is_extern = c && !jbool(jget(x, "inline"), false) && !jbool(jget(x, "constexpr"), false) && jstr(jget(x, "storageClass"), "") != "static" && cx_cshape(this, t);
         if (t.varargs && !d.is_extern) { d.reason = "variadic C++ functions are not bound yet"; }
     }
@@ -2242,7 +2258,18 @@ str cx_leaf(str qn) {
     auto cargs = s.cas;
     if (inst) {
         if (zargs.len > 0) { zargs = str_concat(a, ["this, ", zargs])?; } else { zargs = "this"; }
-        cargs = str_concat(a, ["__self->", d.cx_mname, "(", cargs, ")"])?;
+    }
+    if (d.cx_conv) {
+        cargs = str_concat(a, ["static_cast<", s.cret, ">(*__self)"])?;
+    } else if (d.cx_freeop) {
+        auto ca2 = str_concat(a, ["*__self"])?;
+        if (s.cas.len > 0) { ca2 = str_concat(a, [ca2, ", ", s.cas])?; }
+        cargs = str_concat(a, [d.cx_opname, "(", ca2, ")"])?;
+    } else if (inst) {
+        auto cm = d.cx_mname;
+        if (d.cx_opname.len > 0) { cm = d.cx_opname; }
+        if (d.cx_cname.len > 0) { cm = d.cx_cname; }
+        cargs = str_concat(a, ["__self->", cm, "(", cargs, ")"])?;
     } else if (meth) {
         cargs = str_concat(a, [selfc, "::", d.cx_mname, "(", cargs, ")"])?;
     } else {
@@ -2295,7 +2322,7 @@ str cx_leaf(str qn) {
     auto csep = s.zas;
     if (s.zas.len > 0) { csep = str_concat(a, [", ", s.zas])?; }
     auto zt = List<u8>::init(a);
-    if (d.cx_zctor || d.cx_dtor || (d.cx_ctor && (d.cx_copy || d.cx_move))) {
+    if (d.cx_zctor || d.cx_dtor || d.cx_inject || (d.cx_ctor && (d.cx_copy || d.cx_move))) {
         sprint(&zt, "{xdecl.slice()}")?;
     } else if (d.cx_make) {
         sprint(&zt, "{xdecl.slice()}\nstatic {selfz} {path}({s.zps}) {{ {selfz} __r; {sn}(&__r{csep}); return __r; }}")?;
@@ -2319,7 +2346,7 @@ str cx_leaf(str qn) {
     } else {
         sprint(&zt, "{xdecl.slice()}\n{stat}{s.zret} {path}({s.zps}) {{ return {sn}({zargs}); }}")?;
     }
-    if (meth && d.cx_const && !d.cx_zctor && !d.cx_dtor) {
+    if (meth && d.cx_const && !d.cx_zctor && !d.cx_dtor && !d.cx_inject) {
         const auto t = zt.slice();
         const auto k = str_find(t, ") {{");
         if (k >= 0) {
@@ -2347,10 +2374,12 @@ str cx_leaf(str qn) {
         def = cx_spell(a, f.elem, str_concat(a, [sn, "(", full, ")"])?)?;
     }
     auto fp = "";
-    if (inst) {
-        fp = cx_spell(a, f, str_concat(a, ["(", selfc, "::*)"])?)?;
+    auto cf = f;
+    if (d.cx_cast != null) { cf = d.cx_cast; }
+    if (inst && !d.cx_freeop) {
+        fp = cx_spell(a, cf, str_concat(a, ["(", selfc, "::*)"])?)?;
     } else {
-        fp = cx_spell(a, f, "(*)")?;
+        fp = cx_spell(a, cf, "(*)")?;
     }
     sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {def} {{\n")?;
     if (d.cx_ctor) {
@@ -2383,38 +2412,324 @@ str cx_leaf(str qn) {
     e.c.append("}\n#endif\n")?;
 }
 
-!void cx_classify(CxWalk* w) {
-    for (auto r : w.rlist.slice()) {
-        auto pc = 0;
-        for (auto d : r.meths.slice()) {
-            if (d.cx_ctor && !d.cx_copy && !d.cx_move && !d.cx_deleted && d.reason.len == 0 && d.ty.params.len > 0) { pc += 1; }
-        }
-        auto seen = Map<bool>::init(w.a);
-        for (auto d : r.meths.slice()) {
-            if (d.cx_dtor || d.cx_del || d.cx_assign) { continue; }
-            if (d.cx_ctor) {
-                if (d.cx_deleted) { d.reason = "deleted constructor"; continue; }
-                if (d.cx_copy || d.cx_move) { continue; }
-                if (d.reason.len > 0) { continue; }
-                if (r.value && pc == 1 && d.ty.params.len > 0) {
-                    d.cx_zctor = true;
-                    d.cx_mname = r.d.name;
-                } else if (r.value) {
-                    d.cx_make = true;
-                    d.cx_mname = "make";
-                } else {
-                    d.cx_create = true;
-                    d.cx_mname = "create";
-                }
-                if (seen.has(d.cx_mname)) { d.reason = "overloads are not bound yet"; }
-                seen.put(d.cx_mname, true)?;
-            } else {
-                if (d.cx_deleted) { d.reason = "deleted function"; continue; }
-                if (d.reason.len > 0) { continue; }
-                if (seen.has(d.cx_mname)) { d.reason = "overloads are not bound yet"; }
-                seen.put(d.cx_mname, true)?;
+str cx_last(str qn) {
+    const auto k = str_rfind(qn, "::");
+    if (k < 0) { return qn; }
+    return qn[k + 2..];
+}
+
+str cx_scope(str qn) {
+    const auto k = str_rfind(qn, "::");
+    if (k < 0) { return ""; }
+    return qn[0..k + 2];
+}
+
+!str cx_join(Allocator a, str scope, str name) {
+    if (scope.len == 0) { return name; }
+    return str_concat(a, [scope, name])?;
+}
+
+!str cx_ptokens(CxWalk* w, CType* f) {
+    if (f.params.len == 0) { return "void"; }
+    auto b = List<u8>::init(w.a);
+    for (auto [i, p] : f.params.slice()) {
+        if (i > 0) { sprint(&b, "_")?; }
+        const auto t = w.tok(p.ty)?;
+        if (t.len == 0) { return ""; }
+        sprint(&b, "{t}")?;
+    }
+    return b.slice();
+}
+
+i64 cx_required(CType* f) {
+    auto n = 0;
+    for (auto p : f.params.slice()) { if (!p.def) { n += 1; } }
+    return n;
+}
+
+str cx_oplong(str sym) {
+    if (sym == "+") { return "op_add"; }
+    if (sym == "-") { return "op_sub"; }
+    if (sym == "*") { return "op_mul"; }
+    if (sym == "/") { return "op_div"; }
+    if (sym == "%") { return "op_mod"; }
+    if (sym == "==") { return "op_eq"; }
+    if (sym == "!=") { return "op_ne"; }
+    if (sym == "<") { return "op_lt"; }
+    if (sym == "<=") { return "op_le"; }
+    if (sym == ">") { return "op_gt"; }
+    if (sym == ">=") { return "op_ge"; }
+    return "op";
+}
+
+bool cx_isop(str sym) {
+    for (auto s : ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">="]) {
+        if (sym == s) { return true; }
+    }
+    return false;
+}
+
+bool cx_is_operator(str n) {
+    return str_starts_with(n, "operator") && (n.len == 8 || !cb_ident_char(n[8]));
+}
+
+!bool cx_op(CxWalk* w, CDecl* d) {
+    const auto n = d.cx_mname;
+    if (str_starts_with(n, "operator\"\"")) { d.reason = "user-defined literals are not supported"; return false; }
+    auto sym = "";
+    if (n.len > 8) { sym = str_trim(n[8..]); }
+    if (sym == "->" || sym == "->*" || sym == "," || sym == "&&" || sym == "||" || sym == "<=>" || sym == "new" || sym == "new[]" || sym == "delete" || sym == "delete[]" || sym == "co_await" || sym == "=") {
+        d.reason = str_concat(w.a, ["operator ", sym, " is not supported"])?;
+        return false;
+    }
+    if (sym.len > 0 && (cb_ident_char(sym[0]) || sym[0] == ':')) {
+        const auto tk = w.tok(d.ty.elem)?;
+        if (tk.len == 0) { d.reason = "conversion to an unsupported type"; return false; }
+        d.cx_conv = true;
+        d.cx_mname = str_concat(w.a, ["to_", tk])?;
+        return true;
+    }
+    if (sym == "[]") { d.cx_mname = "op_index"; d.cx_opname = "operator[]"; return true; }
+    if (sym == "()") { d.cx_mname = "op_call"; d.cx_opname = "operator()"; return true; }
+    if (sym == "<<" || sym == ">>") {
+        if (sym == "<<") { d.cx_mname = "op_shl"; } else { d.cx_mname = "op_shr"; }
+        d.cx_opname = str_concat(w.a, ["operator", sym])?;
+        return true;
+    }
+    if (sym == "!") { d.cx_mname = "op_not"; d.cx_opname = "operator!"; return true; }
+    if (sym == "++" || sym == "--") {
+        if (d.ty.params.len > 0) { d.reason = "postfix operator is not supported"; return false; }
+        if (sym == "++") { d.cx_mname = "op_inc"; } else { d.cx_mname = "op_dec"; }
+        d.cx_opname = str_concat(w.a, ["operator", sym])?;
+        return true;
+    }
+    if (sym == "+=" || sym == "-=" || sym == "*=" || sym == "/=" || sym == "%=" || sym == "<<=" || sym == ">>=" || sym == "&=" || sym == "|=" || sym == "^=") {
+        const auto base = sym[0..sym.len - 1];
+        d.cx_mname = str_concat(w.a, [cx_oplong(base), "_assign"])?;
+        d.cx_opname = str_concat(w.a, ["operator", sym])?;
+        return true;
+    }
+    if (cx_isop(sym)) {
+        d.cx_opname = str_concat(w.a, ["operator", sym])?;
+        return true;
+    }
+    d.reason = str_concat(w.a, ["operator ", sym, " is not supported"])?;
+    return false;
+}
+
+!CType* cx_trunc(CxWalk* w, CType* f, i64 k) {
+    const auto t = w.a.create<CType>()?;
+    t.k = .Func;
+    t.elem = f.elem;
+    t.konst = f.konst;
+    t.vol = f.vol;
+    t.noexc = f.noexc;
+    t.ref = f.ref;
+    t.rvalue = f.rvalue;
+    t.params = List<CField>::init(w.a);
+    for (auto i : 0..k) { t.params.push(f.params.get(i))?; }
+    return t;
+}
+
+!CType* cx_drop1(CxWalk* w, CType* f) {
+    const auto t = w.a.create<CType>()?;
+    t.k = .Func;
+    t.elem = f.elem;
+    t.konst = f.konst;
+    t.vol = f.vol;
+    t.noexc = f.noexc;
+    t.ref = f.ref;
+    t.rvalue = f.rvalue;
+    t.params = List<CField>::init(w.a);
+    for (auto i : 1..f.params.len) { t.params.push(f.params.get(i))?; }
+    return t;
+}
+
+!bool cx_freeop(CxWalk* w, CDecl* d) {
+    const auto f = d.ty;
+    if (f.params.len == 0) { d.reason = "operator without parameters"; return false; }
+    auto rt = f.params.get(0).ty;
+    if (rt.k == .Ptr && rt.ref) { rt = rt.elem; }
+    const auto x = w.expand(rt);
+    if (x.k != .Named || x.rec == null || x.rec.cx == null || !x.rec.cx.value) {
+        d.reason = "operator receiver is not a bound value type";
+        return false;
+    }
+    d.cx_meth = true;
+    d.cx_rec = x.rec.cx;
+    d.cx_self = x.rec.cx.qn;
+    d.cx_const = true;
+    d.cx_freeop = true;
+    d.cx_cast = f;
+    d.ty = cx_drop1(w, f)?;
+    x.rec.cx.meths.push(d)?;
+    return true;
+}
+
+!void cx_names(CxWalk* w) {
+    auto groups = Map<List<CDecl*>*>::init(w.a);
+    auto order = List<str>::init(w.a);
+    for (auto d : w.decls.slice()) {
+        if (d.k != .Func || d.cx_var) { continue; }
+        if (d.cx_dtor || d.cx_del || d.cx_assign) { continue; }
+        if (d.cx_copy || d.cx_move) { continue; }
+        if (d.cx_deleted) { if (d.cx_ctor) { d.reason = "deleted constructor"; } else { d.reason = "deleted function"; } continue; }
+        if (cx_is_operator(d.cx_mname)) {
+            if (!cx_op(w, d)?) { continue; }
+            if (!d.cx_meth) {
+                if (!cx_freeop(w, d)?) { continue; }
             }
         }
+        if (!groups.has(d.cxx)) {
+            order.push(d.cxx)?;
+            const auto nl = w.a.create<List<CDecl*>>()?;
+            *nl = List<CDecl*>::init(w.a);
+            groups.put(d.cxx, nl)?;
+        }
+        const auto gl = groups.get(d.cxx)?;
+        gl.push(d)?;
+    }
+    for (auto key : order.slice()) {
+        const auto g = groups.get(key)?;
+        const auto first = g.get(0);
+        const auto isctor = first.cx_ctor;
+        auto live = List<CDecl*>::init(w.a);
+        for (auto d : g.slice()) { if (d.reason.len == 0 && !d.cx_deleted) { live.push(d)?; } }
+        if (live.len == 0) { continue; }
+        auto pc = 0;
+        for (auto d : live.slice()) { if (d.cx_ctor && d.ty.params.len > 0) { pc += 1; } }
+        for (auto d : live.slice()) {
+            const auto vr = d.cx_rec != null && d.cx_rec.value;
+            if (isctor) {
+                if (vr) { d.cx_mname = "make"; d.cx_make = true; } else { d.cx_mname = "create"; d.cx_create = true; }
+            } else if (d.cx_opname.len > 0) {
+                const auto sym = str_trim(d.cx_opname[8..]);
+                if (cx_isop(sym)) {
+                    if (vr) { d.cx_mname = d.cx_opname; } else { d.cx_mname = cx_oplong(sym); }
+                }
+            } else if (d.cx_conv) {
+            } else if (d.cx_mname.len == 0) {
+                d.cx_mname = cx_last(d.cxx);
+            }
+        }
+        if (isctor && first.cx_rec != null && first.cx_rec.value && pc == 1) {
+            for (auto d : live.slice()) {
+                if (d.ty.params.len > 0) { d.cx_zctor = true; d.cx_mname = first.cx_rec.d.name; }
+            }
+        }
+        auto nm = 0;
+        for (auto d : live.slice()) { if (!d.cx_zctor) { nm += 1; } }
+        if (nm > 1) {
+            auto opseen = false;
+            for (auto d : live.slice()) {
+                if (d.cx_zctor) { continue; }
+                if (d.cx_opname.len > 0 && d.cx_rec != null && d.cx_rec.value && cx_isop(str_trim(d.cx_opname[8..]))) {
+                    if (opseen) { d.reason = "operator overloads are not supported"; }
+                    opseen = true;
+                    continue;
+                }
+                const auto tk = cx_ptokens(w, d.ty)?;
+                if (tk.len == 0) { d.reason = "overload parameter type is not supported"; continue; }
+                d.cx_mname = str_concat(w.a, [d.cx_mname, "_", tk])?;
+            }
+        }
+        for (auto [i, x] : live.slice()) {
+            if (x.reason.len > 0 || !x.cx_const) { continue; }
+            for (auto [j, y] : live.slice()) {
+                if (i == j || y.reason.len > 0 || y.cx_const) { continue; }
+                if (x.cx_mname == y.cx_mname) {
+                    x.reason = "same parameters as the non-const overload";
+                    x.cxx = str_concat(w.a, [x.cxx, " const"])?;
+                    break;
+                }
+            }
+        }
+        auto extra = List<CDecl*>::init(w.a);
+        for (auto d : live.slice()) {
+            if (d.reason.len > 0) { continue; }
+            const auto full = d.ty.params.len;
+            const auto req = cx_required(d.ty);
+            if (req >= full) { continue; }
+            auto cast = d.ty;
+            if (d.cx_cast != null) { cast = d.cx_cast; }
+            for (auto k : req..full) {
+                const auto v = w.decl(.Func, "")?;
+                const auto seq = v.seq;
+                *v = *d;
+                v.seq = seq;
+                v.cx_cast = cast;
+                v.cx_over = true;
+                v.cx_k = k;
+                v.cx_zctor = false;
+                v.cx_inject = false;
+                v.reason = "";
+                v.ty = cx_trunc(w, cast, k)?;
+                const auto ks = cb_num(w.a, CVal{ .v = k })?;
+                if (d.cx_zctor) {
+                    v.cx_make = true;
+                    v.cx_mname = str_concat(w.a, ["make_", ks])?;
+                } else {
+                    v.cx_mname = str_concat(w.a, [d.cx_mname, "_", ks])?;
+                }
+                if (!v.cx_meth) { v.name = cx_join(w.a, cx_scope(d.name), v.cx_mname)?; }
+                extra.push(v)?;
+            }
+        }
+        for (auto d : live.slice()) {
+            if (d.cx_meth) {
+            } else {
+                d.name = cx_join(w.a, cx_scope(d.name), d.cx_mname)?;
+            }
+        }
+        for (auto v : extra.slice()) {
+            if (!v.cx_meth) { v.name = cx_join(w.a, cx_scope(v.name), v.cx_mname)?; }
+        }
+        auto used = Map<CDecl*>::init(w.a);
+        auto all = List<CDecl*>::init(w.a);
+        for (auto d : live.slice()) { all.push(d)?; }
+        for (auto v : extra.slice()) { all.push(v)?; }
+        for (auto d : all.slice()) {
+            if (d.reason.len > 0) { continue; }
+            auto p = "";
+            if (d.cx_meth && d.cx_rec != null) { p = str_concat(w.a, [d.cx_rec.d.name, "::", d.cx_mname])?; } else { p = d.name; }
+            if (used.has(p)) {
+                const auto o = used.get(p)?;
+                if (o.cxx != d.cxx || o.cx_k != d.cx_k) {
+                    o.reason = "name clash";
+                    d.reason = "name clash";
+                }
+            } else {
+                used.put(p, d)?;
+            }
+        }
+        for (auto v : extra.slice()) { w.decls.push(v)?; }
+    }
+    for (auto r : w.rlist.slice()) {
+        if (!r.value) { continue; }
+        for (auto d : r.meths.slice()) {
+            if (d.reason.len > 0) { continue; }
+            if (d.cx_opname.len > 0 && cx_isop(str_trim(d.cx_opname[8..]))) { d.cx_inject = true; }
+        }
+    }
+}
+
+!void cx_inject(CEmit* e, CDecl* d, List<u8>* body) {
+    const auto a = e.a;
+    const auto s = cx_sig(e, d.ty)?;
+    if (s.why.len > 0 || e.why.len > 0) { return; }
+    auto gb = List<u8>::init(a);
+    sprint(&gb, "zark_cxx_{e.hid}_{d.seq}")?;
+    const auto g = gb.slice();
+    auto args = s.zas;
+    if (args.len > 0) { args = str_concat(a, ["this, ", args])?; } else { args = "this"; }
+    auto cs = "";
+    if (d.cx_const) { cs = " const"; }
+    if (s.none) {
+        sprint(body, "{d.cx_mname}({s.zps}){cs} {{ {g}({args}); }} ")?;
+    } else if (s.out) {
+        sprint(body, "{s.zret} {d.cx_mname}({s.zps}){cs} {{ {s.zret} __r; {g}({args}, &__r); return __r; }} ")?;
+    } else {
+        sprint(body, "{s.zret} {d.cx_mname}({s.zps}){cs} {{ return {g}({args}); }} ")?;
     }
 }
 
@@ -2527,7 +2842,13 @@ str cx_leaf(str qn) {
     }
     e.why = "";
     for (auto md : r.meths.slice()) {
-        if (!md.cx_zctor || md.reason.len > 0) { continue; }
+        if (md.reason.len > 0) { continue; }
+        if (md.cx_inject) {
+            e.why = "";
+            cx_inject(e, md, &body)?;
+            continue;
+        }
+        if (!md.cx_zctor) { continue; }
         e.why = "";
         const auto sg = cx_sig(e, md.ty)?;
         if (sg.why.len > 0 || e.why.len > 0) { continue; }
@@ -2569,7 +2890,15 @@ str cx_leaf(str qn) {
     for (auto d : w.decls.slice()) { if (d.k != .Func && d.k != .Var) { order.push(d)?; } }
     for (auto d : w.decls.slice()) { if (d.k == .Func) { order.push(d)?; } }
     for (auto d : w.decls.slice()) { if (d.k == .Var) { order.push(d)?; } }
-    e.run(order)?;
+    auto uniq = List<CDecl*>::init(a);
+    auto seen = Map<bool>::init(a);
+    for (auto d : order.slice()) {
+        const auto sk = cb_num(a, CVal{ .v = d.seq })?;
+        if (seen.has(sk)) { continue; }
+        seen.put(sk, true)?;
+        uniq.push(d)?;
+    }
+    e.run(uniq)?;
     return e;
 }
 
@@ -2720,7 +3049,7 @@ str cx_leaf(str qn) {
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
-    cx_classify(&w)?;
+    cx_names(&w)?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
@@ -2732,9 +3061,6 @@ str cx_leaf(str qn) {
     }
     w.layouts(header, from_dir, cflags)?;
     for (auto r : w.rlist.slice()) { w.flat(r)?; }
-    auto count = Map<i64>::init(a);
-    for (auto d : w.decls.slice()) { if (d.k == .Func && !d.cx_meth) { count.put(d.cxx, count.get_or(d.cxx, 0) + 1)?; } }
-    for (auto d : w.decls.slice()) { if (d.k == .Func && !d.cx_meth && count.get_or(d.cxx, 0) > 1) { d.reason = "overloads are not bound yet"; } }
     auto deps = List<str>::init(a);
     auto from = List<str>::init(a);
     for (auto d : dep_files(a, dtext)?) {

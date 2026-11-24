@@ -1,0 +1,15 @@
+import "ops.hpp" as o;
+
+!void main() {
+    const auto a = c_allocator();
+    auto x = o::op_V(1.0, 2.0);
+    auto y = o::op_V(3.0, 4.0);
+    const auto z = x + y;
+    println(z.x, z.y, x == y, x != y, x < y, (x - y).x);
+    auto b = o::op_Box::create(a, 5)?;
+    defer b.deinit();
+    println(b.get().op_index(2), b.get().to_bool(), b.get().op_eq(b.get()));
+    _ = b.get().op_add_assign(3);
+    println(b.get().n);
+    println(o::op::with_default_1(3), o::op::last_default());
+}

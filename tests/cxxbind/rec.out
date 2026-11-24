@@ -25,6 +25,8 @@ static i32 Outer::g() { return zark_cxx_3543bc795928e785_10(); }
 extern void zark_cxx_3543bc795928e785_11(Outer* __self);
 static !Outer_own Outer::create(Allocator __a) { const auto __p = __a.create<Outer>()?; zark_cxx_3543bc795928e785_11(__p); return Outer_own::init(__p, sizeof(Outer), __a); }
 extern void zark_cxx_3543bc795928e785_12(Outer* __self);
+extern i32 zark_cxx_3543bc795928e785_13(Outer* __self);
+i32 Outer::to_i32() { return zark_cxx_3543bc795928e785_13(this); }
 extern i32* zark_cxx_3543bc795928e785_14();
 static i32* Outer::count_ptr() { return zark_cxx_3543bc795928e785_14(); }
 extern void zark_cxx_3543bc795928e785_17(Outer* __self, Outer* a0);

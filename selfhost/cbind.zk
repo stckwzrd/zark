@@ -201,7 +201,7 @@ struct CLexer {
 
 enum CK { Int, Float, Bool, Void, Ptr, Array, Func, Named, Bad }
 
-struct CField { str name; CType* ty; bool bits; i64 at; i64 from; i64 to; }
+struct CField { str name; CType* ty; bool bits; bool def; i64 at; i64 from; i64 to; }
 
 struct CType {
     CK k;
@@ -272,6 +272,14 @@ struct CDecl {
     bool cx_del;
     bool cx_assign;
     bool cx_amove;
+    bool cx_over;
+    bool cx_freeop;
+    bool cx_inject;
+    bool cx_conv;
+    i64 cx_k;
+    CType* cx_cast;
+    str cx_opname;
+    str cx_cname;
     bool cx_zctor;
     bool cx_make;
     bool cx_create;

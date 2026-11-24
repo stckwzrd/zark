@@ -1,5 +1,5 @@
-skipped operator|: operator functions are not bound yet
-skipped operator!: operator functions are not bound yet
 skipped operator""_kb: user-defined literals are not bound
-skipped n::operator+: operator functions are not bound yet
-skipped operator new: operator functions are not bound yet
+skipped operator|: operator | is not supported
+skipped operator!: operator receiver is not a bound value type
+skipped n::operator+: operator receiver is not a bound value type
+skipped operator new: operator new is not supported
