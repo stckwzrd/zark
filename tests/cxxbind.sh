@@ -120,9 +120,9 @@ if command -v python3 >/dev/null; then
     python3 - "$ZARK" zark2 <<'EOF' || fail "import_compiler_change: cannot patch the compiler"
 import sys
 b = open(sys.argv[1], "rb").read()
-old = b'CXXBIND_SRC = embed("cxxbind.zk")'
+old = b'const auto CX_TODO = '
 assert b.count(old) == 1, b.count(old)
-open(sys.argv[2], "wb").write(b.replace(old, b'CXXBIND_SRC = embed("cxxbind.zz")'))
+open(sys.argv[2], "wb").write(b.replace(old, b'const auto CX_TODX = '))
 EOF
     chmod +x zark2
     [ "$(uname -s)" = Darwin ] && codesign -f -s - zark2 2> /dev/null
@@ -163,5 +163,26 @@ printf '#include "cx.h"\n' > hdr/cx.hpp
 printf 'import "cx.hpp" as cx;\nvoid main() { println("{cx::n::f()}"); }\n' > hdr/good.zk
 out=$(cd hdr && "$ZARK" run good.zk 2>&1) || fail "import_h_wrapper: $out"
 [ "$out" = 7 ] || fail "import_h_wrapper: got: $out"
+
+mkdir -p qd/src/lib
+printf 'constexpr int cfg = 3;\n' > qd/src/cfg.hpp
+printf '#include "cfg.hpp"\ninline int g() { return cfg * 2; }\n' > qd/src/lib/lib.hpp
+printf 'import "lib/lib.hpp" as lib;\nvoid main() { println("{lib::g()}"); }\n' > qd/src/main.zk
+out=$(cd qd && "$ZARK" run src/main.zk 2>&1) || fail "import_from_dir: $out"
+[ "$out" = 6 ] || fail "import_from_dir: got: $out"
+mkdir -p qc/src/lib
+printf '#define CFG 4\n' > qc/src/cfg.h
+printf '#include "cfg.h"\nstatic inline int g(void) { return CFG * 2; }\n' > qc/src/lib/lib.h
+printf 'import "lib/lib.h" as lib;\nvoid main() { println("{lib::g()}"); }\n' > qc/src/main.zk
+out=$(cd qc && "$ZARK" run src/main.zk 2>&1) || fail "import_from_dir c: $out"
+[ "$out" = 8 ] || fail "import_from_dir c: got: $out"
+
+mkdir -p two
+printf 'namespace geo { inline int a() { return 1; } }\n' > two/a.hpp
+printf 'namespace geo { inline int b() { return 2; } }\n' > two/b.hpp
+printf 'import "a.hpp";\nimport "b.hpp";\nvoid main() {}\n' > two/m.zk
+if out=$(cd two && "$ZARK" run m.zk 2>&1); then fail "import_two_ns: expected failure"; fi
+case "$out" in *"from a header they both include"*) fail "import_two_ns: C message for C++ headers: $out" ;; esac
+case "$out" in *"'a.hpp' and 'b.hpp' both declare 'geo'"*"import them with 'as'"*) ;; *) fail "import_two_ns: got: $out" ;; esac
 
 echo "ok   cxxbind ($names)"
