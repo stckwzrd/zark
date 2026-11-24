@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes fmt"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -118,6 +118,11 @@ for f in "" --llvm -O; do
 done
 out=$(cd interop && ZARK_JOBS=1 "$ZARK" run std.zk std.cpp 2>&1) || fail "interop std jobs=1: $out"
 [ "$out" = "$(cat interop/std.out)" ] || fail "interop std jobs=1: got: $out"
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f fmt.zk fmt.cpp 2>&1) || fail "interop fmt $f: $out"
+    [ "$out" = "$(cat interop/fmt.out)" ] || fail "interop fmt $f: got: $out"
+done
 
 mkdir -p neg
 printf 'import "../methods.zk";\n!void main() { const auto a = c_allocator(); auto n = geo_NT::create(a, 1)?; println(n.get().get()); }\n' > neg/leak.zk
