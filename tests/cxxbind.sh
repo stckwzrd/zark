@@ -87,7 +87,7 @@ for f in "" --llvm -O; do
 done
 
 (cd interop && "$ZARK" cbind value.hpp -o value_b.zk --inline-c value_b.cpp 2> /dev/null) || fail "interop value: cbind exit $?"
-grep -E '^extern "C" ([^(]*geo::|.*[(,] *(const )?geo::[A-Za-z0-9_]+ +[a-z_])' interop/value_b.cpp && fail "interop value: a class crosses a shim by value"
+grep -E '^extern "C" ((const )?geo::[A-Za-z0-9_]+ zark|.*[(,] *(const )?geo::[A-Za-z0-9_]+ +[a-z_])' interop/value_b.cpp && fail "interop value: a class crosses a shim by value"
 grep -E '^extern .*geo_(V|Vec|Priv|NP|TP|Shape|Circle|A16|M1|M2|MM|Bits|An)[^*A-Za-z0-9_]' interop/value_b.zk && fail "interop value: a struct crosses a shim by value"
 for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f value.zk value.cpp value_b.cpp 2>&1) || fail "interop value $f: $out"

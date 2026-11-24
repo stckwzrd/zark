@@ -22,7 +22,10 @@ const auto u_V0 = 3;
 const auto u_V1 = 4;
 extern i16 zark_cxx_96e9366db8d97169_18(u_V v);
 i16 getv(u_V v) { return zark_cxx_96e9366db8d97169_18(v); }
+type r_S_In = i32;
+const auto r_S_I0 = 0;
+struct r_S { u8[1] __pad0; }
 type Cb = i32;
 const auto CB0 = 7;
-extern i32 zark_cxx_96e9366db8d97169_23(Cb c);
-i32 getcb(Cb c) { return zark_cxx_96e9366db8d97169_23(c); }
+extern i32 zark_cxx_96e9366db8d97169_25(Cb c);
+i32 getcb(Cb c) { return zark_cxx_96e9366db8d97169_25(c); }

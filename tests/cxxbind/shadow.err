@@ -1,9 +1,0 @@
-skipped lib::Id: C++ classes are not bound yet
-skipped lib::Handle: C++ classes are not bound yet
-skipped use_id: uses unbound type 'lib::Id'
-skipped close_h: uses unbound type 'lib::Handle'
-skipped lib::Alias: uses unbound type 'lib::Id'
-skipped B: C++ classes are not bound yet
-skipped D: C++ classes are not bound yet
-skipped P: C++ classes are not bound yet
-skipped Q: C++ classes are not bound yet

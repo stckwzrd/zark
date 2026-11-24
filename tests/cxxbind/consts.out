@@ -11,6 +11,7 @@ const auto cfg_Twice = 6;
 const auto cfg_inner_Port = 8080;
 const auto Limits_Max = 7;
 const auto Limits_Min = -7;
+struct Limits { i32 v; }
 type Count = i32;
 type Real = f64;
 type Byte = u8;

@@ -19,13 +19,13 @@ static geo_W geo::make(i32 k) { geo_W __r; zark_cxx_H_12(k, &__r); return __r; }
 extern void zark_cxx_H_13(geo_V* v);
 static void geo::put(geo_V v) { zark_cxx_H_13(&v); }
 struct geo_NT { i32 n; }
-extern i32 zark_cxx_H_18(geo_NT* x);
-static i32 geo::nt(geo_NT* x) { return zark_cxx_H_18(x); }
 extern i32 zark_cxx_H_19(geo_NT* x);
-static i32 geo::ntp(geo_NT* x) { return zark_cxx_H_19(x); }
+static i32 geo::nt(geo_NT* x) { return zark_cxx_H_19(x); }
+extern i32 zark_cxx_H_20(geo_NT* x);
+static i32 geo::ntp(geo_NT* x) { return zark_cxx_H_20(x); }
 struct geo_Fwd { }
-extern geo_Fwd* zark_cxx_H_21();
-static geo_Fwd* geo::getfwd() { return zark_cxx_H_21(); }
-extern void zark_cxx_H_23(geo_V* a, geo_V* b, geo_V* __r);
-geo_V cmid(geo_V a, geo_V b) { geo_V __r; zark_cxx_H_23(&a, &b, &__r); return __r; }
+extern geo_Fwd* zark_cxx_H_22();
+static geo_Fwd* geo::getfwd() { return zark_cxx_H_22(); }
+extern void zark_cxx_H_24(geo_V* a, geo_V* b, geo_V* __r);
+geo_V cmid(geo_V a, geo_V b) { geo_V __r; zark_cxx_H_24(&a, &b, &__r); return __r; }
 extern i32 cptr(geo_V* a);

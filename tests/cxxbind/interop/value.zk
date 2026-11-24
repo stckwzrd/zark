@@ -68,7 +68,13 @@ void main() {
     a.v = 2;
     println("{vb::geo::check(&mm, &tp, &c, &bits, &an, &p, &a)}");
 
-    const auto s = vb::geo::add(vb::geo_V{ .x = 1.0, .y = 2.0 }, vb::geo_V{ .x = 3.0, .y = 4.5 });
+    vb::geo_V u1;
+    u1.x = 1.0;
+    u1.y = 2.0;
+    vb::geo_V u2;
+    u2.x = 3.0;
+    u2.y = 4.5;
+    const auto s = vb::geo::add(u1, u2);
     const auto t = vb::geo::scale(s, 2.0);
     vb::geo_V d;
     println("{s.x} {s.y} {t.x} {t.y} {vb::geo::len2(t)} {d.x} {d.y}");

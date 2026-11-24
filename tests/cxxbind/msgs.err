@@ -8,8 +8,5 @@ skipped m::ld: type 'long double' is not supported yet
 skipped m::i128: type '__int128' is not supported yet
 skipped m::u128: type '__int128' is not supported yet
 skipped m::np: decltype types are not supported yet
-skipped m::S: C++ classes are not bound yet
-skipped m::cls: uses unbound type 'm::S'
-skipped m::clsp: uses unbound type 'm::S'
 skipped tf: function templates are not bound yet
 skipped a::b: name clash
