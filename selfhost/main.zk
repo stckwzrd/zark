@@ -539,7 +539,7 @@ void restore_stack() {
     c_uses = List<str>::init(a);
     auto it = g.declared.iter();
     while (it.next()) {
-        if (str_starts_with(it.key(), "zark_var_")) { c_uses.push(str_concat(a, ["ZARK_USE_", it.key()[9..]])?)?; }
+        if (str_starts_with(it.key(), "zark_var_") || str_starts_with(it.key(), "zark_cxx_")) { c_uses.push(str_concat(a, ["ZARK_USE_", it.key()[9..]])?)?; }
     }
     auto needs_cxx = false;
     auto objs = compile_sources(a, cache, &sp, olevel, &needs_cxx) catch { return 1; };

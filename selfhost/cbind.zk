@@ -3048,10 +3048,12 @@ List<str> c_inline_sources = List<str>{};
 List<str> c_uses = List<str>{};
 Map<str> c_headers = Map<str>{};
 str c_version = "";
+str cx_version = "";
 const auto CBIND_SRC = embed("cbind.zk");
+const auto CXXBIND_SRC = embed("cxxbind.zk");
 
 bool is_c_header(str p) {
-    return str_ends_with(p, ".h") || str_ends_with(p, ".hpp") || str_ends_with(p, ".hh") || str_ends_with(p, ".hxx");
+    return str_ends_with(p, ".h") || cx_is_header(p);
 }
 
 str c_header_name(str p) {
@@ -3087,8 +3089,8 @@ str c_header_name(str p) {
     return "";
 }
 
-!str cb_key(Allocator a, List<str> flags, List<str> deps) {
-    auto h = fnv64(0xcbf29ce484222325 as u64, c_version);
+!str cb_key(Allocator a, str ver, List<str> flags, List<str> deps) {
+    auto h = fnv64(0xcbf29ce484222325 as u64, ver);
     for (auto f : flags.slice()) { h = fnv64(h, f); }
     for (auto d : deps.slice()) { h = fnv64(fnv64(h, d), read_file(a, d)?); }
     return cb_hex(a, h);
@@ -3134,11 +3136,11 @@ str c_header_name(str p) {
     return p;
 }
 
-!List<str> cb_probes(Allocator a, str from_dir, List<str> flags, List<str> deps, List<str> from) {
+!List<str> cb_probes(Allocator a, str from_dir, List<str> flags, List<str> deps, List<str> from, bool cxx) {
     auto raw = List<str>::init(a);
     raw.push(from_dir)?;
     for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { raw.push(f[2..])?; } }
-    raw.append(cb_sys_dirs(a, flags, false)?.slice())?;
+    raw.append(cb_sys_dirs(a, flags, cxx)?.slice())?;
     auto dirs = List<str>::init(a);
     for (auto d : raw.slice()) {
         const auto p = cb_abs_dir(a, d)?;
@@ -3162,17 +3164,16 @@ str c_header_name(str p) {
 }
 
 !str cbind_import(Allocator a, str header, str from_dir) {
-    if (!str_ends_with(header, ".h")) {
-        eprintln("error: C++ headers are not supported yet: {header}");
-        return error.CompileFailed;
-    }
+    const auto cxx = cx_is_header(header);
     if (c_headers.a.alloc_fn == null) {
         c_headers = Map<str>::init(c_allocator());
         c_inline_sources = List<str>::init(c_allocator());
     }
-    if (c_version.len == 0) {
-        const auto r = os::exec(a, ["clang", "--version"]) catch |e| {
-            eprintln("error: cannot run clang: {e}");
+    if ((cxx && cx_version.len == 0) || (!cxx && c_version.len == 0)) {
+        auto cc = "clang";
+        if (cxx) { cc = "clang++"; }
+        const auto r = os::exec(a, [cc, "--version"]) catch |e| {
+            eprintln("error: cannot run {cc}: {e}");
             return error.CompileFailed;
         };
         auto it = str_lines(r.out);
@@ -3180,13 +3181,31 @@ str c_header_name(str p) {
             eprint(r.err);
             return error.CompileFailed;
         }
-        c_version = str_concat(c_allocator(), [it.line, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?])?;
+        if (cxx) {
+            cx_version = str_concat(c_allocator(), [it.line, " c++ ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CXXBIND_SRC))?])?;
+        } else {
+            c_version = str_concat(c_allocator(), [it.line, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?])?;
+        }
+    }
+    auto ver = c_version;
+    auto ext = ".c";
+    auto kind = "C";
+    if (cxx) {
+        ver = cx_version;
+        ext = ".cpp";
+        kind = "C++";
     }
     auto flags = List<str>::init(a);
-    for (auto f : c_flags.slice()) { if (!str_starts_with(f, "-std=c++") && !str_starts_with(f, "-std=gnu++")) { flags.push(f)?; } }
+    for (auto f : c_flags.slice()) {
+        if (cxx) {
+            if (!cx_c_std(f)) { flags.push(f)?; }
+        } else if (!str_starts_with(f, "-std=c++") && !str_starts_with(f, "-std=gnu++")) {
+            flags.push(f)?;
+        }
+    }
     const auto dir = path::join(a, [c_cache, "cbind"])?;
     fs::make_dirs(dir)?;
-    auto rh = fnv64(fnv64(fnv64(0xcbf29ce484222325 as u64, c_version), header), from_dir);
+    auto rh = fnv64(fnv64(fnv64(0xcbf29ce484222325 as u64, ver), header), from_dir);
     for (auto f : flags.slice()) { rh = fnv64(rh, f); }
     const auto index = path::join(a, [dir, str_concat(a, [cb_hex(a, rh)?, ".deps"])?])?;
     const auto found = cb_find(a, header, from_dir, flags)?;
@@ -3214,20 +3233,23 @@ str c_header_name(str p) {
         for (auto d : deps.slice()) { if (!fs::is_file(d)) { fresh = false; } }
         for (auto p : probes.slice()) { if (fs::is_file(p)) { fresh = false; } }
         if (fresh) {
-            const auto k = cb_key(a, flags, deps) catch "";
+            const auto k = cb_key(a, ver, flags, deps) catch "";
             const auto zk = path::join(a, [dir, str_concat(a, [k, ".zk"])?])?;
-            const auto c = path::join(a, [dir, str_concat(a, [k, ".c"])?])?;
+            const auto c = path::join(a, [dir, str_concat(a, [k, ext])?])?;
             if (k.len > 0 && fs::is_file(zk) && cb_sum(a, cb_text(a, zk) catch "", cb_text(a, c) catch "")? == check) { key = k; }
         }
     }
     if (key.len == 0) {
-        const auto b = cbind_header(a, header, from_dir, flags) catch |e| {
-            if (found.len > 0) { return e; }
+        const auto b = cx_bind(a, header, from_dir, flags) catch |e| {
+            if (found.len > 0) {
+                if (!cxx) { eprintln("hint: if this is a C++ header, import it through a .hpp file that includes it"); }
+                return e;
+            }
             if (header[0] == '/') {
-                eprintln("error: cannot find C header '{header}'");
+                eprintln("error: cannot find {kind} header '{header}'");
                 return error.CompileFailed;
             }
-            const auto sys = cb_sys_dirs(a, flags, false) catch { return error.CompileFailed; };
+            const auto sys = cb_sys_dirs(a, flags, cxx) catch { return error.CompileFailed; };
             auto ids = List<str>::init(a);
             for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { ids.push(f[2..])?; } }
             auto sb = List<u8>::init(a);
@@ -3237,7 +3259,7 @@ str c_header_name(str p) {
                 if (fs::is_file(path::join(a, [d, header])?)) { return e; }
                 if (ids.index_of(d) < 0) { sprint(&sb, ", {d}")?; }
             }
-            eprintln("error: cannot find C header '{header}'; searched: {sb.slice()}");
+            eprintln("error: cannot find {kind} header '{header}'; searched: {sb.slice()}");
             return error.CompileFailed;
         };
         auto deps = List<str>::init(a);
@@ -3249,7 +3271,7 @@ str c_header_name(str p) {
                 from.push(cb_abs_dir(a, path::dir(b.from.get(i)))?)?;
             }
         }
-        const auto probes = cb_probes(a, from_dir, flags, deps, from) catch |e| {
+        const auto probes = cb_probes(a, from_dir, flags, deps, from, cxx) catch |e| {
             eprintln("error: cannot read the include search path of clang for {header}: {e}");
             return error.CompileFailed;
         };
@@ -3259,14 +3281,14 @@ str c_header_name(str p) {
         sprint(&lines, "{head}\n{cb_sum(a, b.zk, b.inline_c)?}\n")?;
         for (auto d : deps.slice()) { sprint(&lines, "{d}\n")?; }
         for (auto p : probes.slice()) { sprint(&lines, "?{p}\n")?; }
-        key = cb_key(a, flags, deps)?;
-        const auto c = path::join(a, [dir, str_concat(a, [key, ".c"])?])?;
+        key = cb_key(a, ver, flags, deps)?;
+        const auto c = path::join(a, [dir, str_concat(a, [key, ext])?])?;
         if (b.inline_c.len > 0) { cb_put(a, c, b.inline_c)?; } else if (!drop(c)) { return error.CompileFailed; }
         cb_put(a, path::join(a, [dir, str_concat(a, [key, ".zk"])?])?, b.zk)?;
         cb_put(a, index, lines.slice())?;
     }
     const auto zk = path::join(a, [dir, str_concat(a, [key, ".zk"])?])?;
-    const auto c = path::join(a, [dir, str_concat(a, [key, ".c"])?])?;
+    const auto c = path::join(a, [dir, str_concat(a, [key, ext])?])?;
     if (fs::is_file(c) && c_inline_sources.index_of(c) < 0) { c_inline_sources.push(c_allocator().dup(c)?)?; }
     c_headers.put(c_allocator().dup(zk)?, c_allocator().dup(header)?)?;
     return zk;

@@ -1210,7 +1210,7 @@ bool cx_scalar(CEmit* e, CType* t) {
     auto cflags = List<str>::init(a);
     for (auto f : flags.slice()) { if (!cx_c_std(f)) { cflags.push(f)?; } }
     auto argv = List<str>::init(a);
-    argv.append(["clang++", "-fsyntax-only", "-Xclang", "-skip-function-bodies", "-Xclang", "-ast-dump=json", "-MD", "-MF", dep, "-iquote", from_dir])?;
+    argv.append(["clang++", "-fsyntax-only", "-Xclang", "-skip-function-bodies", "-Xclang", "-ast-dump=json", "-H", "-MD", "-MF", dep, "-iquote", from_dir])?;
     argv.append(cflags.slice())?;
     argv.append(["-x", "c++", stub])?;
     const auto r = os::exec(a, argv.slice()) catch |e| {
@@ -1221,8 +1221,27 @@ bool cx_scalar(CEmit* e, CType* t) {
     drop(stub);
     const auto dtext = cb_text(a, dep)?;
     drop(dep);
+    auto inc = Map<str>::init(a);
+    auto chain = List<str>::init(a);
+    chain.push(stub)?;
+    auto msgs = List<u8>::init(a);
+    auto lines = str_lines(r.err);
+    while (lines.next()) {
+        const auto l = lines.line;
+        auto n = 0;
+        while (n < l.len && l[n] == '.') { n += 1; }
+        if (n == 0 || n >= l.len || l[n] != ' ' || n > chain.len) {
+            sprint(&msgs, "{l}\n")?;
+            continue;
+        }
+        const auto f = l[n + 1..];
+        chain.truncate(n);
+        const auto p = path::absolute(a, f) catch f;
+        if (!inc.has(p)) { inc.put(p, chain.get(n - 1))?; }
+        chain.push(f)?;
+    }
     if (r.code != 0) {
-        eprint(r.err);
+        eprint(msgs.slice());
         return error.CompileFailed;
     }
     const auto root = json_parse(a, r.out, 1024) catch {
@@ -1244,7 +1263,12 @@ bool cx_scalar(CEmit* e, CType* t) {
     for (auto d : w.decls.slice()) { if (d.k == .Func) { count.put(d.cxx, count.get_or(d.cxx, 0) + 1)?; } }
     for (auto d : w.decls.slice()) { if (d.k == .Func && count.get_or(d.cxx, 0) > 1) { d.reason = CX_TODO; } }
     auto deps = List<str>::init(a);
-    for (auto d : dep_files(a, dtext)?) { if (d != stub) { deps.push(d)?; } }
+    auto from = List<str>::init(a);
+    for (auto d : dep_files(a, dtext)?) {
+        if (d == stub) { continue; }
+        deps.push(d)?;
+        from.push(inc.get_or(path::absolute(a, d) catch d, stub))?;
+    }
     auto abs = "";
     auto h = 0xcbf29ce484222325 as u64;
     if (deps.len > 0) {
@@ -1269,7 +1293,7 @@ bool cx_scalar(CEmit* e, CType* t) {
         e = cx_emit(a, &w, hid)?;
         ic = cx_cpp(a, abs, &e)?;
     }
-    return CBind{ .zk = e.out.slice(), .inline_c = ic, .deps = deps, .from = List<str>::init(a), .warnings = e.warnings };
+    return CBind{ .zk = e.out.slice(), .inline_c = ic, .deps = deps, .from = from, .warnings = e.warnings };
 }
 
 !CBind cx_bind(Allocator a, str header, str from_dir, List<str> flags) {
