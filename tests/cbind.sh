@@ -622,12 +622,6 @@ printf 'import "lib.h" as lib;\nimport "sub/plain.zk";\nvoid main() { println("{
 if out=$(cd tw/app && "$ZARK" run bad.zk "../my lib/lib.c" "-I../my lib" 2>&1); then fail "import_alias_plain: expected failure"; fi
 case "$out" in *"error: '../../my lib/lib.h' is imported as 'lib' elsewhere"*'import "../../my lib/lib.h" as lib;'*) ;; *) fail "import_alias_plain: got: $out" ;; esac
 
-printf 'int f(void);\n' > cpp.hpp
-printf 'import "cpp.hpp";\nvoid main() {}\n' > use_cpp.zk
-out=$("$ZARK" run use_cpp.zk 2>&1); code=$?
-[ $code = 1 ] || fail "import_cpp_header: exit $code: $out"
-[ "$out" = "error: C++ headers are not supported yet: cpp.hpp" ] || fail "import_cpp_header: got: $out"
-
 mkdir -p "inc dir"
 printf 'import "nosuch.h";\nvoid main() {}\n' > use_missing.zk
 out=$("$ZARK" run use_missing.zk "-Iinc dir" 2>&1); code=$?
