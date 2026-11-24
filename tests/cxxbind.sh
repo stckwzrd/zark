@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes fmt macros"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors fmt macros"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -116,6 +116,10 @@ for f in "" --llvm -O; do
     [ "$out" = "$(cat interop/virt.out)" ] || fail "interop virt $f: got: $out"
 done
 
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f escape.zk 2>&1) || fail "interop escape $f: $out"
+    [ "$out" = "$(cat interop/escape.out)" ] || fail "interop escape $f: got: $out"
+done
 for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f std.zk std.cpp 2>&1) || fail "interop std $f: $out"
     [ "$out" = "$(cat interop/std.out)" ] || fail "interop std $f: got: $out"

@@ -100,12 +100,11 @@ bool cx_cshape(CxWalk* w, CType* t) {
     return true;
 }
 
-str cx_lkey(str s) {
+!str cx_lkey(Allocator a, str s) {
     auto t = s;
     if (str_ends_with(t, " (empty)")) { t = t[0..t.len - 8]; }
     for (auto k : ["struct ", "class ", "union "]) { if (str_starts_with(t, k)) { t = t[k.len..]; } }
-    while (str_starts_with(t, "(anonymous namespace)::")) { t = t[23..]; }
-    return t;
+    return str_replace(a, t, "(anonymous namespace)::", "");
 }
 
 !str cx_tkey(Allocator a, str s) {
@@ -113,7 +112,7 @@ str cx_lkey(str s) {
     for (auto k : ["struct ", "class ", "union ", "enum "]) {
         for (auto p : ["<", ", "]) { t = str_replace(a, t, str_concat(a, [p, k])?, p)?; }
     }
-    return str_replace(a, t, " ", "");
+    return str_replace(a, str_replace(a, t, " ", "")?, "_Bool", "bool");
 }
 
 struct CxFld { str name; Json* x; bool pub; bool bits; CType* ty; CxRec* sub; str init; str why; }
@@ -130,7 +129,7 @@ struct CxFwd { CDecl* m; CxRec* b; }
 
 struct CxEnt { i64 depth; i64 off; str text; }
 
-struct CxLay { i64 size; i64 align; List<CxEnt> ents; }
+struct CxLay { i64 size; i64 align; List<CxEnt> ents; bool dup; }
 
 struct CxRec {
     CDecl* d;
@@ -173,6 +172,7 @@ struct CxRec {
     CDecl* assign_decl;
     CDecl* assign_move_decl;
     List<CxBase> allbases;
+    i64 nbases;
     List<CxFwd> fwds;
 }
 
@@ -1408,6 +1408,7 @@ struct CxWalk {
 
     !void define(Json* x, CxRec* r, str scope) {
         r.done = true;
+        r.nbases = jlen(jget(x, "bases"));
         r.is_union = jstr(jget(x, "tagUsed"), "") == "union";
         const auto dd = jget(x, "definitionData");
         r.value = jbool(jget(dd, "isTriviallyCopyable"), false) && !jbool(jget(dd, "isAbstract"), false);
@@ -1534,7 +1535,7 @@ struct CxWalk {
             if (state == 1) {
                 cur = this->a.create<CxLay>()?;
                 cur.ents = List<CxEnt>::init(this->a);
-                key = cx_lkey(t);
+                key = cx_lkey(this->a, t)?;
                 state = 2;
                 continue;
             }
@@ -1542,7 +1543,8 @@ struct CxWalk {
                 cur.size = cb_num_after(t, "sizeof=");
                 cur.align = cb_num_after(t, " align=");
                 if (str_find(key, "<") >= 0) { key = cx_tkey(this->a, key)?; }
-                if (!this->lays.has(key)) { this->lays.put(key, cur)?; }
+                const auto old = this->lays.get_or(key, null);
+                if (old == null) { this->lays.put(key, cur)?; } else { old.dup = true; }
                 state = 0;
                 continue;
             }
@@ -1764,7 +1766,7 @@ struct CxWalk {
     }
 
     !str lkey(str t) {
-        const auto k = cx_lkey(t);
+        const auto k = cx_lkey(this->a, t)?;
         if (str_find(k, "<") >= 0) { return cx_tkey(this->a, k); }
         return k;
     }
@@ -1799,7 +1801,7 @@ struct CxWalk {
             .Named => {
                 if (t.rec != null) {
                     const auto l = this->lays.get_or(t.rec.cx.key, null);
-                    if (l != null) { return CSize{ .size = l.size, .align = l.align }; }
+                    if (l != null && !l.dup) { return CSize{ .size = l.size, .align = l.align }; }
                 }
             }
         }
@@ -1832,6 +1834,10 @@ struct CxWalk {
             r.need = "layout not found";
             return;
         }
+        if (l.dup) {
+            r.skip = "ambiguous layout, another class has the same printed name";
+            return;
+        }
         r.size = l.size;
         r.align = l.align;
         auto fi = 0;
@@ -1844,6 +1850,7 @@ struct CxWalk {
                 if (b == null || b.d == null || r.pubs.index_of(b.qn) < 0) { continue; }
                 this->flat(b)?;
                 if (b.skip.len > 0 || b.why.len > 0) { continue; }
+                for (auto bt : b.bits.slice()) { this->note(r, cx_qual(this->a, r.qn, bt.name)?, "bitfield of a base class")?; }
                 for (auto it : b.items.slice()) {
                     if (it.name == "__vptr" && e.off + it.off != 0) { continue; }
                     auto c = it;
@@ -1906,6 +1913,10 @@ struct CxWalk {
                 }
             }
             const auto z = this->sz(ty)?;
+            if (z.size < 0 && ty.k == .Array && ty.n < 0) {
+                this->note(r, label, "flexible array member")?;
+                continue;
+            }
             if (z.size < 0) {
                 this->note(r, label, "layout not found")?;
                 continue;
@@ -2400,8 +2411,20 @@ bool cx_ptrs(CEmit* e, CType* t) {
     return false;
 }
 
+CType* cx_expand(CEmit* e, CType* t) {
+    auto x = t;
+    while (x.k == .Named && x.rec == null && cb_known(x.name).len == 0) {
+        const auto y = e.typedefs.get_or(x.name, null);
+        if (y == null) { return x; }
+        x = y;
+    }
+    return x;
+}
+
 bool cx_hasptr(CEmit* e, CxRec* r) {
-    if (r.why.len > 0 || r.skip.len > 0) { return true; }
+    if (r.why.len > 0 || r.skip.len > 0 || r.notes.len > 0 || r.nbases != r.allbases.len) { return true; }
+    for (auto f : r.flds.slice()) { if (!f.pub) { return true; } }
+    for (auto b : r.allbases.slice()) { if (cx_hasptr(e, b.r)) { return true; } }
     for (auto it : r.items.slice()) { if (cx_ptrs(e, it.ty)) { return true; } }
     return false;
 }
@@ -2546,8 +2569,9 @@ struct CxSig {
             const auto er = e.rec_of(p.ty.elem);
             const auto vr = er != null && er.cx != null && er.cx.value;
             const auto rr = e.rec_of(f.elem);
-            const auto esc = f.elem.k == .Ptr || (rr != null && (rr.cx == null || cx_hasptr(e, rr.cx)));
-            if ((p.ty.rvalue || p.ty.elem.konst) && ((!(f.elem.k == .Ptr && f.elem.ref) && cx_scalar(e, p.ty.elem)) || (vr && !esc))) {
+            const auto fe = cx_expand(e, f.elem);
+            const auto esc = fe.k == .Ptr || (rr != null && (rr.cx == null || cx_hasptr(e, rr.cx)));
+            if ((p.ty.rvalue || p.ty.elem.konst) && ((!(fe.k == .Ptr && fe.ref) && cx_scalar(e, p.ty.elem)) || (vr && !esc))) {
                 st = p.ty.elem;
                 if (vr) {
                     xt = cx_ptr(a, p.ty.elem)?;
