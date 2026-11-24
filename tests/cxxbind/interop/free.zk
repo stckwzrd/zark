@@ -1,0 +1,13 @@
+import "free_b.zk" as fr;
+
+i32 inc(i32 x) { return x + 1; }
+
+void main() {
+    i32 v = 41;
+    const auto b = fr::bump(&v);
+    *fr::cell(2) = 30;
+    const auto sq = fr::pick(1);
+    const auto neg = fr::pick(0);
+    println("{fr::geo::area(6, 7)} {cstr(fr::geo_deep::name())} {b} {v} {fr::sum_ref(2, 3.5)} {fr::sink(5)}");
+    println("{*fr::cell(0)} {*fr::cell(2)} {fr::twice(21)} {fr::hidden(1)} {fr::apply(inc, 9)} {sq(7)} {neg(7)}");
+}

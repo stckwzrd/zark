@@ -199,6 +199,7 @@ void run_job(CJob* j) {
         if (c_inline_sources.index_of(x) >= 0) {
             flags.push("-DZARK_PICK")?;
             for (auto u : c_uses) { if (str_contains(text, u)) { flags.push(str_concat(a, ["-D", u])?)?; } }
+            flags.append(["-iquote", c_inline_dirs.get_or(x, ".")])?;
         }
         auto h = fnv64(fnv64(fnv64(0xcbf29ce484222325 as u64, cc), olevel), x);
         for (auto f : flags) { h = fnv64(h, f); }

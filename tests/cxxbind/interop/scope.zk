@@ -1,0 +1,6 @@
+import "scope_b.zk" as d;
+
+void main() {
+    d::b_T[2] v = [1, 2];
+    println("{sizeof(d::b_T)} {d::b::second(&v[0])} {sizeof(d::K)} {d::get(d::K_Z)} {sizeof(d::n_K)} {d::getn(d::n_K_Z)} {d::cx(1)}");
+}

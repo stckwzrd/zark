@@ -1,0 +1,28 @@
+struct esc_V { i32 x = 1; i32 y = 2; }
+type esc_IP = i32*;
+type esc_IR = i32*;
+align(8) struct esc_Iter { u8[8] __pad0; i32 n; u8[4] __pad1; esc_Iter(i32* q) { zark_cxx_H_9(this, q); } }
+align(8) struct esc_RR { u8[8] __pad0; i32 n; u8[4] __pad1; }
+struct esc_Pub { i32* p; i32 n; u8[4] __pad0; }
+align(8) struct esc_Inh { u8[12] __pad0; i32 m; }
+struct esc_Plain { i32 a; i32 b; }
+struct esc { }
+extern esc_IP zark_cxx_H_3(esc_V* v);
+static esc_IP esc::firstip(esc_V* v) { return zark_cxx_H_3(v); }
+extern esc_IR zark_cxx_H_5(esc_V* v);
+static esc_IR esc::firstr(esc_V* v) { return zark_cxx_H_5(v); }
+extern i32* zark_cxx_H_6(esc_V* v);
+static i32* esc::firstp(esc_V* v) { return zark_cxx_H_6(v); }
+extern i32 zark_cxx_H_7(esc_V* v);
+static i32 esc::sum(esc_V v) { return zark_cxx_H_7(&v); }
+extern void zark_cxx_H_9(esc_Iter* __self, i32* q);
+extern void zark_cxx_H_11(esc_V* v, esc_Iter* __r);
+static esc_Iter esc::mkit(esc_V* v) { esc_Iter __r; zark_cxx_H_11(v, &__r); return __r; }
+extern void zark_cxx_H_14(esc_V* v, esc_RR* __r);
+static esc_RR esc::mkrr(esc_V* v) { esc_RR __r; zark_cxx_H_14(v, &__r); return __r; }
+extern void zark_cxx_H_17(esc_V* v, esc_Pub* __r);
+static esc_Pub esc::mkpub(esc_V* v) { esc_Pub __r; zark_cxx_H_17(v, &__r); return __r; }
+extern void zark_cxx_H_20(esc_V* v, esc_Inh* __r);
+static esc_Inh esc::mkinh(esc_V* v) { esc_Inh __r; zark_cxx_H_20(v, &__r); return __r; }
+extern void zark_cxx_H_23(esc_V* v, esc_Plain* __r);
+static esc_Plain esc::mkplain(esc_V v) { esc_Plain __r; zark_cxx_H_23(&v, &__r); return __r; }

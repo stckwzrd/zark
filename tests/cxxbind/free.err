@@ -1,0 +1,3 @@
+skipped say: variadic C++ functions are not bound yet
+skipped a_b::f: name clash
+skipped a::b::f: name clash

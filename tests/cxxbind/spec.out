@@ -1,0 +1,37 @@
+type Wchar = u16;
+struct Cmd { i32 id; }
+type Key = i32;
+const auto K0 = 0;
+struct Vec_u16 { i32 Size; i32 Capacity; u16* Data; }
+struct Vec_Cmd { i32 Size; i32 Capacity; Cmd* Data; }
+struct Vec_Cmdp { }
+struct Vec_f32 { i32 Size; i32 Capacity; f32* Data; }
+struct Vec_Key { i32 Size; i32 Capacity; Key* Data; }
+struct Vec_i32 { i32 Size; i32 Capacity; i32* Data; }
+struct IO { Vec_u16 chars; Vec_Cmd cmds; Vec_Cmdp* list; Vec_f32 fl; Vec_Key keys; Vec_i32 ints; }
+struct n_Pair { i32 k; }
+struct Vec_n_Pair { i32 Size; i32 Capacity; n_Pair* Data; }
+struct n_Store { Vec_n_Pair data; }
+struct Arr_i32_4 { i32[4] v; }
+struct HasArr { Arr_i32_4 a; }
+struct Box_i64l { i64 v; }
+struct Box_i64ll { i64 v; }
+struct Box_u8pc { }
+struct U2 { Box_i64l a; Box_i64ll b; u8[40] __pad0; i32 tail; u8[4] __pad1; }
+struct TA_i32__anon0 { u32[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } }
+struct TA_i32 { TA_i32__anon0 __anon0; i32 n; }
+struct HT { TA_i32 t; }
+extern i32 zark_cxx_d9b13ca03726f5a6_7(Vec_u16* __self);
+i32 Vec_u16::size() const { return zark_cxx_d9b13ca03726f5a6_7(this); }
+extern i32 zark_cxx_d9b13ca03726f5a6_9(Vec_Cmd* __self);
+i32 Vec_Cmd::size() const { return zark_cxx_d9b13ca03726f5a6_9(this); }
+extern i32 zark_cxx_d9b13ca03726f5a6_12(Vec_f32* __self);
+i32 Vec_f32::size() const { return zark_cxx_d9b13ca03726f5a6_12(this); }
+extern i32 zark_cxx_d9b13ca03726f5a6_14(Vec_Key* __self);
+i32 Vec_Key::size() const { return zark_cxx_d9b13ca03726f5a6_14(this); }
+extern i32 zark_cxx_d9b13ca03726f5a6_16(Vec_i32* __self);
+i32 Vec_i32::size() const { return zark_cxx_d9b13ca03726f5a6_16(this); }
+extern i32 zark_cxx_d9b13ca03726f5a6_22(Vec_n_Pair* __self);
+i32 Vec_n_Pair::size() const { return zark_cxx_d9b13ca03726f5a6_22(this); }
+extern i32 zark_cxx_d9b13ca03726f5a6_27(Vec_Cmd* v);
+i32 count(Vec_Cmd* v) { return zark_cxx_d9b13ca03726f5a6_27(v); }

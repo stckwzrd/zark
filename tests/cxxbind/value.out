@@ -1,0 +1,46 @@
+type geo_Kind = u8;
+const auto geo_Kind_A = 0;
+const auto geo_Kind_B = 1;
+struct geo_V { f32 x = 0.0; f32 y = 1.5; }
+struct geo_W { i32 k = 7; bool on = true; u8[3] __pad0; f64 d = 0.25; geo_V v; i32* p; i64 q = 3; geo_Kind kd = 1; u8[3] __pad1; i32 n; }
+struct geo_NT { i32 n; }
+owned struct geo_NT_own { geo_NT* ptr; void* mem; u64 size; Allocator a; static Self init(geo_NT* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_NT* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_NT* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_87e0e95e58b4d15a_19(this->ptr); } else { zark_cxx_87e0e95e58b4d15a_16(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_NT* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_NT>()?; zark_cxx_87e0e95e58b4d15a_15(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_NT), .a = a }; } }
+struct geo_Fwd { }
+struct Str { i8[16] buf; }
+struct geo { }
+extern void zark_cxx_87e0e95e58b4d15a_7(geo_V* a, geo_V* b, geo_V* __r);
+static geo_V geo::add(geo_V a, geo_V b) { geo_V __r; zark_cxx_87e0e95e58b4d15a_7(&a, &b, &__r); return __r; }
+extern geo_V* zark_cxx_87e0e95e58b4d15a_8(geo_V* a);
+static geo_V* geo::first(geo_V* a) { return zark_cxx_87e0e95e58b4d15a_8(a); }
+extern geo_V* zark_cxx_87e0e95e58b4d15a_9(geo_V* a, geo_V* b);
+static geo_V* geo::pick(geo_V* a, geo_V* b) { return zark_cxx_87e0e95e58b4d15a_9(a, b); }
+extern geo_V* zark_cxx_87e0e95e58b4d15a_10(geo_V* a);
+static geo_V* geo::ref(geo_V* a) { return zark_cxx_87e0e95e58b4d15a_10(a); }
+extern f32 zark_cxx_87e0e95e58b4d15a_11(geo_V* v);
+static f32 geo::len2(geo_V v) { return zark_cxx_87e0e95e58b4d15a_11(&v); }
+extern void zark_cxx_87e0e95e58b4d15a_12(i32 k, geo_W* __r);
+static geo_W geo::make(i32 k) { geo_W __r; zark_cxx_87e0e95e58b4d15a_12(k, &__r); return __r; }
+extern void zark_cxx_87e0e95e58b4d15a_13(geo_V* v);
+static void geo::put(geo_V v) { zark_cxx_87e0e95e58b4d15a_13(&v); }
+extern void zark_cxx_87e0e95e58b4d15a_15(geo_NT* __self, geo_NT* a0);
+extern void zark_cxx_87e0e95e58b4d15a_16(geo_NT* __self);
+extern void zark_cxx_87e0e95e58b4d15a_17(geo_NT* __self, geo_NT* __other);
+void geo_NT::assign(geo_NT* __other) { zark_cxx_87e0e95e58b4d15a_17(this, __other); }
+extern void zark_cxx_87e0e95e58b4d15a_18(geo_NT* __self, geo_NT* __other);
+void geo_NT::assign_move(geo_NT* __other) { zark_cxx_87e0e95e58b4d15a_18(this, __other); }
+extern void zark_cxx_87e0e95e58b4d15a_19(geo_NT* __self);
+extern void zark_cxx_87e0e95e58b4d15a_21(geo_NT* x, geo_NT* __r);
+static !geo_NT_own geo::copy(Allocator __a, geo_NT* x) { const auto __p = __a.create<geo_NT>()?; zark_cxx_87e0e95e58b4d15a_21(x, __p); return geo_NT_own::init(__p, sizeof(geo_NT), __a); }
+extern void zark_cxx_87e0e95e58b4d15a_22(geo_NT* __r);
+static !geo_NT_own geo::back(Allocator __a) { const auto __p = __a.create<geo_NT>()?; zark_cxx_87e0e95e58b4d15a_22(__p); return geo_NT_own::init(__p, sizeof(geo_NT), __a); }
+extern i32 zark_cxx_87e0e95e58b4d15a_23(geo_NT* x);
+static i32 geo::nt(geo_NT* x) { return zark_cxx_87e0e95e58b4d15a_23(x); }
+extern i32 zark_cxx_87e0e95e58b4d15a_24(geo_NT* x);
+static i32 geo::ntp(geo_NT* x) { return zark_cxx_87e0e95e58b4d15a_24(x); }
+extern geo_Fwd* zark_cxx_87e0e95e58b4d15a_26();
+static geo_Fwd* geo::getfwd() { return zark_cxx_87e0e95e58b4d15a_26(); }
+extern void zark_cxx_87e0e95e58b4d15a_28(geo_V* a, geo_V* b, geo_V* __r);
+geo_V cmid(geo_V a, geo_V b) { geo_V __r; zark_cxx_87e0e95e58b4d15a_28(&a, &b, &__r); return __r; }
+extern i32 cptr(geo_V* a);
+extern u8* zark_cxx_87e0e95e58b4d15a_32(Str* s);
+u8* cview(Str* s) { return zark_cxx_87e0e95e58b4d15a_32(s); }

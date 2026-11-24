@@ -129,7 +129,12 @@ struct Loader {
             if (d.k == .Alias) { name = d.path; }
             if (name.len == 0) { continue; }
             if (this->ctypes.has(name)) {
-                eprintln("error: C headers '{this->ctypes.get(name)?}' and '{header}' both declare '{name}' (from a header they both include); importing both is not supported yet, import the one header that includes both");
+                const auto other = this->ctypes.get(name)?;
+                if (cx_is_header(other) || cx_is_header(header)) {
+                    eprintln("error: headers '{other}' and '{header}' both declare '{name}'; import them with 'as' or through one header that includes both");
+                    return error.CompileFailed;
+                }
+                eprintln("error: C headers '{other}' and '{header}' both declare '{name}' (from a header they both include); importing both is not supported yet, import the one header that includes both");
                 return error.CompileFailed;
             }
             this->ctypes.put(name, header)?;
