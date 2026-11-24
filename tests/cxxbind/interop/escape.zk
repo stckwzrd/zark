@@ -1,0 +1,17 @@
+import "escape.hpp" as e;
+
+void main() {
+    e::esc_V v;
+    v.x = 42;
+    auto it = e::esc::mkit(&v);
+    auto rr = e::esc::mkrr(&v);
+    auto inh = e::esc::mkinh(&v);
+    println(e::esc::firstip(&v) == &v.x);
+    println(e::esc::firstr(&v) == &v.x);
+    println(e::esc::firstp(&v) == &v.x);
+    println(it.at() == &v.x);
+    println(rr.at() == &v.x);
+    println(inh.where() == &v.x);
+    println(e::esc::sum(v));
+    println(e::esc::mkplain(v).a);
+}
