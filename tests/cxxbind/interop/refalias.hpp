@@ -1,0 +1,28 @@
+struct V { int x; };
+typedef V VT;
+struct S { V v; int y; };
+struct H { V* p; };
+struct HV { void* p; };
+struct M {
+    int x;
+    void addtwice(const M& o);
+    int peek(const V& a) const;
+    int with(const V& a, const V& b) const;
+    static int smul(const V& a, int k);
+};
+struct Own { int n; V v; V* w; void poke(const V& a); };
+int bump(const V& a, S* s);
+int via_h(const V& a, H* h);
+int via_hh(const V& a, V** h);
+int via_void(const V& a, void* p);
+int via_arr(const V& a, V (*arr)[2]);
+int via_td(const VT& a, VT* b);
+int via_ref(const V& a, V& b);
+int via_hv(const V& a, HV* h);
+int via_int(const V& a, int* p);
+int two(const V& a, const V& b, int* c);
+int ro(const V& a, const V& b);
+int len(const V& a, const char* s, int k);
+int sq(const int& a);
+V& operator+=(V& a, const V& b);
+V operator+(const V& a, const V& b);

@@ -1,0 +1,5 @@
+struct UA_i32_4 { i32[4] a; }
+struct AA_i32_4 { }
+struct Use { u8[16] __pad0; UA_i32_4 b; UA_i32_4 c; }
+extern void zark_cxx_fa7063d71084fb98_6(UA_i32_4* __r);
+UA_i32_4 mk() { UA_i32_4 __r; zark_cxx_fa7063d71084fb98_6(&__r); return __r; }

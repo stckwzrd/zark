@@ -1,0 +1,16 @@
+struct B { int y = 3; B(); };
+struct D : B { int z = 4; };
+struct E2 { B b; int w = 5; };
+struct EA { B bs[2]; int w = 6; };
+struct F : D { int q = 7; };
+struct G : E2 { int g = 8; };
+struct Plain { int a = 1; int b = 2; };
+struct P2 : Plain { int c = 3; };
+struct Own : B { int k = 9; ~Own(); };
+struct Many : B { int m = 1; Many(int); };
+struct Mem { Plain p; int m = 2; };
+int cpp_d();
+int cpp_e();
+int cpp_f();
+int cpp_g();
+int cpp_own();

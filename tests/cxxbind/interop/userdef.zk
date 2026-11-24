@@ -1,0 +1,18 @@
+import "userdef.hpp" as f;
+
+!void main() {
+    const auto d = f::D::make();
+    const auto e = f::E2::make();
+    const auto ea = f::EA::make();
+    const auto fv = f::F::make();
+    const auto g = f::G::make();
+    println(d.y, d.z, e.b.y, e.w, ea.bs[0].y, ea.bs[1].y, ea.w);
+    println(fv.y, fv.z, fv.q, g.b.y, g.w, g.g);
+    println(f::cpp_d(), f::cpp_e(), f::cpp_f(), f::cpp_g(), f::cpp_own());
+    const auto o = f::Own::create(c_allocator())?;
+    defer o.deinit();
+    println(o.get().y, o.get().k);
+    const auto p = f::P2{};
+    const auto m = f::Mem{};
+    println(p.a, p.b, p.c, m.p.a, m.p.b, m.m);
+}

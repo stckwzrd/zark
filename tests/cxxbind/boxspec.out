@@ -1,0 +1,62 @@
+struct Foo { i64 q; i64 r; }
+struct cFoo { i8[3] c; }
+struct ci32 { i64 q; i64 r; }
+struct vi32 { i16 s; }
+struct i32p { f64 d; }
+struct Boxi32 { i8 x; }
+type E = i32;
+const auto E0 = 0;
+const auto E1 = 1;
+type myint = i32;
+type cint = i32;
+type CFoo = Foo;
+type ip = i32*;
+struct Box_i32 { i32 v; }
+struct Box_i32__c { i32 v; }
+struct Box_i32__v { i32 v; }
+struct Box_i32__cv { i32 v; }
+struct Box_ci32 { ci32 v; }
+struct Box_vi32 { vi32 v; }
+struct Box_Foo { Foo v; }
+struct Box_cFoo { cFoo v; }
+struct Box_Foo__c { Foo v; }
+owned struct Box_Foo__c_own { Box_Foo__c* ptr; void* mem; u64 size; Allocator a; static Self init(Box_Foo__c* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(Box_Foo__c* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } Box_Foo__c* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_e23cc6347c14a56c_33(this->ptr); } else { zark_cxx_e23cc6347c14a56c_28(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } Box_Foo__c* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Box_Foo__c>()?; zark_cxx_e23cc6347c14a56c_30(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Box_Foo__c), .a = a }; } }
+struct Box_i32p { i32* v; }
+struct Box_i32pc { i32* v; }
+struct Box_i32p__c { i32* v; }
+struct Box_Box_i32__c { Box_i32__c v; }
+struct Box_Box_ci32 { Box_ci32 v; }
+struct Box_Box_i32 { Box_i32 v; }
+struct Box_E { E v; }
+struct Box_E__c { E v; }
+struct Arr_i32_4 { i32[4] a; }
+struct Arr_i32_5 { i32[5] a; }
+struct Arr_i32__c_4 { i32[4] a; }
+type BC = Box_i32__c;
+type BX = Box_ci32;
+type BM = Box_i32;
+type BCI = Box_i32__c;
+struct Use { Box_i32 a; BC b; Box_i32__c c; u8[4] __pad0; BX d; Box_ci32 e; BM f; BCI g; Box_cFoo j; u8[5] __pad1; Box_i32p k; Box_i32p__c l; Box_i32pc m; }
+extern void zark_cxx_e23cc6347c14a56c_28(Box_Foo__c* __self);
+extern void zark_cxx_e23cc6347c14a56c_30(Box_Foo__c* __self, Box_Foo__c* a0);
+extern void zark_cxx_e23cc6347c14a56c_33(Box_Foo__c* __self);
+extern void zark_cxx_e23cc6347c14a56c_51(BC* __r);
+BC mkbc() { BC __r; zark_cxx_e23cc6347c14a56c_51(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_52(BX* __r);
+BX mkbx() { BX __r; zark_cxx_e23cc6347c14a56c_52(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_53(Box_ci32* __r);
+Box_ci32 mkci() { Box_ci32 __r; zark_cxx_e23cc6347c14a56c_53(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_54(Box_i32__c* __r);
+Box_i32__c mkcint() { Box_i32__c __r; zark_cxx_e23cc6347c14a56c_54(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_55(Box_i32* __r);
+Box_i32 mkint() { Box_i32 __r; zark_cxx_e23cc6347c14a56c_55(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_56(Box_i32* __r);
+Box_i32 mkmy() { Box_i32 __r; zark_cxx_e23cc6347c14a56c_56(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_57(Box_cFoo* __r);
+Box_cFoo mkcFoo() { Box_cFoo __r; zark_cxx_e23cc6347c14a56c_57(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_58(Box_Box_i32__c* __r);
+Box_Box_i32__c mkbb() { Box_Box_i32__c __r; zark_cxx_e23cc6347c14a56c_58(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_59(Box_Box_ci32* __r);
+Box_Box_ci32 mkbbx() { Box_Box_ci32 __r; zark_cxx_e23cc6347c14a56c_59(&__r); return __r; }
+extern void zark_cxx_e23cc6347c14a56c_60(Arr_i32_4* __r);
+Arr_i32_4 mkarr() { Arr_i32_4 __r; zark_cxx_e23cc6347c14a56c_60(&__r); return __r; }

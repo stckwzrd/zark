@@ -1,0 +1,18 @@
+skipped Box<int *>: name clash
+skipped Box<i32p>: name clash
+skipped Box_i32: name clash
+skipped Box<int>: name clash
+skipped Box_Foo__c: name clash
+skipped Box<const Foo>: name clash
+skipped BP: uses skipped Box<i32p>
+skipped Use::a: uses skipped Box<int *>
+skipped Use::b: uses skipped Box<i32p>
+skipped Use::c: uses unbound type 'BP'
+skipped Use::d: uses skipped Box<int>
+skipped Use::e: uses skipped Box<const Foo>
+skipped f1: uses skipped Box<int *>
+skipped f2: uses skipped Box<i32p>
+skipped f3: uses unbound type 'BP'
+skipped f4: uses skipped Box<int>
+skipped f5: uses skipped Box<int>
+skipped f6: uses skipped Box<const Foo>

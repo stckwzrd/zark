@@ -1,0 +1,17 @@
+template<class T> struct Box { T v; };
+struct i32p { double d; };
+struct Box_i32 { char x; };
+struct Foo { long q; };
+struct Box_Foo__c { short s; };
+template struct Box<int*>;
+template struct Box<i32p>;
+template struct Box<int>;
+template struct Box<const Foo>;
+typedef Box<i32p> BP;
+struct Use { Box<int*> a; Box<i32p> b; BP c; Box<int> d; Box<const Foo> e; };
+Box<int*> f1();
+Box<i32p> f2();
+BP f3();
+Box<int> f4();
+int f5(Box<int>* p);
+Box<const Foo> f6();

@@ -5,7 +5,7 @@ import "ops.hpp" as o;
     auto x = o::op_V(1.0, 2.0);
     auto y = o::op_V(3.0, 4.0);
     const auto z = x + y;
-    println(z.x, z.y, x == y, x != y, x < y, (x - y).x);
+    println(z.x, z.y, x == y, x != y, x < y, x.op_sub_op_V(y).x);
     auto b = o::op_Box::create(a, 5)?;
     defer b.deinit();
     println(b.get().op_index(2), b.get().to_bool(), b.get().op_eq(b.get()));

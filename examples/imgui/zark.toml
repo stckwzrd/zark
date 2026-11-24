@@ -17,3 +17,4 @@ sources = [
 ]
 pkg-config = ["sdl2"]
 libs = ["GL"]
+by_value = ["ImVec2", "ImVec4"]

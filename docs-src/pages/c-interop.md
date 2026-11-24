@@ -159,9 +159,9 @@ How the names come out:
 | method, `const` method, `static` method | a method of the struct, a `const` method, a `static` method: `c.get().next()`, `sh::shapes_Counter::alive()` |
 | overloaded function | one function per overload with a suffix of parameter tokens: `scale_f32_f32`, `scale_shapes_Vec` (`const char*` is `u8pc`, a pointer adds `p`, a reference `pr`); a name that is not overloaded stays as it is |
 | default arguments | the full name, plus `name_k` for each shorter call C++ accepts (`k` is the number of arguments); C++ fills in the defaults |
-| `operator+`, `==`, `<` and the like on a value type | Zark operators: `a + b`, `a == b` |
+| `operator+`, `==`, `<` and the like on a value type | Zark operators: `a + b`, `a == b`; an operator with more than one overload on the same type gets no short form, each overload is a method with a parameter suffix (`op_add_i32`, `op_add_V`) |
 | other operators | named methods: `op_index` for `[]`, `op_call` for `()`, `op_add_assign` for `+=`, `to_bool()` for `operator bool` |
-| `T&`, `T*` | `T*`; a `const T&` parameter of a number, enum or value type is taken by value (unless the function returns a reference or a pointer) |
+| `T&`, `T*` | `T*`; a `const T&` parameter of a number or enum is taken by value, and so is one of a plain value type unless the function returns a reference or a pointer, or something else in the signature (the object the method belongs to, a non-const pointer or reference, a `void*`) could reach the same storage; then it stays `T*`. The `by_value` manifest key lists value types that are always taken by value |
 | `static` data member, global variable | `name_ptr()`, as for C variables |
 | `Box<int>` (an instantiated template) | `Box_i32` |
 | `std::string`, `std::string_view` in a parameter or result | `str` (a `std::string` result is copied with an allocator you pass first) |
@@ -628,6 +628,7 @@ libs = ["GL"]
 | `std` | `-std=` for C or C++ |
 | `cflags` | any other compile flags |
 | `pkg-config` | packages whose `pkg-config --cflags --libs` is added |
+| `by_value` | C++ value types (`"ImVec2"` or `"ns::Vec"`) that a C++ binding always takes by value as `const T&` parameters, even when the rest of the signature could reach the same storage; you assert that this is safe. `zark cbind` takes `--by-value=A,B` |
 
 Paths are relative to `zark.toml`. More about manifests is in [projects](projects.md).
 

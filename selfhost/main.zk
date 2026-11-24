@@ -23,7 +23,7 @@ usage:
   zark lsp                          language server on stdin/stdout
   zark ir    <file.zk> [--arch x86_64|aarch64] [--os linux|macos]  print LLVM IR to stdout
   zark new   NAME                   create a project (zark.toml, src/main.zk)
-  zark cbind <header.h> [-I.. -D..] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]  print Zark bindings for a C header
+  zark cbind <header.h> [-I.. -D..] [--by-value=A,B] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
 ");
@@ -477,6 +477,7 @@ void restore_stack() {
         return 1;
     };
     c_flags = sp.flags;
+    c_by_value = sp.by_value;
     if (cross_target()) { c_flags.push(target_flag())?; }
     loader.load_file(src_file, "") catch {
         g.flush_diag();
