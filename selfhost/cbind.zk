@@ -260,6 +260,25 @@ struct CDecl {
     i64 at;
     str cxx;
     CxRec* cx;
+    bool cx_meth;
+    bool cx_const;
+    bool cx_ctor;
+    bool cx_dtor;
+    bool cx_var;
+    bool cx_copy;
+    bool cx_move;
+    bool cx_deleted;
+    bool cx_implicit;
+    bool cx_del;
+    bool cx_assign;
+    bool cx_amove;
+    bool cx_zctor;
+    bool cx_make;
+    bool cx_create;
+    CxRec* cx_rec;
+    str cx_mname;
+    str cx_self;
+    CType* cx_var_ty;
 }
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }

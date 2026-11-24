@@ -1,3 +1,4 @@
+skipped tf: function templates are not bound yet
 skipped m::ov: overloads are not bound yet
 skipped m::va: variadic C++ functions are not bound yet
 skipped m::wc: type 'wchar_t' is not supported yet
@@ -8,5 +9,4 @@ skipped m::ld: type 'long double' is not supported yet
 skipped m::i128: type '__int128' is not supported yet
 skipped m::u128: type '__int128' is not supported yet
 skipped m::np: decltype types are not supported yet
-skipped tf: function templates are not bound yet
-skipped a::b: name clash
+skipped a_b::h: name clash

@@ -12,9 +12,9 @@ struct n_Pair { i32 k; }
 struct Vec_n_Pair { i32 Size; i32 Capacity; n_Pair* Data; }
 struct n_Store { Vec_n_Pair data; }
 align(4) struct HasArr { u8[16] __pad0; }
-extern i32 zark_cxx_H_25(Vec_Cmd* v);
-i32 count(Vec_Cmd* v) { return zark_cxx_H_25(v); }
 align(8) struct U2 { u8[56] __pad0; i32 tail; u8[4] __pad1; }
 struct TA_i32__anon0 { u32[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } }
 struct TA_i32 { TA_i32__anon0 __anon0; i32 n; }
 struct HT { TA_i32 t; }
+extern i32 zark_cxx_d9b13ca03726f5a6_25(Vec_Cmd* v);
+i32 count(Vec_Cmd* v) { return zark_cxx_d9b13ca03726f5a6_25(v); }

@@ -131,6 +131,23 @@ struct CxRec {
     i64 align;
     str why;
     str skip;
+    List<CDecl*> meths;
+    List<CDecl*> svars;
+    bool abstract;
+    bool poly;
+    bool copyable;
+    bool movable;
+    bool has_dtor;
+    bool virtual_dtor;
+    bool dtor_pub;
+    bool own;
+    bool user_default;
+    bool deleted_copy;
+    CDecl* dtor_decl;
+    CDecl* copy_decl;
+    CDecl* del_decl;
+    CDecl* assign_decl;
+    CDecl* assign_move_decl;
 }
 
 Json* cx_find(Json* n, str kind) {
@@ -880,10 +897,9 @@ struct CxWalk {
         if (out && (meth || kind == "VarDecl")) { return this->kids(x); }
         if (meth) {
             this->kids(x);
-            if (jbool(jget(x, "explicitlyDeleted"), false)) { return; }
-            if (kind == "CXXConstructorDecl") { return this->skip(qn, "constructors are not bound yet"); }
-            if (kind == "CXXDestructorDecl") { return this->skip(qn, "destructors are not bound yet"); }
-            return this->skip(qn, "methods are not bound yet");
+            const auto r = this->recs.get_or(scope, null);
+            if (r == null) { return this->skip(qn, "method outside a bound class"); }
+            return this->method(x, r, scope, kind);
         }
         if (kind == "EnumDecl" && out) {
             const auto p = this->byid.get_or(jstr(jget(x, "previousDecl"), ""), "");
@@ -919,7 +935,7 @@ struct CxWalk {
         }
         if (kind == "EnumDecl") { return this->enum_decl(x, scope, name, qn, zn, zs); }
         if (kind == "TypedefDecl" || kind == "TypeAliasDecl") { return this->typedef_decl(x, scope, qn, zn); }
-        if (kind == "VarDecl") { return this->var_decl(x, scope, qn, zn, cls); }
+        if (kind == "VarDecl") { return this->var_decl(x, scope, qn, zn, zs, cls); }
         if (kind == "FunctionDecl") { return this->func(x, scope, name, c); }
         this->kids(x);
         if (cls && (kind == "FunctionTemplateDecl" || kind == "ClassTemplateDecl")) { return this->skip(qn, "member templates are not bound"); }
@@ -952,6 +968,8 @@ struct CxWalk {
         r.items = List<CxItem>::init(this->a);
         r.bits = List<CxBit>::init(this->a);
         r.notes = List<CxNote>::init(this->a);
+        r.meths = List<CDecl*>::init(this->a);
+        r.svars = List<CDecl*>::init(this->a);
         return r;
     }
 
@@ -972,6 +990,198 @@ struct CxWalk {
         return r;
     }
 
+    !CType* self_type(CxRec* r) {
+        const auto t = this->named(r.d.name)?;
+        t.rec = r.d;
+        t.tag = 1;
+        t.cxx = r.qn;
+        return t;
+    }
+
+    bool is_self(CType* t, CxRec* r) {
+        const auto x = this->expand(t);
+        return x.k == .Named && x.rec != null && x.rec == r.d;
+    }
+
+    bool is_special(CType* t, CxRec* r, bool move) {
+        if (t.params.len != 1) { return false; }
+        const auto p = t.params.get(0).ty;
+        return p.k == .Ptr && p.ref && p.rvalue == move && this->is_self(p.elem, r);
+    }
+
+    !void method(Json* x, CxRec* r, str scope, str kind) {
+        const auto name = jstr(jget(x, "name"), "");
+        const auto qn = cx_qual(this->a, scope, name)?;
+        const auto deleted = jbool(jget(x, "explicitlyDeleted"), false);
+        const auto implicit = jbool(jget(x, "isImplicit"), false);
+        const auto virt = jbool(jget(x, "virtual"), false);
+        const auto stat = jstr(jget(x, "storageClass"), "") == "static";
+        const auto t = this->type_of(jget(x, "type"), scope)?;
+        if (t.k != .Func) { return this->skip(qn, cx_why(t)); }
+        if (kind == "CXXDestructorDecl") {
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::~dtor"])?)?;
+            d.cx_meth = true;
+            d.cx_dtor = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = "~dtor";
+            d.cxx = qn;
+            d.ty = t;
+            d.cx_deleted = deleted;
+            d.cx_implicit = implicit;
+            r.meths.push(d)?;
+            r.dtor_pub = true;
+            r.virtual_dtor = virt;
+            r.has_dtor = !deleted;
+            if (!deleted && r.dtor_decl == null) { r.dtor_decl = d; }
+            return;
+        }
+        if (kind == "CXXConstructorDecl") {
+            const auto copy = this->is_special(t, r, false);
+            const auto move = this->is_special(t, r, true);
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::", r.d.name])?)?;
+            d.cx_meth = true;
+            d.cx_ctor = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = r.d.name;
+            d.cxx = qn;
+            d.ty = t;
+            d.cx_copy = copy;
+            d.cx_move = move;
+            d.cx_deleted = deleted;
+            d.cx_implicit = implicit;
+            if ((copy || move) && deleted) { d.reason = "deleted constructor"; }
+            if (copy && deleted) { r.deleted_copy = true; }
+            if (copy && !deleted && r.copy_decl == null) { r.copy_decl = d; }
+            r.meths.push(d)?;
+            return;
+        }
+        const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::", name])?)?;
+        d.cx_meth = true;
+        d.cx_const = t.konst;
+        d.cx_rec = r;
+        d.cx_self = r.qn;
+        d.cx_mname = name;
+        d.cxx = qn;
+        d.ty = t;
+        d.is_static = stat;
+        d.cx_deleted = deleted;
+        d.cx_implicit = implicit;
+        if (jbool(jget(x, "pure"), false)) { d.cx_assign = false; }
+        if (str_starts_with(name, "operator") && (name.len == 8 || !cb_ident_char(name[8]))) { d.reason = "operator functions are not bound yet"; }
+        r.meths.push(d)?;
+    }
+
+    !void cxx_ops(Json* x, CxRec* r) {
+        const auto dd = jget(x, "definitionData");
+        r.abstract = jbool(jget(dd, "isAbstract"), false);
+        r.poly = jbool(jget(dd, "isPolymorphic"), false);
+        const auto dc = jget(dd, "defaultCtor");
+        r.user_default = jbool(jget(dc, "userProvided"), false);
+        const auto cc = jget(dd, "copyCtor");
+        const auto mc = jget(dd, "moveCtor");
+        const auto pubdef = jstr(jget(x, "tagUsed"), "") != "class";
+        if (!r.has_dtor && !r.dtor_pub && pubdef && !r.abstract && !r.value) {
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::~dtor"])?)?;
+            const auto t = this->a.create<CType>()?;
+            t.k = .Func;
+            t.elem = this->a.create<CType>()?;
+            t.elem.k = .Void;
+            t.params = List<CField>::init(this->a);
+            d.cx_meth = true;
+            d.cx_dtor = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = "~dtor";
+            d.cxx = r.qn;
+            d.ty = t;
+            r.meths.push(d)?;
+            r.has_dtor = true;
+            r.dtor_decl = d;
+        }
+        r.own = !r.value && r.has_dtor && !r.abstract;
+        r.copyable = !r.deleted_copy && !((cc == null || jlen(cc) == 0) && mc != null && jlen(mc) > 0);
+        if (r.copy_decl == null && r.own) {
+            const auto p = cx_ptr(this->a, this->self_type(r)?)?;
+            p.ref = true;
+            p.elem.konst = true;
+            const auto t = this->a.create<CType>()?;
+            t.k = .Func;
+            t.elem = this->a.create<CType>()?;
+            t.elem.k = .Void;
+            t.params = List<CField>::init(this->a);
+            t.params.push(CField{ .ty = p })?;
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::copy"])?)?;
+            d.cx_meth = true;
+            d.cx_ctor = true;
+            d.cx_copy = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = "copy";
+            d.cxx = r.qn;
+            d.ty = t;
+            r.copy_decl = d;
+        }
+        if (r.own && r.copyable && r.assign_decl == null) {
+            const auto p = cx_ptr(this->a, this->self_type(r)?)?;
+            p.ref = true;
+            p.elem.konst = true;
+            const auto t = this->a.create<CType>()?;
+            t.k = .Func;
+            t.elem = this->a.create<CType>()?;
+            t.elem.k = .Void;
+            t.params = List<CField>::init(this->a);
+            t.params.push(CField{ .ty = p })?;
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::assign"])?)?;
+            d.cx_meth = true;
+            d.cx_assign = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = "assign";
+            d.cxx = r.qn;
+            d.ty = t;
+            r.assign_decl = d;
+        }
+        if (r.own && r.assign_move_decl == null) {
+            const auto p = cx_ptr(this->a, this->self_type(r)?)?;
+            p.ref = true;
+            p.rvalue = true;
+            const auto t = this->a.create<CType>()?;
+            t.k = .Func;
+            t.elem = this->a.create<CType>()?;
+            t.elem.k = .Void;
+            t.params = List<CField>::init(this->a);
+            t.params.push(CField{ .ty = p })?;
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::assign_move"])?)?;
+            d.cx_meth = true;
+            d.cx_assign = true;
+            d.cx_amove = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = "assign_move";
+            d.cxx = r.qn;
+            d.ty = t;
+            r.assign_move_decl = d;
+        }
+        if (r.own && r.has_dtor && r.del_decl == null) {
+            const auto t = this->a.create<CType>()?;
+            t.k = .Func;
+            t.elem = this->a.create<CType>()?;
+            t.elem.k = .Void;
+            t.params = List<CField>::init(this->a);
+            const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::~delete"])?)?;
+            d.cx_meth = true;
+            d.cx_del = true;
+            d.cx_rec = r;
+            d.cx_self = r.qn;
+            d.cx_mname = "~delete";
+            d.cxx = r.qn;
+            d.ty = t;
+            r.del_decl = d;
+        }
+    }
+
     !void record(Json* x, CxRec* r, str outer) {
         this->record_bases(x, outer, r.qn)?;
         this->walk(x, r.qn, r.d.name, false, true, jstr(jget(x, "tagUsed"), "") != "class")?;
@@ -987,6 +1197,7 @@ struct CxWalk {
             r.tag = str_concat(this->a, [jstr(jget(x, "tagUsed"), ""), " "])?;
             r.d.complete = true;
             r.d.is_union = r.is_union;
+            this->cxx_ops(x, r)?;
             this->rlist.push(r)?;
             const auto old = this->a.create<CDecl>()?;
             old.k = .Var;
@@ -1257,6 +1468,7 @@ struct CxWalk {
         r.tag = str_concat(this->a, [jstr(jget(c, "tagUsed"), ""), " "])?;
         r.d.complete = true;
         r.d.is_union = r.is_union;
+        this->cxx_ops(c, r)?;
         this->rlist.push(r)?;
         if (meth) { this->skip(cxx, "methods of template specializations are not bound yet")?; }
         return r;
@@ -1597,7 +1809,7 @@ struct CxWalk {
         this->tid.put(qn, id)?;
     }
 
-    !void var_decl(Json* x, str scope, str qn, str zn, bool cls) {
+    !void var_decl(Json* x, str scope, str qn, str zn, str zs, bool cls) {
         this->kids(x);
         const auto ty = jget(x, "type");
         const auto t = this->btype(ty, scope)?;
@@ -1607,7 +1819,7 @@ struct CxWalk {
         for (auto i : 0..jlen(k)) { if (!str_ends_with(jstr(jget(jat(k, i), "kind"), ""), "Attr")) { init = jat(k, i); } }
         const auto konst = jbool(jget(x, "constexpr"), false) || str_starts_with(q, "const ");
         if (init == null || jstr(jget(x, "init"), "").len == 0 || !konst || (t.k != .Int && t.k != .Float && t.k != .Bool)) {
-            return this->skip(qn, "variables are not bound yet");
+            return this->var_accessor(x, scope, qn, zn, zs, cls, t)?;
         }
         const auto id = jstr(jget(x, "id"), "");
         auto body = "";
@@ -1636,6 +1848,38 @@ struct CxWalk {
         }
         const auto d = this->decl(.Const, zn)?;
         d.body = body;
+    }
+
+    !void var_accessor(Json* x, str scope, str qn, str zn, str zs, bool cls, CType* t) {
+        if (cx_bad(t)) { return this->skip(qn, cx_why(t)); }
+        const auto name = jstr(jget(x, "name"), "");
+        const auto r = this->recs.get_or(scope, null);
+        auto self = "";
+        auto path = zn;
+        auto mname = str_concat(this->a, [name, "_ptr"])?;
+        if (cls && r != null) {
+            self = r.d.name;
+            path = cx_qual(this->a, self, mname)?;
+        } else if (zs.len > 0) {
+            self = zs;
+            path = cx_qual(this->a, zs, mname)?;
+        } else {
+            path = mname;
+        }
+        const auto ft = this->a.create<CType>()?;
+        ft.k = .Func;
+        ft.elem = cx_ptr(this->a, t)?;
+        ft.params = List<CField>::init(this->a);
+        const auto d = this->decl(.Func, path)?;
+        d.cx_var = true;
+        d.cx_var_ty = t;
+        d.cx_self = self;
+        d.cx_mname = mname;
+        d.cx_rec = r;
+        d.cx_meth = cls && r != null;
+        d.is_static = true;
+        d.cxx = qn;
+        d.ty = ft;
     }
 
     !void func(Json* x, str scope, str name, bool c) {
@@ -1738,12 +1982,6 @@ bool cx_hasptr(CEmit* e, CxRec* r) {
     return false;
 }
 
-str cx_byval(CDecl* r) {
-    if (!r.complete) { return "incomplete class by value"; }
-    if (!r.cx.value) { return "non-trivial class by value is not bound yet"; }
-    return "";
-}
-
 bool cx_scalar(CEmit* e, CType* t) {
     auto x = t;
     while (x.k == .Named && cb_known(x.name).len == 0) {
@@ -1760,19 +1998,32 @@ bool cx_scalar(CEmit* e, CType* t) {
     return p;
 }
 
-!void cx_shim(CEmit* e, CDecl* d) {
-    if (d.reason.len > 0) { return e.warn(d.name, d.reason); }
+struct CxSig {
+    str zps;
+    str xps;
+    str zas;
+    str cps;
+    str cas;
+    str ccps;
+    str zret;
+    str cret;
+    str zty;
+    str why;
+    bool out;
+    bool own;
+    bool none;
+    bool refrvalue;
+}
+
+!CxSig cx_sig(CEmit* e, CType* f) {
     const auto a = e.a;
-    const auto f = d.ty;
-    auto sb = List<u8>::init(a);
-    sprint(&sb, "zark_cxx_{e.hid}_{d.seq}")?;
-    const auto sn = sb.slice();
+    auto s = CxSig{ .zps = "", .xps = "", .zas = "", .cps = "", .cas = "", .ccps = "", .zret = "void", .cret = "void", .zty = "", .why = "", .out = false, .own = false, .none = false, .refrvalue = false };
     auto zp = List<u8>::init(a);
     auto xp = List<u8>::init(a);
     auto za = List<u8>::init(a);
     auto cp = List<u8>::init(a);
     auto ca = List<u8>::init(a);
-    auto why = "";
+    auto cc = List<u8>::init(a);
     for (auto [i, p] : f.params.slice()) {
         if (i > 0) {
             sprint(&zp, ", ")?;
@@ -1780,6 +2031,7 @@ bool cx_scalar(CEmit* e, CType* t) {
             sprint(&za, ", ")?;
             sprint(&cp, ", ")?;
             sprint(&ca, ", ")?;
+            sprint(&cc, ", ")?;
         }
         auto an = List<u8>::init(a);
         sprint(&an, "a{i}")?;
@@ -1791,13 +2043,28 @@ bool cx_scalar(CEmit* e, CType* t) {
         auto pass = zn;
         const auto pr = e.rec_of(p.ty);
         if (pr != null && pr.cx != null) {
-            if (why.len == 0) { why = cx_byval(pr); }
-            xt = cx_ptr(a, p.ty)?;
-            pass = str_concat(a, ["&", zn])?;
-            arg = str_concat(a, ["*", arg])?;
+            if (pr.cx.value) {
+                xt = cx_ptr(a, p.ty)?;
+                pass = str_concat(a, ["&", zn])?;
+                arg = str_concat(a, ["*", arg])?;
+            } else {
+                st = cx_ptr(a, p.ty)?;
+                xt = st;
+                pass = zn;
+                if (pr.cx.copyable) {
+                    arg = str_concat(a, ["*", arg])?;
+                } else {
+                    const auto rv = cx_spell(a, p.ty, "&&")?;
+                    arg = str_concat(a, ["static_cast<", rv, ">(*", arg, ")"])?;
+                }
+            }
+        } else if (pr != null) {
+            if (s.why.len == 0) { s.why = "incomplete class by value"; }
+        } else if (p.ty.k == .Named && e.fwd.has(p.ty.name)) {
+            if (s.why.len == 0) { s.why = "incomplete class by value"; }
         } else if (p.ty.k == .Ptr && p.ty.ref) {
             const auto er = e.rec_of(p.ty.elem);
-            const auto vr = er != null && er.cx != null && cx_byval(er).len == 0;
+            const auto vr = er != null && er.cx != null && er.cx.value;
             const auto rr = e.rec_of(f.elem);
             const auto esc = f.elem.k == .Ptr || (rr != null && (rr.cx == null || cx_hasptr(e, rr.cx)));
             if ((p.ty.rvalue || p.ty.elem.konst) && ((!(f.elem.k == .Ptr && f.elem.ref) && cx_scalar(e, p.ty.elem)) || (vr && !esc))) {
@@ -1825,83 +2092,330 @@ bool cx_scalar(CEmit* e, CType* t) {
         const auto cs = cx_spell(a, xt, an.slice())?;
         sprint(&cp, "{cs}")?;
         sprint(&ca, "{arg}")?;
+        const auto cpt = cx_spell(a, p.ty, "")?;
+        sprint(&cc, "{cpt}")?;
     }
-    auto rt = f.elem;
-    auto ret = "return ";
-    auto pre = "";
-    auto post = "";
-    if (rt.k == .Void) { ret = ""; }
-    auto cret = ret;
+    s.zps = zp.slice();
+    s.xps = xp.slice();
+    s.zas = za.slice();
+    s.cps = cp.slice();
+    s.cas = ca.slice();
+    s.ccps = cc.slice();
+    if (s.why.len > 0) { return s; }
+    const auto rt = f.elem;
+    if (rt.k == .Void) { s.none = true; return s; }
     const auto rr = e.rec_of(rt);
-    const auto out = rr != null && rr.cx != null;
-    if (out) {
-        if (why.len == 0) { why = cx_byval(rr); }
-        cret = "";
-        pre = "auto &&v = ";
-        post = "; __builtin_memcpy((void*)r, (const void*)&v, sizeof(v))";
+    if (rr != null && rr.cx != null && rr.cx.value) {
+        s.out = true;
+        auto z = List<u8>::init(a);
+        e.ty(&z, rt)?;
+        s.zret = z.slice();
+        s.zty = rr.cx.d.name;
+        s.cret = cx_spell(a, rt, "")?;
+    } else if (rr != null && rr.cx != null) {
+        s.own = true;
+        s.zty = rr.cx.d.name;
+        s.zret = str_concat(a, [s.zty, "_own"])?;
+        s.cret = cx_spell(a, rt, "")?;
+    } else if (rt.k == .Ptr && rt.ref) {
+        auto z = List<u8>::init(a);
+        e.ty(&z, cx_ptr(a, rt.elem)?)?;
+        s.zret = z.slice();
+        s.cret = cx_spell(a, cx_ptr(a, rt.elem)?, "")?;
+        if (rt.rvalue) { s.refrvalue = true; }
+    } else {
+        auto z = List<u8>::init(a);
+        e.ty(&z, rt)?;
+        s.zret = z.slice();
+        s.cret = cx_spell(a, rt, "")?;
     }
-    if (why.len > 0) { return e.warn(d.name, why); }
-    if (rt.k == .Ptr && rt.ref) {
-        pre = "&";
-        if (rt.rvalue) {
-            cret = "";
-            pre = "auto &&r = ";
-            post = "; return &r";
+    if (e.why.len > 0) { s.why = e.why; }
+    return s;
+}
+
+!str cx_sname(CEmit* e, CDecl* d) {
+    auto b = List<u8>::init(e.a);
+    sprint(&b, "zark_cxx_{e.hid}_{d.seq}")?;
+    return b.slice();
+}
+
+str cx_leaf(str qn) {
+    const auto k = str_rfind(qn, "::");
+    if (k < 0) { return qn; }
+    return qn[k + 2..];
+}
+
+!void cx_del(CEmit* e, CDecl* d) {
+    if (d.reason.len > 0) { return e.warn(d.cxx, d.reason); }
+    const auto a = e.a;
+    const auto sn = cx_sname(e, d)?;
+    const auto zr = d.cx_rec.d.name;
+    const auto cr = d.cx_rec.qn;
+    auto zt = List<u8>::init(a);
+    sprint(&zt, "extern void {sn}({zr}* __self);")?;
+    if (!e.line(str_concat(a, [zr, "::~delete"])?, 3, zt.slice())?) { return; }
+    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self) {{\n    try {{\n        delete __self;\n    }} catch (...) {{\n        zark_cxx_fail(\"{cr}\");\n    }}\n}}\n#endif\n")?;
+}
+
+!void cx_assign(CEmit* e, CDecl* d) {
+    if (d.reason.len > 0) { return e.warn(d.cxx, d.reason); }
+    const auto a = e.a;
+    const auto sn = cx_sname(e, d)?;
+    const auto zr = d.cx_rec.d.name;
+    const auto cr = d.cx_rec.qn;
+    auto zt = List<u8>::init(a);
+    auto body = "";
+    if (d.cx_amove) {
+        sprint(&zt, "extern void {sn}({zr}* __self, {zr}* __other);\nvoid {zr}::assign_move({zr}* __other) {{ {sn}(this, __other); }}")?;
+        body = str_concat(a, ["*__self = static_cast<", cr, "&&>(*__other);"])?;
+    } else {
+        sprint(&zt, "extern void {sn}({zr}* __self, {zr}* __other);\nvoid {zr}::assign({zr}* __other) {{ {sn}(this, __other); }}")?;
+        body = "*__self = *__other;";
+    }
+    auto ap = "::assign";
+    if (d.cx_amove) { ap = "::assign_move"; }
+    if (!e.line(str_concat(a, [zr, ap])?, 3, zt.slice())?) { return; }
+    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self, {cr}* __other) {{\n    try {{\n        {body}\n    }} catch (...) {{\n        zark_cxx_fail(\"{cr}\");\n    }}\n}}\n#endif\n")?;
+}
+
+!void cx_var(CEmit* e, CDecl* d) {
+    if (d.reason.len > 0) { return e.warn(d.cxx, d.reason); }
+    const auto a = e.a;
+    const auto sn = cx_sname(e, d)?;
+    auto tb = List<u8>::init(a);
+    e.ty(&tb, d.cx_var_ty)?;
+    const auto zt = tb.slice();
+    const auto ct = cx_spell(a, d.cx_var_ty, "")?;
+    auto path = "";
+    auto text = List<u8>::init(a);
+    if (d.cx_meth && d.cx_rec != null) {
+        const auto zr = d.cx_rec.d.name;
+        path = str_concat(a, [zr, "::", e.ename(d.cx_mname)?])?;
+        sprint(&text, "extern {zt}* {sn}();\nstatic {zt}* {path}() {{ return {sn}(); }}")?;
+    } else {
+        const auto k = str_rfind(d.name, "::");
+        auto zs = "";
+        path = e.ename(d.name)?;
+        auto stat = "";
+        if (k >= 0) {
+            zs = e.ename(str_replace(a, d.name[0..k], "::", "_")?)?;
+            path = str_concat(a, [zs, "::", e.ename(d.name[k + 2..])?])?;
+            stat = "static ";
         }
-        rt = cx_ptr(a, rt.elem)?;
+        if (zs.len > 0 && e.done.get_or(zs, 0) != 7) {
+            if (e.done.has(zs)) { return e.warn(d.cxx, "name clash"); }
+            auto sl = List<u8>::init(a);
+            sprint(&sl, "struct {zs} {{ }}")?;
+            _ = e.line(zs, 7, sl.slice())?;
+        }
+        sprint(&text, "extern {zt}* {sn}();\n{stat}{zt}* {path}() {{ return {sn}(); }}")?;
     }
-    auto zr = List<u8>::init(a);
-    e.ty(&zr, rt)?;
-    if (e.why.len > 0) { return e.warn(d.name, e.why); }
-    const auto k = str_rfind(d.name, "::");
-    auto zs = "";
-    auto path = e.ename(d.name)?;
+    if (!e.line(path, 3, text.slice())?) { return; }
+    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {ct}* {sn}(void) {{ return &{d.cxx}; }}\n#endif\n")?;
+}
+
+!void cx_shim(CEmit* e, CDecl* d) {
+    if (d.reason.len > 0) { return e.warn(d.cxx, d.reason); }
+    if (d.cx_del) { return cx_del(e, d); }
+    if (d.cx_assign) { return cx_assign(e, d); }
+    if (d.cx_var) { return cx_var(e, d); }
+    const auto a = e.a;
+    const auto f = d.ty;
+    const auto s = cx_sig(e, f)?;
+    if (s.why.len > 0) { return e.warn(d.cxx, s.why); }
+    if (e.why.len > 0) { return e.warn(d.cxx, e.why); }
+    const auto sn = cx_sname(e, d)?;
+    const auto meth = d.cx_meth && d.cx_rec != null;
+    const auto inst = meth && !d.is_static;
+    auto selfz = "";
+    auto selfc = "";
+    if (meth) { selfz = d.cx_rec.d.name; selfc = d.cx_rec.qn; }
+    auto xs = s.xps;
+    auto cs = s.cps;
+    if (inst) {
+        const auto zs0 = str_concat(a, [selfz, "* __self"])?;
+        if (xs.len > 0) { xs = str_concat(a, [zs0, ", ", xs])?; } else { xs = zs0; }
+        const auto cs0 = str_concat(a, [selfc, "* __self"])?;
+        if (cs.len > 0) { cs = str_concat(a, [cs0, ", ", cs])?; } else { cs = cs0; }
+    }
+    auto zargs = s.zas;
+    auto cargs = s.cas;
+    if (inst) {
+        if (zargs.len > 0) { zargs = str_concat(a, ["this, ", zargs])?; } else { zargs = "this"; }
+        cargs = str_concat(a, ["__self->", d.cx_mname, "(", cargs, ")"])?;
+    } else if (meth) {
+        cargs = str_concat(a, [selfc, "::", d.cx_mname, "(", cargs, ")"])?;
+    } else {
+        cargs = str_concat(a, [d.cxx, "(", cargs, ")"])?;
+    }
+    if (d.cx_ctor) {
+        cargs = str_concat(a, ["::new ((void*)__self) ", selfc, "(", s.cas, ")"])?;
+    }
+    if (d.cx_dtor) {
+        cargs = str_concat(a, ["__self->~", cx_leaf(selfc), "()"])?;
+    }
+    auto outs = List<u8>::init(a);
+    if (s.out) {
+        const auto o = str_concat(a, [s.zret, "* __r"])?;
+        if (xs.len > 0) { const auto os = str_concat(a, [", ", o])?; sprint(&outs, "{os}")?; } else { sprint(&outs, "{o}")?; }
+    }
+    if (s.own) {
+        const auto o = str_concat(a, [s.zty, "* __r"])?;
+        if (xs.len > 0) { const auto os = str_concat(a, [", ", o])?; sprint(&outs, "{os}")?; } else { sprint(&outs, "{o}")?; }
+    }
+    auto zr = s.zret;
+    if (s.none || s.out || s.own) { zr = "void"; }
+    auto xdecl = List<u8>::init(a);
+    sprint(&xdecl, "extern {zr} {sn}({xs}{outs.slice()});")?;
+
+    auto path = "";
     auto stat = "";
-    if (k >= 0) {
-        zs = e.ename(str_replace(a, d.name[0..k], "::", "_")?)?;
-        path = str_concat(a, [zs, "::", e.ename(d.name[k + 2..])?])?;
-        stat = "static ";
+    if (meth) {
+        path = str_concat(a, [e.ename(selfz)?, "::", e.ename(d.cx_mname)?])?;
+        if (d.is_static) { stat = "static "; }
+    } else {
+        const auto k = str_rfind(d.name, "::");
+        path = e.ename(d.name)?;
+        if (k >= 0) {
+            const auto zs = e.ename(str_replace(a, d.name[0..k], "::", "_")?)?;
+            path = str_concat(a, [zs, "::", e.ename(d.name[k + 2..])?])?;
+            stat = "static ";
+            if (e.done.get_or(zs, 0) != 7) {
+                if (e.done.has(zs)) { return e.warn(d.cxx, "name clash"); }
+                auto sl = List<u8>::init(a);
+                sprint(&sl, "struct {zs} {{ }}")?;
+                _ = e.line(zs, 7, sl.slice())?;
+            }
+        }
     }
     if (e.bad.has(path) || e.done.has(path)) {
         e.bad.put(path, true)?;
-        return e.warn(d.name, "name clash");
+        return e.warn(d.cxx, "name clash");
     }
-    if (zs.len > 0 && e.done.get_or(zs, 0) != 7) {
-        if (e.done.has(zs)) { return e.warn(d.name, "name clash"); }
-        auto sl = List<u8>::init(a);
-        sprint(&sl, "struct {zs} {{ }}")?;
-        _ = e.line(zs, 7, sl.slice())?;
-    }
-    const auto zrs = zr.slice();
-    const auto zps = zp.slice();
-    const auto xps = xp.slice();
-    const auto zas = za.slice();
+    auto csep = s.zas;
+    if (s.zas.len > 0) { csep = str_concat(a, [", ", s.zas])?; }
     auto zt = List<u8>::init(a);
-    auto cps = cp.slice();
-    auto def = "";
-    if (out) {
-        auto sep = "";
-        if (f.params.len > 0) { sep = ", "; }
-        sprint(&zt, "extern void {sn}({xps}{sep}{zrs}* __r);\n{stat}{zrs} {path}({zps}) {{ {zrs} __r; {sn}({zas}{sep}&__r); return __r; }}")?;
-        const auto rc = a.create<CType>()?;
-        *rc = *rt;
-        rc.konst = false;
-        cps = str_concat(a, [cps, sep, cx_spell(a, cx_ptr(a, rc)?, "r")?])?;
-        def = str_concat(a, ["void ", sn, "(", cps, ")"])?;
+    if (d.cx_zctor || d.cx_dtor || (d.cx_ctor && (d.cx_copy || d.cx_move))) {
+        sprint(&zt, "{xdecl.slice()}")?;
+    } else if (d.cx_make) {
+        sprint(&zt, "{xdecl.slice()}\nstatic {selfz} {path}({s.zps}) {{ {selfz} __r; {sn}(&__r{csep}); return __r; }}")?;
+    } else if (d.cx_create) {
+        auto zp2 = "Allocator __a";
+        if (s.zps.len > 0) { zp2 = str_concat(a, ["Allocator __a, ", s.zps])?; }
+        const auto own = str_concat(a, [selfz, "_own"])?;
+        sprint(&zt, "{xdecl.slice()}\nstatic !{own} {path}({zp2}) {{ const auto __p = __a.create<{selfz}>()?; {sn}(__p{csep}); return {own}::init(__p, sizeof({selfz}), __a); }}")?;
+    } else if (s.own) {
+        auto zp2 = "Allocator __a";
+        if (s.zps.len > 0) { zp2 = str_concat(a, ["Allocator __a, ", s.zps])?; }
+        auto args = zargs;
+        if (zargs.len > 0) { args = str_concat(a, [zargs, ", __p"])?; } else { args = "__p"; }
+        sprint(&zt, "{xdecl.slice()}\n{stat}!{s.zret} {path}({zp2}) {{ const auto __p = __a.create<{s.zty}>()?; {sn}({args}); return {s.zret}::init(__p, sizeof({s.zty}), __a); }}")?;
+    } else if (s.out) {
+        auto args = zargs;
+        if (zargs.len > 0) { args = str_concat(a, [zargs, ", &__r"])?; } else { args = "&__r"; }
+        sprint(&zt, "{xdecl.slice()}\n{stat}{s.zret} {path}({s.zps}) {{ {s.zret} __r; {sn}({args}); return __r; }}")?;
+    } else if (s.none) {
+        sprint(&zt, "{xdecl.slice()}\n{stat}void {path}({s.zps}) {{ {sn}({zargs}); }}")?;
     } else {
-        sprint(&zt, "extern {zrs} {sn}({xps});\n{stat}{zrs} {path}({zps}) {{ {ret}{sn}({zas}); }}")?;
-        def = cx_spell(a, rt, str_concat(a, [sn, "(", cps, ")"])?)?;
+        sprint(&zt, "{xdecl.slice()}\n{stat}{s.zret} {path}({s.zps}) {{ return {sn}({zargs}); }}")?;
+    }
+    if (meth && d.cx_const && !d.cx_zctor && !d.cx_dtor) {
+        const auto t = zt.slice();
+        const auto k = str_find(t, ") {{");
+        if (k >= 0) {
+            zt = List<u8>::init(a);
+            sprint(&zt, "{t[0..k + 1]} const{t[k + 1..]}")?;
+        }
     }
     if (!e.line(path, 3, zt.slice())?) { return; }
-    const auto cas = ca.slice();
-    const auto fp = cx_spell(a, f, "(*)")?;
-    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {def} {{\n    (void)static_cast<{fp}>(&{d.cxx});\n")?;
-    if (cx_exc && !f.noexc) {
-        sprint(&e.c, "    try {{\n        {cret}{pre}{d.cxx}({cas}){post};\n    }} catch (...) {{\n        zark_cxx_fail(\"{d.cxx}\");\n    }}\n")?;
+
+    auto full = cs;
+    if (s.out) {
+        const auto o = str_concat(a, [s.cret, "* __r"])?;
+        if (full.len > 0) { full = str_concat(a, [full, ", ", o])?; } else { full = o; }
+    }
+    if (s.own) {
+        const auto o = str_concat(a, [s.cret, "* __r"])?;
+        if (full.len > 0) { full = str_concat(a, [full, ", ", o])?; } else { full = o; }
+    }
+    auto def = "";
+    if (s.none || s.out || s.own) {
+        def = str_concat(a, ["void ", sn, "(", full, ")"])?;
+    } else if (f.elem.k == .Ptr && f.elem.ref) {
+        def = cx_spell(a, cx_ptr(a, f.elem.elem)?, str_concat(a, [sn, "(", full, ")"])?)?;
     } else {
-        sprint(&e.c, "    {cret}{pre}{d.cxx}({cas}){post};\n")?;
+        def = cx_spell(a, f.elem, str_concat(a, [sn, "(", full, ")"])?)?;
+    }
+    auto fp = "";
+    if (inst) {
+        fp = cx_spell(a, f, str_concat(a, ["(", selfc, "::*)"])?)?;
+    } else {
+        fp = cx_spell(a, f, "(*)")?;
+    }
+    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {def} {{\n")?;
+    if (d.cx_ctor) {
+        auto ct = str_concat(a, ["__is_constructible(", selfc])?;
+        if (s.ccps.len > 0) { ct = str_concat(a, [ct, ", ", s.ccps])?; }
+        ct = str_concat(a, [ct, ")"])?;
+        sprint(&e.c, "    static_assert({ct});\n")?;
+    } else if (!d.cx_dtor) {
+        sprint(&e.c, "    (void)static_cast<{fp}>(&{d.cxx});\n")?;
+    }
+    auto body = "";
+    if (s.out) {
+        body = str_concat(a, ["auto &&v = ", cargs, "; __builtin_memcpy((void*)__r, (const void*)&v, sizeof(v));"])?;
+    } else if (s.own) {
+        body = str_concat(a, ["::new ((void*)__r) ", s.cret, "(", cargs, ");"])?;
+    } else if (s.none) {
+        body = str_concat(a, [cargs, ";"])?;
+    } else if (s.refrvalue) {
+        body = str_concat(a, ["auto &&r = ", cargs, "; return &r;"])?;
+    } else if (f.elem.k == .Ptr && f.elem.ref) {
+        body = str_concat(a, ["return &", cargs, ";"])?;
+    } else {
+        body = str_concat(a, ["return ", cargs, ";"])?;
+    }
+    if (cx_exc && !f.noexc) {
+        sprint(&e.c, "    try {{\n        {body}\n    }} catch (...) {{\n        zark_cxx_fail(\"{d.cxx}\");\n    }}\n")?;
+    } else {
+        sprint(&e.c, "    {body}\n")?;
     }
     e.c.append("}\n#endif\n")?;
+}
+
+!void cx_classify(CxWalk* w) {
+    for (auto r : w.rlist.slice()) {
+        auto pc = 0;
+        for (auto d : r.meths.slice()) {
+            if (d.cx_ctor && !d.cx_copy && !d.cx_move && !d.cx_deleted && d.reason.len == 0 && d.ty.params.len > 0) { pc += 1; }
+        }
+        auto seen = Map<bool>::init(w.a);
+        for (auto d : r.meths.slice()) {
+            if (d.cx_dtor || d.cx_del || d.cx_assign) { continue; }
+            if (d.cx_ctor) {
+                if (d.cx_deleted) { d.reason = "deleted constructor"; continue; }
+                if (d.cx_copy || d.cx_move) { continue; }
+                if (d.reason.len > 0) { continue; }
+                if (r.value && pc == 1 && d.ty.params.len > 0) {
+                    d.cx_zctor = true;
+                    d.cx_mname = r.d.name;
+                } else if (r.value) {
+                    d.cx_make = true;
+                    d.cx_mname = "make";
+                } else {
+                    d.cx_create = true;
+                    d.cx_mname = "create";
+                }
+                if (seen.has(d.cx_mname)) { d.reason = "overloads are not bound yet"; }
+                seen.put(d.cx_mname, true)?;
+            } else {
+                if (d.cx_deleted) { d.reason = "deleted function"; continue; }
+                if (d.reason.len > 0) { continue; }
+                if (seen.has(d.cx_mname)) { d.reason = "overloads are not bound yet"; }
+                seen.put(d.cx_mname, true)?;
+            }
+        }
+    }
 }
 
 !void cx_record(CEmit* e, CDecl* d) {
@@ -2012,17 +2526,50 @@ bool cx_scalar(CEmit* e, CType* t) {
         sprint(&c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{bf.set.seq})\nextern \"C\" void {st}({r.qn}* p, {ct} v) {{\n    p->{bf.name} = v;\n}}\n#endif\n")?;
     }
     e.why = "";
+    for (auto md : r.meths.slice()) {
+        if (!md.cx_zctor || md.reason.len > 0) { continue; }
+        e.why = "";
+        const auto sg = cx_sig(e, md.ty)?;
+        if (sg.why.len > 0 || e.why.len > 0) { continue; }
+        auto gb = List<u8>::init(a);
+        sprint(&gb, "zark_cxx_{e.hid}_{md.seq}")?;
+        const auto g = gb.slice();
+        auto sep = "";
+        if (sg.zas.len > 0) { sep = str_concat(a, [", ", sg.zas])?; }
+        sprint(&body, "{zr}({sg.zps}) {{ {g}(this{sep}); }} ")?;
+    }
+    e.why = "";
     if (al < r.align || r.align > 8) { sprint(&ext, "align({r.align}) ")?; }
     sprint(&ext, "struct {zr} {{ {body.slice()}}}")?;
     if (!e.line(d.name, 1, ext.slice())?) { return; }
     e.c.append(c.slice())?;
+    if (r.own && r.dtor_decl != null && r.del_decl != null) {
+        const auto own = str_concat(a, [zr, "_own"])?;
+        auto dt = List<u8>::init(a);
+        sprint(&dt, "zark_cxx_{e.hid}_{r.dtor_decl.seq}")?;
+        auto dl = List<u8>::init(a);
+        sprint(&dl, "zark_cxx_{e.hid}_{r.del_decl.seq}")?;
+        auto ob = List<u8>::init(a);
+        sprint(&ob, "owned struct {own} {{ {zr}* ptr; void* mem; u64 size; Allocator a; static Self init({zr}* p, u64 z, Allocator al) {{ return Self{{ .ptr = p, .mem = p, .size = z, .a = al }}; }} {zr}* get() borrows {{ return this->ptr; }} void deinit() move {{ if (this->a.alloc_fn == null) {{ {dl.slice()}(this->ptr); }} else {{ {dt.slice()}(this->ptr); this->a.destroy(this->ptr); }} }} {zr}* release() move {{ return this->ptr; }}")?;
+        if (r.copyable && r.copy_decl != null) {
+            auto cp = List<u8>::init(a);
+            sprint(&cp, "zark_cxx_{e.hid}_{r.copy_decl.seq}")?;
+            sprint(&ob, " !Self clone(Allocator a) {{ const auto __p = a.create<{zr}>()?; {cp.slice()}(__p, this->ptr); return Self{{ .ptr = __p, .mem = __p, .size = sizeof({zr}), .a = a }}; }}")?;
+        }
+        sprint(&ob, " }")?;
+        _ = e.line(own, 1, ob.slice())?;
+    }
     if (r.why.len > 0) { e.note(r.qn, r.why)?; }
 }
 
 !CEmit cx_emit(Allocator a, CxWalk* w, str hid) {
     auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .cxn = Map<str>::init(a), .bad = w.bad, .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
     for (auto d : w.decls.slice()) { if (d.k != .Func && d.cxx.len > 0) { e.cxn.put(d.name, d.cxx)?; } }
-    e.run(w.decls)?;
+    auto order = List<CDecl*>::init(a);
+    for (auto d : w.decls.slice()) { if (d.k != .Func && d.k != .Var) { order.push(d)?; } }
+    for (auto d : w.decls.slice()) { if (d.k == .Func) { order.push(d)?; } }
+    for (auto d : w.decls.slice()) { if (d.k == .Var) { order.push(d)?; } }
+    e.run(order)?;
     return e;
 }
 
@@ -2030,10 +2577,15 @@ bool cx_scalar(CEmit* e, CType* t) {
     if (e.c.len == 0) { return ""; }
     auto b = List<u8>::init(a);
     sprint(&b, "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"\n")?;
-    if (cx_exc) { sprint(&b, "#include <cstdio>\n#include <cstdlib>\n#include <exception>\n")?; }
-    sprint(&b, "#include \"{abs}\"\n#pragma clang diagnostic ignored \"-Weverything\"\n")?;
-    if (cx_exc) {
-        sprint(&b, "[[noreturn]] static inline void zark_cxx_fail(const char *f) {{\n    fflush(stdout);\n    try {{\n        throw;\n    }} catch (const std::exception &e) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s: %s\\n\", f, e.what());\n    }} catch (...) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s\\n\", f);\n    }}\n    abort();\n}}\n")?;
+    if (cross_target()) {
+        sprint(&b, "#include \"{abs}\"\n#pragma clang diagnostic ignored \"-Weverything\"\ninline void *operator new(__SIZE_TYPE__, void *p) noexcept {{ return p; }}\ninline void operator delete(void *, void *) noexcept {{ }}\n[[noreturn]] static inline void zark_cxx_fail(const char *f) {{ (void)f; __builtin_trap(); }}\n")?;
+    } else {
+        sprint(&b, "#include <new>\n")?;
+        if (cx_exc) { sprint(&b, "#include <cstdio>\n#include <cstdlib>\n#include <exception>\n")?; }
+        sprint(&b, "#include \"{abs}\"\n#pragma clang diagnostic ignored \"-Weverything\"\n")?;
+        if (cx_exc) {
+            sprint(&b, "[[noreturn]] static inline void zark_cxx_fail(const char *f) {{\n    fflush(stdout);\n    try {{\n        throw;\n    }} catch (const std::exception &e) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s: %s\\n\", f, e.what());\n    }} catch (...) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s\\n\", f);\n    }}\n    abort();\n}}\n")?;
+        }
     }
     const auto c = e.c.slice();
     sprint(&b, "{c}")?;
@@ -2168,6 +2720,7 @@ bool cx_scalar(CEmit* e, CType* t) {
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
+    cx_classify(&w)?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
@@ -2180,8 +2733,8 @@ bool cx_scalar(CEmit* e, CType* t) {
     w.layouts(header, from_dir, cflags)?;
     for (auto r : w.rlist.slice()) { w.flat(r)?; }
     auto count = Map<i64>::init(a);
-    for (auto d : w.decls.slice()) { if (d.k == .Func) { count.put(d.cxx, count.get_or(d.cxx, 0) + 1)?; } }
-    for (auto d : w.decls.slice()) { if (d.k == .Func && count.get_or(d.cxx, 0) > 1) { d.reason = "overloads are not bound yet"; } }
+    for (auto d : w.decls.slice()) { if (d.k == .Func && !d.cx_meth) { count.put(d.cxx, count.get_or(d.cxx, 0) + 1)?; } }
+    for (auto d : w.decls.slice()) { if (d.k == .Func && !d.cx_meth && count.get_or(d.cxx, 0) > 1) { d.reason = "overloads are not bound yet"; } }
     auto deps = List<str>::init(a);
     auto from = List<str>::init(a);
     for (auto d : dep_files(a, dtext)?) {

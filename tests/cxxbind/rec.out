@@ -3,25 +3,59 @@ type Outer_K = i32;
 const auto Outer_K0 = 0;
 const auto Outer_N = 3;
 struct Outer { Outer_Inner in; Outer_K k; u8[4] __pad0; }
-extern i32 zark_cxx_H_18(Outer_Inner* p);
-i32 useinner(Outer_Inner* p) { return zark_cxx_H_18(p); }
+owned struct Outer_own { Outer* ptr; void* mem; u64 size; Allocator a; static Self init(Outer* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } Outer* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_20(this->ptr); } else { zark_cxx_3543bc795928e785_12(this->ptr); this->a.destroy(this->ptr); } } Outer* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Outer>()?; zark_cxx_3543bc795928e785_17(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Outer), .a = a }; } }
 type r_S_In = i32;
 const auto r_S_I0 = 0;
 struct r_S { i32 s; }
-extern i32 zark_cxx_H_23(r_S* s);
-i32 user(r_S* s) { return zark_cxx_H_23(s); }
 struct u_T { i32 t; }
-extern i32 zark_cxx_H_26(u_T* t);
-i32 taket(u_T* t) { return zark_cxx_H_26(t); }
 type UT = u_T;
-extern i32 zark_cxx_H_28(UT* x);
-i32 takeut(UT* x) { return zark_cxx_H_28(x); }
 struct Self { Self* next; i32 v; u8[4] __pad0; }
 struct type_ { i32 match_; }
 struct Hid { i32 h; }
-extern i32* zark_cxx_H_36(i32* a, i32* b);
-i32* imax(i32* a, i32* b) { return zark_cxx_H_36(a, b); }
 struct st { i32 a; }
 struct v1_In { i32 i; }
 struct VA { void* __vptr; }
+owned struct VA_own { VA* ptr; void* mem; u64 size; Allocator a; static Self init(VA* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } VA* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_53(this->ptr); } else { zark_cxx_3543bc795928e785_49(this->ptr); this->a.destroy(this->ptr); } } VA* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<VA>()?; zark_cxx_3543bc795928e785_50(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(VA), .a = a }; } }
 align(8) struct VB2 { u8[8] __pad0; i32 y; u8[4] __pad1; }
+owned struct VB2_own { VB2* ptr; void* mem; u64 size; Allocator a; static Self init(VB2* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } VB2* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_60(this->ptr); } else { zark_cxx_3543bc795928e785_56(this->ptr); this->a.destroy(this->ptr); } } VB2* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<VB2>()?; zark_cxx_3543bc795928e785_57(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(VB2), .a = a }; } }
+extern i32 zark_cxx_3543bc795928e785_9(Outer* __self);
+i32 Outer::f() { return zark_cxx_3543bc795928e785_9(this); }
+extern i32 zark_cxx_3543bc795928e785_10();
+static i32 Outer::g() { return zark_cxx_3543bc795928e785_10(); }
+extern void zark_cxx_3543bc795928e785_11(Outer* __self);
+static !Outer_own Outer::create(Allocator __a) { const auto __p = __a.create<Outer>()?; zark_cxx_3543bc795928e785_11(__p); return Outer_own::init(__p, sizeof(Outer), __a); }
+extern void zark_cxx_3543bc795928e785_12(Outer* __self);
+extern i32* zark_cxx_3543bc795928e785_14();
+static i32* Outer::count_ptr() { return zark_cxx_3543bc795928e785_14(); }
+extern void zark_cxx_3543bc795928e785_17(Outer* __self, Outer* a0);
+extern void zark_cxx_3543bc795928e785_18(Outer* __self, Outer* __other);
+void Outer::assign(Outer* __other) { zark_cxx_3543bc795928e785_18(this, __other); }
+extern void zark_cxx_3543bc795928e785_19(Outer* __self, Outer* __other);
+void Outer::assign_move(Outer* __other) { zark_cxx_3543bc795928e785_19(this, __other); }
+extern void zark_cxx_3543bc795928e785_20(Outer* __self);
+extern i32 zark_cxx_3543bc795928e785_22(Outer_Inner* p);
+i32 useinner(Outer_Inner* p) { return zark_cxx_3543bc795928e785_22(p); }
+extern i32 zark_cxx_3543bc795928e785_27(r_S* s);
+i32 user(r_S* s) { return zark_cxx_3543bc795928e785_27(s); }
+extern i32 zark_cxx_3543bc795928e785_30(u_T* t);
+i32 taket(u_T* t) { return zark_cxx_3543bc795928e785_30(t); }
+extern i32 zark_cxx_3543bc795928e785_32(UT* x);
+i32 takeut(UT* x) { return zark_cxx_3543bc795928e785_32(x); }
+extern i32* zark_cxx_3543bc795928e785_40(i32* a, i32* b);
+i32* imax(i32* a, i32* b) { return zark_cxx_3543bc795928e785_40(a, b); }
+extern void zark_cxx_3543bc795928e785_48(VA* __self);
+void VA::f() { zark_cxx_3543bc795928e785_48(this); }
+extern void zark_cxx_3543bc795928e785_49(VA* __self);
+extern void zark_cxx_3543bc795928e785_50(VA* __self, VA* a0);
+extern void zark_cxx_3543bc795928e785_51(VA* __self, VA* __other);
+void VA::assign(VA* __other) { zark_cxx_3543bc795928e785_51(this, __other); }
+extern void zark_cxx_3543bc795928e785_52(VA* __self, VA* __other);
+void VA::assign_move(VA* __other) { zark_cxx_3543bc795928e785_52(this, __other); }
+extern void zark_cxx_3543bc795928e785_53(VA* __self);
+extern void zark_cxx_3543bc795928e785_56(VB2* __self);
+extern void zark_cxx_3543bc795928e785_57(VB2* __self, VB2* a0);
+extern void zark_cxx_3543bc795928e785_58(VB2* __self, VB2* __other);
+void VB2::assign(VB2* __other) { zark_cxx_3543bc795928e785_58(this, __other); }
+extern void zark_cxx_3543bc795928e785_59(VB2* __self, VB2* __other);
+void VB2::assign_move(VB2* __other) { zark_cxx_3543bc795928e785_59(this, __other); }
+extern void zark_cxx_3543bc795928e785_60(VB2* __self);

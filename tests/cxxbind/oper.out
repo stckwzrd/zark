@@ -1,5 +1,5 @@
 type E = u8;
 const auto E_A = 0;
 const auto E_B = 1;
-extern i32 zark_cxx_d7b549694f0106c9_8(i32 v);
-i32 operatorx(i32 v) { return zark_cxx_d7b549694f0106c9_8(v); }
+extern i32 zark_cxx_3dab6e1491d68b6c_8(i32 v);
+i32 operatorx(i32 v) { return zark_cxx_3dab6e1491d68b6c_8(v); }

@@ -1,24 +1,24 @@
 type Mode = u8;
 const auto Mode_Off = 0;
 const auto Mode_On = 1;
-extern u32 zark_cxx_H_11(Flags* p);
-extern void zark_cxx_H_12(Flags* p, u32 v);
-extern i32 zark_cxx_H_13(Flags* p);
-extern void zark_cxx_H_14(Flags* p, i32 v);
-extern bool zark_cxx_H_15(Flags* p);
-extern void zark_cxx_H_16(Flags* p, bool v);
-extern u64 zark_cxx_H_17(Flags* p);
-extern void zark_cxx_H_18(Flags* p, u64 v);
-extern i16 zark_cxx_H_19(Flags* p);
-extern void zark_cxx_H_20(Flags* p, i16 v);
-align(8) struct Flags { u8[8] __pad0; i8 tag; u8[7] __pad1; u32 get_a() { return zark_cxx_H_11(this); } void set_a(u32 v) { zark_cxx_H_12(this, v); } i32 get_s() { return zark_cxx_H_13(this); } void set_s(i32 v) { zark_cxx_H_14(this, v); } bool get_on() { return zark_cxx_H_15(this); } void set_on(bool v) { zark_cxx_H_16(this, v); } u64 get_wide() { return zark_cxx_H_17(this); } void set_wide(u64 v) { zark_cxx_H_18(this, v); } i16 get_h() { return zark_cxx_H_19(this); } void set_h(i16 v) { zark_cxx_H_20(this, v); } }
-extern Mode zark_cxx_H_21(WithEnum* p);
-extern void zark_cxx_H_22(WithEnum* p, Mode v);
-struct WithEnum { u8[4] __pad0; i32 rest; Mode get_m() { return zark_cxx_H_21(this); } void set_m(Mode v) { zark_cxx_H_22(this, v); } }
-extern i32 zark_cxx_H_23(PB* p);
-extern void zark_cxx_H_24(PB* p, i32 v);
-align(4) struct PB { u8[4] __pad0; i32 get_shown() { return zark_cxx_H_23(this); } void set_shown(i32 v) { zark_cxx_H_24(this, v); } }
+extern u32 zark_cxx_a178a9b1938d0a03_11(Flags* p);
+extern void zark_cxx_a178a9b1938d0a03_12(Flags* p, u32 v);
+extern i32 zark_cxx_a178a9b1938d0a03_13(Flags* p);
+extern void zark_cxx_a178a9b1938d0a03_14(Flags* p, i32 v);
+extern bool zark_cxx_a178a9b1938d0a03_15(Flags* p);
+extern void zark_cxx_a178a9b1938d0a03_16(Flags* p, bool v);
+extern u64 zark_cxx_a178a9b1938d0a03_17(Flags* p);
+extern void zark_cxx_a178a9b1938d0a03_18(Flags* p, u64 v);
+extern i16 zark_cxx_a178a9b1938d0a03_19(Flags* p);
+extern void zark_cxx_a178a9b1938d0a03_20(Flags* p, i16 v);
+align(8) struct Flags { u8[8] __pad0; i8 tag; u8[7] __pad1; u32 get_a() { return zark_cxx_a178a9b1938d0a03_11(this); } void set_a(u32 v) { zark_cxx_a178a9b1938d0a03_12(this, v); } i32 get_s() { return zark_cxx_a178a9b1938d0a03_13(this); } void set_s(i32 v) { zark_cxx_a178a9b1938d0a03_14(this, v); } bool get_on() { return zark_cxx_a178a9b1938d0a03_15(this); } void set_on(bool v) { zark_cxx_a178a9b1938d0a03_16(this, v); } u64 get_wide() { return zark_cxx_a178a9b1938d0a03_17(this); } void set_wide(u64 v) { zark_cxx_a178a9b1938d0a03_18(this, v); } i16 get_h() { return zark_cxx_a178a9b1938d0a03_19(this); } void set_h(i16 v) { zark_cxx_a178a9b1938d0a03_20(this, v); } }
+extern Mode zark_cxx_a178a9b1938d0a03_21(WithEnum* p);
+extern void zark_cxx_a178a9b1938d0a03_22(WithEnum* p, Mode v);
+struct WithEnum { u8[4] __pad0; i32 rest; Mode get_m() { return zark_cxx_a178a9b1938d0a03_21(this); } void set_m(Mode v) { zark_cxx_a178a9b1938d0a03_22(this, v); } }
+extern i32 zark_cxx_a178a9b1938d0a03_23(PB* p);
+extern void zark_cxx_a178a9b1938d0a03_24(PB* p, i32 v);
+align(4) struct PB { u8[4] __pad0; i32 get_shown() { return zark_cxx_a178a9b1938d0a03_23(this); } void set_shown(i32 v) { zark_cxx_a178a9b1938d0a03_24(this, v); } }
 align(4) struct Nest__anon0 { u8[4] __pad0; }
-extern i32 zark_cxx_H_25(Nest* p);
-extern void zark_cxx_H_26(Nest* p, i32 v);
-struct Nest { Nest__anon0 an; u8[4] __pad0; i32 get_c() { return zark_cxx_H_25(this); } void set_c(i32 v) { zark_cxx_H_26(this, v); } }
+extern i32 zark_cxx_a178a9b1938d0a03_25(Nest* p);
+extern void zark_cxx_a178a9b1938d0a03_26(Nest* p, i32 v);
+struct Nest { Nest__anon0 an; u8[4] __pad0; i32 get_c() { return zark_cxx_a178a9b1938d0a03_25(this); } void set_c(i32 v) { zark_cxx_a178a9b1938d0a03_26(this, v); } }

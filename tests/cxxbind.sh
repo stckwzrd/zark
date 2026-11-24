@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -22,7 +22,7 @@ for name in $names; do
 done
 
 "$ZARK" cbind tests/cxxbind/layout.hpp --arch aarch64 --os linux > layout.a64.zk 2> /dev/null || fail "layout a64: exit $?"
-diff -u tests/cxxbind/layout.a64.out layout.a64.zk || fail "layout a64: output differs"
+diff -u <(nohid tests/cxxbind/layout.a64.out) <(nohid layout.a64.zk) || fail "layout a64: output differs"
 
 grep -q "^skipped std::" sysfilter.err && fail "sysfilter: std:: names in warnings"
 [ "$(wc -l < sysfilter.zk)" -le 10 ] || fail "sysfilter: output is not small"
@@ -96,6 +96,22 @@ for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f value.zk value.cpp value_b.cpp 2>&1) || fail "interop value $f: $out"
     [ "$out" = "$(cat interop/value.out)" ] || fail "interop value $f: got: $out"
 done
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f lifetime.zk lifetime.cpp 2>&1) || fail "interop lifetime $f: $out"
+    [ "$out" = "$(cat interop/lifetime.out)" ] || fail "interop lifetime $f: got: $out"
+done
+
+mkdir -p neg
+printf 'import "../methods.zk";\n!void main() { const auto a = c_allocator(); auto n = geo_NT::create(a, 1)?; println(n.get().get()); }\n' > neg/leak.zk
+if out=$("$ZARK" ir neg/leak.zk 2>&1); then fail "neg leak: expected failure"; fi
+case "$out" in *"not consumed on every path"*) ;; *) fail "neg leak: got: $out" ;; esac
+printf 'import "../methods.zk";\n!void main() { const auto a = c_allocator(); auto n = geo_NT::create(a, 1)?; const auto p = n.get(); n.deinit(); println(p.get()); }\n' > neg/after_deinit.zk
+if out=$("$ZARK" ir neg/after_deinit.zk 2>&1); then fail "neg after_deinit: expected failure"; fi
+case "$out" in *"may have moved or freed"*) ;; *) fail "neg after_deinit: got: $out" ;; esac
+printf 'import "../methods.zk";\n!void main() { const auto a = c_allocator(); auto n = geo_NT::create(a, 1)?; const auto p = n.release(); println(n.get().get()); _ = p; }\n' > neg/after_release.zk
+if out=$("$ZARK" ir neg/after_release.zk 2>&1); then fail "neg after_release: expected failure"; fi
+case "$out" in *"used after 'release'"*) ;; *) fail "neg after_release: got: $out" ;; esac
 
 cp -r "$R/tests/cxxbind/interop/imp" imp
 for f in "" --llvm -O; do

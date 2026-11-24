@@ -4,15 +4,20 @@ struct geo_Mixed { i32 a; u8[4] __pad0; i8 c; u8[7] __pad1; f64 e; }
 struct geo_NP { i32 n; i8 c; u8[3] __pad0; }
 struct geo_Tail { i32 n; i8 c; i8 t; u8[2] __pad0; }
 struct geo_Shape { void* __vptr; i32 id; u8[4] __pad0; }
+owned struct geo_Shape_own { geo_Shape* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Shape* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } geo_Shape* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_9a37b9b674268887_16(this->ptr); } else { zark_cxx_9a37b9b674268887_12(this->ptr); this->a.destroy(this->ptr); } } geo_Shape* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_Shape>()?; zark_cxx_9a37b9b674268887_13(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_Shape), .a = a }; } }
 struct geo_Circle { void* __vptr; i32 id; u8[4] __pad0; f64 r; }
+owned struct geo_Circle_own { geo_Circle* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Circle* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } geo_Circle* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_9a37b9b674268887_23(this->ptr); } else { zark_cxx_9a37b9b674268887_19(this->ptr); this->a.destroy(this->ptr); } } geo_Circle* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_Circle>()?; zark_cxx_9a37b9b674268887_20(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_Circle), .a = a }; } }
 align(16) struct geo_A16 { i8 c; u8[15] __pad0; }
 align(8) struct geo_AF { i8 c; u8[7] __pad0; i32 x; u8[4] __pad1; }
 struct geo_M1 { i32 a; }
 struct geo_M2 { void* __vptr; i32 b; u8[4] __pad0; }
+owned struct geo_M2_own { geo_M2* ptr; void* mem; u64 size; Allocator a; static Self init(geo_M2* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } geo_M2* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_9a37b9b674268887_37(this->ptr); } else { zark_cxx_9a37b9b674268887_33(this->ptr); this->a.destroy(this->ptr); } } geo_M2* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_M2>()?; zark_cxx_9a37b9b674268887_34(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_M2), .a = a }; } }
 struct geo_MM { void* __vptr; i32 b; i32 a; i32 c; u8[4] __pad0; }
+owned struct geo_MM_own { geo_MM* ptr; void* mem; u64 size; Allocator a; static Self init(geo_MM* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } geo_MM* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_9a37b9b674268887_44(this->ptr); } else { zark_cxx_9a37b9b674268887_40(this->ptr); this->a.destroy(this->ptr); } } geo_MM* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_MM>()?; zark_cxx_9a37b9b674268887_41(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_MM), .a = a }; } }
 align(8) struct geo_PrivBase { u8[24] __pad0; i32 p; u8[4] __pad1; }
 struct geo_VB { i32 v; }
 struct geo_VD { void* __vptr; i32 w; u8[4] __pad0; }
+owned struct geo_VD_own { geo_VD* ptr; void* mem; u64 size; Allocator a; static Self init(geo_VD* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } geo_VD* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_9a37b9b674268887_55(this->ptr); } else { zark_cxx_9a37b9b674268887_51(this->ptr); this->a.destroy(this->ptr); } } geo_VD* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_VD>()?; zark_cxx_9a37b9b674268887_52(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_VD), .a = a }; } }
 struct geo_E { u8[1] __pad0; }
 struct geo_DE { i32 x; }
 struct geo_Hide { u8[8] __pad0; f64 y; i32 k; u8[4] __pad1; i32 x; u8[4] __pad2; }
@@ -21,3 +26,42 @@ struct geo_Arr { geo_Vec[2] vs; i32[3] n; u8[4] __pad0; geo_Vec* next; }
 struct geo_Pk { u8[5] storage; }
 struct geo_UsePk { geo_Pk p; i8 tail; }
 struct geo_NU { i32 k; }
+extern void zark_cxx_9a37b9b674268887_7(geo_NP* __self);
+static geo_NP geo_NP::make() { geo_NP __r; zark_cxx_9a37b9b674268887_7(&__r); return __r; }
+extern void zark_cxx_9a37b9b674268887_12(geo_Shape* __self);
+extern void zark_cxx_9a37b9b674268887_13(geo_Shape* __self, geo_Shape* a0);
+extern void zark_cxx_9a37b9b674268887_14(geo_Shape* __self, geo_Shape* __other);
+void geo_Shape::assign(geo_Shape* __other) { zark_cxx_9a37b9b674268887_14(this, __other); }
+extern void zark_cxx_9a37b9b674268887_15(geo_Shape* __self, geo_Shape* __other);
+void geo_Shape::assign_move(geo_Shape* __other) { zark_cxx_9a37b9b674268887_15(this, __other); }
+extern void zark_cxx_9a37b9b674268887_16(geo_Shape* __self);
+extern void zark_cxx_9a37b9b674268887_19(geo_Circle* __self);
+extern void zark_cxx_9a37b9b674268887_20(geo_Circle* __self, geo_Circle* a0);
+extern void zark_cxx_9a37b9b674268887_21(geo_Circle* __self, geo_Circle* __other);
+void geo_Circle::assign(geo_Circle* __other) { zark_cxx_9a37b9b674268887_21(this, __other); }
+extern void zark_cxx_9a37b9b674268887_22(geo_Circle* __self, geo_Circle* __other);
+void geo_Circle::assign_move(geo_Circle* __other) { zark_cxx_9a37b9b674268887_22(this, __other); }
+extern void zark_cxx_9a37b9b674268887_23(geo_Circle* __self);
+extern void zark_cxx_9a37b9b674268887_32(geo_M2* __self);
+void geo_M2::f() { zark_cxx_9a37b9b674268887_32(this); }
+extern void zark_cxx_9a37b9b674268887_33(geo_M2* __self);
+extern void zark_cxx_9a37b9b674268887_34(geo_M2* __self, geo_M2* a0);
+extern void zark_cxx_9a37b9b674268887_35(geo_M2* __self, geo_M2* __other);
+void geo_M2::assign(geo_M2* __other) { zark_cxx_9a37b9b674268887_35(this, __other); }
+extern void zark_cxx_9a37b9b674268887_36(geo_M2* __self, geo_M2* __other);
+void geo_M2::assign_move(geo_M2* __other) { zark_cxx_9a37b9b674268887_36(this, __other); }
+extern void zark_cxx_9a37b9b674268887_37(geo_M2* __self);
+extern void zark_cxx_9a37b9b674268887_40(geo_MM* __self);
+extern void zark_cxx_9a37b9b674268887_41(geo_MM* __self, geo_MM* a0);
+extern void zark_cxx_9a37b9b674268887_42(geo_MM* __self, geo_MM* __other);
+void geo_MM::assign(geo_MM* __other) { zark_cxx_9a37b9b674268887_42(this, __other); }
+extern void zark_cxx_9a37b9b674268887_43(geo_MM* __self, geo_MM* __other);
+void geo_MM::assign_move(geo_MM* __other) { zark_cxx_9a37b9b674268887_43(this, __other); }
+extern void zark_cxx_9a37b9b674268887_44(geo_MM* __self);
+extern void zark_cxx_9a37b9b674268887_51(geo_VD* __self);
+extern void zark_cxx_9a37b9b674268887_52(geo_VD* __self, geo_VD* a0);
+extern void zark_cxx_9a37b9b674268887_53(geo_VD* __self, geo_VD* __other);
+void geo_VD::assign(geo_VD* __other) { zark_cxx_9a37b9b674268887_53(this, __other); }
+extern void zark_cxx_9a37b9b674268887_54(geo_VD* __self, geo_VD* __other);
+void geo_VD::assign_move(geo_VD* __other) { zark_cxx_9a37b9b674268887_54(this, __other); }
+extern void zark_cxx_9a37b9b674268887_55(geo_VD* __self);

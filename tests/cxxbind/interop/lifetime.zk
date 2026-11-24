@@ -1,0 +1,29 @@
+import "lifetime.hpp" as l;
+
+!void work() {
+    const auto a = c_allocator();
+    auto x = l::life_Counter::create(a, 1)?;
+    defer x.deinit();
+    auto y = x.clone(a)?;
+    defer y.deinit();
+    println(x.get().value(), y.get().value());
+    x.get().set(5);
+    println(x.get().value(), y.get().value());
+    auto z = x.get().bump(a, 3)?;
+    defer z.deinit();
+    println(z.get().value());
+    auto w = l::life_Counter::make(a, 9)?;
+    defer w.deinit();
+    println(w.get().value());
+    z.get().assign(x.get());
+    println(z.get().value());
+    z.get().assign_move(w.get());
+    println(z.get().value());
+    l::life::drop(x.get());
+    println(l::life_Counter::alive());
+}
+
+!void main() {
+    work()?;
+    println(l::life_Counter::alive(), l::life::ctors(), l::life::dtors());
+}

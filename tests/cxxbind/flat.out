@@ -4,5 +4,5 @@ type Fwd = i16;
 const auto Fwd_A = 0;
 const auto Fwd_B = 1;
 type K = i32;
-extern void usek(K k);
 const auto K0 = 0;
+extern void usek(K k);
