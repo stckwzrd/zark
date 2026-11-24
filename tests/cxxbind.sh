@@ -242,4 +242,11 @@ if out=$(cd two && "$ZARK" run m.zk 2>&1); then fail "import_two_ns: expected fa
 case "$out" in *"from a header they both include"*) fail "import_two_ns: C message for C++ headers: $out" ;; esac
 case "$out" in *"'a.hpp' and 'b.hpp' both declare 'geo'"*"import them with 'as'"*) ;; *) fail "import_two_ns: got: $out" ;; esac
 
+# The ImGui example needs its pinned dependency; skip this part without it.
+if [ -f "$R/examples/imgui/deps/imgui/imgui.h" ]; then
+    (cd "$R/examples/imgui" && "$ZARK" cbind imgui_all.hpp -I deps/imgui > /dev/null 2> "$T/imgui.err") || fail "imgui: cbind exit $?"
+    diff -u "$R/tests/cxxbind/imgui.err" "$T/imgui.err" || fail "imgui: warnings differ"
+    (cd "$R/examples/imgui" && "$ZARK" build > /dev/null 2>&1) || fail "imgui: build failed"
+fi
+
 echo "ok   cxxbind ($names)"
