@@ -1,0 +1,9 @@
+import "opsuf.hpp" as f;
+
+!void main() {
+    const auto v = f::V{ .x = 1 };
+    const auto w = f::W{ .x = 2 };
+    println(v.op_add_i32(5).x, v.op_add_i16(5).x, v.op_add_i64l(5).x, v.op_add_V(v).x);
+    println((v - 3).x, v == v, v == f::V{ .x = 2 });
+    println((w + w).x, w.op_mul_i32(3).x, w.op_mul_f64(1.5).x);
+}

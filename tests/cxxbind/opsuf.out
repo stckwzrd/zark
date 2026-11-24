@@ -1,0 +1,11 @@
+struct V { i32 x; V op_add_i32(i32 k) const { V __r; zark_cxx_6e658a1a5f128d79_2(this, k, &__r); return __r; } V op_add_i16(i16 k) const { V __r; zark_cxx_6e658a1a5f128d79_3(this, k, &__r); return __r; } V op_add_i64l(i64 k) const { V __r; zark_cxx_6e658a1a5f128d79_4(this, k, &__r); return __r; } V op_add_V(V b) const { V __r; zark_cxx_6e658a1a5f128d79_5(this, &b, &__r); return __r; } V operator-(i32 k) const { V __r; zark_cxx_6e658a1a5f128d79_6(this, k, &__r); return __r; } bool operator==(V b) const { return zark_cxx_6e658a1a5f128d79_7(this, &b); } }
+struct W { i32 x; W operator+(W b) const { W __r; zark_cxx_6e658a1a5f128d79_10(this, &b, &__r); return __r; } W op_mul_i32(i32 k) const { W __r; zark_cxx_6e658a1a5f128d79_11(this, k, &__r); return __r; } W op_mul_f64(f64 k) const { W __r; zark_cxx_6e658a1a5f128d79_12(this, k, &__r); return __r; } }
+extern void zark_cxx_6e658a1a5f128d79_2(V* __self, i32 k, V* __r);
+extern void zark_cxx_6e658a1a5f128d79_3(V* __self, i16 k, V* __r);
+extern void zark_cxx_6e658a1a5f128d79_4(V* __self, i64 k, V* __r);
+extern void zark_cxx_6e658a1a5f128d79_5(V* __self, V* b, V* __r);
+extern void zark_cxx_6e658a1a5f128d79_6(V* __self, i32 k, V* __r);
+extern bool zark_cxx_6e658a1a5f128d79_7(V* __self, V* b);
+extern void zark_cxx_6e658a1a5f128d79_10(W* __self, W* b, W* __r);
+extern void zark_cxx_6e658a1a5f128d79_11(W* __self, i32 k, W* __r);
+extern void zark_cxx_6e658a1a5f128d79_12(W* __self, f64 k, W* __r);

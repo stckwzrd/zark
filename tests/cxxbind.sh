@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros boxspec boxclash boxauto refalias userdef"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros boxspec boxclash boxauto refalias userdef opsuf"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -124,6 +124,11 @@ done
 for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f userdef.zk userdef.cpp 2>&1) || fail "interop userdef $f: $out"
     [ "$out" = "$(cat interop/userdef.out)" ] || fail "interop userdef $f: got: $out"
+done
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f opsuf.zk opsuf.cpp 2>&1) || fail "interop opsuf $f: $out"
+    [ "$out" = "$(cat interop/opsuf.out)" ] || fail "interop opsuf $f: got: $out"
 done
 
 for f in "" --llvm -O; do
@@ -275,7 +280,7 @@ printf 'namespace q { struct V { int x; }; struct W { int x; }; V operator+(V a,
 opsigs() { grep -o 'q_V [A-Za-z_][A-Za-z0-9_+]*([^)]*) const' "$1" | sort; }
 diff -u <(opsigs oporder/a.zk) <(opsigs oporder/b.zk) || fail "op order: declaration order changed the bindings"
 [ "$(opsigs oporder/a.zk | wc -l)" = 2 ] || fail "op order: expected both overloads"
-grep -q "operator+" oporder/a.zk || fail "op order: no operator+"
+grep -q "operator+" oporder/a.zk && fail "op order: unsuffixed operator+ with two overloads"
 grep -q "op_add_" oporder/a.zk || fail "op order: the second overload was dropped"
 grep -q "operator overloads are not supported" oporder/a.err && fail "op order: an overload was dropped"
 
