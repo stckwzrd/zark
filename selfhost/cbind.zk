@@ -3070,6 +3070,7 @@ struct CBind {
 List<str> c_flags = List<str>{};
 str c_cache = ".zark-cache";
 List<str> c_inline_sources = List<str>{};
+Map<str> c_inline_dirs = Map<str>{};
 List<str> c_uses = List<str>{};
 Map<str> c_headers = Map<str>{};
 str c_version = "";
@@ -3193,6 +3194,7 @@ str c_header_name(str p) {
     if (c_headers.a.alloc_fn == null) {
         c_headers = Map<str>::init(c_allocator());
         c_inline_sources = List<str>::init(c_allocator());
+        c_inline_dirs = Map<str>::init(c_allocator());
     }
     if ((cxx && cx_version.len == 0) || (!cxx && c_version.len == 0)) {
         auto cc = "clang";
@@ -3315,7 +3317,10 @@ str c_header_name(str p) {
     }
     const auto zk = path::join(a, [dir, str_concat(a, [key, ".zk"])?])?;
     const auto c = path::join(a, [dir, str_concat(a, [key, ext])?])?;
-    if (fs::is_file(c) && c_inline_sources.index_of(c) < 0) { c_inline_sources.push(c_allocator().dup(c)?)?; }
+    if (fs::is_file(c) && c_inline_sources.index_of(c) < 0) {
+        c_inline_sources.push(c_allocator().dup(c)?)?;
+        c_inline_dirs.put(c_allocator().dup(c)?, c_allocator().dup(from_dir)?)?;
+    }
     c_headers.put(c_allocator().dup(zk)?, c_allocator().dup(header)?)?;
     return zk;
 }
