@@ -5,7 +5,7 @@ struct m { }
 extern i32 zark_cxx_e76701896a014a8e_0(i32 a0);
 static i32 m::ov_i32(i32 a0) { return zark_cxx_e76701896a014a8e_0(a0); }
 extern i32 zark_cxx_e76701896a014a8e_1(i64 a0);
-static i32 m::ov_i64(i64 a0) { return zark_cxx_e76701896a014a8e_1(a0); }
+static i32 m::ov_i64l(i64 a0) { return zark_cxx_e76701896a014a8e_1(a0); }
 extern i32 zark_cxx_e76701896a014a8e_13(m_S* s);
 static i32 m::cls(m_S s) { return zark_cxx_e76701896a014a8e_13(&s); }
 extern i32 zark_cxx_e76701896a014a8e_14(m_S* s);

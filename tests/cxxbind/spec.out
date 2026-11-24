@@ -14,7 +14,10 @@ struct Vec_n_Pair { i32 Size; i32 Capacity; n_Pair* Data; }
 struct n_Store { Vec_n_Pair data; }
 struct Arr_i32_4 { i32[4] v; }
 struct HasArr { Arr_i32_4 a; }
-align(8) struct U2 { u8[56] __pad0; i32 tail; u8[4] __pad1; }
+struct Box_i64l { i64 v; }
+struct Box_i64ll { i64 v; }
+struct Box_u8pc { }
+struct U2 { Box_i64l a; Box_i64ll b; u8[40] __pad0; i32 tail; u8[4] __pad1; }
 struct TA_i32__anon0 { u32[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } }
 struct TA_i32 { TA_i32__anon0 __anon0; i32 n; }
 struct HT { TA_i32 t; }

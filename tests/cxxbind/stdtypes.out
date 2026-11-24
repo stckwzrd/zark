@@ -1,38 +1,33 @@
 struct st_Thing { i32 v; }
-owned struct st_Thing_own { st_Thing* ptr; void* mem; u64 size; Allocator a; static Self init(st_Thing* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(st_Thing* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } st_Thing* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_7b1ac28d7e23a321_7(this->ptr); } else { zark_cxx_7b1ac28d7e23a321_2(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } st_Thing* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<st_Thing>()?; zark_cxx_7b1ac28d7e23a321_4(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(st_Thing), .a = a }; } }
+owned struct st_Thing_own { st_Thing* ptr; void* mem; u64 size; Allocator a; static Self init(st_Thing* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(st_Thing* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } st_Thing* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_8ab6215fa9c78ba9_7(this->ptr); } else { zark_cxx_8ab6215fa9c78ba9_2(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } st_Thing* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<st_Thing>()?; zark_cxx_8ab6215fa9c78ba9_4(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(st_Thing), .a = a }; } }
 align(8) struct st_StrField { i32 a; u8[60] __pad0; i32 z; u8[4] __pad1; }
-owned struct st_StrField_own { st_StrField* ptr; void* mem; u64 size; Allocator a; static Self init(st_StrField* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(st_StrField* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } st_StrField* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_7b1ac28d7e23a321_14(this->ptr); } else { zark_cxx_7b1ac28d7e23a321_10(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } st_StrField* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<st_StrField>()?; zark_cxx_7b1ac28d7e23a321_11(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(st_StrField), .a = a }; } }
-extern void zark_cxx_7b1ac28d7e23a321_1(st_Thing* __self, i32 k);
-static !st_Thing_own st_Thing::create(Allocator __a, i32 k) { const auto __p = __a.create<st_Thing>()?; zark_cxx_7b1ac28d7e23a321_1(__p, k); return st_Thing_own::init(__p, sizeof(st_Thing), __a); }
-extern void zark_cxx_7b1ac28d7e23a321_2(st_Thing* __self);
-extern i32 zark_cxx_7b1ac28d7e23a321_3(st_Thing* __self);
-i32 st_Thing::get() const { return zark_cxx_7b1ac28d7e23a321_3(this); }
-extern void zark_cxx_7b1ac28d7e23a321_4(st_Thing* __self, st_Thing* a0);
-extern void zark_cxx_7b1ac28d7e23a321_5(st_Thing* __self, st_Thing* __other);
-void st_Thing::assign(st_Thing* __other) { zark_cxx_7b1ac28d7e23a321_5(this, __other); }
-extern void zark_cxx_7b1ac28d7e23a321_6(st_Thing* __self, st_Thing* __other);
-void st_Thing::assign_move(st_Thing* __other) { zark_cxx_7b1ac28d7e23a321_6(this, __other); }
-extern void zark_cxx_7b1ac28d7e23a321_7(st_Thing* __self);
-extern void zark_cxx_7b1ac28d7e23a321_10(st_StrField* __self);
-extern void zark_cxx_7b1ac28d7e23a321_11(st_StrField* __self, st_StrField* a0);
-extern void zark_cxx_7b1ac28d7e23a321_12(st_StrField* __self, st_StrField* __other);
-void st_StrField::assign(st_StrField* __other) { zark_cxx_7b1ac28d7e23a321_12(this, __other); }
-extern void zark_cxx_7b1ac28d7e23a321_13(st_StrField* __self, st_StrField* __other);
-void st_StrField::assign_move(st_StrField* __other) { zark_cxx_7b1ac28d7e23a321_13(this, __other); }
-extern void zark_cxx_7b1ac28d7e23a321_14(st_StrField* __self);
+owned struct st_StrField_own { st_StrField* ptr; void* mem; u64 size; Allocator a; static Self init(st_StrField* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(st_StrField* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } st_StrField* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_8ab6215fa9c78ba9_11(this->ptr); } else { zark_cxx_8ab6215fa9c78ba9_10(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } st_StrField* release() move { return this->ptr; } }
+extern void zark_cxx_8ab6215fa9c78ba9_1(st_Thing* __self, i32 k);
+static !st_Thing_own st_Thing::create(Allocator __a, i32 k) { const auto __p = __a.create<st_Thing>()?; zark_cxx_8ab6215fa9c78ba9_1(__p, k); return st_Thing_own::init(__p, sizeof(st_Thing), __a); }
+extern void zark_cxx_8ab6215fa9c78ba9_2(st_Thing* __self);
+extern i32 zark_cxx_8ab6215fa9c78ba9_3(st_Thing* __self);
+i32 st_Thing::get() const { return zark_cxx_8ab6215fa9c78ba9_3(this); }
+extern void zark_cxx_8ab6215fa9c78ba9_4(st_Thing* __self, st_Thing* a0);
+extern void zark_cxx_8ab6215fa9c78ba9_5(st_Thing* __self, st_Thing* __other);
+void st_Thing::assign(st_Thing* __other) { zark_cxx_8ab6215fa9c78ba9_5(this, __other); }
+extern void zark_cxx_8ab6215fa9c78ba9_6(st_Thing* __self, st_Thing* __other);
+void st_Thing::assign_move(st_Thing* __other) { zark_cxx_8ab6215fa9c78ba9_6(this, __other); }
+extern void zark_cxx_8ab6215fa9c78ba9_7(st_Thing* __self);
+extern void zark_cxx_8ab6215fa9c78ba9_10(st_StrField* __self);
+extern void zark_cxx_8ab6215fa9c78ba9_11(st_StrField* __self);
 struct st { }
-extern void zark_cxx_7b1ac28d7e23a321_16(Allocator* __a, u8* s_p, u64 s_n, u8** __p, u64* __n);
-static !str st::echo(Allocator __a, str s) { u8* __p = null; u64 __n = 0; zark_cxx_7b1ac28d7e23a321_16(&__a, s.ptr, s.len as u64, &__p, &__n); return __p[0..__n as i64]; }
-extern void zark_cxx_7b1ac28d7e23a321_17(u8** __p, u64* __n);
-static str st::hello() { u8* __p = null; u64 __n = 0; zark_cxx_7b1ac28d7e23a321_17(&__p, &__n); return __p[0..__n as i64]; }
-extern void zark_cxx_7b1ac28d7e23a321_18(u8* v_p, u64 v_n, u8** __p, u64* __n);
-static str st::view(str v) { u8* __p = null; u64 __n = 0; zark_cxx_7b1ac28d7e23a321_18(v.ptr, v.len as u64, &__p, &__n); return __p[0..__n as i64]; }
-extern i32 zark_cxx_7b1ac28d7e23a321_19(i32* v_p, u64 v_n);
-static i32 st::sum(i32[] v) { return zark_cxx_7b1ac28d7e23a321_19(v.ptr, v.len as u64); }
-extern void zark_cxx_7b1ac28d7e23a321_20(Allocator* __a, i32 n, i32** __p, u64* __n);
-static !i32[] st::make(Allocator __a, i32 n) { i32* __p = null; u64 __n = 0; zark_cxx_7b1ac28d7e23a321_20(&__a, n, &__p, &__n); return __p[0..__n as i64]; }
-extern st_Thing* zark_cxx_7b1ac28d7e23a321_21(i32 k);
-static st_Thing_own st::make_thing(i32 k) { const auto __p = zark_cxx_7b1ac28d7e23a321_21(k); return st_Thing_own::init(__p, 0, Allocator{}); }
-extern i32 zark_cxx_7b1ac28d7e23a321_22(st_Thing* p_p, bool p_z);
-static i32 st::take(move st_Thing_own p) { return zark_cxx_7b1ac28d7e23a321_22(p.ptr, p.a.alloc_fn != null); }
+extern void zark_cxx_8ab6215fa9c78ba9_13(Allocator* __a, u8* s_p, u64 s_n, u8** __p, u64* __n);
+static !str st::echo(Allocator __a, str s) { u8* __p = null; u64 __n = 0; zark_cxx_8ab6215fa9c78ba9_13(&__a, s.ptr, s.len as u64, &__p, &__n); return __p[0..__n as i64]; }
+extern void zark_cxx_8ab6215fa9c78ba9_14(u8** __p, u64* __n);
+static str st::hello() { u8* __p = null; u64 __n = 0; zark_cxx_8ab6215fa9c78ba9_14(&__p, &__n); return __p[0..__n as i64]; }
+extern void zark_cxx_8ab6215fa9c78ba9_15(u8* v_p, u64 v_n, u8** __p, u64* __n);
+static str st::view(str v) { u8* __p = null; u64 __n = 0; zark_cxx_8ab6215fa9c78ba9_15(v.ptr, v.len as u64, &__p, &__n); return __p[0..__n as i64]; }
+extern i32 zark_cxx_8ab6215fa9c78ba9_16(i32* v_p, u64 v_n);
+static i32 st::sum(i32[] v) { return zark_cxx_8ab6215fa9c78ba9_16(v.ptr, v.len as u64); }
+extern void zark_cxx_8ab6215fa9c78ba9_17(Allocator* __a, i32 n, i32** __p, u64* __n);
+static !i32[] st::make(Allocator __a, i32 n) { i32* __p = null; u64 __n = 0; zark_cxx_8ab6215fa9c78ba9_17(&__a, n, &__p, &__n); return __p[0..__n as i64]; }
+extern st_Thing* zark_cxx_8ab6215fa9c78ba9_18(i32 k);
+static st_Thing_own st::make_thing(i32 k) { const auto __p = zark_cxx_8ab6215fa9c78ba9_18(k); return st_Thing_own::init(__p, 0, Allocator{}); }
+extern i32 zark_cxx_8ab6215fa9c78ba9_19(st_Thing* p_p, bool p_z);
+static i32 st::take(move st_Thing_own p) { return zark_cxx_8ab6215fa9c78ba9_19(p.ptr, p.a.alloc_fn != null); }
 comptime assert(sizeof(Allocator) == 24);
