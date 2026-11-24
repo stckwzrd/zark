@@ -1,5 +1,5 @@
 skipped tf: template without an instantiation; add 'template ... NAME<...>(...);' to a wrapper header
-skipped m::va: variadic C++ functions are not bound yet
+skipped m::va: variadic function without a printf format attribute
 skipped m::wc: type 'wchar_t' is not supported yet
 skipped m::c8: type 'char8_t' is not supported yet
 skipped m::c16: type 'char16_t' is not supported yet

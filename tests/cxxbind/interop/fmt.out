@@ -1,0 +1,7 @@
+a %s b %d c
+1
+col %s 2.5
+true
+node id %s %d
+true
+ptr %s

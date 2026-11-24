@@ -42,13 +42,13 @@ f32 wave(void* data, i32 i) {
     ig::ImGui::SliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
     ig::ImGui::SliderFloat("amplitude", &app->amp, 0.1, 1.0, "%.2f", 0);
     ig::ImGui::Checkbox("pause", &app->paused);
-    ig::ImGui::PlotLines_u8p_fnp_voidp_i32_i32_u8p_f32_f32_ImVec2("wave", wave, app, 120, 0, null, -1.0, 1.0, ig::ImVec2(0.0, 80.0));
+    ig::ImGui::PlotLines_u8pc_fnp_voidp_i32_i32_u8pc_f32_f32_ImVec2("wave", wave, app, 120, 0, null, -1.0, 1.0, ig::ImVec2(0.0, 80.0));
     ig::ImGui::ProgressBar((app->phase / 6.2831853) as f32, ig::ImVec2(-1.0, 0.0), null);
 
     ig::ImGui::SeparatorText("Draw list");
     const auto dl = ig::ImGui::GetWindowDrawList();
     const auto p = ig::ImGui::GetCursorScreenPos();
-    dl.AddLine(ig::ImVec2(p.x, p.y), ig::ImVec2(p.x + 240.0, p.y + 24.0), 0xFF00FFFF, 2.0);
+    dl.AddLine_4(ig::ImVec2(p.x, p.y), ig::ImVec2(p.x + 240.0, p.y + 24.0), 0xFF00FFFF, 2.0);
 
     ig::ImGui::SeparatorText("Owned object");
     auto clipper = ig::ImGuiListClipper::create(c_allocator())?;

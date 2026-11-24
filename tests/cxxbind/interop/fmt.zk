@@ -1,0 +1,18 @@
+import "fmt.hpp" as f;
+
+!void main() {
+    const auto text = "a %s b %d c";
+    f::fx::Text(text.ptr);
+    println(cstr(f::fx::last()));
+    println(f::fx::calls());
+
+    f::fx::TextColored(f::FmtV(2.5), "col %s");
+    println(cstr(f::fx::last()), f::fx::col());
+
+    const auto id = "node";
+    println(f::fx::TreeNode_u8pc_u8pc(id.ptr, "id %s %d"));
+    println(cstr(f::fx::str_id()), cstr(f::fx::last()));
+
+    println(f::fx::TreeNode_voidpc_u8pc(null, "ptr %s"));
+    println(cstr(f::fx::last()));
+}
