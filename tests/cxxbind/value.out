@@ -4,7 +4,7 @@ const auto geo_Kind_B = 1;
 struct geo_V { f32 x = 0.0; f32 y = 1.5; }
 struct geo_W { i32 k = 7; bool on = true; u8[3] __pad0; f64 d = 0.25; geo_V v; i32* p; i64 q = 3; geo_Kind kd = 1; u8[3] __pad1; i32 n; }
 struct geo_NT { i32 n; }
-owned struct geo_NT_own { geo_NT* ptr; void* mem; u64 size; Allocator a; static Self init(geo_NT* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } geo_NT* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_87e0e95e58b4d15a_19(this->ptr); } else { zark_cxx_87e0e95e58b4d15a_16(this->ptr); this->a.destroy(this->ptr); } } geo_NT* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_NT>()?; zark_cxx_87e0e95e58b4d15a_15(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_NT), .a = a }; } }
+owned struct geo_NT_own { geo_NT* ptr; void* mem; u64 size; Allocator a; static Self init(geo_NT* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_NT* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_NT* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_87e0e95e58b4d15a_19(this->ptr); } else { zark_cxx_87e0e95e58b4d15a_16(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_NT* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_NT>()?; zark_cxx_87e0e95e58b4d15a_15(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_NT), .a = a }; } }
 struct geo_Fwd { }
 struct Str { i8[16] buf; }
 struct geo { }

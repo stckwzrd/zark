@@ -107,6 +107,10 @@ struct CxBit { str name; CType* ty; str label; CDecl* get; CDecl* set; }
 
 struct CxNote { str label; str why; }
 
+struct CxBase { str qn; CxRec* r; bool virt; }
+
+struct CxFwd { CDecl* m; CxRec* b; }
+
 struct CxEnt { i64 depth; i64 off; str text; }
 
 struct CxLay { i64 size; i64 align; List<CxEnt> ents; }
@@ -148,6 +152,8 @@ struct CxRec {
     CDecl* del_decl;
     CDecl* assign_decl;
     CDecl* assign_move_decl;
+    List<CxBase> allbases;
+    List<CxFwd> fwds;
 }
 
 Json* cx_find(Json* n, str kind) {
@@ -970,6 +976,8 @@ struct CxWalk {
         r.notes = List<CxNote>::init(this->a);
         r.meths = List<CDecl*>::init(this->a);
         r.svars = List<CDecl*>::init(this->a);
+        r.allbases = List<CxBase>::init(this->a);
+        r.fwds = List<CxFwd>::init(this->a);
         return r;
     }
 
@@ -1109,9 +1117,9 @@ struct CxWalk {
             r.has_dtor = true;
             r.dtor_decl = d;
         }
-        r.own = !r.value && r.has_dtor && !r.abstract;
+        r.own = !r.value && r.has_dtor;
         r.copyable = !r.deleted_copy && !((cc == null || jlen(cc) == 0) && mc != null && jlen(mc) > 0);
-        if (r.copy_decl == null && r.own) {
+        if (!r.abstract && r.copy_decl == null && r.own) {
             const auto p = cx_ptr(this->a, this->self_type(r)?)?;
             p.ref = true;
             p.elem.konst = true;
@@ -1132,7 +1140,7 @@ struct CxWalk {
             d.ty = t;
             r.copy_decl = d;
         }
-        if (r.own && r.copyable && r.assign_decl == null) {
+        if (!r.abstract && r.own && r.copyable && r.assign_decl == null) {
             const auto p = cx_ptr(this->a, this->self_type(r)?)?;
             p.ref = true;
             p.elem.konst = true;
@@ -1152,7 +1160,7 @@ struct CxWalk {
             d.ty = t;
             r.assign_decl = d;
         }
-        if (r.own && r.assign_move_decl == null) {
+        if (!r.abstract && r.own && r.assign_move_decl == null) {
             const auto p = cx_ptr(this->a, this->self_type(r)?)?;
             p.ref = true;
             p.rvalue = true;
@@ -1198,9 +1206,13 @@ struct CxWalk {
             const auto bs = jget(x, "bases");
             for (auto i : 0..jlen(bs)) {
                 const auto b = jat(bs, i);
-                if (jstr(jget(b, "access"), "") != "public" || jbool(jget(b, "isVirtual"), false)) { continue; }
+                if (jstr(jget(b, "access"), "") != "public") { continue; }
+                const auto virt = jbool(jget(b, "isVirtual"), false);
                 const auto t = this->expand(this->type_of(jget(b, "type"), outer)?);
-                if (t.k == .Named && t.rec != null) { r.pubs.push(t.rec.cx.qn)?; }
+                if (t.k == .Named && t.rec != null) {
+                    r.allbases.push(CxBase{ .qn = t.rec.cx.qn, .r = t.rec.cx, .virt = virt })?;
+                    if (!virt) { r.pubs.push(t.rec.cx.qn)?; }
+                }
             }
             this->define(x, r, r.qn)?;
             r.tag = str_concat(this->a, [jstr(jget(x, "tagUsed"), ""), " "])?;
@@ -2230,11 +2242,26 @@ str cx_leaf(str qn) {
     sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {ct}* {sn}(void) {{ return &{d.cxx}; }}\n#endif\n")?;
 }
 
+!void cx_upcast(CEmit* e, CDecl* d) {
+    const auto a = e.a;
+    const auto sn = cx_sname(e, d)?;
+    const auto dz = d.cx_rec.d.name;
+    const auto dc = d.cx_rec.qn;
+    const auto bz = d.cx_mname[3..];
+    const auto bc = d.cx_base;
+    const auto path = str_concat(a, [e.ename(dz)?, "::", e.ename(d.cx_mname)?])?;
+    auto zt = List<u8>::init(a);
+    sprint(&zt, "extern {bz}* {sn}({dz}* __self);\n{bz}* {path}() const {{ return {sn}(this); }}")?;
+    if (!e.line(path, 3, zt.slice())?) { return; }
+    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {bc}* {sn}({dc}* __self) {{\n    return static_cast<{bc}*>(__self);\n}}\n#endif\n")?;
+}
+
 !void cx_shim(CEmit* e, CDecl* d) {
     if (d.reason.len > 0) { return e.warn(d.cxx, d.reason); }
     if (d.cx_del) { return cx_del(e, d); }
     if (d.cx_assign) { return cx_assign(e, d); }
     if (d.cx_var) { return cx_var(e, d); }
+    if (d.cx_upcast) { return cx_upcast(e, d); }
     const auto a = e.a;
     const auto f = d.ty;
     const auto s = cx_sig(e, f)?;
@@ -2566,6 +2593,64 @@ bool cx_is_operator(str n) {
     return true;
 }
 
+!str cx_argnames(CEmit* e, CType* f) {
+    auto b = List<u8>::init(e.a);
+    for (auto [i, p] : f.params.slice()) {
+        if (i > 0) { sprint(&b, ", ")?; }
+        auto zn = cb_pname(e.a, f.params.slice(), i)?;
+        if (p.name.len > 0) { zn = e.ename(p.name)?; }
+        sprint(&b, "{zn}")?;
+    }
+    return b.slice();
+}
+
+!void cx_inherit(CxWalk* w) {
+    for (auto r : w.rlist.slice()) {
+        if (r.allbases.len == 0) { continue; }
+        auto hidden = Map<bool>::init(w.a);
+        for (auto d : r.meths.slice()) {
+            if (d.cx_cname.len > 0) { hidden.put(d.cx_cname, true)?; }
+        }
+        auto fw = Map<bool>::init(w.a);
+        for (auto b : r.allbases.slice()) {
+            const auto br = b.r;
+            if (br == null || br.d == null) { continue; }
+            const auto up = str_concat(w.a, ["as_", br.d.name])?;
+            const auto d = w.decl(.Func, str_concat(w.a, [r.d.name, "::", up])?)?;
+            const auto bt = w.a.create<CType>()?;
+            bt.k = .Named;
+            bt.name = br.d.name;
+            bt.rec = br.d;
+            bt.tag = 1;
+            bt.cxx = br.qn;
+            const auto t = w.a.create<CType>()?;
+            t.k = .Func;
+            t.elem = cx_ptr(w.a, bt)?;
+            t.konst = true;
+            t.params = List<CField>::init(w.a);
+            d.cx_meth = true;
+            d.cx_rec = r;
+            d.cx_mname = up;
+            d.cx_cname = up;
+            d.cx_upcast = true;
+            d.cx_base = b.qn;
+            d.cx_const = true;
+            d.cxx = str_concat(w.a, [r.qn, "::as_", br.d.name])?;
+            d.ty = t;
+            r.meths.push(d)?;
+            w.decls.push(d)?;
+            for (auto bd : br.meths.slice()) {
+                if (bd.reason.len > 0 || bd.cx_ctor || bd.cx_dtor || bd.cx_assign || bd.cx_del || bd.cx_upcast || bd.cx_inject || bd.cx_zctor || bd.cx_var) { continue; }
+                if (bd.is_static) { continue; }
+                if (bd.cx_cname.len > 0 && hidden.has(bd.cx_cname)) { continue; }
+                if (fw.has(bd.cx_mname)) { continue; }
+                fw.put(bd.cx_mname, true)?;
+                r.fwds.push(CxFwd{ .m = bd, .b = br })?;
+            }
+        }
+    }
+}
+
 !void cx_names(CxWalk* w) {
     auto groups = Map<List<CDecl*>*>::init(w.a);
     auto order = List<str>::init(w.a);
@@ -2602,6 +2687,10 @@ bool cx_is_operator(str n) {
             const auto vr = d.cx_rec != null && d.cx_rec.value;
             if (isctor) {
                 if (vr) { d.cx_mname = "make"; d.cx_make = true; } else { d.cx_mname = "create"; d.cx_create = true; }
+                if (d.cx_rec != null && d.cx_rec.abstract) {
+                    d.reason = "abstract class (implementing it in Zark is not supported)";
+                    d.cxx = str_concat(w.a, [d.cx_rec.qn, "::create"])?;
+                }
             } else if (d.cx_opname.len > 0) {
                 const auto sym = str_trim(d.cx_opname[8..]);
                 if (cx_isop(sym)) {
@@ -2703,6 +2792,12 @@ bool cx_is_operator(str n) {
             }
         }
         for (auto v : extra.slice()) { w.decls.push(v)?; }
+    }
+    cx_inherit(w)?;
+    for (auto r : w.rlist.slice()) {
+        if (!r.abstract || r.d == null) { continue; }
+        const auto sd = w.decl(.Skip, str_concat(w.a, [r.d.name, "::create"])?)?;
+        sd.reason = "abstract class (implementing it in Zark is not supported)";
     }
     for (auto r : w.rlist.slice()) {
         if (!r.value) { continue; }
@@ -2871,14 +2966,43 @@ bool cx_is_operator(str n) {
         auto dl = List<u8>::init(a);
         sprint(&dl, "zark_cxx_{e.hid}_{r.del_decl.seq}")?;
         auto ob = List<u8>::init(a);
-        sprint(&ob, "owned struct {own} {{ {zr}* ptr; void* mem; u64 size; Allocator a; static Self init({zr}* p, u64 z, Allocator al) {{ return Self{{ .ptr = p, .mem = p, .size = z, .a = al }}; }} {zr}* get() borrows {{ return this->ptr; }} void deinit() move {{ if (this->a.alloc_fn == null) {{ {dl.slice()}(this->ptr); }} else {{ {dt.slice()}(this->ptr); this->a.destroy(this->ptr); }} }} {zr}* release() move {{ return this->ptr; }}")?;
-        if (r.copyable && r.copy_decl != null) {
+        sprint(&ob, "owned struct {own} {{ {zr}* ptr; void* mem; u64 size; Allocator a; static Self init({zr}* p, u64 z, Allocator al) {{ return Self{{ .ptr = p, .mem = p, .size = z, .a = al }}; }} static Self adopt({zr}* p, void* hm, u64 z, Allocator al) {{ return Self{{ .ptr = p, .mem = hm, .size = z, .a = al }}; }} {zr}* get() borrows {{ return this->ptr; }} void deinit() move {{ if (this->a.alloc_fn == null) {{ {dl.slice()}(this->ptr); }} else {{ {dt.slice()}(this->ptr); if (this->a.free_fn != null) {{ this->a.free_fn(this->a.ctx, this->mem, this->size); }} }} }} {zr}* release() move {{ return this->ptr; }}")?;
+        if (!r.abstract && r.copyable && r.copy_decl != null) {
             auto cp = List<u8>::init(a);
             sprint(&cp, "zark_cxx_{e.hid}_{r.copy_decl.seq}")?;
             sprint(&ob, " !Self clone(Allocator a) {{ const auto __p = a.create<{zr}>()?; {cp.slice()}(__p, this->ptr); return Self{{ .ptr = __p, .mem = __p, .size = sizeof({zr}), .a = a }}; }}")?;
         }
+        for (auto b : r.allbases.slice()) {
+            if (b.r == null || !b.r.own || !b.r.virtual_dtor) { continue; }
+            const auto bz = b.r.d.name;
+            sprint(&ob, " {bz}_own into_{bz}() move {{ return {bz}_own::adopt(this->ptr.as_{bz}(), this->mem, this->size, this->a); }}")?;
+        }
         sprint(&ob, " }")?;
         _ = e.line(own, 1, ob.slice())?;
+    }
+        for (auto f : r.fwds.slice()) {
+        const auto bd = f.m;
+        const auto bs = f.b.d.name;
+        e.why = "";
+        const auto sg = cx_sig(e, bd.ty)?;
+        if (sg.why.len > 0 || e.why.len > 0) { continue; }
+        auto zps = sg.zps;
+        auto names = cx_argnames(e, bd.ty)?;
+        if (sg.own) {
+            if (zps.len > 0) { zps = str_concat(a, ["Allocator __a, ", zps])?; } else { zps = "Allocator __a"; }
+            if (names.len > 0) { names = str_concat(a, ["__a, ", names])?; } else { names = "__a"; }
+        }
+        auto ret = sg.zret;
+        if (sg.own) { ret = str_concat(a, ["!", sg.zret])?; }
+        if (sg.none) { ret = "void"; }
+        const auto path = str_concat(a, [e.ename(zr)?, "::", e.ename(bd.cx_mname)?])?;
+        auto txt = List<u8>::init(a);
+        if (sg.none) {
+            sprint(&txt, "{ret} {path}({zps}) {{ this.as_{bs}().{bd.cx_mname}({names}); }}")?;
+        } else {
+            sprint(&txt, "{ret} {path}({zps}) {{ return this.as_{bs}().{bd.cx_mname}({names}); }}")?;
+        }
+        _ = e.line(path, 3, txt.slice())?;
     }
     if (r.why.len > 0) { e.note(r.qn, r.why)?; }
 }

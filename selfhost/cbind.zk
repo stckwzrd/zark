@@ -280,6 +280,8 @@ struct CDecl {
     CType* cx_cast;
     str cx_opname;
     str cx_cname;
+    bool cx_upcast;
+    str cx_base;
     bool cx_zctor;
     bool cx_make;
     bool cx_create;

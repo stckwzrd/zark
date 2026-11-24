@@ -3,7 +3,7 @@ type Outer_K = i32;
 const auto Outer_K0 = 0;
 const auto Outer_N = 3;
 struct Outer { Outer_Inner in; Outer_K k; u8[4] __pad0; }
-owned struct Outer_own { Outer* ptr; void* mem; u64 size; Allocator a; static Self init(Outer* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } Outer* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_20(this->ptr); } else { zark_cxx_3543bc795928e785_12(this->ptr); this->a.destroy(this->ptr); } } Outer* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Outer>()?; zark_cxx_3543bc795928e785_17(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Outer), .a = a }; } }
+owned struct Outer_own { Outer* ptr; void* mem; u64 size; Allocator a; static Self init(Outer* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(Outer* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } Outer* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_20(this->ptr); } else { zark_cxx_3543bc795928e785_12(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } Outer* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Outer>()?; zark_cxx_3543bc795928e785_17(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Outer), .a = a }; } }
 type r_S_In = i32;
 const auto r_S_I0 = 0;
 struct r_S { i32 s; }
@@ -15,9 +15,10 @@ struct Hid { i32 h; }
 struct st { i32 a; }
 struct v1_In { i32 i; }
 struct VA { void* __vptr; }
-owned struct VA_own { VA* ptr; void* mem; u64 size; Allocator a; static Self init(VA* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } VA* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_53(this->ptr); } else { zark_cxx_3543bc795928e785_49(this->ptr); this->a.destroy(this->ptr); } } VA* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<VA>()?; zark_cxx_3543bc795928e785_50(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(VA), .a = a }; } }
+owned struct VA_own { VA* ptr; void* mem; u64 size; Allocator a; static Self init(VA* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(VA* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } VA* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_53(this->ptr); } else { zark_cxx_3543bc795928e785_49(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } VA* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<VA>()?; zark_cxx_3543bc795928e785_50(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(VA), .a = a }; } }
 align(8) struct VB2 { u8[8] __pad0; i32 y; u8[4] __pad1; }
-owned struct VB2_own { VB2* ptr; void* mem; u64 size; Allocator a; static Self init(VB2* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } VB2* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_60(this->ptr); } else { zark_cxx_3543bc795928e785_56(this->ptr); this->a.destroy(this->ptr); } } VB2* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<VB2>()?; zark_cxx_3543bc795928e785_57(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(VB2), .a = a }; } }
+owned struct VB2_own { VB2* ptr; void* mem; u64 size; Allocator a; static Self init(VB2* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(VB2* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } VB2* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_3543bc795928e785_60(this->ptr); } else { zark_cxx_3543bc795928e785_56(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } VB2* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<VB2>()?; zark_cxx_3543bc795928e785_57(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(VB2), .a = a }; } }
+void VB2::f() { this.as_VA().f(); }
 extern i32 zark_cxx_3543bc795928e785_9(Outer* __self);
 i32 Outer::f() { return zark_cxx_3543bc795928e785_9(this); }
 extern i32 zark_cxx_3543bc795928e785_10();
@@ -61,3 +62,5 @@ void VB2::assign(VB2* __other) { zark_cxx_3543bc795928e785_58(this, __other); }
 extern void zark_cxx_3543bc795928e785_59(VB2* __self, VB2* __other);
 void VB2::assign_move(VB2* __other) { zark_cxx_3543bc795928e785_59(this, __other); }
 extern void zark_cxx_3543bc795928e785_60(VB2* __self);
+extern VA* zark_cxx_3543bc795928e785_62(VB2* __self);
+VA* VB2::as_VA() const { return zark_cxx_3543bc795928e785_62(this); }

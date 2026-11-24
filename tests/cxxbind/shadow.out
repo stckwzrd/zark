@@ -20,3 +20,5 @@ void use_id(lib_Id x) { zark_cxx_23ab4d6a8b01a3ca_6(&x); }
 extern void close_h(lib_Handle* h);
 extern void f(a_T x);
 extern void um(m_M x);
+extern B* zark_cxx_23ab4d6a8b01a3ca_26(D* __self);
+B* D::as_B() const { return zark_cxx_23ab4d6a8b01a3ca_26(this); }
