@@ -169,6 +169,7 @@ struct CxRec {
     str no_own_why;
     bool nocopy;
     bool user_default;
+    bool mark;
     str alt;
     bool deleted_copy;
     CDecl* dtor_decl;
@@ -2650,16 +2651,72 @@ bool cx_scalar(CEmit* e, CType* t) {
     return x.k == .Named || x.k == .Int || x.k == .Float || x.k == .Bool || (x.k == .Ptr && !x.ref);
 }
 
-bool cx_alias(CEmit* e, CType* f, i64 idx) {
+bool cx_holds(CEmit* e, CxRec* r, CDecl* v) {
+    if (r.d == v) { return true; }
+    for (auto f : r.flds.slice()) {
+        if (f.ty == null) { continue; }
+        auto x = cx_expand(e, f.ty);
+        while (x.k == .Array) { x = cx_expand(e, x.elem); }
+        const auto fr = e.rec_of(x);
+        if (fr != null && fr.cx != null && cx_holds(e, fr.cx, v)) { return true; }
+    }
+    for (auto b : r.allbases.slice()) { if (cx_holds(e, b.r, v)) { return true; } }
+    return false;
+}
+
+bool cx_reach(CEmit* e, CDecl* v, CxRec* r) {
+    if (r.mark) { return false; }
+    if (r.why.len > 0 || r.skip.len > 0 || r.notes.len > 0 || r.nbases != r.allbases.len) { return true; }
+    for (auto f : r.flds.slice()) { if (!f.pub) { return true; } }
+    r.mark = true;
+    auto res = false;
+    for (auto it : r.items.slice()) {
+        auto x = cx_expand(e, it.ty);
+        while (x.k == .Array) { x = cx_expand(e, x.elem); }
+        if (x.k == .Ptr && cx_may(e, v, x.elem, false)) { res = true; }
+    }
+    r.mark = false;
+    return res;
+}
+
+bool cx_recmay(CEmit* e, CDecl* v, CxRec* r, bool konst) {
+    if (!konst && cx_holds(e, r, v)) { return true; }
+    return cx_reach(e, v, r);
+}
+
+bool cx_may(CEmit* e, CDecl* v, CType* t, bool konst) {
+    const auto x = cx_expand(e, t);
+    const auto k = konst || t.konst || x.konst;
+    if (x.stdk > 0) { return !k; }
+    if (x.k == .Ptr) { return cx_may(e, v, x.elem, false); }
+    if (x.k == .Array) { return cx_may(e, v, x.elem, k); }
+    if (x.k == .Func) { return false; }
+    const auto r = e.rec_of(x);
+    if (r == null) { return !k; }
+    if (r.cx == null) { return true; }
+    return cx_recmay(e, v, r.cx, k);
+}
+
+bool cx_alias(CEmit* e, CDecl* d, i64 idx) {
+    const auto f = d.ty;
     const auto target = e.rec_of(f.params.get(idx).ty.elem);
     if (target == null) { return false; }
     for (auto [j, p] : f.params.slice()) {
-        if (j == idx || p.ty.k != .Ptr) { continue; }
-        if (p.ty.elem.konst) { continue; }
-        const auto er = e.rec_of(p.ty.elem);
-        if (er != null && er == target) { return true; }
+        if (j == idx) { continue; }
+        const auto x = cx_expand(e, p.ty);
+        if (x.k == .Ptr) {
+            if (cx_may(e, target, x.elem, false)) { return true; }
+        } else if (cx_may(e, target, p.ty, true)) {
+            return true;
+        }
     }
-    return false;
+    if (!d.cx_meth || d.cx_rec == null || d.is_static || d.cx_ctor || d.cx_dtor) { return false; }
+    auto rconst = d.cx_const;
+    if (d.cx_freeop && d.cx_cast != null) {
+        const auto rt = d.cx_cast.params.get(0).ty;
+        rconst = !(rt.k == .Ptr && rt.ref && !rt.elem.konst);
+    }
+    return cx_recmay(e, target, d.cx_rec, rconst);
 }
 
 !CType* cx_ptr(Allocator a, CType* t) {
@@ -2691,8 +2748,9 @@ struct CxSig {
     str pre;
 }
 
-!CxSig cx_sig(CEmit* e, CType* f) {
+!CxSig cx_sig(CEmit* e, CDecl* d) {
     const auto a = e.a;
+    const auto f = d.ty;
     auto s = CxSig{ .zps = "", .xps = "", .zas = "", .cps = "", .cas = "", .ccps = "", .zret = "void", .cret = "void", .zty = "", .why = "", .out = false, .own = false, .none = false, .refrvalue = false, .stdres = 0, .stdview = 0, .uptrres = false, .vecelem = null, .pre = "" };
     auto zp = List<u8>::init(a);
     auto xp = List<u8>::init(a);
@@ -2795,7 +2853,7 @@ struct CxSig {
             const auto rr = e.rec_of(f.elem);
             const auto fe = cx_expand(e, f.elem);
             const auto esc = fe.k == .Ptr || (rr != null && (rr.cx == null || cx_hasptr(e, rr.cx)));
-            const auto aliased = cx_alias(e, f, i);
+            const auto aliased = !p.ty.rvalue && cx_alias(e, d, i);
             if (!aliased && (p.ty.rvalue || p.ty.elem.konst) && ((!(fe.k == .Ptr && fe.ref) && cx_scalar(e, p.ty.elem)) || (vr && !esc))) {
                 st = p.ty.elem;
                 if (vr) {
@@ -3021,7 +3079,7 @@ str cx_leaf(str qn) {
     if (d.cx_upcast) { return cx_upcast(e, d); }
     const auto a = e.a;
     const auto f = d.ty;
-    const auto s = cx_sig(e, f)?;
+    const auto s = cx_sig(e, d)?;
     if (s.why.len > 0) { return e.warn(d.cxx, s.why); }
     if (e.why.len > 0) { return e.warn(d.cxx, e.why); }
     const auto sn = cx_sname(e, d)?;
@@ -3730,7 +3788,7 @@ bool cx_is_operator(str n) {
 
 !void cx_inject(CEmit* e, CDecl* d, List<u8>* body) {
     const auto a = e.a;
-    const auto s = cx_sig(e, d.ty)?;
+    const auto s = cx_sig(e, d)?;
     if (s.why.len > 0 || e.why.len > 0) { return; }
     auto gb = List<u8>::init(a);
     sprint(&gb, "zark_cxx_{e.hid}_{d.seq}")?;
@@ -3875,7 +3933,7 @@ bool cx_is_operator(str n) {
         }
         if (!md.cx_zctor) { continue; }
         e.why = "";
-        const auto sg = cx_sig(e, md.ty)?;
+        const auto sg = cx_sig(e, md)?;
         if (sg.why.len > 0 || e.why.len > 0) { continue; }
         auto gb = List<u8>::init(a);
         sprint(&gb, "zark_cxx_{e.hid}_{md.seq}")?;
@@ -3914,7 +3972,7 @@ bool cx_is_operator(str n) {
         const auto bd = f.m;
         const auto bs = f.b.d.name;
         e.why = "";
-        const auto sg = cx_sig(e, bd.ty)?;
+        const auto sg = cx_sig(e, bd)?;
         if (sg.why.len > 0 || e.why.len > 0) { continue; }
         auto zps = sg.zps;
         auto names = cx_argnames(e, bd.ty)?;
