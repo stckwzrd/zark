@@ -1,0 +1,11 @@
+struct V { int x; };
+V operator+(V a, int k);
+V operator+(V a, short k);
+V operator+(V a, long k);
+V operator+(V a, V b);
+V operator-(V a, int k);
+bool operator==(V a, V b);
+struct W { int x; };
+W operator+(W a, W b);
+W operator*(W a, int k);
+W operator*(W a, double k);

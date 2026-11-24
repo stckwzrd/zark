@@ -1,0 +1,46 @@
+struct V { i32 x; V operator+(V b) const { V __r; zark_cxx_9fd4a677fe358dcc_32(this, &b, &__r); return __r; } }
+type VT = V;
+struct S { V v; i32 y; }
+struct H { V* p; }
+struct HV { void* p; }
+struct M { i32 x; }
+struct Own { i32 n; V v; V* w; }
+extern void zark_cxx_9fd4a677fe358dcc_10(M* __self, M* o);
+void M::addtwice(M* o) { zark_cxx_9fd4a677fe358dcc_10(this, o); }
+extern i32 zark_cxx_9fd4a677fe358dcc_11(M* __self, V* a);
+i32 M::peek(V a) const { return zark_cxx_9fd4a677fe358dcc_11(this, &a); }
+extern i32 zark_cxx_9fd4a677fe358dcc_12(M* __self, V* a, V* b);
+i32 M::with(V a, V b) const { return zark_cxx_9fd4a677fe358dcc_12(this, &a, &b); }
+extern i32 zark_cxx_9fd4a677fe358dcc_13(V* a, i32 k);
+static i32 M::smul(V a, i32 k) { return zark_cxx_9fd4a677fe358dcc_13(&a, k); }
+extern void zark_cxx_9fd4a677fe358dcc_16(Own* __self, V* a);
+void Own::poke(V* a) { zark_cxx_9fd4a677fe358dcc_16(this, a); }
+extern i32 zark_cxx_9fd4a677fe358dcc_18(V* a, S* s);
+i32 bump(V* a, S* s) { return zark_cxx_9fd4a677fe358dcc_18(a, s); }
+extern i32 zark_cxx_9fd4a677fe358dcc_19(V* a, H* h);
+i32 via_h(V* a, H* h) { return zark_cxx_9fd4a677fe358dcc_19(a, h); }
+extern i32 zark_cxx_9fd4a677fe358dcc_20(V* a, V** h);
+i32 via_hh(V* a, V** h) { return zark_cxx_9fd4a677fe358dcc_20(a, h); }
+extern i32 zark_cxx_9fd4a677fe358dcc_21(V* a, void* p);
+i32 via_void(V* a, void* p) { return zark_cxx_9fd4a677fe358dcc_21(a, p); }
+extern i32 zark_cxx_9fd4a677fe358dcc_22(V* a, V[2]* arr);
+i32 via_arr(V* a, V[2]* arr) { return zark_cxx_9fd4a677fe358dcc_22(a, arr); }
+extern i32 zark_cxx_9fd4a677fe358dcc_23(VT* a, VT* b);
+i32 via_td(VT* a, VT* b) { return zark_cxx_9fd4a677fe358dcc_23(a, b); }
+extern i32 zark_cxx_9fd4a677fe358dcc_24(V* a, V* b);
+i32 via_ref(V* a, V* b) { return zark_cxx_9fd4a677fe358dcc_24(a, b); }
+extern i32 zark_cxx_9fd4a677fe358dcc_25(V* a, HV* h);
+i32 via_hv(V* a, HV* h) { return zark_cxx_9fd4a677fe358dcc_25(a, h); }
+extern i32 zark_cxx_9fd4a677fe358dcc_26(V* a, i32* p);
+i32 via_int(V* a, i32* p) { return zark_cxx_9fd4a677fe358dcc_26(a, p); }
+extern i32 zark_cxx_9fd4a677fe358dcc_27(V* a, V* b, i32* c);
+i32 two(V* a, V* b, i32* c) { return zark_cxx_9fd4a677fe358dcc_27(a, b, c); }
+extern i32 zark_cxx_9fd4a677fe358dcc_28(V* a, V* b);
+i32 ro(V a, V b) { return zark_cxx_9fd4a677fe358dcc_28(&a, &b); }
+extern i32 zark_cxx_9fd4a677fe358dcc_29(V* a, u8* s, i32 k);
+i32 len(V a, u8* s, i32 k) { return zark_cxx_9fd4a677fe358dcc_29(&a, s, k); }
+extern i32 zark_cxx_9fd4a677fe358dcc_30(i32 a);
+i32 sq(i32 a) { return zark_cxx_9fd4a677fe358dcc_30(a); }
+extern V* zark_cxx_9fd4a677fe358dcc_31(V* __self, V* b);
+V* V::op_add_assign(V* b) const { return zark_cxx_9fd4a677fe358dcc_31(this, b); }
+extern void zark_cxx_9fd4a677fe358dcc_32(V* __self, V* b, V* __r);

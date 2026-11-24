@@ -1,0 +1,2 @@
+skipped AA: non-type template parameter of a deduced type is not supported
+skipped Use::a: template specialization AA<int, 4> is not instantiated; add 'template struct AA<...>;' to a wrapper header

@@ -1,0 +1,56 @@
+struct B { i32 y; }
+struct D { i32 y; i32 z; }
+struct E2 { B b; i32 w; }
+struct EA { B[2] bs; i32 w; }
+struct F { i32 y; i32 z; i32 q; }
+struct G { B b; i32 w; i32 g; }
+struct Plain { i32 a = 1; i32 b = 2; }
+struct P2 { i32 a = 1; i32 b = 2; i32 c = 3; }
+struct Own { i32 y; i32 k; }
+owned struct Own_own { Own* ptr; void* mem; u64 size; Allocator a; static Self init(Own* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(Own* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } Own* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_00d0554344d2e64a_28(this->ptr); } else { zark_cxx_00d0554344d2e64a_23(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } Own* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Own>()?; zark_cxx_00d0554344d2e64a_25(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Own), .a = a }; } }
+struct Many { i32 y; i32 m; Many(i32 a0) { zark_cxx_00d0554344d2e64a_31(this, a0); } }
+struct Mem { Plain p; i32 m = 2; }
+extern void zark_cxx_00d0554344d2e64a_1(B* __self);
+static B B::make() { B __r; zark_cxx_00d0554344d2e64a_1(&__r); return __r; }
+extern void zark_cxx_00d0554344d2e64a_4(D* __self);
+static D D::make() { D __r; zark_cxx_00d0554344d2e64a_4(&__r); return __r; }
+extern void zark_cxx_00d0554344d2e64a_7(E2* __self);
+static E2 E2::make() { E2 __r; zark_cxx_00d0554344d2e64a_7(&__r); return __r; }
+extern void zark_cxx_00d0554344d2e64a_10(EA* __self);
+static EA EA::make() { EA __r; zark_cxx_00d0554344d2e64a_10(&__r); return __r; }
+extern void zark_cxx_00d0554344d2e64a_13(F* __self);
+static F F::make() { F __r; zark_cxx_00d0554344d2e64a_13(&__r); return __r; }
+extern void zark_cxx_00d0554344d2e64a_16(G* __self);
+static G G::make() { G __r; zark_cxx_00d0554344d2e64a_16(&__r); return __r; }
+extern void zark_cxx_00d0554344d2e64a_23(Own* __self);
+extern void zark_cxx_00d0554344d2e64a_24(Own* __self);
+static !Own_own Own::create(Allocator __a) { const auto __p = __a.create<Own>()?; zark_cxx_00d0554344d2e64a_24(__p); return Own_own::init(__p, sizeof(Own), __a); }
+extern void zark_cxx_00d0554344d2e64a_25(Own* __self, Own* a0);
+extern void zark_cxx_00d0554344d2e64a_26(Own* __self, Own* __other);
+void Own::assign(Own* __other) { zark_cxx_00d0554344d2e64a_26(this, __other); }
+extern void zark_cxx_00d0554344d2e64a_27(Own* __self, Own* __other);
+void Own::assign_move(Own* __other) { zark_cxx_00d0554344d2e64a_27(this, __other); }
+extern void zark_cxx_00d0554344d2e64a_28(Own* __self);
+extern void zark_cxx_00d0554344d2e64a_31(Many* __self, i32 a0);
+extern i32 zark_cxx_00d0554344d2e64a_35();
+i32 cpp_d() { return zark_cxx_00d0554344d2e64a_35(); }
+extern i32 zark_cxx_00d0554344d2e64a_36();
+i32 cpp_e() { return zark_cxx_00d0554344d2e64a_36(); }
+extern i32 zark_cxx_00d0554344d2e64a_37();
+i32 cpp_f() { return zark_cxx_00d0554344d2e64a_37(); }
+extern i32 zark_cxx_00d0554344d2e64a_38();
+i32 cpp_g() { return zark_cxx_00d0554344d2e64a_38(); }
+extern i32 zark_cxx_00d0554344d2e64a_39();
+i32 cpp_own() { return zark_cxx_00d0554344d2e64a_39(); }
+extern B* zark_cxx_00d0554344d2e64a_40(D* __self);
+B* D::as_B() const { return zark_cxx_00d0554344d2e64a_40(this); }
+extern D* zark_cxx_00d0554344d2e64a_42(F* __self);
+D* F::as_D() const { return zark_cxx_00d0554344d2e64a_42(this); }
+extern E2* zark_cxx_00d0554344d2e64a_44(G* __self);
+E2* G::as_E2() const { return zark_cxx_00d0554344d2e64a_44(this); }
+extern Plain* zark_cxx_00d0554344d2e64a_46(P2* __self);
+Plain* P2::as_Plain() const { return zark_cxx_00d0554344d2e64a_46(this); }
+extern B* zark_cxx_00d0554344d2e64a_48(Own* __self);
+B* Own::as_B() const { return zark_cxx_00d0554344d2e64a_48(this); }
+extern B* zark_cxx_00d0554344d2e64a_50(Many* __self);
+B* Many::as_B() const { return zark_cxx_00d0554344d2e64a_50(this); }
