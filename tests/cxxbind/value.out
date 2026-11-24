@@ -31,4 +31,4 @@ geo_V cmid(geo_V a, geo_V b) { geo_V __r; zark_cxx_H_24(&a, &b, &__r); return __
 extern i32 cptr(geo_V* a);
 struct Str { i8[16] buf; }
 extern u8* zark_cxx_H_28(Str* s);
-u8* cstr(Str* s) { return zark_cxx_H_28(s); }
+u8* cview(Str* s) { return zark_cxx_H_28(s); }
