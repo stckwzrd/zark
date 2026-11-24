@@ -1227,10 +1227,15 @@ struct CxWalk {
         d.cx_implicit = implicit;
         if (jbool(jget(x, "pure"), false)) { d.cx_assign = false; }
         if (t.varargs) {
-            const auto fi = this->fmt_index(x)?;
-            if (fi > 0) {
+            auto fi = this->fmt_index(x)?;
+            if (fi > 0 && !stat) { fi -= 1; }
+            if (fi == 0) {
+                d.reason = "printf format parameter is out of range";
+            } else if (fi > 0) {
                 if (fi > t.params.len) {
                     d.reason = "printf format parameter is out of range";
+                } else if (fi != t.params.len) {
+                    d.reason = "printf format string is not the last parameter";
                 } else if (!this->is_text(t.params.get(fi - 1).ty)) {
                     d.reason = "printf format parameter is not a string";
                 } else {
@@ -2311,6 +2316,8 @@ struct CxWalk {
             if (fi > 0) {
                 if (fi > t.params.len) {
                     d.reason = "printf format parameter is out of range";
+                } else if (fi != t.params.len) {
+                    d.reason = "printf format string is not the last parameter";
                 } else if (!this->is_text(t.params.get(fi - 1).ty)) {
                     d.reason = "printf format parameter is not a string";
                 } else {
@@ -3777,6 +3784,47 @@ bool cx_is_operator(str n) {
     return n;
 }
 
+!void cx_macros(Allocator a, CxWalk* w, str header, str from_dir, List<str> flags) {
+    const auto dir = ".zark-cache/cbind";
+    fs::make_dirs(dir)?;
+    auto sb = List<u8>::init(a);
+    sprint(&sb, "{dir}/mstub-{os::pid()}.cpp")?;
+    const auto stub = sb.slice();
+    auto body = List<u8>::init(a);
+    sprint(&body, "#include \"{header}\"\n")?;
+    write_file(stub, body.slice())?;
+    auto argv = List<str>::init(a);
+    argv.append(["clang++", "-E", "-dD", "-iquote", from_dir])?;
+    argv.append(flags.slice())?;
+    argv.append(["-x", "c++", stub])?;
+    const auto r = os::exec(a, argv.slice()) catch |e| {
+        drop(stub);
+        eprintln("error: cannot run clang++: {e}");
+        return error.CompileFailed;
+    };
+    drop(stub);
+    if (r.code != 0) {
+        eprint(r.err);
+        return error.CompileFailed;
+    }
+    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a), .from = List<str>::init(a) } };
+    lx.run()?;
+    auto et = List<CTok>::init(a);
+    et.push(CTok{ .k = .Eof, .text = "" })?;
+    auto p = CParser{ .a = a, .toks = et.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
+    p.flush(lx.out.toks.len)?;
+    p.macros()?;
+    for (auto d : p.decls.slice()) {
+        if (d.k != .Macro || !d.rel) { continue; }
+        const auto m = w.decl(.Macro, d.name)?;
+        m.body = d.body;
+        m.reason = d.reason;
+        m.ty = d.ty;
+        m.func_like = d.func_like;
+    }
+}
+
 !CBind cxxbind_header(Allocator a, str header, str from_dir, List<str> flags) {
     const auto dir = ".zark-cache/cbind";
     fs::make_dirs(dir)?;
@@ -3839,6 +3887,7 @@ bool cx_is_operator(str n) {
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
+    cx_macros(a, &w, header, from_dir, cflags)?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
