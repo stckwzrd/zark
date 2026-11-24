@@ -1297,6 +1297,13 @@ struct CxWalk {
         r.poly = jbool(jget(dd, "isPolymorphic"), false);
         const auto dc = jget(dd, "defaultCtor");
         r.user_default = jbool(jget(dc, "userProvided"), false);
+        for (auto b : r.allbases.slice()) { if (b.r.user_default) { r.user_default = true; } }
+        for (auto f : r.flds.slice()) {
+            if (f.ty == null) { continue; }
+            auto t = this->expand(f.ty);
+            while (t.k == .Array) { t = this->expand(t.elem); }
+            if (t.k == .Named && t.rec != null && t.rec.cx != null && t.rec.cx.user_default) { r.user_default = true; }
+        }
         auto has_assign = false;
         auto has_amove = false;
         for (auto md : r.meths.slice()) {
@@ -1342,7 +1349,7 @@ struct CxWalk {
             r.no_own_why = "destructor is not public";
             if (r.dtor_deleted) { r.no_own_why = "destructor is deleted"; }
         }
-        if (!r.value && !r.abstract && r.own) {
+        if (!r.abstract && ((!r.value && r.own) || (r.value && r.user_default))) {
             auto has_ctor = false;
             for (auto md : r.meths.slice()) { if (md.cx_ctor) { has_ctor = true; } }
             const auto dc = jget(dd, "defaultCtor");
