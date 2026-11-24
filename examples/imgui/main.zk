@@ -48,7 +48,9 @@ f32 wave(void* data, i32 i) {
     ig::ImGui::SeparatorText("Draw list");
     const auto dl = ig::ImGui::GetWindowDrawList();
     const auto p = ig::ImGui::GetCursorScreenPos();
-    dl.AddLine_4(ig::ImVec2(p.x, p.y), ig::ImVec2(p.x + 240.0, p.y + 24.0), 0xFF00FFFF, 2.0);
+    auto a = ig::ImVec2(p.x, p.y);
+    auto b = ig::ImVec2(p.x + 240.0, p.y + 24.0);
+    dl.AddLine_4(&a, &b, 0xFF00FFFF, 2.0);
 
     ig::ImGui::SeparatorText("Owned object");
     auto clipper = ig::ImGuiListClipper::create(c_allocator())?;

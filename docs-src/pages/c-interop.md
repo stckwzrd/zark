@@ -161,7 +161,7 @@ How the names come out:
 | default arguments | the full name, plus `name_k` for each shorter call C++ accepts (`k` is the number of arguments); C++ fills in the defaults |
 | `operator+`, `==`, `<` and the like on a value type | Zark operators: `a + b`, `a == b` |
 | other operators | named methods: `op_index` for `[]`, `op_call` for `()`, `op_add_assign` for `+=`, `to_bool()` for `operator bool` |
-| `T&`, `T*` | `T*`; a `const T&` parameter of a number, enum or value type is taken by value (unless the function returns a reference or a pointer) |
+| `T&`, `T*` | `T*`; a `const T&` parameter of a number or enum is taken by value, and so is one of a plain value type unless the function returns a reference or a pointer, or something else in the signature (the object the method belongs to, a non-const pointer or reference, a `void*`) could reach the same storage; then it stays `T*` |
 | `static` data member, global variable | `name_ptr()`, as for C variables |
 | `Box<int>` (an instantiated template) | `Box_i32` |
 | `std::string`, `std::string_view` in a parameter or result | `str` (a `std::string` result is copied with an allocator you pass first) |
@@ -264,7 +264,9 @@ struct App {
 
     const auto dl = ig::ImGui::GetWindowDrawList();
     const auto p = ig::ImGui::GetCursorScreenPos();
-    dl.AddLine_4(ig::ImVec2(p.x, p.y), ig::ImVec2(p.x + 240.0, p.y + 24.0), 0xFF00FFFF, 2.0);
+    auto a = ig::ImVec2(p.x, p.y);
+    auto b = ig::ImVec2(p.x + 240.0, p.y + 24.0);
+    dl.AddLine_4(&a, &b, 0xFF00FFFF, 2.0);
 
     auto clipper = ig::ImGuiListClipper::create(c_allocator())?;
     defer clipper.deinit();
