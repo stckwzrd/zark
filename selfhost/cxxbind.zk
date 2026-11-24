@@ -935,6 +935,7 @@ struct CxWalk {
             }
             return this->record(x, r, cx_up(p));
         }
+        if (kind == "ClassTemplatePartialSpecializationDecl") { return this->skip(qn, "partial template specializations are not supported"); }
         if (kind == "ClassTemplateSpecializationDecl" && name.len > 0) {
             if (!jbool(jget(x, "completeDefinition"), false)) { return this->skip(qn, "template specialization is not defined"); }
             auto q = this->find(scope, name)?;
@@ -1488,7 +1489,23 @@ struct CxWalk {
             if (n > 1) { return this->badt("ambiguous template arguments"); }
             if (one != null) { r = this->spec(one, q, key)?; }
         }
-        if (r == null) { return this->badt(CX_TODO); }
+        if (r == null) {
+            if (q.len == 0) { return this->badt(CX_TODO); }
+            auto cs = List<str>::init(this->a);
+            for (auto x : args.slice()) { cs.push(cx_spell(this->a, x, "")?)?; }
+            const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
+            const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", str_join(this->a, ks.slice(), "_")?])?;
+            r = this->newrec(cxx)?;
+            r.d = this->decl(.Struct, zn)?;
+            r.d.cxx = cxx;
+            r.d.cx = r;
+            r.d.complete = false;
+            this->recs.put(key, r)?;
+            this->zrec.put(zn, r)?;
+            this->names.put(key, zn)?;
+            this->specs.put(key, r)?;
+            this->tused.put(q, true)?;
+        }
         if (this->bad.has(r.d.name)) { return this->badt(str_concat(this->a, ["uses skipped ", r.qn])?); }
         const auto t = this->named(r.d.name)?;
         t.rec = r.d;

@@ -1,16 +1,7 @@
-skipped Vec<unsigned short>: methods of template specializations are not bound yet
-skipped Vec<Cmd>: methods of template specializations are not bound yet
-skipped Vec<float>: methods of template specializations are not bound yet
-skipped Vec<Key>: methods of template specializations are not bound yet
-skipped Vec<int>: methods of template specializations are not bound yet
-skipped IO::list: C++ declaration not bound yet
-skipped Vec<n::Pair>: methods of template specializations are not bound yet
-skipped HasArr::a: C++ declaration not bound yet
-skipped Box: C++ declaration not bound yet
+skipped Box: partial template specializations are not supported
 skipped U2::a: ambiguous template arguments
 skipped U2::b: ambiguous template arguments
 skipped U2::c: ambiguous template arguments
 skipped U2::d: ambiguous template arguments
-skipped Unused: class templates are not bound yet
-skipped Arr: class templates are not bound yet
-skipped Box: class templates are not bound yet
+skipped Unused: template without an instantiation; add 'template struct Unused<...>;' to a wrapper header
+skipped Box: template without an instantiation; add 'template struct Box<...>;' to a wrapper header
