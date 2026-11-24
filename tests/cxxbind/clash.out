@@ -1,0 +1,15 @@
+struct c_S { i32 v; }
+struct c_Own { i32 v; }
+struct c_Own_own { i32 z; }
+struct c { }
+extern i32 zark_cxx_54a7d25364568fc5_0(i32 a, i32 b);
+static i32 c::f(i32 a, i32 b) { return zark_cxx_54a7d25364568fc5_0(a, b); }
+extern i32 zark_cxx_54a7d25364568fc5_3(c_S* __self, i32 x);
+i32 c_S::match_(i32 x) { return zark_cxx_54a7d25364568fc5_3(this, x); }
+extern void zark_cxx_54a7d25364568fc5_7(c_Own* __self);
+extern void zark_cxx_54a7d25364568fc5_8(c_Own* __self, c_Own* o);
+void c_Own::assign(c_Own* o) { zark_cxx_54a7d25364568fc5_8(this, o); }
+extern void zark_cxx_54a7d25364568fc5_9(c_Own* __self, c_Own* o);
+void c_Own::assign_move(c_Own* o) { zark_cxx_54a7d25364568fc5_9(this, o); }
+extern void zark_cxx_54a7d25364568fc5_10(c_Own* __self, c_Own* a0);
+extern void zark_cxx_54a7d25364568fc5_11(c_Own* __self);

@@ -1,0 +1,5 @@
+import "lib.hpp" as lib;
+
+void main() {
+    println("{lib::m::add(2, 3)} {lib::m_text::width(4)} {lib::twice(21)} {lib::m_magic} {lib::digits(12345)}");
+}

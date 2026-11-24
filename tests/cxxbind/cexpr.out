@@ -1,0 +1,14 @@
+const auto G = -1;
+const auto F1 = 0.10000000149011612;
+const auto D1 = 0.10000000149011612;
+const auto F2 = 0.10000000149011612;
+const auto F3 = 16777216.0;
+const auto D2 = 1.0e-05;
+const auto D4 = -0.10000000149011612;
+const auto D8 = 1.8446744073709552e+19;
+const auto F6 = 9007200328482816.0;
+const auto D9 = 0.5;
+const auto X1 = 5;
+const auto X2 = 6;
+const auto L = 8;
+const auto P = 9;

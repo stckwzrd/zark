@@ -852,7 +852,7 @@ i32 lsp_main() {
         const auto body = s.rd.message(ta) catch {
             break;
         };
-        const auto msg = json_parse(ta, body) catch {
+        const auto msg = json_parse(ta, body, 64) catch {
             ar.deinit();
             continue;
         };

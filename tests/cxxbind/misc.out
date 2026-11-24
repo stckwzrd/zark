@@ -1,0 +1,11 @@
+extern i32 zark_cxx_15229d94ecc130f4_0(i32 x);
+i32 cx(i32 x) { return zark_cxx_15229d94ecc130f4_0(x); }
+extern i32 other(i32 a0);
+extern void zark_cxx_15229d94ecc130f4_5(i32 a1, i32 a1_);
+void pa(i32 a1, i32 a1_) { zark_cxx_15229d94ecc130f4_5(a1, a1_); }
+extern void zark_cxx_15229d94ecc130f4_6(i32 a0__, i32 a0, i32 a0_);
+void pb(i32 a0__, i32 a0, i32 a0_) { zark_cxx_15229d94ecc130f4_6(a0__, a0, a0_); }
+extern i32* zark_cxx_15229d94ecc130f4_7();
+i32* rref() { return zark_cxx_15229d94ecc130f4_7(); }
+extern i32[4]* zark_cxx_15229d94ecc130f4_8();
+i32[4]* rarr() { return zark_cxx_15229d94ecc130f4_8(); }

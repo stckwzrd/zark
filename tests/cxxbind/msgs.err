@@ -1,0 +1,11 @@
+skipped tf: template without an instantiation; add 'template ... NAME<...>(...);' to a wrapper header
+skipped m::va: variadic C++ functions are not bound yet
+skipped m::wc: type 'wchar_t' is not supported yet
+skipped m::c8: type 'char8_t' is not supported yet
+skipped m::c16: type 'char16_t' is not supported yet
+skipped m::c32: type 'char32_t' is not supported yet
+skipped m::ld: type 'long double' is not supported yet
+skipped m::i128: type '__int128' is not supported yet
+skipped m::u128: type '__int128' is not supported yet
+skipped m::np: decltype types are not supported yet
+skipped a_b::h: name clash

@@ -1,0 +1,27 @@
+struct op_V { f32 x = 0.0; f32 y = 0.0; op_V(f32 a, f32 b) { zark_cxx_734f26ee1f8bb49f_1(this, a, b); } op_V operator-(op_V b) const { op_V __r; zark_cxx_734f26ee1f8bb49f_4(this, &b, &__r); return __r; } bool operator==(op_V b) const { return zark_cxx_734f26ee1f8bb49f_5(this, &b); } bool operator!=(op_V b) const { return zark_cxx_734f26ee1f8bb49f_6(this, &b); } bool operator<(op_V b) const { return zark_cxx_734f26ee1f8bb49f_7(this, &b); } }
+struct op_Box { i32 n; }
+owned struct op_Box_own { op_Box* ptr; void* mem; u64 size; Allocator a; static Self init(op_Box* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(op_Box* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } op_Box* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_734f26ee1f8bb49f_20(this->ptr); } else { zark_cxx_734f26ee1f8bb49f_12(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } op_Box* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<op_Box>()?; zark_cxx_734f26ee1f8bb49f_11(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(op_Box), .a = a }; } }
+struct op_W { f32 x; op_W operator+(op_W b) const { op_W __r; zark_cxx_734f26ee1f8bb49f_25(this, &b, &__r); return __r; } }
+extern void zark_cxx_734f26ee1f8bb49f_1(op_V* __self, f32 a, f32 b);
+extern void zark_cxx_734f26ee1f8bb49f_4(op_V* __self, op_V* b, op_V* __r);
+extern bool zark_cxx_734f26ee1f8bb49f_5(op_V* __self, op_V* b);
+extern bool zark_cxx_734f26ee1f8bb49f_6(op_V* __self, op_V* b);
+extern bool zark_cxx_734f26ee1f8bb49f_7(op_V* __self, op_V* b);
+extern void zark_cxx_734f26ee1f8bb49f_10(op_Box* __self, i32 k);
+static !op_Box_own op_Box::create(Allocator __a, i32 k) { const auto __p = __a.create<op_Box>()?; zark_cxx_734f26ee1f8bb49f_10(__p, k); return op_Box_own::init(__p, sizeof(op_Box), __a); }
+extern void zark_cxx_734f26ee1f8bb49f_11(op_Box* __self, op_Box* o);
+extern void zark_cxx_734f26ee1f8bb49f_12(op_Box* __self);
+extern i32 zark_cxx_734f26ee1f8bb49f_13(op_Box* __self, i32 i);
+i32 op_Box::op_index(i32 i) const { return zark_cxx_734f26ee1f8bb49f_13(this, i); }
+extern bool zark_cxx_734f26ee1f8bb49f_14(op_Box* __self, op_Box* o);
+bool op_Box::op_eq(op_Box* o) const { return zark_cxx_734f26ee1f8bb49f_14(this, o); }
+extern bool zark_cxx_734f26ee1f8bb49f_15(op_Box* __self);
+bool op_Box::to_bool() const { return zark_cxx_734f26ee1f8bb49f_15(this); }
+extern op_Box* zark_cxx_734f26ee1f8bb49f_16(op_Box* __self, i32 k);
+op_Box* op_Box::op_add_assign(i32 k) { return zark_cxx_734f26ee1f8bb49f_16(this, k); }
+extern void zark_cxx_734f26ee1f8bb49f_18(op_Box* __self, op_Box* __other);
+void op_Box::assign(op_Box* __other) { zark_cxx_734f26ee1f8bb49f_18(this, __other); }
+extern void zark_cxx_734f26ee1f8bb49f_19(op_Box* __self, op_Box* __other);
+void op_Box::assign_move(op_Box* __other) { zark_cxx_734f26ee1f8bb49f_19(this, __other); }
+extern void zark_cxx_734f26ee1f8bb49f_20(op_Box* __self);
+extern void zark_cxx_734f26ee1f8bb49f_25(op_W* __self, op_W* b, op_W* __r);

@@ -2,14 +2,14 @@
 set -e
 cd "$(dirname "$0")"
 zark="${ZARK:-zark}"
-pin=2a6a93fccd10f275ee9206167dc9698f6f00fac1
+pin=6d32174508fb8c518e7a832cc1d571fadd5cba76
 
-if [ ! -d deps/cimgui ]; then
-    mkdir -p deps/cimgui
-    git -C deps/cimgui init -q
-    git -C deps/cimgui fetch -q --depth 1 https://github.com/cimgui/cimgui "$pin"
-    git -C deps/cimgui checkout -q FETCH_HEAD
-    git -C deps/cimgui submodule update -q --init --depth 1
+if [ ! -f deps/imgui/imgui.h ]; then
+    rm -rf deps/imgui
+    mkdir -p deps/imgui
+    git -C deps/imgui init -q
+    git -C deps/imgui fetch -q --depth 1 https://github.com/ocornut/imgui "$pin"
+    git -C deps/imgui checkout -q FETCH_HEAD
 fi
 
 exec "$zark" run -- "$@"

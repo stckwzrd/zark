@@ -1,0 +1,6 @@
+import "throw_b.zk" as tb;
+
+void main() {
+    println("{tb::t::calm(1)} {tb::t::boom(0)}");
+    println("{tb::t::boom(1)}");
+}

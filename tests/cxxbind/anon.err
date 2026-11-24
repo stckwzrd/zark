@@ -1,0 +1,2 @@
+skipped Num.bits: bitfield
+opaque NTU: union with non-trivial members

@@ -1,0 +1,8 @@
+const auto a_b_X = 1;
+const auto a_b_Y = 2;
+type Fwd = i16;
+const auto Fwd_A = 0;
+const auto Fwd_B = 1;
+type K = i32;
+const auto K0 = 0;
+extern void usek(K k);
