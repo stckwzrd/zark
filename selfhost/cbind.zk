@@ -222,6 +222,9 @@ struct CType {
     bool rvalue;
     bool noexc;
     str cxx;
+    i64 stdk;
+    CType* arg;
+    str why;
 }
 
 enum CDK { Func, Struct, Typedef, Macro, Var, Skip, Enum, Const }
@@ -1819,6 +1822,10 @@ struct CEmit {
     }
 
     !void ty(List<u8>* b, CType* t) {
+        if (t.stdk == 1 || t.stdk == 2) { sprint(b, "str")?; return; }
+        if (t.stdk == 3) { this->ty(b, t.arg)?; sprint(b, "[]")?; return; }
+        if (t.stdk == 4) { this->ty(b, t.arg)?; sprint(b, "_own")?; return; }
+        if (t.stdk == 5) { this->fail(t.why); return; }
         match t.k {
             .Int => {
                 if (t.signed) { sprint(b, "i{t.width}")?; } else { sprint(b, "u{t.width}")?; }

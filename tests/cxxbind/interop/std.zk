@@ -1,0 +1,27 @@
+import "std.hpp" as s;
+
+!void work(Arena* ar) {
+    const auto a = ar.allocator();
+    const auto e = s::st::echo(a, "abc")?;
+    println(e, e.len);
+    println(s::st::hello());
+    println(s::st::view("xyz"));
+    i32[4] v = [1, 2, 3, 4];
+    println(s::st::sum(v[..]));
+    const auto m = s::st::make(a, 4)?;
+    println(m.len, m[0], m[3]);
+    auto t = s::st::make_thing(7);
+    defer t.deinit();
+    println(t.get().get(), s::st_Thing::alive());
+    auto u = s::st::make_thing(9);
+    println(s::st_Thing::alive());
+    const auto r = s::st::take(u);
+    println(r, s::st_Thing::alive());
+}
+
+!void main() {
+    auto ar = Arena::init(c_allocator());
+    defer ar.deinit();
+    work(&ar)?;
+    println(s::st_Thing::alive());
+}

@@ -1,0 +1,4 @@
+skipped st::StrField::s: std:: member
+skipped st::StrField::v: std:: member
+skipped st::map_size: std::map<int, int> is not supported
+skipped st::bad_ref: std::string& result is not supported
