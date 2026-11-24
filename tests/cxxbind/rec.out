@@ -21,3 +21,11 @@ struct type_ { i32 match_; }
 struct Hid { i32 h; }
 extern i32* zark_cxx_H_36(i32* a, i32* b);
 i32* imax(i32* a, i32* b) { return zark_cxx_H_36(a, b); }
+struct st { i32 a; }
+extern i32 zark_cxx_H_40(st* p);
+i32 st(st* p) { return zark_cxx_H_40(p); }
+struct v1_In { i32 i; }
+extern i32 zark_cxx_H_43(v1_In* p);
+i32 usein(v1_In* p) { return zark_cxx_H_43(p); }
+struct VA { void* __vptr; }
+struct VB2 { void* __vptr; i32 y; u8[4] __pad0; }

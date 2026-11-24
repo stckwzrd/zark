@@ -20,3 +20,5 @@ int usefwd(Fwd f);
 }
 extern "C" geo::V cmid(geo::V a, geo::V b);
 extern "C" int cptr(geo::V* a);
+struct Str { char buf[16]; };
+const char* cstr(const Str& s);

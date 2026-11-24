@@ -31,3 +31,9 @@ struct type { int match; };
 namespace { struct Hid { int h; }; }
 int useh(Hid* h);
 const int& imax(const int& a, const int& b);
+struct st { int a; };
+int st(struct st* p);
+inline namespace v1 { struct In { int i; }; }
+int usein(In* p);
+struct VA { virtual void f(); };
+struct VB2 : virtual VA { int y; };
