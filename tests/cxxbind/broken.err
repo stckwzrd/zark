@@ -1,2 +1,2 @@
-skipped n::take: shim does not compile: static_cast from 'void (*)(Id)' (aka 'void (*)(long)') to 'void (*)(Id)' (aka 'void (*)(int)') is not allowed
 skipped sq: shim does not compile: call to consteval function 'sq' is not a constant expression
+skipped old: shim does not compile: 'old' is unavailable: gone
