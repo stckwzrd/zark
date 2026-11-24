@@ -1,0 +1,11 @@
+struct FmtVec { f32 x; FmtVec(f32 v) { zark_cxx_f2359e59297c5a08_1(this, v); } }
+extern void zark_cxx_f2359e59297c5a08_1(FmtVec* __self, f32 v);
+struct fx { }
+extern void zark_cxx_f2359e59297c5a08_3(u8* fmt);
+static void fx::Text(u8* fmt) { zark_cxx_f2359e59297c5a08_3(fmt); }
+extern void zark_cxx_f2359e59297c5a08_4(FmtVec* col, u8* fmt);
+static void fx::TextColored(FmtVec col, u8* fmt) { zark_cxx_f2359e59297c5a08_4(&col, fmt); }
+extern bool zark_cxx_f2359e59297c5a08_5(u8* str_id, u8* fmt);
+static bool fx::TreeNode_u8pc_u8pc(u8* str_id, u8* fmt) { return zark_cxx_f2359e59297c5a08_5(str_id, fmt); }
+extern bool zark_cxx_f2359e59297c5a08_6(void* ptr_id, u8* fmt);
+static bool fx::TreeNode_voidpc_u8pc(void* ptr_id, u8* fmt) { return zark_cxx_f2359e59297c5a08_6(ptr_id, fmt); }
