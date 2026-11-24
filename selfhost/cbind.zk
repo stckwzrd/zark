@@ -259,6 +259,7 @@ struct CDecl {
     i64 from;
     i64 at;
     str cxx;
+    CxRec* cx;
 }
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
@@ -2106,6 +2107,7 @@ struct CEmit {
     }
 
     !void record(CDecl* d) {
+        if (d.cx != null) { return cx_record(this, d); }
         if (!d.complete) {
             if (this->defined.has(d.name) || this->bad.has(d.name)) { return; }
             if (!this->claim(d.name, 1)?) { return; }

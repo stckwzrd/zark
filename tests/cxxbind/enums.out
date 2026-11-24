@@ -36,6 +36,7 @@ const auto Box_Bottom = 1;
 type Box_Fit = u32;
 const auto Box_Fit_Fill = 3;
 const auto Box_Fit_Crop = 4;
+struct Box { i32 w; }
 const auto TdA = 0;
 const auto TdB = 1;
 type TdEnum = i32;

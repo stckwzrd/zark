@@ -1,7 +1,7 @@
 struct U__anon0 { u32[1] storage; i32* as_i() { void* p = this; return p; } f32* as_f() { void* p = this; return p; } }
 struct U__anon1 { i8 p; i8 q; }
 struct U__anon2 { i16 s1; i16 s2; }
-struct U { U__anon0 __anon0; U__anon1 pq; U__anon2 __anon2; i32 tail; }
+struct U { U__anon0 __anon0; U__anon1 pq; U__anon2 __anon2; u8[2] __pad0; i32 tail; }
 struct Num { u64[1] storage; i32* as_i() { void* p = this; return p; } f64* as_d() { void* p = this; return p; } }
 struct P { i32 a; i32 b; }
 struct Named { i32 z; }
@@ -12,7 +12,7 @@ struct S2__anon0 { u32[1] storage; i32* as_x() { void* p = this; return p; } S2_
 struct S2 { S2__anon0 w; }
 struct NTm { i32 z; }
 struct NTU { u32[1] storage; }
-extern i32 zark_cxx_H_20(P* p);
-i32 takep(P p) { return zark_cxx_H_20(&p); }
-extern i32 zark_cxx_H_21(NamedP p);
-i32 taken(NamedP p) { return zark_cxx_H_21(p); }
+extern i32 zark_cxx_H_19(P* p);
+i32 takep(P p) { return zark_cxx_H_19(&p); }
+extern i32 zark_cxx_H_20(NamedP p);
+i32 taken(NamedP p) { return zark_cxx_H_20(p); }
