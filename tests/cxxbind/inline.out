@@ -1,0 +1,6 @@
+struct v1_In { i32 v; }
+struct v1_Inl { }
+extern i32 zark_cxx_3d0afd8d718e4026_2(v1_In* p);
+static i32 v1_Inl::use(v1_In* p) { return zark_cxx_3d0afd8d718e4026_2(p); }
+extern i32 zark_cxx_3d0afd8d718e4026_3(v1_In* p);
+i32 call(v1_In* p) { return zark_cxx_3d0afd8d718e4026_3(p); }

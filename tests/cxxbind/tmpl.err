@@ -4,3 +4,4 @@ skipped parse: template specialization Res<int> is not instantiated; add 'templa
 skipped use: template specialization Res<int> is not instantiated; add 'template struct Res<...>;' to a wrapper header
 skipped VStore<Item>::VStore: copying this class is not supported
 skipped VStore<Item>::operator=: operator = is not supported
+skipped CopyBad: shim does not compile: static assertion failed due to requirement '__is_constructible(CopyBad)'

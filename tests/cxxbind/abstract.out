@@ -1,0 +1,12 @@
+struct A { void* __vptr; }
+owned struct A_own { A* ptr; void* mem; u64 size; Allocator a; static Self init(A* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(A* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } A* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_4bedfff5dded1acc_3(this->ptr); } else { zark_cxx_4bedfff5dded1acc_1(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } A* release() move { return this->ptr; } }
+struct B { void* __vptr; }
+owned struct B_own { B* ptr; void* mem; u64 size; Allocator a; static Self init(B* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(B* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } B* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_4bedfff5dded1acc_9(this->ptr); } else { zark_cxx_4bedfff5dded1acc_8(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } B* release() move { return this->ptr; } }
+extern void zark_cxx_4bedfff5dded1acc_1(A* __self);
+extern void zark_cxx_4bedfff5dded1acc_2(A* __self);
+void A::f() { zark_cxx_4bedfff5dded1acc_2(this); }
+extern void zark_cxx_4bedfff5dded1acc_3(A* __self);
+extern void zark_cxx_4bedfff5dded1acc_6(B* __self);
+void B::g() { zark_cxx_4bedfff5dded1acc_6(this); }
+extern void zark_cxx_4bedfff5dded1acc_8(B* __self);
+extern void zark_cxx_4bedfff5dded1acc_9(B* __self);

@@ -1,0 +1,4 @@
+extern i32 zark_cxx_664f83f1ffc8587f_0(i32 a, i32 b);
+i32 h(i32 a, i32 b) { return zark_cxx_664f83f1ffc8587f_0(a, b); }
+extern i32 zark_cxx_664f83f1ffc8587f_1(i32 a);
+i32 h_1(i32 a) { return zark_cxx_664f83f1ffc8587f_1(a); }

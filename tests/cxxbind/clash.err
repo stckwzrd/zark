@@ -1,3 +1,3 @@
 skipped c::f_1: name clash
-skipped c::Own::Own: generated name X_own clashes with a bound type
+skipped c::Own::create: generated name X_own clashes with a bound type
 skipped c::f: name clash

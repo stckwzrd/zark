@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors fmt macros"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -104,6 +104,16 @@ done
 for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f lifetime.zk lifetime.cpp 2>&1) || fail "interop lifetime $f: $out"
     [ "$out" = "$(cat interop/lifetime.out)" ] || fail "interop lifetime $f: got: $out"
+done
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f init.zk init.cpp 2>&1) || fail "interop init $f: $out"
+    [ "$out" = "$(cat interop/init.out)" ] || fail "interop init $f: got: $out"
+done
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f alias.zk alias.cpp 2>&1) || fail "interop alias $f: $out"
+    [ "$out" = "$(cat interop/alias.out)" ] || fail "interop alias $f: got: $out"
 done
 
 for f in "" --llvm -O; do
@@ -241,6 +251,18 @@ printf 'import "a.hpp";\nimport "b.hpp";\nvoid main() {}\n' > two/m.zk
 if out=$(cd two && "$ZARK" run m.zk 2>&1); then fail "import_two_ns: expected failure"; fi
 case "$out" in *"from a header they both include"*) fail "import_two_ns: C message for C++ headers: $out" ;; esac
 case "$out" in *"'a.hpp' and 'b.hpp' both declare 'geo'"*"import them with 'as'"*) ;; *) fail "import_two_ns: got: $out" ;; esac
+
+mkdir -p oporder
+printf 'namespace q { struct V { int x; }; struct W { int x; }; V operator+(V a, int k); V operator+(V a, W w); }\n' > oporder/a.hpp
+printf 'namespace q { struct V { int x; }; struct W { int x; }; V operator+(V a, W w); V operator+(V a, int k); }\n' > oporder/b.hpp
+"$ZARK" cbind oporder/a.hpp > oporder/a.zk 2> oporder/a.err || fail "op order a: exit $?"
+"$ZARK" cbind oporder/b.hpp > oporder/b.zk 2> oporder/b.err || fail "op order b: exit $?"
+opsigs() { grep -o 'q_V [A-Za-z_][A-Za-z0-9_+]*([^)]*) const' "$1" | sort; }
+diff -u <(opsigs oporder/a.zk) <(opsigs oporder/b.zk) || fail "op order: declaration order changed the bindings"
+[ "$(opsigs oporder/a.zk | wc -l)" = 2 ] || fail "op order: expected both overloads"
+grep -q "operator+" oporder/a.zk || fail "op order: no operator+"
+grep -q "op_add_" oporder/a.zk || fail "op order: the second overload was dropped"
+grep -q "operator overloads are not supported" oporder/a.err && fail "op order: an overload was dropped"
 
 # The ImGui example needs its pinned dependency; skip this part without it.
 if [ -f "$R/examples/imgui/deps/imgui/imgui.h" ]; then

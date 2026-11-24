@@ -1,0 +1,18 @@
+struct Val { i32 x; }
+struct Own { i32 x; }
+owned struct Own_own { Own* ptr; void* mem; u64 size; Allocator a; static Self init(Own* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(Own* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } Own* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_bc4562b779e1087d_11(this->ptr); } else { zark_cxx_bc4562b779e1087d_6(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } Own* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Own>()?; zark_cxx_bc4562b779e1087d_8(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Own), .a = a }; } }
+extern void zark_cxx_bc4562b779e1087d_1(Val* __self);
+static Val Val::make() { Val __r; zark_cxx_bc4562b779e1087d_1(&__r); return __r; }
+extern i32 zark_cxx_bc4562b779e1087d_2(Val* __self);
+i32 Val::get() const { return zark_cxx_bc4562b779e1087d_2(this); }
+extern void zark_cxx_bc4562b779e1087d_5(Own* __self);
+static !Own_own Own::create(Allocator __a) { const auto __p = __a.create<Own>()?; zark_cxx_bc4562b779e1087d_5(__p); return Own_own::init(__p, sizeof(Own), __a); }
+extern void zark_cxx_bc4562b779e1087d_6(Own* __self);
+extern i32 zark_cxx_bc4562b779e1087d_7(Own* __self);
+i32 Own::get() const { return zark_cxx_bc4562b779e1087d_7(this); }
+extern void zark_cxx_bc4562b779e1087d_8(Own* __self, Own* a0);
+extern void zark_cxx_bc4562b779e1087d_9(Own* __self, Own* __other);
+void Own::assign(Own* __other) { zark_cxx_bc4562b779e1087d_9(this, __other); }
+extern void zark_cxx_bc4562b779e1087d_10(Own* __self, Own* __other);
+void Own::assign_move(Own* __other) { zark_cxx_bc4562b779e1087d_10(this, __other); }
+extern void zark_cxx_bc4562b779e1087d_11(Own* __self);

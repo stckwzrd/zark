@@ -1,3 +1,4 @@
+skipped gone: deleted function
 skipped say: variadic function without a printf format attribute
 skipped a_b::f: name clash
 skipped a::b::f: name clash

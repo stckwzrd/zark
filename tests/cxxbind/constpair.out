@@ -1,0 +1,13 @@
+struct Pair { i32 n; }
+struct Over { i32 n; }
+struct Cross { i32 n; }
+extern i32 zark_cxx_6a9d0de6f40d3494_2(Pair* __self);
+i32 Pair::get() { return zark_cxx_6a9d0de6f40d3494_2(this); }
+extern i32 zark_cxx_6a9d0de6f40d3494_7(Over* __self);
+i32 Over::get_void() { return zark_cxx_6a9d0de6f40d3494_7(this); }
+extern i32 zark_cxx_6a9d0de6f40d3494_8(Over* __self, i32 k);
+i32 Over::get_i32(i32 k) { return zark_cxx_6a9d0de6f40d3494_8(this, k); }
+extern i32 zark_cxx_6a9d0de6f40d3494_11(Cross* __self);
+i32 Cross::get_void() { return zark_cxx_6a9d0de6f40d3494_11(this); }
+extern i32 zark_cxx_6a9d0de6f40d3494_12(Cross* __self, i32 k);
+i32 Cross::get_i32(i32 k) const { return zark_cxx_6a9d0de6f40d3494_12(this, k); }
