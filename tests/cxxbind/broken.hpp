@@ -8,3 +8,4 @@ void take(Id x);
 int fine(int x);
 }
 consteval int sq(int x) { return x * x; }
+int old(int x) __attribute__((unavailable("gone")));

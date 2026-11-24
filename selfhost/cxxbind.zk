@@ -31,11 +31,35 @@ str cx_up(str s) {
     return s[0..k];
 }
 
-bool cx_bad(CType* t) {
-    if (t.k == .Bad) { return true; }
-    if ((t.k == .Ptr || t.k == .Array || t.k == .Func) && cx_bad(t.elem)) { return true; }
-    if (t.k == .Func) { for (auto p : t.params.slice()) { if (cx_bad(p.ty)) { return true; } } }
-    return false;
+str cx_why(CType* t) {
+    if (t.k == .Bad) { return t.name; }
+    if (t.k == .Ptr || t.k == .Array || t.k == .Func) {
+        const auto w = cx_why(t.elem);
+        if (w.len > 0) { return w; }
+    }
+    if (t.k == .Func) {
+        for (auto p : t.params.slice()) {
+            const auto w = cx_why(p.ty);
+            if (w.len > 0) { return w; }
+        }
+    }
+    return "";
+}
+
+bool cx_bad(CType* t) { return cx_why(t).len > 0; }
+
+!str cx_fnum(Allocator a, f64 v) {
+    u8[40] buf;
+    auto s = "";
+    for (auto p : 1..18) {
+        const auto n = snprintf(buf.ptr, 40, "%.*g", p as i32, v);
+        s = buf[0..n as i64];
+        if (parse_float(s)? == v) { break; }
+    }
+    if (str_find(s, ".") >= 0) { return str_concat(a, [s]); }
+    auto e = str_find(s, "e");
+    if (e < 0) { e = s.len; }
+    return str_concat(a, [s[0..e], ".0", s[e..]]);
 }
 
 bool cx_cshape(CType* t) {
@@ -361,8 +385,14 @@ struct CxWalk {
     Map<str> names;
     Map<CType*> anon;
     Map<CVal> vals;
-    Map<str> fvals;
+    Map<f64> fvals;
     Map<List<str>> bases;
+    Map<bool> declared;
+    Map<str> tid;
+    Map<str> byid;
+    Map<str> zq;
+    Map<CDecl*> zd;
+    Map<bool> bad;
     bool uchar;
     bool short_enums;
 
@@ -433,6 +463,13 @@ struct CxWalk {
         return t;
     }
 
+    !CType* badt(str why) {
+        const auto t = this->a.create<CType>()?;
+        t.k = .Bad;
+        t.name = why;
+        return t;
+    }
+
     !CType* lookup(str name, str scope) {
         auto n = name;
         auto s = scope;
@@ -443,7 +480,10 @@ struct CxWalk {
         while (true) {
             const auto q = this->find(s, n)?;
             if (q.len > 0) {
-                const auto t = this->named(this->names.get_or(q, ""))?;
+                const auto z = this->names.get_or(q, "");
+                if (z.len == 0) { return this->badt(CX_TODO); }
+                if (this->bad.has(z)) { return this->badt(str_concat(this->a, ["uses skipped ", z])?); }
+                const auto t = this->named(z)?;
                 t.cxx = q;
                 return t;
             }
@@ -456,25 +496,51 @@ struct CxWalk {
             t.cxx = name;
             return t;
         }
-        const auto t = this->a.create<CType>()?;
-        t.k = .Bad;
-        t.name = CX_TODO;
-        return t;
+        return this->badt(CX_TODO);
     }
 
     !str find(str s, str n) {
         const auto q = cx_qual(this->a, s, n)?;
-        if (this->names.has(q)) { return q; }
+        if (this->names.has(q) || this->declared.has(q)) { return q; }
         const auto k = str_find(n, "::");
         if (k > 0) {
             const auto c = cx_qual(this->a, s, n[0..k])?;
-            if (this->bases.has(c)) { return this->find(c, n[k + 2..]); }
+            if (this->declared.has(c) || this->bases.has(c)) {
+                const auto r = this->find(c, n[k + 2..])?;
+                if (r.len > 0) { return r; }
+                return q;
+            }
         }
         for (auto b : this->bases.get_or(s, List<str>{}).slice()) {
+            if (b == "?") { return q; }
             const auto r = this->find(b, n)?;
             if (r.len > 0) { return r; }
         }
         return "";
+    }
+
+    !void declare(Json* x, str kind, str scope) {
+        auto name = jstr(jget(x, "name"), "");
+        if (kind == "UsingShadowDecl") { name = jstr(jget(jget(x, "target"), "name"), ""); }
+        if (name.len == 0 || name == "std") { return; }
+        for (auto q : ["CXXRecordDecl", "EnumDecl", "TypedefDecl", "TypeAliasDecl", "ClassTemplateDecl", "TypeAliasTemplateDecl", "NamespaceDecl", "NamespaceAliasDecl", "UsingShadowDecl"]) {
+            if (kind == q) { return this->declared.put(cx_qual(this->a, scope, name)?, true); }
+        }
+    }
+
+    !bool claim(str zn, str qn) {
+        const auto o = this->zq.get_or(zn, "");
+        if (o.len == 0) { this->zq.put(zn, qn)?; }
+        if (o.len == 0 || o == qn) { return true; }
+        if (!this->bad.has(zn)) {
+            this->bad.put(zn, true)?;
+            const auto d = this->zd.get_or(zn, null);
+            if (d != null) { d.rel = false; }
+            this->skip(o, "name clash")?;
+        }
+        this->names.put(qn, zn)?;
+        this->skip(qn, "name clash")?;
+        return false;
     }
 
     !void record_bases(Json* x, str scope, str qn) {
@@ -482,7 +548,6 @@ struct CxWalk {
         const auto bs = jget(x, "bases");
         for (auto i : 0..jlen(bs)) {
             const auto b = jat(bs, i);
-            if (jstr(jget(b, "access"), "") != "public") { continue; }
             auto n = jstr(jget(jget(b, "type"), "qualType"), "");
             auto s = scope;
             if (str_starts_with(n, "::")) {
@@ -495,7 +560,10 @@ struct CxWalk {
                     l.push(q)?;
                     break;
                 }
-                if (s.len == 0) { break; }
+                if (s.len == 0) {
+                    l.push("?")?;
+                    break;
+                }
                 s = cx_up(s);
             }
         }
@@ -508,10 +576,50 @@ struct CxWalk {
     }
 
     !CType* type_of(Json* ty, str scope) {
-        const auto t = this->parse(jstr(jget(ty, "qualType"), ""), scope)?;
+        const auto q = jstr(jget(ty, "qualType"), "");
+        const auto t = this->parse(q, scope)?;
         const auto d = jstr(jget(ty, "desugaredQualType"), "");
-        if (!cx_bad(t) || d.len == 0) { return t; }
-        return this->parse(d, scope);
+        const auto why = cx_why(t);
+        if (why.len > 0) {
+            if (d.len == 0 || why != CX_TODO) { return t; }
+            return this->parse(d, scope);
+        }
+        const auto id = jstr(jget(ty, "typeAliasDeclId"), "");
+        auto ok = id.len == 0 || (t.k == .Named && (this->tid.get_or(t.cxx, "") == id || cb_known(t.name).len > 0));
+        if (ok && d.len > 0) {
+            const auto dt = this->parse(d, scope)?;
+            ok = cx_bad(dt) || this->same(t, dt)?;
+        }
+        if (!ok) { return this->badt(str_concat(this->a, ["cannot resolve type '", q, "'"])?); }
+        return t;
+    }
+
+    !CType* scalar(CType* t) {
+        const auto x = this->expand(t);
+        const auto k = cb_known(x.name);
+        if (x.k != .Named || k.len == 0) { return x; }
+        const auto r = this->a.create<CType>()?;
+        r.k = .Int;
+        r.signed = k[0] == 'i';
+        r.width = 64;
+        if (k != "usize") { r.width = parse_int_radix(k[1..], 10)? as i64; }
+        return r;
+    }
+
+    !bool same(CType* x0, CType* y0) {
+        const auto x = this->scalar(x0)?;
+        const auto y = this->scalar(y0)?;
+        if (x.k != y.k) { return false; }
+        if (x.k == .Int) { return x.width == y.width && x.signed == y.signed; }
+        if (x.k == .Float) { return x.width == y.width; }
+        if (x.k == .Named) { return x.name == y.name; }
+        if (x.k == .Ptr) { return x.ref == y.ref && x.rvalue == y.rvalue && this->same(x.elem, y.elem)?; }
+        if (x.k == .Array) { return x.n == y.n && this->same(x.elem, y.elem)?; }
+        if (x.k == .Func) {
+            if (x.params.len != y.params.len || x.varargs != y.varargs || !this->same(x.elem, y.elem)?) { return false; }
+            for (auto [i, p] : x.params.slice()) { if (!this->same(p.ty, y.params.get(i).ty)?) { return false; } }
+        }
+        return true;
     }
 
     !CType* btype(Json* ty, str scope) {
@@ -530,7 +638,7 @@ struct CxWalk {
         return x;
     }
 
-    !CVal eval(Json* n) {
+    !CVal eval(Json* n, str sc) {
         const auto k = jstr(jget(n, "kind"), "");
         const auto kids = jget(n, "inner");
         auto v = CVal{ .v = 0 };
@@ -542,10 +650,10 @@ struct CxWalk {
             v = CVal{ .v = jint(jget(n, "value"), 0) };
         } else if (k == "CXXBoolLiteralExpr") {
             v = cb_bool(jbool(jget(n, "value"), false));
-        } else if (k == "ParenExpr" || k == "ConstantExpr" || k == "ImplicitCastExpr" || k == "CStyleCastExpr" || k == "CXXStaticCastExpr" || k == "CXXFunctionalCastExpr") {
-            v = this->eval(jat(kids, 0))?;
+        } else if (k == "ParenExpr" || k == "ConstantExpr" || k == "ImplicitCastExpr" || k == "CStyleCastExpr" || k == "CXXStaticCastExpr" || k == "CXXFunctionalCastExpr" || (k == "InitListExpr" && jlen(kids) == 1)) {
+            v = this->eval(jat(kids, 0), sc)?;
         } else if (k == "UnaryOperator") {
-            const auto x = this->eval(jat(kids, 0))?;
+            const auto x = this->eval(jat(kids, 0), sc)?;
             const auto op = jstr(jget(n, "opcode"), "");
             if (op == "-") {
                 v = cb_neg(x)?;
@@ -559,9 +667,9 @@ struct CxWalk {
                 return error.ParseFailed;
             }
         } else if (k == "BinaryOperator") {
-            v = cb_bin(jstr(jget(n, "opcode"), ""), this->eval(jat(kids, 0))?, this->eval(jat(kids, 1))?)?;
+            v = cb_bin(jstr(jget(n, "opcode"), ""), this->eval(jat(kids, 0), sc)?, this->eval(jat(kids, 1), sc)?)?;
         } else if (k == "ConditionalOperator") {
-            if (this->eval(jat(kids, 0))?.v != 0) { v = this->eval(jat(kids, 1))?; } else { v = this->eval(jat(kids, 2))?; }
+            if (this->eval(jat(kids, 0), sc)?.v != 0) { v = this->eval(jat(kids, 1), sc)?; } else { v = this->eval(jat(kids, 2), sc)?; }
         } else if (k == "DeclRefExpr") {
             const auto id = jstr(jget(jget(n, "referencedDecl"), "id"), "");
             if (!this->vals.has(id)) { return error.ParseFailed; }
@@ -569,31 +677,46 @@ struct CxWalk {
         } else {
             return error.ParseFailed;
         }
-        const auto t = this->btype(jget(n, "type"), "")?;
+        const auto t = this->btype(jget(n, "type"), sc)?;
         if (t.k == .Int) { return cb_cast(v, t.width, t.signed); }
         if (t.k == .Bool) { return cb_bool(v.v != 0); }
-        return v;
+        if (k == "ConstantExpr" && jget(n, "value") != null) { return v; }
+        return error.ParseFailed;
     }
 
-    !str evalf(Json* n) {
+    !f64 evalf(Json* n, str sc) {
         const auto k = jstr(jget(n, "kind"), "");
         const auto kids = jget(n, "inner");
-        if (k == "FloatingLiteral") { return jstr(jget(n, "value"), ""); }
-        if (k == "ParenExpr" || k == "ConstantExpr" || k == "ImplicitCastExpr" || k == "CStyleCastExpr" || k == "CXXStaticCastExpr" || k == "CXXFunctionalCastExpr") {
-            if (jstr(jget(n, "castKind"), "") == "IntegralToFloating") { return cb_num(this->a, this->eval(jat(kids, 0))?); }
-            return this->evalf(jat(kids, 0));
-        }
-        if (k == "UnaryOperator" && jstr(jget(n, "opcode"), "") == "-") {
-            const auto s = this->evalf(jat(kids, 0))?;
-            if (str_starts_with(s, "-")) { return s[1..]; }
-            return str_concat(this->a, ["-", s]);
-        }
-        if (k == "DeclRefExpr") {
+        const auto t = this->btype(jget(n, "type"), sc)?;
+        if (t.k != .Float) { return error.ParseFailed; }
+        auto v = 0.0;
+        if (k == "FloatingLiteral") {
+            v = parse_float(jstr(jget(n, "value"), ""))?;
+        } else if (jstr(jget(n, "castKind"), "") == "IntegralToFloating") {
+            const auto x = this->eval(jat(kids, 0), sc)?;
+            if (t.width == 32 && x.u) {
+                v = ((x.v as u64) as f32) as f64;
+            } else if (t.width == 32) {
+                v = (x.v as f32) as f64;
+            } else if (x.u) {
+                v = (x.v as u64) as f64;
+            } else {
+                v = x.v as f64;
+            }
+        } else if (k == "ParenExpr" || k == "ConstantExpr" || k == "ImplicitCastExpr" || k == "CStyleCastExpr" || k == "CXXStaticCastExpr" || k == "CXXFunctionalCastExpr" || (k == "InitListExpr" && jlen(kids) == 1)) {
+            v = this->evalf(jat(kids, 0), sc)?;
+        } else if (k == "UnaryOperator" && jstr(jget(n, "opcode"), "") == "-") {
+            const auto x = this->evalf(jat(kids, 0), sc)?;
+            v = -x;
+        } else if (k == "DeclRefExpr") {
             const auto id = jstr(jget(jget(n, "referencedDecl"), "id"), "");
             if (!this->fvals.has(id)) { return error.ParseFailed; }
-            return this->fvals.get(id);
+            v = this->fvals.get(id)?;
+        } else {
+            return error.ParseFailed;
         }
-        return error.ParseFailed;
+        if (t.width == 32) { v = (v as f32) as f64; }
+        return v;
     }
 
     !void walk(Json* n, str scope, str zs, bool c, bool cls, bool pub0) {
@@ -603,7 +726,9 @@ struct CxWalk {
             const auto x = jat(k, i);
             const auto kind = jstr(jget(x, "kind"), "");
             const auto f = this->locs(x);
+            if (this->rel(f)) { this->declare(x, kind, scope)?; }
             if (kind == "AccessSpecDecl") { pub = jstr(jget(x, "access"), "") == "public"; }
+            if (kind == "UsingShadowDecl" && pub && this->rel(f)) { this->alias(x, scope)?; }
             if (f == this->stub && kind == "EnumDecl") { this->uchar = jstr(jget(cx_find(x, "ConstantExpr"), "value"), "") == "false"; }
             if (!pub || !this->rel(f) || jbool(jget(x, "isImplicit"), false)) {
                 this->kids(x);
@@ -627,7 +752,7 @@ struct CxWalk {
             this->skip(qn, CX_TODO)?;
             return this->walk(x, qn, zn, false, true, jstr(jget(x, "tagUsed"), "") != "class");
         }
-        if (kind == "EnumDecl") { return this->enum_decl(x, name, qn, zn, zs); }
+        if (kind == "EnumDecl") { return this->enum_decl(x, scope, name, qn, zn, zs); }
         if (kind == "TypedefDecl" || kind == "TypeAliasDecl") { return this->typedef_decl(x, scope, qn, zn); }
         if (kind == "VarDecl") { return this->var_decl(x, scope, qn, zn, cls); }
         if (kind == "FunctionDecl") { return this->func(x, scope, name, c); }
@@ -639,12 +764,22 @@ struct CxWalk {
         this->skip(qn, CX_TODO)?;
     }
 
-    !void enum_decl(Json* x, str name, str qn, str zn, str zs) {
+    !void alias(Json* x, str scope) {
+        const auto g = jget(x, "target");
+        const auto q = this->byid.get_or(jstr(jget(g, "id"), ""), "");
+        if (q.len == 0) { return; }
+        const auto n = cx_qual(this->a, scope, jstr(jget(g, "name"), ""))?;
+        this->names.put(n, this->names.get_or(q, ""))?;
+        const auto t = this->tid.get_or(q, "");
+        if (t.len > 0) { this->tid.put(n, t)?; }
+    }
+
+    !void enum_decl(Json* x, str scope, str name, str qn, str zn, str zs) {
         const auto id = jstr(jget(x, "id"), "");
         const auto scoped = jget(x, "scopedEnumTag") != null;
         CType* fixed = null;
         const auto fu = jget(x, "fixedUnderlyingType");
-        if (fu != null) { fixed = this->btype(fu, "")?; }
+        if (fu != null) { fixed = this->btype(fu, scope)?; }
         auto names = List<str>::init(this->a);
         auto ids = List<str>::init(this->a);
         auto vals = List<CVal>::init(this->a);
@@ -660,7 +795,12 @@ struct CxWalk {
             ids.push(jstr(jget(e, "id"), ""))?;
             const auto ce = cx_find(e, "ConstantExpr");
             if (ce != null) {
-                v = this->eval(ce)?;
+                if (fixed == null || fixed.k == .Int) {
+                    v = this->eval(ce, scope) catch {
+                        why = "enum value not evaluated";
+                        continue;
+                    };
+                }
             } else if (jlen(jget(e, "inner")) > 0) {
                 why = "enum value not evaluated";
             } else if (names.len > 1) {
@@ -683,11 +823,17 @@ struct CxWalk {
             t = p.enum_type(vals, this->short_enums)?;
         }
         if (t.k == .Bad) { return this->skip(label, t.name); }
-        if (name.len > 0) {
-            const auto d = this->decl(.Enum, zn)?;
-            d.ty = t;
-            this->typedefs.put(zn, t)?;
-            this->names.put(qn, zn)?;
+        if (name.len > 0 && this->zq.get_or(zn, "") == qn) {
+            this->byid.put(id, qn)?;
+        } else if (name.len > 0) {
+            if (this->claim(zn, qn)?) {
+                const auto d = this->decl(.Enum, zn)?;
+                d.ty = t;
+                this->zd.put(zn, d)?;
+                this->typedefs.put(zn, t)?;
+                this->names.put(qn, zn)?;
+                this->byid.put(id, qn)?;
+            }
         } else {
             this->anon.put(id, t)?;
         }
@@ -719,10 +865,15 @@ struct CxWalk {
         auto t = this->anon_of(x);
         if (t == null) { t = this->type_of(jget(x, "type"), scope)?; }
         if (t.k == .Bad) { return this->skip(qn, t.name); }
+        if (!this->claim(zn, qn)?) { return; }
         const auto d = this->decl(.Typedef, zn)?;
         d.ty = t;
+        this->zd.put(zn, d)?;
         this->typedefs.put(zn, t)?;
         this->names.put(qn, zn)?;
+        const auto id = jstr(jget(x, "id"), "");
+        this->byid.put(id, qn)?;
+        this->tid.put(qn, id)?;
     }
 
     !void var_decl(Json* x, str scope, str qn, str zn, bool cls) {
@@ -731,7 +882,8 @@ struct CxWalk {
         const auto t = this->btype(ty, scope)?;
         const auto q = jstr(jget(ty, "qualType"), "");
         const auto k = jget(x, "inner");
-        const auto init = jat(k, jlen(k) - 1);
+        Json* init = null;
+        for (auto i : 0..jlen(k)) { if (!str_ends_with(jstr(jget(jat(k, i), "kind"), ""), "Attr")) { init = jat(k, i); } }
         const auto konst = jbool(jget(x, "constexpr"), false) || str_starts_with(q, "const ");
         if (init == null || jstr(jget(x, "init"), "").len == 0 || !konst || (t.k != .Int && t.k != .Float && t.k != .Bool)) {
             if (!cls) { this->skip(qn, CX_TODO)?; }
@@ -740,18 +892,12 @@ struct CxWalk {
         const auto id = jstr(jget(x, "id"), "");
         auto body = "";
         if (t.k == .Float) {
-            auto s = this->evalf(init) catch { return this->skip(qn, "not a constant"); };
-            if (str_find(s, "inf") >= 0 || str_find(s, "nan") >= 0) { return this->skip(qn, "not a constant"); }
-            if (str_find(s, ".") < 0) {
-                auto e = str_find(s, "e");
-                if (e < 0) { e = str_find(s, "E"); }
-                if (e < 0) { e = s.len; }
-                s = str_concat(this->a, [s[0..e], ".0", s[e..]])?;
-            }
-            this->fvals.put(id, s)?;
-            body = s;
+            const auto f = this->evalf(init, scope) catch { return this->skip(qn, "not a constant"); };
+            if (f - f != 0.0) { return this->skip(qn, "not a constant"); }
+            this->fvals.put(id, f)?;
+            body = cx_fnum(this->a, f)?;
         } else {
-            const auto v = this->eval(init) catch { return this->skip(qn, "not a constant"); };
+            const auto v = this->eval(init, scope) catch { return this->skip(qn, "not a constant"); };
             this->vals.put(id, v)?;
             if (t.k == .Bool) {
                 body = "false";
@@ -786,6 +932,7 @@ struct CxWalk {
             const auto p = jat(k, i);
             if (jstr(jget(p, "kind"), "") != "ParmVarDecl" || n >= t.params.len) { continue; }
             t.params.items[n].name = jstr(jget(p, "name"), "");
+            t.params.items[n].ty = this->type_of(jget(p, "type"), scope)?;
             n += 1;
         }
         const auto d = this->decl(.Func, label)?;
@@ -966,7 +1113,7 @@ bool cx_scalar(CEmit* e, CType* t) {
 }
 
 !CEmit cx_emit(Allocator a, CxWalk* w, str hid) {
-    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
+    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .bad = w.bad, .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
     e.run(w.decls)?;
     return e;
 }
@@ -1079,12 +1226,12 @@ bool cx_scalar(CEmit* e, CType* t) {
         return error.CompileFailed;
     }
     const auto root = json_parse(a, r.out, 1024) catch {
-        eprintln("error: cannot read the clang++ AST of {header}");
+        eprintln("error: cannot read the clang++ AST of {header}: nested deeper than 1024 levels");
         return error.CompileFailed;
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<str>::init(a), .bases = Map<List<str>>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a) };
     cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
