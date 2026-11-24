@@ -1,0 +1,6 @@
+struct c_S { i32 v; }
+struct c { }
+extern i32 zark_cxx_084ce18934e8c248_0(i32 a, i32 b);
+static i32 c::f(i32 a, i32 b) { return zark_cxx_084ce18934e8c248_0(a, b); }
+extern i32 zark_cxx_084ce18934e8c248_3(c_S* __self, i32 x);
+i32 c_S::match_(i32 x) { return zark_cxx_084ce18934e8c248_3(this, x); }

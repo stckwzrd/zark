@@ -1,0 +1,24 @@
+struct ui_Vec2 { f32 x = 0.0; f32 y = 0.0; ui_Vec2(f32 a, f32 b) { zark_cxx_130dab71de28ce48_1(this, a, b); } }
+struct ui_Buf { f32 v; }
+extern void zark_cxx_130dab71de28ce48_1(ui_Vec2* __self, f32 a, f32 b);
+struct ui { }
+extern i32 zark_cxx_130dab71de28ce48_3(u8* label, i32* current, u8** items, i32 count, i32 height);
+static i32 ui::Combo_u8p_i32p_u8pp_i32_i32(u8* label, i32* current, u8** items, i32 count, i32 height) { return zark_cxx_130dab71de28ce48_3(label, current, items, count, height); }
+extern i32 zark_cxx_130dab71de28ce48_4(u8* label, i32* current, u8* items, i32 count, i32 height);
+static i32 ui::Combo_u8p_i32p_u8p_i32_i32(u8* label, i32* current, u8* items, i32 count, i32 height) { return zark_cxx_130dab71de28ce48_4(label, current, items, count, height); }
+extern bool zark_cxx_130dab71de28ce48_5(u8* label);
+static bool ui::TreeNode_u8p(u8* label) { return zark_cxx_130dab71de28ce48_5(label); }
+extern bool zark_cxx_130dab71de28ce48_6(void* ptr_id, u8* fmt);
+static bool ui::TreeNode_voidp_u8p(void* ptr_id, u8* fmt) { return zark_cxx_130dab71de28ce48_6(ptr_id, fmt); }
+extern bool zark_cxx_130dab71de28ce48_7(u8* str_id, u8* fmt);
+static bool ui::TreeNode_u8p_u8p(u8* str_id, u8* fmt) { return zark_cxx_130dab71de28ce48_7(str_id, fmt); }
+extern i32 zark_cxx_130dab71de28ce48_8(f32* v, f32 lo, f32 hi, u8* fmt);
+static i32 ui::Slider_f32p_f32_f32_u8p(f32* v, f32 lo, f32 hi, u8* fmt) { return zark_cxx_130dab71de28ce48_8(v, lo, hi, fmt); }
+extern i32 zark_cxx_130dab71de28ce48_9(f64* v, f64 lo, f64 hi, u8* fmt);
+static i32 ui::Slider_f64p_f64_f64_u8p(f64* v, f64 lo, f64 hi, u8* fmt) { return zark_cxx_130dab71de28ce48_9(v, lo, hi, fmt); }
+extern i32 zark_cxx_130dab71de28ce48_10(ui_Vec2* p, ui_Vec2* q);
+static i32 ui::Hit_ui_Vec2_ui_Vec2(ui_Vec2 p, ui_Vec2 q) { return zark_cxx_130dab71de28ce48_10(&p, &q); }
+extern f32 zark_cxx_130dab71de28ce48_11(ui_Vec2* p, f32 r);
+static f32 ui::Hit_ui_Vec2p_f32(ui_Vec2 p, f32 r) { return zark_cxx_130dab71de28ce48_11(&p, r); }
+extern f32* zark_cxx_130dab71de28ce48_13(ui_Buf* __self, i32 i);
+f32* ui_Buf::at_i32(i32 i) { return zark_cxx_130dab71de28ce48_13(this, i); }

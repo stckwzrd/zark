@@ -183,6 +183,26 @@ extern "C" int zark_cxx_c87ba372870ff464_16(int a0) {
     }
 }
 #endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_c87ba372870ff464_17)
+extern "C" int zark_cxx_c87ba372870ff464_17(int a0) {
+    (void)static_cast<int (*)(int)>(&over);
+    try {
+        return over(a0);
+    } catch (...) {
+        zark_cxx_fail("over");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_c87ba372870ff464_18)
+extern "C" int zark_cxx_c87ba372870ff464_18(double a0) {
+    (void)static_cast<int (*)(double)>(&over);
+    try {
+        return over(a0);
+    } catch (...) {
+        zark_cxx_fail("over");
+    }
+}
+#endif
 #if !defined(ZARK_PICK) || defined(ZARK_USE_c87ba372870ff464_20)
 extern "C" int zark_cxx_c87ba372870ff464_20(int a0) {
     (void)static_cast<int (*)(int)>(&twice_decl);
@@ -190,6 +210,16 @@ extern "C" int zark_cxx_c87ba372870ff464_20(int a0) {
         return twice_decl(a0);
     } catch (...) {
         zark_cxx_fail("twice_decl");
+    }
+}
+#endif
+#if !defined(ZARK_PICK) || defined(ZARK_USE_c87ba372870ff464_23)
+extern "C" int zark_cxx_c87ba372870ff464_23() {
+    (void)static_cast<int (*)(int)>(&later);
+    try {
+        return later();
+    } catch (...) {
+        zark_cxx_fail("later");
     }
 }
 #endif

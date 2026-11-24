@@ -34,6 +34,12 @@ extern u64 zark_cxx_c87ba372870ff464_15(i64 x, u16 s);
 u64 big(i64 x, u16 s) { return zark_cxx_c87ba372870ff464_15(x, s); }
 extern i32 zark_cxx_c87ba372870ff464_16(i32 x);
 i32 later(i32 x) { return zark_cxx_c87ba372870ff464_16(x); }
+extern i32 zark_cxx_c87ba372870ff464_17(i32 a0);
+i32 over_i32(i32 a0) { return zark_cxx_c87ba372870ff464_17(a0); }
+extern i32 zark_cxx_c87ba372870ff464_18(f64 a0);
+i32 over_f64(f64 a0) { return zark_cxx_c87ba372870ff464_18(a0); }
 extern i32 zark_cxx_c87ba372870ff464_20(i32 x);
 i32 twice_decl(i32 x) { return zark_cxx_c87ba372870ff464_20(x); }
 struct a_b { }
+extern i32 zark_cxx_c87ba372870ff464_23();
+i32 later_0() { return zark_cxx_c87ba372870ff464_23(); }
