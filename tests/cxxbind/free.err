@@ -1,2 +1,4 @@
 skipped over: C++ declaration not bound yet
 skipped say: C++ declaration not bound yet
+skipped a_b::f: name clash
+skipped a::b::f: name clash

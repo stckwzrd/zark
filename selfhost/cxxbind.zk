@@ -3,6 +3,7 @@ import "json.zk";
 import "cbuild.zk";
 import "std/fs" as fs;
 import "std/os" as os;
+import "std/path" as path;
 
 const auto CX_TODO = "C++ declaration not bound yet";
 
@@ -22,6 +23,25 @@ bool cx_c_std(str f) {
 !str cx_zname(Allocator a, str scope, str name) {
     if (scope.len == 0) { return name; }
     return str_concat(a, [scope, "_", name]);
+}
+
+str cx_up(str s) {
+    const auto k = str_rfind(s, "::");
+    if (k < 0) { return ""; }
+    return s[0..k];
+}
+
+bool cx_bad(CType* t) {
+    if (t.k == .Bad) { return true; }
+    if ((t.k == .Ptr || t.k == .Array || t.k == .Func) && cx_bad(t.elem)) { return true; }
+    if (t.k == .Func) { for (auto p : t.params.slice()) { if (cx_bad(p.ty)) { return true; } } }
+    return false;
+}
+
+bool cx_cshape(CType* t) {
+    if (t.elem.k == .Ptr && t.elem.ref) { return false; }
+    for (auto p : t.params.slice()) { if (p.ty.k == .Ptr && p.ty.ref) { return false; } }
+    return true;
 }
 
 Json* cx_find(Json* n, str kind) {
@@ -83,10 +103,6 @@ struct CxType {
         this->i += 1;
         return true;
     }
-    bool quals() {
-        return this->eat("const") || this->eat("volatile") || this->eat("__restrict") || this->eat("restrict");
-    }
-
     !CType* mk(CK k) {
         const auto t = this->w.a.create<CType>()?;
         t.k = k;
@@ -114,16 +130,28 @@ struct CxType {
         return this->decl(b);
     }
 
+    !CType* leaf(CK k, str cxx) {
+        const auto t = this->mk(k)?;
+        t.cxx = cxx;
+        return t;
+    }
+
     !CType* base() {
         auto nlong = 0;
         auto nshort = 0;
         auto nsigned = 0;
         auto nunsigned = 0;
         auto base = "";
+        auto konst = false;
+        auto vol = false;
         CType* named = null;
         while (true) {
             const auto t = this->peek();
-            if (t == "const" || t == "volatile" || t == "struct" || t == "class" || t == "union" || t == "enum" || t == "typename") {
+            if (t == "const") {
+                konst = true;
+            } else if (t == "volatile") {
+                vol = true;
+            } else if (t == "struct" || t == "class" || t == "union" || t == "enum" || t == "typename") {
             } else if (t == "long") {
                 nlong += 1;
             } else if (t == "short") {
@@ -135,25 +163,65 @@ struct CxType {
             } else if (t == "void" || t == "char" || t == "int" || t == "float" || t == "double" || t == "bool") {
                 base = t;
             } else if (t.len > 0 && (cb_ident_char(t[0]) || t[0] == ':') && named == null && base.len == 0 && nlong + nshort + nsigned + nunsigned == 0) {
-                named = this->w.lookup(t, this->scope)?;
+                if (t == "auto") {
+                    named = this->mk(.Bad)?;
+                    named.name = "deduced return type";
+                } else {
+                    named = this->w.lookup(t, this->scope)?;
+                }
             } else {
                 break;
             }
             this->i += 1;
         }
-        if (this->peek() == "<") { return this->bad(); }
-        if (named != null) { return named; }
-        if (base == "void") { return this->mk(.Void); }
-        if (base == "bool") { return this->mk(.Bool); }
+        if (this->eat("<")) {
+            auto depth = 1;
+            auto par = 0;
+            while (depth > 0 && this->i < this->toks.len) {
+                const auto t = this->peek();
+                this->i += 1;
+                if (t == "(") {
+                    par += 1;
+                } else if (t == ")") {
+                    par -= 1;
+                } else if (par == 0 && t == "<") {
+                    depth += 1;
+                } else if (par == 0 && t == ">") {
+                    depth -= 1;
+                }
+            }
+            if (str_starts_with(this->peek(), "::")) { this->i += 1; }
+            return this->bad();
+        }
+        auto r = named;
+        if (r == null) { r = this->builtin(base, nlong, nshort, nsigned, nunsigned)?; }
+        r.konst = konst;
+        r.vol = vol;
+        return r;
+    }
+
+    !CType* builtin(str base, i64 nlong, i64 nshort, i64 nsigned, i64 nunsigned) {
+        if (base == "void") { return this->leaf(.Void, base); }
+        if (base == "bool") { return this->leaf(.Bool, base); }
         if (base == "float" || base == "double") {
             if (nlong > 0) { return this->bad(); }
-            const auto t = this->mk(.Float)?;
+            const auto t = this->leaf(.Float, base)?;
             t.width = 32;
             if (base == "double") { t.width = 64; }
             return t;
         }
         if (base.len == 0 && nlong + nshort + nsigned + nunsigned == 0) { return this->bad(); }
-        const auto t = this->mk(.Int)?;
+        auto sb = List<u8>::init(this->w.a);
+        if (nunsigned > 0) { sprint(&sb, "unsigned ")?; }
+        if (nsigned > 0 && base == "char") { sprint(&sb, "signed ")?; }
+        if (nshort > 0) { sprint(&sb, "short ")?; }
+        for (auto j : 0..nlong) { sprint(&sb, "long ")?; }
+        if (base == "char") {
+            sprint(&sb, "char ")?;
+        } else if (nshort + nlong == 0) {
+            sprint(&sb, "int ")?;
+        }
+        const auto t = this->leaf(.Int, sb.slice()[0..sb.len - 1])?;
         t.signed = nunsigned == 0;
         t.width = 32;
         if (base == "char") {
@@ -171,27 +239,45 @@ struct CxType {
     !CType* decl(CType* b) {
         auto t = b;
         while (true) {
-            if (this->eat("*")) {
+            const auto p = this->peek();
+            if (p == "*") {
                 t = this->ptr(t)?;
-            } else if (!this->quals()) {
+            } else if (p == "&" || p == "&&") {
+                t = this->ptr(t)?;
+                t.ref = true;
+                t.rvalue = p == "&&";
+            } else if (p == "const") {
+                t.konst = true;
+            } else if (p == "volatile") {
+                t.vol = true;
+            } else if (p != "__restrict" && p != "restrict") {
                 break;
             }
-        }
-        if (this->peek() == "&" || this->peek() == "&&") { return this->bad(); }
-        if (this->peek() == "(" && this->i + 1 < this->toks.len && this->toks.get(this->i + 1) == "*") {
             this->i += 1;
-            auto n = 0;
-            while (true) {
-                if (this->eat("*")) {
-                    n += 1;
-                } else if (!this->quals()) {
-                    break;
+        }
+        if (this->peek() == "(" && this->i + 1 < this->toks.len) {
+            const auto n = this->toks.get(this->i + 1);
+            if (n == "*" || n == "&" || n == "&&") {
+                const auto open = this->i;
+                auto depth = 0;
+                while (this->i < this->toks.len) {
+                    const auto x = this->peek();
+                    this->i += 1;
+                    if (x == "(") { depth += 1; }
+                    if (x == ")") {
+                        depth -= 1;
+                        if (depth == 0) { break; }
+                    }
                 }
+                if (depth != 0) { return this->bad(); }
+                const auto outer = this->suffix(t)?;
+                const auto end = this->i;
+                this->i = open + 1;
+                const auto r = this->decl(outer)?;
+                if (!this->eat(")")) { return this->bad(); }
+                this->i = end;
+                return r;
             }
-            if (!this->eat(")")) { return this->bad(); }
-            t = this->suffix(t)?;
-            for (auto j : 0..n) { t = this->ptr(t)?; }
-            return t;
         }
         return this->suffix(t);
     }
@@ -212,7 +298,34 @@ struct CxType {
                     if (!this->eat(",")) { return this->bad(); }
                 }
             }
-            _ = this->eat("noexcept");
+            while (true) {
+                if (this->eat("const")) {
+                    f.konst = true;
+                } else if (this->eat("volatile")) {
+                    f.vol = true;
+                } else if (this->eat("&")) {
+                    f.ref = true;
+                } else if (this->eat("&&")) {
+                    f.ref = true;
+                    f.rvalue = true;
+                } else if (this->eat("noexcept")) {
+                    f.noexc = true;
+                    if (this->eat("(")) {
+                        f.noexc = this->eat("true");
+                        if (!f.noexc && !this->eat("false")) { return this->bad(); }
+                        if (!this->eat(")")) { return this->bad(); }
+                    }
+                } else if (this->eat("throw")) {
+                    if (!this->eat("(") || !this->eat(")")) { return this->bad(); }
+                    f.noexc = true;
+                } else {
+                    break;
+                }
+            }
+            if (this->peek() == "-" && this->i + 1 < this->toks.len && this->toks.get(this->i + 1) == ">") {
+                this->i += 2;
+                f.elem = this->ty()?;
+            }
             return f;
         }
         auto dims = List<i64>::init(this->w.a);
@@ -249,6 +362,7 @@ struct CxWalk {
     Map<CType*> anon;
     Map<CVal> vals;
     Map<str> fvals;
+    Map<List<str>> bases;
     bool uchar;
     bool short_enums;
 
@@ -300,6 +414,7 @@ struct CxWalk {
         d.k = k;
         d.name = name;
         d.rel = true;
+        d.seq = this->decls.len;
         d.fields = List<CField>::init(this->a);
         d.subs = List<CDecl*>::init(this->a);
         this->decls.push(d)?;
@@ -326,18 +441,65 @@ struct CxWalk {
             s = "";
         }
         while (true) {
-            const auto z = this->names.get_or(cx_qual(this->a, s, n)?, "");
-            if (z.len > 0) { return this->named(z); }
+            const auto q = this->find(s, n)?;
+            if (q.len > 0) {
+                const auto t = this->named(this->names.get_or(q, ""))?;
+                t.cxx = q;
+                return t;
+            }
             if (s.len == 0) { break; }
-            const auto k = str_rfind(s, "::");
-            if (k < 0) { s = ""; } else { s = s[0..k]; }
+            s = cx_up(s);
         }
         if (str_starts_with(n, "std::")) { n = n[5..]; }
-        if (cb_known(n).len > 0) { return this->named(n); }
+        if (cb_known(n).len > 0) {
+            const auto t = this->named(n)?;
+            t.cxx = name;
+            return t;
+        }
         const auto t = this->a.create<CType>()?;
         t.k = .Bad;
         t.name = CX_TODO;
         return t;
+    }
+
+    !str find(str s, str n) {
+        const auto q = cx_qual(this->a, s, n)?;
+        if (this->names.has(q)) { return q; }
+        const auto k = str_find(n, "::");
+        if (k > 0) {
+            const auto c = cx_qual(this->a, s, n[0..k])?;
+            if (this->bases.has(c)) { return this->find(c, n[k + 2..]); }
+        }
+        for (auto b : this->bases.get_or(s, List<str>{}).slice()) {
+            const auto r = this->find(b, n)?;
+            if (r.len > 0) { return r; }
+        }
+        return "";
+    }
+
+    !void record_bases(Json* x, str scope, str qn) {
+        auto l = List<str>::init(this->a);
+        const auto bs = jget(x, "bases");
+        for (auto i : 0..jlen(bs)) {
+            const auto b = jat(bs, i);
+            if (jstr(jget(b, "access"), "") != "public") { continue; }
+            auto n = jstr(jget(jget(b, "type"), "qualType"), "");
+            auto s = scope;
+            if (str_starts_with(n, "::")) {
+                n = n[2..];
+                s = "";
+            }
+            while (true) {
+                const auto q = cx_qual(this->a, s, n)?;
+                if (this->bases.has(q)) {
+                    l.push(q)?;
+                    break;
+                }
+                if (s.len == 0) { break; }
+                s = cx_up(s);
+            }
+        }
+        if (l.len > 0 || !this->bases.has(qn)) { this->bases.put(qn, l)?; }
     }
 
     !CType* parse(str s, str scope) {
@@ -348,7 +510,7 @@ struct CxWalk {
     !CType* type_of(Json* ty, str scope) {
         const auto t = this->parse(jstr(jget(ty, "qualType"), ""), scope)?;
         const auto d = jstr(jget(ty, "desugaredQualType"), "");
-        if (t.k != .Bad || d.len == 0) { return t; }
+        if (!cx_bad(t) || d.len == 0) { return t; }
         return this->parse(d, scope);
     }
 
@@ -461,13 +623,14 @@ struct CxWalk {
         }
         if (kind == "LinkageSpecDecl") { return this->walk(x, scope, zs, jstr(jget(x, "language"), "") == "C", false, true); }
         if (kind == "CXXRecordDecl" && name.len > 0) {
+            this->record_bases(x, scope, qn)?;
             this->skip(qn, CX_TODO)?;
             return this->walk(x, qn, zn, false, true, jstr(jget(x, "tagUsed"), "") != "class");
         }
         if (kind == "EnumDecl") { return this->enum_decl(x, name, qn, zn, zs); }
         if (kind == "TypedefDecl" || kind == "TypeAliasDecl") { return this->typedef_decl(x, scope, qn, zn); }
         if (kind == "VarDecl") { return this->var_decl(x, scope, qn, zn, cls); }
-        if (kind == "FunctionDecl" && c) { return this->func(x, scope, name); }
+        if (kind == "FunctionDecl") { return this->func(x, scope, name, c); }
         this->kids(x);
         if (cls || name.len == 0) { return; }
         for (auto q : ["UsingDecl", "UsingShadowDecl", "UsingDirectiveDecl", "UsingEnumDecl", "NamespaceAliasDecl", "StaticAssertDecl", "EmptyDecl"]) {
@@ -609,10 +772,14 @@ struct CxWalk {
         d.body = body;
     }
 
-    !void func(Json* x, str scope, str name) {
+    !void func(Json* x, str scope, str name, bool c) {
         this->kids(x);
+        if (jbool(jget(x, "explicitlyDeleted"), false) || jget(x, "previousDecl") != null) { return; }
+        const auto qn = cx_qual(this->a, scope, name)?;
+        auto label = qn;
+        if (c) { label = name; }
         const auto t = this->type_of(jget(x, "type"), scope)?;
-        if (t.k != .Func || jbool(jget(x, "inline"), false) || jstr(jget(x, "storageClass"), "") == "static") { return this->skip(name, CX_TODO); }
+        if (t.k != .Func) { return this->skip(label, CX_TODO); }
         const auto k = jget(x, "inner");
         auto n = 0;
         for (auto i : 0..jlen(k)) {
@@ -621,10 +788,266 @@ struct CxWalk {
             t.params.items[n].name = jstr(jget(p, "name"), "");
             n += 1;
         }
-        const auto d = this->decl(.Func, name)?;
+        const auto d = this->decl(.Func, label)?;
         d.ty = t;
-        d.is_extern = true;
+        d.cxx = qn;
+        d.is_extern = c && !jbool(jget(x, "inline"), false) && jstr(jget(x, "storageClass"), "") != "static" && cx_cshape(t);
+        if (t.varargs && !d.is_extern) { d.reason = CX_TODO; }
     }
+}
+
+bool cx_exc = true;
+
+!str cx_spell(Allocator a, CType* t, str inner) {
+    auto b = List<u8>::init(a);
+    match t.k {
+        .Ptr => {
+            if (t.ref && t.rvalue) {
+                sprint(&b, "&&")?;
+            } else if (t.ref) {
+                sprint(&b, "&")?;
+            } else {
+                sprint(&b, "*")?;
+            }
+            if (t.konst) { sprint(&b, " const")?; }
+            if (t.vol) { sprint(&b, " volatile")?; }
+            if (inner.len > 0 && (t.konst || t.vol)) { sprint(&b, " ")?; }
+            sprint(&b, "{inner}")?;
+            auto s = b.slice();
+            if (t.elem.k == .Func || t.elem.k == .Array) { s = str_concat(a, ["(", s, ")"])?; }
+            return cx_spell(a, t.elem, s);
+        }
+        .Array => {
+            sprint(&b, "{inner}[")?;
+            if (t.n >= 0) { sprint(&b, "{t.n}")?; }
+            sprint(&b, "]")?;
+            return cx_spell(a, t.elem, b.slice());
+        }
+        .Func => {
+            sprint(&b, "{inner}(")?;
+            for (auto [i, p] : t.params.slice()) {
+                if (i > 0) { sprint(&b, ", ")?; }
+                const auto ps = cx_spell(a, p.ty, "")?;
+                sprint(&b, "{ps}")?;
+            }
+            if (t.varargs && t.params.len > 0) { sprint(&b, ", ")?; }
+            if (t.varargs) { sprint(&b, "...")?; }
+            sprint(&b, ")")?;
+            if (t.konst) { sprint(&b, " const")?; }
+            if (t.vol) { sprint(&b, " volatile")?; }
+            if (t.ref && t.rvalue) {
+                sprint(&b, " &&")?;
+            } else if (t.ref) {
+                sprint(&b, " &")?;
+            }
+            if (t.noexc) { sprint(&b, " noexcept")?; }
+            return cx_spell(a, t.elem, b.slice());
+        }
+    }
+    if (t.konst) { sprint(&b, "const ")?; }
+    if (t.vol) { sprint(&b, "volatile ")?; }
+    sprint(&b, "{t.cxx}")?;
+    if (inner.len > 0) { sprint(&b, " {inner}")?; }
+    return b.slice();
+}
+
+bool cx_scalar(CEmit* e, CType* t) {
+    auto x = t;
+    while (x.k == .Named && cb_known(x.name).len == 0) {
+        x = e.typedefs.get_or(x.name, null);
+        if (x == null) { return false; }
+    }
+    return x.k == .Named || x.k == .Int || x.k == .Float || x.k == .Bool || (x.k == .Ptr && !x.ref);
+}
+
+!CType* cx_ptr(Allocator a, CType* t) {
+    const auto p = a.create<CType>()?;
+    p.k = .Ptr;
+    p.elem = t;
+    return p;
+}
+
+!void cx_shim(CEmit* e, CDecl* d) {
+    if (d.reason.len > 0) { return e.warn(d.name, d.reason); }
+    const auto a = e.a;
+    const auto f = d.ty;
+    auto sb = List<u8>::init(a);
+    sprint(&sb, "zark_cxx_{e.hid}_{d.seq}")?;
+    const auto sn = sb.slice();
+    auto zp = List<u8>::init(a);
+    auto za = List<u8>::init(a);
+    auto cp = List<u8>::init(a);
+    auto ca = List<u8>::init(a);
+    for (auto [i, p] : f.params.slice()) {
+        if (i > 0) {
+            sprint(&zp, ", ")?;
+            sprint(&za, ", ")?;
+            sprint(&cp, ", ")?;
+            sprint(&ca, ", ")?;
+        }
+        auto an = List<u8>::init(a);
+        sprint(&an, "a{i}")?;
+        auto zn = an.slice();
+        if (p.name.len > 0) { zn = e.ename(p.name)?; }
+        auto st = p.ty;
+        auto arg = an.slice();
+        if (p.ty.k == .Ptr && p.ty.ref) {
+            if ((p.ty.rvalue || p.ty.elem.konst) && cx_scalar(e, p.ty.elem)) {
+                st = p.ty.elem;
+            } else {
+                st = cx_ptr(a, p.ty.elem)?;
+                arg = str_concat(a, ["*", arg])?;
+            }
+            if (p.ty.rvalue) {
+                const auto rt = cx_spell(a, p.ty.elem, "&&")?;
+                arg = str_concat(a, ["static_cast<", rt, ">(", arg, ")"])?;
+            }
+        }
+        e.ty(&zp, st)?;
+        sprint(&zp, " {zn}")?;
+        sprint(&za, "{zn}")?;
+        const auto cs = cx_spell(a, st, an.slice())?;
+        sprint(&cp, "{cs}")?;
+        sprint(&ca, "{arg}")?;
+    }
+    auto rt = f.elem;
+    auto ret = "return ";
+    auto pre = "";
+    auto post = "";
+    if (rt.k == .Void) { ret = ""; }
+    if (rt.k == .Ptr && rt.ref) {
+        pre = "&";
+        if (rt.rvalue) {
+            const auto lt = cx_spell(a, rt.elem, "&")?;
+            pre = str_concat(a, ["&static_cast<", lt, ">("])?;
+            post = ")";
+        }
+        rt = cx_ptr(a, rt.elem)?;
+    }
+    auto zr = List<u8>::init(a);
+    e.ty(&zr, rt)?;
+    if (e.why.len > 0) { return e.warn(d.name, e.why); }
+    const auto k = str_rfind(d.name, "::");
+    auto zs = "";
+    auto path = e.ename(d.name)?;
+    auto stat = "";
+    if (k >= 0) {
+        zs = e.ename(str_replace(a, d.name[0..k], "::", "_")?)?;
+        path = str_concat(a, [zs, "::", e.ename(d.name[k + 2..])?])?;
+        stat = "static ";
+    }
+    if (e.bad.has(path) || e.done.has(path)) {
+        e.bad.put(path, true)?;
+        return e.warn(d.name, "name clash");
+    }
+    if (zs.len > 0 && e.done.get_or(zs, 0) != 7) {
+        if (e.done.has(zs)) { return e.warn(d.name, "name clash"); }
+        auto sl = List<u8>::init(a);
+        sprint(&sl, "struct {zs} {{ }}")?;
+        _ = e.line(zs, 7, sl.slice())?;
+    }
+    const auto zrs = zr.slice();
+    const auto zps = zp.slice();
+    const auto zas = za.slice();
+    auto zt = List<u8>::init(a);
+    sprint(&zt, "extern {zrs} {sn}({zps});\n{stat}{zrs} {path}({zps}) {{ {ret}{sn}({zas}); }}")?;
+    if (!e.line(path, 3, zt.slice())?) { return; }
+    const auto cps = cp.slice();
+    const auto cas = ca.slice();
+    const auto def = cx_spell(a, rt, str_concat(a, [sn, "(", cps, ")"])?)?;
+    const auto fp = cx_spell(a, f, "(*)")?;
+    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {def} {{\n    (void)static_cast<{fp}>(&{d.cxx});\n")?;
+    if (cx_exc && !f.noexc) {
+        sprint(&e.c, "    try {{\n        {ret}{pre}{d.cxx}({cas}){post};\n    }} catch (...) {{\n        zark_cxx_fail(\"{d.cxx}\");\n    }}\n")?;
+    } else {
+        sprint(&e.c, "    {ret}{pre}{d.cxx}({cas}){post};\n")?;
+    }
+    e.c.append("}\n#endif\n")?;
+}
+
+!CEmit cx_emit(Allocator a, CxWalk* w, str hid) {
+    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
+    e.run(w.decls)?;
+    return e;
+}
+
+!str cx_cpp(Allocator a, str abs, CEmit* e) {
+    if (e.c.len == 0) { return ""; }
+    auto b = List<u8>::init(a);
+    sprint(&b, "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"\n")?;
+    if (cx_exc) { sprint(&b, "#include <cstdio>\n#include <cstdlib>\n#include <exception>\n")?; }
+    sprint(&b, "#include \"{abs}\"\n")?;
+    if (cx_exc) {
+        sprint(&b, "[[noreturn]] static inline void zark_cxx_fail(const char *f) {{\n    fflush(stdout);\n    try {{\n        throw;\n    }} catch (const std::exception &e) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s: %s\\n\", f, e.what());\n    }} catch (...) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s\\n\", f);\n    }}\n    abort();\n}}\n")?;
+    }
+    const auto c = e.c.slice();
+    sprint(&b, "{c}")?;
+    return b.slice();
+}
+
+!i64 cx_check(Allocator a, CxWalk* w, str hid, str text, List<str> flags, str from_dir) {
+    auto pb = List<u8>::init(a);
+    sprint(&pb, ".zark-cache/cbind/check-{os::pid()}.cpp")?;
+    const auto p = pb.slice();
+    write_file(p, text)?;
+    auto argv = List<str>::init(a);
+    argv.append(["clang++", "-fsyntax-only", "-ferror-limit=0", "-iquote", from_dir])?;
+    argv.append(flags.slice())?;
+    argv.append(["-x", "c++", p])?;
+    const auto r = os::exec(a, argv.slice()) catch |err| {
+        drop(p);
+        eprintln("error: cannot run clang++: {err}");
+        return error.CompileFailed;
+    };
+    drop(p);
+    if (r.code == 0) { return -1; }
+    const auto guard = str_concat(a, ["#if !defined(ZARK_PICK) || defined(ZARK_USE_", hid, "_"])?;
+    auto shim = List<i64>::init(a);
+    auto cur = -1;
+    auto lines = str_lines(text);
+    while (lines.next()) {
+        const auto l = lines.line;
+        if (str_starts_with(l, guard)) { cur = parse_int_radix(l[guard.len..l.len - 1], 10)? as i64; }
+        shim.push(cur)?;
+        if (l == "#endif") { cur = -1; }
+    }
+    const auto at = str_concat(a, [p, ":"])?;
+    auto n = 0;
+    auto pend = "";
+    auto it = str_lines(r.err);
+    while (it.next()) {
+        const auto l = it.line;
+        const auto ek = str_find(l, ": error: ");
+        if (!str_starts_with(l, at)) {
+            if (ek >= 0) { pend = l[ek + 9..]; }
+            continue;
+        }
+        const auto rest = l[at.len..];
+        const auto c = str_find(rest, ":");
+        if (c < 0) { continue; }
+        const auto ln = parse_int_radix(rest[0..c], 10) catch { continue; };
+        if (ln < 1 || (ln as i64) > shim.len) { continue; }
+        auto msg = "";
+        if (ek >= 0) {
+            msg = l[ek + 9..];
+        } else if (pend.len > 0 && str_find(l, ": note: ") >= 0) {
+            msg = pend;
+        } else {
+            continue;
+        }
+        pend = "";
+        const auto seq = shim.get((ln as i64) - 1);
+        if (seq < 0) { continue; }
+        const auto d = w.decls.get(seq);
+        if (d.reason.len > 0) { continue; }
+        d.reason = str_concat(a, ["shim does not compile: ", msg])?;
+        n += 1;
+    }
+    if (n == 0) {
+        eprint(r.err);
+        return error.CompileFailed;
+    }
+    return n;
 }
 
 !CBind cxxbind_header(Allocator a, str header, str from_dir, List<str> flags) {
@@ -661,17 +1084,45 @@ struct CxWalk {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<str>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<str>::init(a), .bases = Map<List<str>>::init(a) };
+    cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
         if (f == "-fno-short-enums") { w.short_enums = false; }
+        if (f == "-fno-exceptions") { cx_exc = false; }
+        if (f == "-fexceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
-    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a) };
-    e.run(w.decls)?;
+    auto count = Map<i64>::init(a);
+    for (auto d : w.decls.slice()) { if (d.k == .Func) { count.put(d.cxx, count.get_or(d.cxx, 0) + 1)?; } }
+    for (auto d : w.decls.slice()) { if (d.k == .Func && count.get_or(d.cxx, 0) > 1) { d.reason = CX_TODO; } }
     auto deps = List<str>::init(a);
     for (auto d : dep_files(a, dtext)?) { if (d != stub) { deps.push(d)?; } }
-    return CBind{ .zk = e.out.slice(), .deps = deps, .from = List<str>::init(a), .warnings = e.warnings };
+    auto abs = "";
+    auto h = 0xcbf29ce484222325 as u64;
+    if (deps.len > 0) {
+        abs = path::absolute(a, deps.get(0))?;
+        h = fnv64(fnv64(h, abs), read_file(a, deps.get(0))?);
+    }
+    for (auto f : flags.slice()) { h = fnv64(h, f); }
+    auto hb = List<u8>::init(a);
+    sprint(&hb, "{h:016x}")?;
+    const auto hid = hb.slice();
+    auto e = cx_emit(a, &w, hid)?;
+    auto ic = cx_cpp(a, abs, &e)?;
+    auto pass = 0;
+    while (ic.len > 0) {
+        const auto n = cx_check(a, &w, hid, ic, cflags, from_dir)?;
+        if (n < 0) { break; }
+        if (pass == 2) {
+            eprintln("error: the C++ shims of {header} still do not compile");
+            return error.CompileFailed;
+        }
+        pass += 1;
+        e = cx_emit(a, &w, hid)?;
+        ic = cx_cpp(a, abs, &e)?;
+    }
+    return CBind{ .zk = e.out.slice(), .inline_c = ic, .deps = deps, .from = List<str>::init(a), .warnings = e.warnings };
 }
 
 !CBind cx_bind(Allocator a, str header, str from_dir, List<str> flags) {

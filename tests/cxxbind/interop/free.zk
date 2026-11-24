@@ -3,7 +3,7 @@ import "free_b.zk" as fr;
 i32 inc(i32 x) { return x + 1; }
 
 void main() {
-    auto v = 41;
+    i32 v = 41;
     const auto b = fr::bump(&v);
     *fr::cell(2) = 30;
     const auto sq = fr::pick(1);

@@ -217,6 +217,11 @@ struct CType {
     bool c_unsigned;
     bool plain;
     bool vol;
+    bool konst;
+    bool ref;
+    bool rvalue;
+    bool noexc;
+    str cxx;
 }
 
 enum CDK { Func, Struct, Typedef, Macro, Var, Skip, Enum, Const }
@@ -253,6 +258,7 @@ struct CDecl {
     bool inner_attr;
     i64 from;
     i64 at;
+    str cxx;
 }
 
 struct CMac { str body; bool live; bool func_like; bool bad; bool lexed; List<CTok> toks; CDecl* d; }
@@ -1875,6 +1881,7 @@ struct CEmit {
     }
 
     !void func(CDecl* d) {
+        if (d.cxx.len > 0 && !d.is_extern) { return cx_shim(this, d); }
         if (d.asm_label) { this->relabeled.put(d.name, true)?; }
         if (d.is_inline && !d.is_extern && !d.has_body) { return; }
         if (d.is_static && !d.is_inline && this->inl.has(d.name)) { return; }
