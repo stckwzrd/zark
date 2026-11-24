@@ -309,7 +309,15 @@ struct CxType {
             auto args = List<CType*>::init(this->w.a);
             auto ok = true;
             while (ok) {
-                args.push(this->ty()?)?;
+                const auto pt = this->peek();
+                if (pt.len > 0 && ((pt[0] >= '0' && pt[0] <= '9') || (pt[0] == '-' && pt.len > 1 && pt[1] >= '0' && pt[1] <= '9'))) {
+                    const auto v = this->w.named(pt)?;
+                    v.cxx = pt;
+                    args.push(v)?;
+                    this->i += 1;
+                } else {
+                    args.push(this->ty()?)?;
+                }
                 if (this->eat(">")) { break; }
                 ok = this->eat(",");
             }
@@ -527,6 +535,7 @@ struct CxWalk {
     List<str> tmpl;
     List<str> inl;
     Map<CxRec*> bykey;
+    Map<bool> tused;
     str skey;
     bool uchar;
     bool short_enums;
@@ -926,6 +935,15 @@ struct CxWalk {
             }
             return this->record(x, r, cx_up(p));
         }
+        if (kind == "ClassTemplateSpecializationDecl" && name.len > 0) {
+            if (!jbool(jget(x, "completeDefinition"), false)) { return this->skip(qn, "template specialization is not defined"); }
+            auto q = this->find(scope, name)?;
+            if (q.len == 0) { q = cx_qual(this->a, scope, name)?; }
+            _ = this->spec(x, q, "")?;
+            const auto sk = this->skey;
+            if (sk.len > 0) { _ = this->spec(x, q, sk)?; }
+            return;
+        }
         if (kind == "CXXRecordDecl" && name.len > 0) {
             const auto r = this->rec_decl(x, qn, zn)?;
             if (r == null) { return this->kids(x); }
@@ -949,7 +967,22 @@ struct CxWalk {
         for (auto q : ["UsingDecl", "UsingShadowDecl", "UsingDirectiveDecl", "UsingEnumDecl", "NamespaceAliasDecl", "StaticAssertDecl", "EmptyDecl"]) {
             if (kind == q) { return; }
         }
-        if (kind == "FunctionTemplateDecl") { return this->skip(qn, "function templates are not bound yet"); }
+        if (kind == "FunctionTemplateDecl") {
+            auto bound = false;
+            const auto ftk = jget(x, "inner");
+            for (auto i : 0..jlen(ftk)) {
+                const auto c = jat(ftk, i);
+                if (jstr(jget(c, "kind"), "") != "FunctionDecl") { continue; }
+                auto has = false;
+                const auto ci = jget(c, "inner");
+                for (auto j : 0..jlen(ci)) { if (jstr(jget(jat(ci, j), "kind"), "") == "TemplateArgument") { has = true; } }
+                if (!has) { continue; }
+                this->func(c, scope, name, false)?;
+                bound = true;
+            }
+            if (!bound) { return this->skip(qn, "template without an instantiation; add 'template ... NAME<...>(...);' to a wrapper header"); }
+            return;
+        }
         if (kind == "ClassTemplateDecl") {
             auto l = List<Json*>::init(this->a);
             const auto k = jget(x, "inner");
@@ -1366,6 +1399,7 @@ struct CxWalk {
     }
 
     !str tok(CType* t) {
+        if (t.k == .Named && t.rec == null && t.name.len > 0 && ((t.name[0] >= '0' && t.name[0] <= '9') || t.name[0] == '-')) { return t.name; }
         auto x = t;
         while (x.k == .Named && x.rec == null) {
             const auto d = this->zd.get_or(x.name, null);
@@ -1468,12 +1502,17 @@ struct CxWalk {
         auto ks = List<str>::init(this->a);
         auto cs = List<str>::init(this->a);
         const auto k = jget(c, "inner");
-        auto meth = false;
         for (auto i : 0..jlen(k)) {
             const auto x = jat(k, i);
             const auto kind = jstr(jget(x, "kind"), "");
-            if ((kind == "CXXMethodDecl" || kind == "CXXConstructorDecl" || kind == "CXXDestructorDecl" || kind == "CXXConversionDecl") && !jbool(jget(x, "isImplicit"), false)) { meth = true; }
             if (kind != "TemplateArgument") { continue; }
+            if (jget(x, "value") != null) {
+                auto v = jstr(jget(x, "value"), "");
+                if (v.len == 0) { v = cb_num(this->a, CVal{ .v = jint(jget(x, "value"), 0) })?; }
+                ks.push(v)?;
+                cs.push(v)?;
+                continue;
+            }
             if (jget(x, "type") == null) { return null; }
             const auto t = this->tnode(jat(jget(x, "inner"), 0))?;
             if (t == null) { return null; }
@@ -1482,6 +1521,7 @@ struct CxWalk {
             ks.push(tk)?;
             cs.push(cx_spell(this->a, t, "")?)?;
         }
+        if (ks.len == 0) { return null; }
         const auto key = str_concat(this->a, [q, "<", str_join(this->a, ks.slice(), ",")?, ">"])?;
         this->skey = key;
         if (key != want || this->specs.has(key)) { return null; }
@@ -1490,14 +1530,34 @@ struct CxWalk {
         const auto r = this->rec_decl(c, cxx, zn)?;
         if (r == null) { return null; }
         this->specs.put(key, r)?;
+        this->tused.put(q, true)?;
         r.key = cx_tkey(this->a, cxx)?;
+        this->record_bases(c, cxx, r.qn)?;
+        const auto ci = jget(c, "inner");
+        for (auto i : 0..jlen(ci)) {
+            const auto x = jat(ci, i);
+            const auto kind = jstr(jget(x, "kind"), "");
+            if (kind == "CXXMethodDecl" || kind == "CXXConstructorDecl" || kind == "CXXDestructorDecl" || kind == "CXXConversionDecl") {
+                if (!jbool(jget(x, "isImplicit"), false)) { this->method(x, r, cxx, kind)?; }
+            }
+        }
         this->define(c, r, cxx)?;
         r.tag = str_concat(this->a, [jstr(jget(c, "tagUsed"), ""), " "])?;
         r.d.complete = true;
         r.d.is_union = r.is_union;
+        const auto bs = jget(c, "bases");
+        for (auto i : 0..jlen(bs)) {
+            const auto b = jat(bs, i);
+            if (jstr(jget(b, "access"), "") != "public") { continue; }
+            const auto virt = jbool(jget(b, "isVirtual"), false);
+            const auto bt = this->expand(this->type_of(jget(b, "type"), cxx)?);
+            if (bt.k == .Named && bt.rec != null) {
+                r.allbases.push(CxBase{ .qn = bt.rec.cx.qn, .r = bt.rec.cx, .virt = virt })?;
+                if (!virt) { r.pubs.push(bt.rec.cx.qn)?; }
+            }
+        }
         this->cxx_ops(c, r)?;
         this->rlist.push(r)?;
-        if (meth) { this->skip(cxx, "methods of template specializations are not bound yet")?; }
         return r;
     }
 
@@ -3164,7 +3224,7 @@ bool cx_is_operator(str n) {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a) };
     cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
@@ -3173,11 +3233,11 @@ bool cx_is_operator(str n) {
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
-    cx_names(&w)?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
-        if (!used) { w.skip(q, "class templates are not bound yet")?; }
+        if (w.tused.get_or(q, false)) { used = true; }
+        if (!used) { w.skip(q, str_concat(w.a, ["template without an instantiation; add 'template struct ", cx_last(q), "<...>;' to a wrapper header"])?)?; }
     }
     for (auto r : w.rlist.slice()) {
         r.key = w.dkey(r.key)?;
@@ -3185,6 +3245,7 @@ bool cx_is_operator(str n) {
     }
     w.layouts(header, from_dir, cflags)?;
     for (auto r : w.rlist.slice()) { w.flat(r)?; }
+    cx_names(&w)?;
     auto deps = List<str>::init(a);
     auto from = List<str>::init(a);
     for (auto d : dep_files(a, dtext)?) {
