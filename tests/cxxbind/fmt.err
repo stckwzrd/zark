@@ -1,3 +1,5 @@
 skipped fx::TextV: va_list parameter
 skipped fx::Plain: variadic function without a printf format attribute
 skipped fx::Scan: variadic function with a non-printf format attribute
+skipped FmtLog::log: printf format string is not the last parameter
+skipped mix: printf format string is not the last parameter

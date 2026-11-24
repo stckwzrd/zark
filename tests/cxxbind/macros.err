@@ -1,0 +1,5 @@
+opaque MacroClash: layout not found
+skipped MAC_UNKNOWN: not a constant
+skipped MAC_FN: function-like macro
+skipped MAC_EMPTY: empty macro
+skipped MacroClash: name clash
