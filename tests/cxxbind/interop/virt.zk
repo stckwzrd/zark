@@ -1,0 +1,23 @@
+import "virt.hpp" as g;
+
+!void work() {
+    const auto a = c_allocator();
+    auto c = g::geo_Circle::create(a, 2.0)?;
+    println(c.get().area(), cstr(c.get().name()), c.get().tag());
+    println(c.get().as_geo_Shape().area());
+    println(g::geo::circle_live());
+    auto s = c.into_geo_Shape();
+    defer s.deinit();
+    println(s.get().area());
+    auto m = g::geo_Mix::create(a, 1, 2, 3)?;
+    defer m.deinit();
+    println(g::geo::m2_b(m.get().as_geo_M2()));
+    auto d = g::geo_VD::create(a, 4, 5)?;
+    defer d.deinit();
+    println(g::geo::vb_v(d.get().as_geo_VB()));
+}
+
+!void main() {
+    work()?;
+    println(g::geo::circle_live());
+}

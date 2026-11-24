@@ -26,3 +26,5 @@ extern b_Id zark_cxx_652972d0bb10dda1_14(b_Id x, a_Id y);
 static b_Id b_c::inner(b_Id x, a_Id y) { return zark_cxx_652972d0bb10dda1_14(x, y); }
 extern Mode zark_cxx_652972d0bb10dda1_18(Mode m, Mode prev);
 Mode toggle(Mode m, Mode prev) { return zark_cxx_652972d0bb10dda1_18(m, prev); }
+extern Holder* zark_cxx_652972d0bb10dda1_19(Kid* __self);
+Holder* Kid::as_Holder() const { return zark_cxx_652972d0bb10dda1_19(this); }

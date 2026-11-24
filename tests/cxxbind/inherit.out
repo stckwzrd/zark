@@ -1,0 +1,102 @@
+struct geo_Shape { void* __vptr; i32 id; u8[4] __pad0; }
+owned struct geo_Shape_own { geo_Shape* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Shape* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_Shape* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_Shape* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_5(this->ptr); } else { zark_cxx_be28820e260634aa_1(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_Shape* release() move { return this->ptr; } }
+struct geo_Circle { void* __vptr; i32 id; u8[4] __pad0; f64 r; }
+owned struct geo_Circle_own { geo_Circle* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Circle* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_Circle* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_Circle* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_15(this->ptr); } else { zark_cxx_be28820e260634aa_9(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_Circle* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_Circle>()?; zark_cxx_be28820e260634aa_12(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_Circle), .a = a }; } geo_Shape_own into_geo_Shape() move { return geo_Shape_own::adopt(this->ptr.as_geo_Shape(), this->mem, this->size, this->a); } }
+i32 geo_Circle::tag() { return this.as_geo_Shape().tag(); }
+struct geo_M1 { i32 a; }
+struct geo_M2 { void* __vptr; i32 b; u8[4] __pad0; }
+owned struct geo_M2_own { geo_M2* ptr; void* mem; u64 size; Allocator a; static Self init(geo_M2* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_M2* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_M2* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_24(this->ptr); } else { zark_cxx_be28820e260634aa_20(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_M2* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_M2>()?; zark_cxx_be28820e260634aa_21(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_M2), .a = a }; } }
+struct geo_Mix { void* __vptr; i32 b; i32 a; i32 c; u8[4] __pad0; }
+owned struct geo_Mix_own { geo_Mix* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Mix* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_Mix* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_Mix* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_31(this->ptr); } else { zark_cxx_be28820e260634aa_27(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_Mix* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_Mix>()?; zark_cxx_be28820e260634aa_28(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_Mix), .a = a }; } geo_M2_own into_geo_M2() move { return geo_M2_own::adopt(this->ptr.as_geo_M2(), this->mem, this->size, this->a); } }
+struct geo_VB { void* __vptr; i32 v; u8[4] __pad0; }
+owned struct geo_VB_own { geo_VB* ptr; void* mem; u64 size; Allocator a; static Self init(geo_VB* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_VB* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_VB* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_38(this->ptr); } else { zark_cxx_be28820e260634aa_34(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_VB* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_VB>()?; zark_cxx_be28820e260634aa_35(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_VB), .a = a }; } }
+struct geo_VD { void* __vptr; i32 w; u8[20] __pad0; }
+owned struct geo_VD_own { geo_VD* ptr; void* mem; u64 size; Allocator a; static Self init(geo_VD* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_VD* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_VD* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_45(this->ptr); } else { zark_cxx_be28820e260634aa_41(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_VD* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_VD>()?; zark_cxx_be28820e260634aa_42(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_VD), .a = a }; } geo_VB_own into_geo_VB() move { return geo_VB_own::adopt(this->ptr.as_geo_VB(), this->mem, this->size, this->a); } }
+struct geo_Hide { void* __vptr; i32 id; i32 x; }
+owned struct geo_Hide_own { geo_Hide* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Hide* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_Hide* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_Hide* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_54(this->ptr); } else { zark_cxx_be28820e260634aa_50(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_Hide* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_Hide>()?; zark_cxx_be28820e260634aa_51(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_Hide), .a = a }; } geo_Shape_own into_geo_Shape() move { return geo_Shape_own::adopt(this->ptr.as_geo_Shape(), this->mem, this->size, this->a); } }
+u8* geo_Hide::name() { return this.as_geo_Shape().name(); }
+i32 geo_Hide::tag() { return this.as_geo_Shape().tag(); }
+struct geo_Hide2 { void* __vptr; i32 id; i32 x; }
+owned struct geo_Hide2_own { geo_Hide2* ptr; void* mem; u64 size; Allocator a; static Self init(geo_Hide2* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(geo_Hide2* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } geo_Hide2* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_be28820e260634aa_62(this->ptr); } else { zark_cxx_be28820e260634aa_58(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } geo_Hide2* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<geo_Hide2>()?; zark_cxx_be28820e260634aa_59(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(geo_Hide2), .a = a }; } }
+f64 geo_Hide2::area() { return this.as_geo_Hide().area(); }
+extern void zark_cxx_be28820e260634aa_1(geo_Shape* __self);
+extern f64 zark_cxx_be28820e260634aa_2(geo_Shape* __self);
+f64 geo_Shape::area() const { return zark_cxx_be28820e260634aa_2(this); }
+extern u8* zark_cxx_be28820e260634aa_3(geo_Shape* __self);
+u8* geo_Shape::name() const { return zark_cxx_be28820e260634aa_3(this); }
+extern i32 zark_cxx_be28820e260634aa_4(geo_Shape* __self);
+i32 geo_Shape::tag() const { return zark_cxx_be28820e260634aa_4(this); }
+extern void zark_cxx_be28820e260634aa_5(geo_Shape* __self);
+extern void zark_cxx_be28820e260634aa_8(geo_Circle* __self, f64 rr);
+static !geo_Circle_own geo_Circle::create(Allocator __a, f64 rr) { const auto __p = __a.create<geo_Circle>()?; zark_cxx_be28820e260634aa_8(__p, rr); return geo_Circle_own::init(__p, sizeof(geo_Circle), __a); }
+extern void zark_cxx_be28820e260634aa_9(geo_Circle* __self);
+extern f64 zark_cxx_be28820e260634aa_10(geo_Circle* __self);
+f64 geo_Circle::area() const { return zark_cxx_be28820e260634aa_10(this); }
+extern u8* zark_cxx_be28820e260634aa_11(geo_Circle* __self);
+u8* geo_Circle::name() const { return zark_cxx_be28820e260634aa_11(this); }
+extern void zark_cxx_be28820e260634aa_12(geo_Circle* __self, geo_Circle* a0);
+extern void zark_cxx_be28820e260634aa_13(geo_Circle* __self, geo_Circle* __other);
+void geo_Circle::assign(geo_Circle* __other) { zark_cxx_be28820e260634aa_13(this, __other); }
+extern void zark_cxx_be28820e260634aa_14(geo_Circle* __self, geo_Circle* __other);
+void geo_Circle::assign_move(geo_Circle* __other) { zark_cxx_be28820e260634aa_14(this, __other); }
+extern void zark_cxx_be28820e260634aa_15(geo_Circle* __self);
+extern void zark_cxx_be28820e260634aa_20(geo_M2* __self);
+extern void zark_cxx_be28820e260634aa_21(geo_M2* __self, geo_M2* a0);
+extern void zark_cxx_be28820e260634aa_22(geo_M2* __self, geo_M2* __other);
+void geo_M2::assign(geo_M2* __other) { zark_cxx_be28820e260634aa_22(this, __other); }
+extern void zark_cxx_be28820e260634aa_23(geo_M2* __self, geo_M2* __other);
+void geo_M2::assign_move(geo_M2* __other) { zark_cxx_be28820e260634aa_23(this, __other); }
+extern void zark_cxx_be28820e260634aa_24(geo_M2* __self);
+extern void zark_cxx_be28820e260634aa_27(geo_Mix* __self);
+extern void zark_cxx_be28820e260634aa_28(geo_Mix* __self, geo_Mix* a0);
+extern void zark_cxx_be28820e260634aa_29(geo_Mix* __self, geo_Mix* __other);
+void geo_Mix::assign(geo_Mix* __other) { zark_cxx_be28820e260634aa_29(this, __other); }
+extern void zark_cxx_be28820e260634aa_30(geo_Mix* __self, geo_Mix* __other);
+void geo_Mix::assign_move(geo_Mix* __other) { zark_cxx_be28820e260634aa_30(this, __other); }
+extern void zark_cxx_be28820e260634aa_31(geo_Mix* __self);
+extern void zark_cxx_be28820e260634aa_34(geo_VB* __self);
+extern void zark_cxx_be28820e260634aa_35(geo_VB* __self, geo_VB* a0);
+extern void zark_cxx_be28820e260634aa_36(geo_VB* __self, geo_VB* __other);
+void geo_VB::assign(geo_VB* __other) { zark_cxx_be28820e260634aa_36(this, __other); }
+extern void zark_cxx_be28820e260634aa_37(geo_VB* __self, geo_VB* __other);
+void geo_VB::assign_move(geo_VB* __other) { zark_cxx_be28820e260634aa_37(this, __other); }
+extern void zark_cxx_be28820e260634aa_38(geo_VB* __self);
+extern void zark_cxx_be28820e260634aa_41(geo_VD* __self);
+extern void zark_cxx_be28820e260634aa_42(geo_VD* __self, geo_VD* a0);
+extern void zark_cxx_be28820e260634aa_43(geo_VD* __self, geo_VD* __other);
+void geo_VD::assign(geo_VD* __other) { zark_cxx_be28820e260634aa_43(this, __other); }
+extern void zark_cxx_be28820e260634aa_44(geo_VD* __self, geo_VD* __other);
+void geo_VD::assign_move(geo_VD* __other) { zark_cxx_be28820e260634aa_44(this, __other); }
+extern void zark_cxx_be28820e260634aa_45(geo_VD* __self);
+extern f64 zark_cxx_be28820e260634aa_48(geo_Hide* __self);
+f64 geo_Hide::area() const { return zark_cxx_be28820e260634aa_48(this); }
+extern i32 zark_cxx_be28820e260634aa_49(geo_Hide* __self, i32 a);
+i32 geo_Hide::f(i32 a) { return zark_cxx_be28820e260634aa_49(this, a); }
+extern void zark_cxx_be28820e260634aa_50(geo_Hide* __self);
+extern void zark_cxx_be28820e260634aa_51(geo_Hide* __self, geo_Hide* a0);
+extern void zark_cxx_be28820e260634aa_52(geo_Hide* __self, geo_Hide* __other);
+void geo_Hide::assign(geo_Hide* __other) { zark_cxx_be28820e260634aa_52(this, __other); }
+extern void zark_cxx_be28820e260634aa_53(geo_Hide* __self, geo_Hide* __other);
+void geo_Hide::assign_move(geo_Hide* __other) { zark_cxx_be28820e260634aa_53(this, __other); }
+extern void zark_cxx_be28820e260634aa_54(geo_Hide* __self);
+extern i32 zark_cxx_be28820e260634aa_57(geo_Hide2* __self);
+i32 geo_Hide2::f() { return zark_cxx_be28820e260634aa_57(this); }
+extern void zark_cxx_be28820e260634aa_58(geo_Hide2* __self);
+extern void zark_cxx_be28820e260634aa_59(geo_Hide2* __self, geo_Hide2* a0);
+extern void zark_cxx_be28820e260634aa_60(geo_Hide2* __self, geo_Hide2* __other);
+void geo_Hide2::assign(geo_Hide2* __other) { zark_cxx_be28820e260634aa_60(this, __other); }
+extern void zark_cxx_be28820e260634aa_61(geo_Hide2* __self, geo_Hide2* __other);
+void geo_Hide2::assign_move(geo_Hide2* __other) { zark_cxx_be28820e260634aa_61(this, __other); }
+extern void zark_cxx_be28820e260634aa_62(geo_Hide2* __self);
+extern geo_Shape* zark_cxx_be28820e260634aa_64(geo_Circle* __self);
+geo_Shape* geo_Circle::as_geo_Shape() const { return zark_cxx_be28820e260634aa_64(this); }
+extern geo_M1* zark_cxx_be28820e260634aa_66(geo_Mix* __self);
+geo_M1* geo_Mix::as_geo_M1() const { return zark_cxx_be28820e260634aa_66(this); }
+extern geo_M2* zark_cxx_be28820e260634aa_68(geo_Mix* __self);
+geo_M2* geo_Mix::as_geo_M2() const { return zark_cxx_be28820e260634aa_68(this); }
+extern geo_VB* zark_cxx_be28820e260634aa_70(geo_VD* __self);
+geo_VB* geo_VD::as_geo_VB() const { return zark_cxx_be28820e260634aa_70(this); }
+extern geo_Shape* zark_cxx_be28820e260634aa_72(geo_Hide* __self);
+geo_Shape* geo_Hide::as_geo_Shape() const { return zark_cxx_be28820e260634aa_72(this); }
+extern geo_Hide* zark_cxx_be28820e260634aa_74(geo_Hide2* __self);
+geo_Hide* geo_Hide2::as_geo_Hide() const { return zark_cxx_be28820e260634aa_74(this); }
