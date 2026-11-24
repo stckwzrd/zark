@@ -1,0 +1,25 @@
+struct Priv { i32 v; }
+struct PrivS { i32 v; }
+struct ProtS { i32 v; }
+struct Ok { i32 v; }
+owned struct Ok_own { Ok* ptr; void* mem; u64 size; Allocator a; static Self init(Ok* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(Ok* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } Ok* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_47ee19b3b0c94358_15(this->ptr); } else { zark_cxx_47ee19b3b0c94358_10(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } Ok* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<Ok>()?; zark_cxx_47ee19b3b0c94358_12(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(Ok), .a = a }; } }
+struct OkClass { i32 v; }
+owned struct OkClass_own { OkClass* ptr; void* mem; u64 size; Allocator a; static Self init(OkClass* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(OkClass* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } OkClass* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_47ee19b3b0c94358_23(this->ptr); } else { zark_cxx_47ee19b3b0c94358_18(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } OkClass* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<OkClass>()?; zark_cxx_47ee19b3b0c94358_20(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(OkClass), .a = a }; } }
+extern void zark_cxx_47ee19b3b0c94358_10(Ok* __self);
+extern void zark_cxx_47ee19b3b0c94358_11(Ok* __self);
+static !Ok_own Ok::create(Allocator __a) { const auto __p = __a.create<Ok>()?; zark_cxx_47ee19b3b0c94358_11(__p); return Ok_own::init(__p, sizeof(Ok), __a); }
+extern void zark_cxx_47ee19b3b0c94358_12(Ok* __self, Ok* a0);
+extern void zark_cxx_47ee19b3b0c94358_13(Ok* __self, Ok* __other);
+void Ok::assign(Ok* __other) { zark_cxx_47ee19b3b0c94358_13(this, __other); }
+extern void zark_cxx_47ee19b3b0c94358_14(Ok* __self, Ok* __other);
+void Ok::assign_move(Ok* __other) { zark_cxx_47ee19b3b0c94358_14(this, __other); }
+extern void zark_cxx_47ee19b3b0c94358_15(Ok* __self);
+extern void zark_cxx_47ee19b3b0c94358_18(OkClass* __self);
+extern void zark_cxx_47ee19b3b0c94358_19(OkClass* __self);
+static !OkClass_own OkClass::create(Allocator __a) { const auto __p = __a.create<OkClass>()?; zark_cxx_47ee19b3b0c94358_19(__p); return OkClass_own::init(__p, sizeof(OkClass), __a); }
+extern void zark_cxx_47ee19b3b0c94358_20(OkClass* __self, OkClass* a0);
+extern void zark_cxx_47ee19b3b0c94358_21(OkClass* __self, OkClass* __other);
+void OkClass::assign(OkClass* __other) { zark_cxx_47ee19b3b0c94358_21(this, __other); }
+extern void zark_cxx_47ee19b3b0c94358_22(OkClass* __self, OkClass* __other);
+void OkClass::assign_move(OkClass* __other) { zark_cxx_47ee19b3b0c94358_22(this, __other); }
+extern void zark_cxx_47ee19b3b0c94358_23(OkClass* __self);

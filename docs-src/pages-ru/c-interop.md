@@ -267,7 +267,131 @@ void main() {
 
 Замыкание `fn[](...) -> R` в C передавать нельзя: у него есть контекст, а C ждёт простой адрес.
 
-## C++ через фасад `extern "C"`
+## C++-заголовки
+
+Заголовок с расширением `.hpp`, `.hh`, `.hxx` или `.h++` читается как C++, а `.h` — всегда как C. `import "x.hpp" as name;` подключает такой заголовок, а `zark cbind x.hpp` печатает привязки. clang++ разбирает заголовок, и компилятор создаёт две вещи: модуль Zark и небольшой C++-файл с функциями `extern "C"` (шимами), которые делают настоящие вызовы. Zark никогда не вызывает C++-функцию по манглированному имени, и класс не переходит границу C по значению: классы ходят указателями, а простые Zark копирует туда и обратно. C++-файл компилируется и линкуется за вас, причём собираются только те шимы, которые программа действительно использует, поэтому объявленная, но нигде не определённая функция безвредна, пока вы её не вызываете.
+
+```cpp file=shapes.hpp
+#pragma once
+#include <string>
+
+namespace shapes {
+
+enum class Kind { Circle, Box };
+
+struct Vec {
+    float x = 0;
+    float y = 0;
+    Vec(float a, float b) : x(a), y(b) {}
+};
+
+Vec operator+(const Vec& a, const Vec& b);
+float dot(const Vec& a, const Vec& b);
+float scale(float v, float k = 2.0f);
+float scale(Vec v);
+
+class Counter {
+public:
+    explicit Counter(int start);
+    ~Counter();
+    int next();
+    static int alive();
+private:
+    int n;
+    std::string log;
+};
+
+}
+```
+
+```cpp file=shapes.cpp
+#include "shapes.hpp"
+
+namespace shapes {
+
+static int live = 0;
+
+Vec operator+(const Vec& a, const Vec& b) { return Vec(a.x + b.x, a.y + b.y); }
+float dot(const Vec& a, const Vec& b) { return a.x * b.x + a.y * b.y; }
+float scale(float v, float k) { return v * k; }
+float scale(Vec v) { return v.x * v.y; }
+
+Counter::Counter(int start) : n(start) { live += 1; }
+Counter::~Counter() { live -= 1; }
+int Counter::next() { return n++; }
+int Counter::alive() { return live; }
+
+}
+```
+
+```zark run with=shapes.cpp
+import "shapes.hpp" as sh;
+
+!void main() {
+    const auto a = sh::shapes_Vec(1.0, 2.0);
+    const auto b = a + sh::shapes_Vec(3.0, 4.0);
+    println(b.x, b.y, sh::shapes::dot(a, b), sh::shapes_Kind_Box);
+    println(sh::shapes::scale_f32_f32(1.5, 4.0), sh::shapes::scale_f32_f32_1(1.5));
+
+    auto c = sh::shapes_Counter::create(c_allocator(), 10)?;
+    defer c.deinit();
+    println(c.get().next(), c.get().next(), sh::shapes_Counter::alive());
+}
+```
+
+Как получаются имена:
+
+| В C++ | В Zark, при `import "shapes.hpp" as sh;` |
+|---|---|
+| пространство имён `shapes`, функция `dot` | пустая структура `shapes` со статическим методом: `sh::shapes::dot(a, b)`; функция вне пространства имён — просто `sh::f(x)` |
+| класс `shapes::Vec`, вложенный `Outer::Inner` | `sh::shapes_Vec`, `Outer_Inner`: путь соединяется через `_`, типы не вкладываются |
+| `enum class Kind` в `shapes`, `constexpr`-константа `N` | `sh::shapes_Kind_Box`, `sh::shapes_N`, обычные целые |
+| метод, `const`-метод, `static`-метод | метод структуры, `const`-метод, `static`-метод: `c.get().next()`, `sh::shapes_Counter::alive()` |
+| перегруженная функция | по функции на перегрузку с суффиксом из токенов параметров: `scale_f32_f32`, `scale_shapes_Vec` (`const char*` — это `u8pc`, указатель добавляет `p`, ссылка — `pr`); имя без перегрузок остаётся как есть |
+| аргументы по умолчанию | полное имя плюс `name_k` для каждого более короткого вызова, который принимает C++ (`k` — число аргументов); значения подставляет C++ |
+| `operator+`, `==`, `<` и подобные на value-типе | операторы Zark: `a + b`, `a == b` |
+| остальные операторы | именованные методы: `op_index` для `[]`, `op_call` для `()`, `op_add_assign` для `+=`, `to_bool()` для `operator bool` |
+| `T&`, `T*` | `T*`; параметр `const T&` числа, enum или value-типа принимается по значению (если функция не возвращает ссылку или указатель) |
+| `static`-поле, глобальная переменная | `name_ptr()`, как для C-переменных |
+| `Box<int>` (инстанцированный шаблон) | `Box_i32` |
+| `std::string`, `std::string_view` в параметре или результате | `str` (результат `std::string` копируется с переданным первым аллокатором) |
+| `std::vector<T>` из чисел или маленьких структур | `T[]` |
+| `std::unique_ptr<T>` | owned-описатель `T_own` (ниже) |
+| printf-вариадика `Text(const char* fmt, ...)` | `Text(u8* fmt)`: текст печатается как есть, форматируйте его в Zark через `bprint` |
+
+С классами есть два разных случая:
+
+- **Value-тип** тривиально копируется, как `Vec` или `ImVec2` из Dear ImGui. Это обычная структура Zark с раскладкой C++; её можно копировать, возвращать и хранить, а `T{}` или `T(args)` создают значение.
+- Любой другой класс, как `Counter`, — **нетривиальный**: у него есть деструктор, копирующий конструктор или виртуальные функции. Zark держит такой объект только через указатель. Чтобы создать его, вызовите `T::create(allocator, args)`: объект выделяется аллокатором и в нём запускается конструктор. Возвращается `!T_own` — owned-описатель с `get()` (указатель, заём), `deinit()` (вызвать деструктор и освободить память), `release()` (отдать указатель, не разрушая) и, если есть копирующий конструктор, `clone(allocator)`. Компилятор проверяет описатель как любое owned-значение, поэтому шаблон всегда такой:
+
+  ```zark
+  auto c = sh::shapes_Counter::create(c_allocator(), 10)?;
+  defer c.deinit();
+  ```
+
+  Если `defer` нет, будет ошибка `'c' holds a 'sh.shapes_Counter_own' that is not consumed on every path out of its scope`. Указатель, который вернул C++ (`GetIO()`, метод, возвращающий `Foo*`), считается заёмным и Zark его не уничтожает. Нетривиальный результат по значению принимает первым аллокатор и возвращает `!T_own`; нетривиальный параметр по значению принимает указатель, и C++ копирует объект.
+
+> **Внимание:** Zark не знает, что нетривиальный объект нельзя копировать. `auto copy = *c.get();` компилируется и делает побитовую копию, о которой C++ ничего не знает (например, `std::string`, указывающий внутрь себя, или указатель, который освободят два деструктора). Для копии используйте `clone()` (если есть копирующий конструктор) и держите объект за описателем или указателем.
+
+Наследование работает через указатели: у производного класса есть `as_Base()` (например, `c.get().as_geo_Shape()`), публичные методы баз повторяются на нём, а виртуальная функция вызывается с обычной диспетчеризацией, поэтому `shape.area()` вызывает переопределение. У абстрактного класса нет `create`, а `into_Base()` превращает owned-описатель в описатель базы, если у базы виртуальный деструктор. Наследоваться от C++-класса в Zark нельзя.
+
+Исключение никогда не доходит до кода Zark. Шим ловит его, печатает `zark: uncaught C++ exception in shapes::fn: what()` в stderr и завершает процесс; у `noexcept`-функций и у всех шымов, собранных с `-fno-exceptions`, `try` нет вообще. Zark-колбэки передаются в C++ как обычные `fn`-указатели.
+
+Каждый шим называет оборачиваемую функцию точной сигнатурой, и шаг привязки компилирует шимы. Объявление, которое привязать нельзя, отбрасывается с причиной в stderr, а остальной заголовок остаётся рабочим; запустите `zark cbind x.hpp`, чтобы увидеть их:
+
+```text
+skipped m::ld: type 'long double' is not supported yet
+skipped fx::TextV: va_list parameter
+skipped ui::Buf::at const: same parameters as the non-const overload
+```
+
+### C++-заголовок `.h` и шаблоны
+
+Заголовок с расширением `.h` читается как C. C++-заголовок `.h` подключают через однострочный `.hpp`-обёртку, которая его включает. Ошибка для C++-заголовка `.h` заканчивается подсказкой `if this is a C++ header, import it through a .hpp file that includes it`.
+
+Шаблон привязывается только через существующие специализации, поэтому для голого `Stack<T>` будет `skipped Stack: template without an instantiation; add 'template struct Stack<...>;' to a wrapper header`. В обёртке же перечисляют нужные специализации явной инстанциацией (для функции — `template double twice<double>(double);`).
+
+## C++ через фасад `extern "C"` (вручную)
 
 Zark не знает C++-ABI (шаблоны, перегрузки, классы). Поэтому C++ прячут за небольшим C-интерфейсом, где объект — непрозрачный указатель.
 

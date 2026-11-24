@@ -1,0 +1,7 @@
+import "alias.hpp" as f;
+
+!void main() {
+    f::Alias a = f::Alias{};
+    a.v = 1;
+    println(f::use_alias(&a, &a), a.v);
+}

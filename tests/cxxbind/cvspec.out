@@ -1,0 +1,4 @@
+struct CBox_i32 { i32 v; }
+struct CBox_ci32 { i32 v; }
+struct CBox_vi32 { i32 v; }
+struct UseCv { CBox_i32 a; CBox_ci32 b; CBox_vi32 c; }

@@ -19,6 +19,8 @@ struct Box {
     bool operator==(const Box& o) const;
     operator bool() const;
     Box& operator+=(int k);
+    Box& operator&=(int k);
+    Box& operator|=(int k);
     Box operator++(int);
 };
 }

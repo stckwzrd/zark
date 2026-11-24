@@ -1,0 +1,5 @@
+struct Alias { i32 v; }
+extern void zark_cxx_52d562b6df18b471_2(Alias* a, Alias* p);
+void use_alias(Alias* a, Alias* p) { zark_cxx_52d562b6df18b471_2(a, p); }
+extern i32 zark_cxx_52d562b6df18b471_3(Alias* a);
+i32 read_alias(Alias a) { return zark_cxx_52d562b6df18b471_3(&a); }
