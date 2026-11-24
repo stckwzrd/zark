@@ -51,4 +51,4 @@ Deferred from layer 4:
 - **Lambdas and `std::function`** crossing into C++. Only plain `fn` pointers do today.
 - **An `instantiate` key in `zark.toml`** to ask for template specializations without a wrapper `.hpp`.
 - **Cross targets and macOS CI for C++ headers.** Only the aarch64 Linux bindings of one header are compared in tests, and the `std::` shims are not checked against libc++.
-- **A no-copy marker for owned structs,** so that copying a non-trivial C++ object in Zark (`auto x = *p;`) is a compile error.
+- **Copying an owned value is a move.** `auto y = x;` on an `_own` handle currently compiles and frees twice; the borrow checker should treat the copy as a move and require an explicit `move`. The same marker should reject `auto x = *p;` on a non-trivial C++ object.
