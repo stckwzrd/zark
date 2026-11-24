@@ -1,0 +1,2 @@
+skipped Unused: template without an instantiation; add 'template struct Unused<...>;' to a wrapper header
+skipped Bad<int>::no: shim does not compile: member reference base type 'int' is not a structure or union

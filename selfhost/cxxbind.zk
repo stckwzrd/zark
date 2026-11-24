@@ -37,6 +37,8 @@ str cx_up(str s) {
 
 str cx_why(CType* t) {
     if (t.k == .Bad) { return t.name; }
+    if (t.stdk == 5) { return t.why; }
+    if (t.k == .Ptr && t.elem.stdk > 0) { return t.elem.why; }
     if (t.k == .Ptr || t.k == .Array || t.k == .Func) {
         const auto w = cx_why(t.elem);
         if (w.len > 0) { return w; }
@@ -293,9 +295,15 @@ struct CxType {
                 if (t == "auto") {
                     named = this->mk(.Bad)?;
                     named.name = "deduced return type";
+                } else if (t == "std::string" || t == "std::basic_string<char>") {
+                    named = this->w.stdty(1, "str", "std::string", null)?;
+                } else if (t == "std::string_view" || t == "std::basic_string_view<char>") {
+                    named = this->w.stdty(2, "str", "std::string_view", null)?;
                 } else if (this->i + 1 < this->toks.len && this->toks.get(this->i + 1) == "<") {
                     tname = t;
                     named = this->bad()?;
+                } else if (str_starts_with(t, "std::") && cb_known(t[5..]).len == 0) {
+                    named = this->w.stdty(5, t, t, null)?;
                 } else {
                     named = this->w.lookup(t, this->scope)?;
                 }
@@ -309,11 +317,51 @@ struct CxType {
             auto args = List<CType*>::init(this->w.a);
             auto ok = true;
             while (ok) {
-                args.push(this->ty()?)?;
+                const auto pt = this->peek();
+                if (pt.len > 0 && ((pt[0] >= '0' && pt[0] <= '9') || (pt[0] == '-' && pt.len > 1 && pt[1] >= '0' && pt[1] <= '9'))) {
+                    const auto v = this->w.named(pt)?;
+                    v.cxx = pt;
+                    args.push(v)?;
+                    this->i += 1;
+                } else {
+                    args.push(this->ty()?)?;
+                }
                 if (this->eat(">")) { break; }
                 ok = this->eat(",");
             }
             if (ok && !str_starts_with(this->peek(), "::")) {
+                if (tname == "std::vector" || tname == "std::basic_string") {
+                    auto kind = 1;
+                    if (tname == "std::vector") { kind = 3; }
+                    CType* aty = null;
+                    if (args.len > 0) { aty = args.get(0); }
+                    auto cxx = "std::string";
+                    if (kind == 3) { cxx = str_concat(this->w.a, ["std::vector<", cx_spell(this->w.a, aty, "")?, ">"])?; }
+                    auto zn = "str";
+                    if (kind == 3) { zn = "vec"; }
+                    const auto r = this->w.stdty(kind, zn, cxx, aty)?;
+                    r.konst = konst;
+                    r.vol = vol;
+                    return r;
+                }
+                if (tname == "std::unique_ptr") {
+                    CType* aty = null;
+                    if (args.len > 0) { aty = args.get(0); }
+                    const auto cxx = str_concat(this->w.a, ["std::unique_ptr<", cx_spell(this->w.a, aty, "")?, ">"])?;
+                    const auto r = this->w.stdty(4, "uptr", cxx, aty)?;
+                    r.konst = konst;
+                    r.vol = vol;
+                    return r;
+                }
+                if (str_starts_with(tname, "std::")) {
+                    auto cs = List<str>::init(this->w.a);
+                    for (auto x : args.slice()) { cs.push(cx_spell(this->w.a, x, "")?)?; }
+                    const auto cxx = str_concat(this->w.a, [tname, "<", str_join(this->w.a, cs.slice(), ", ")?, ">"])?;
+                    const auto r = this->w.stdty(5, tname, cxx, null)?;
+                    r.konst = konst;
+                    r.vol = vol;
+                    return r;
+                }
                 const auto r = this->w.tlookup(tname, this->scope, args)?;
                 r.konst = konst;
                 r.vol = vol;
@@ -527,6 +575,7 @@ struct CxWalk {
     List<str> tmpl;
     List<str> inl;
     Map<CxRec*> bykey;
+    Map<bool> tused;
     str skey;
     bool uchar;
     bool short_enums;
@@ -602,6 +651,21 @@ struct CxWalk {
         const auto t = this->a.create<CType>()?;
         t.k = .Bad;
         t.name = why;
+        return t;
+    }
+
+    !CType* stdty(i64 k, str name, str cxx, CType* arg) {
+        const auto t = this->a.create<CType>()?;
+        t.k = .Named;
+        t.name = name;
+        t.cxx = cxx;
+        t.stdk = k;
+        t.arg = arg;
+        if (k == 5) {
+            t.why = str_concat(this->a, [cxx, " is not supported"])?;
+        } else {
+            t.why = str_concat(this->a, [cxx, " pointer is not supported"])?;
+        }
         return t;
     }
 
@@ -735,8 +799,8 @@ struct CxWalk {
             if (cx_named(dt) || cx_bad(dt)) { return t; }
             return dt;
         }
-        auto ok = id.len == 0 || (t.k == .Named && (this->tid.get_or(t.cxx, "") == id || cb_known(t.name).len > 0));
-        if (ok && d.len > 0) {
+        auto ok = t.stdk > 0 || id.len == 0 || (t.k == .Named && (this->tid.get_or(t.cxx, "") == id || cb_known(t.name).len > 0));
+        if (ok && d.len > 0 && t.stdk == 0) {
             const auto dt = this->parse(d, scope)?;
             ok = cx_bad(dt) || cx_named(dt) || this->same(t, dt)?;
         }
@@ -926,6 +990,16 @@ struct CxWalk {
             }
             return this->record(x, r, cx_up(p));
         }
+        if (kind == "ClassTemplatePartialSpecializationDecl") { return this->skip(qn, "partial template specializations are not supported"); }
+        if (kind == "ClassTemplateSpecializationDecl" && name.len > 0) {
+            if (!jbool(jget(x, "completeDefinition"), false)) { return this->skip(qn, "template specialization is not defined"); }
+            auto q = this->find(scope, name)?;
+            if (q.len == 0) { q = cx_qual(this->a, scope, name)?; }
+            _ = this->spec(x, q, "")?;
+            const auto sk = this->skey;
+            if (sk.len > 0) { _ = this->spec(x, q, sk)?; }
+            return;
+        }
         if (kind == "CXXRecordDecl" && name.len > 0) {
             const auto r = this->rec_decl(x, qn, zn)?;
             if (r == null) { return this->kids(x); }
@@ -949,7 +1023,22 @@ struct CxWalk {
         for (auto q : ["UsingDecl", "UsingShadowDecl", "UsingDirectiveDecl", "UsingEnumDecl", "NamespaceAliasDecl", "StaticAssertDecl", "EmptyDecl"]) {
             if (kind == q) { return; }
         }
-        if (kind == "FunctionTemplateDecl") { return this->skip(qn, "function templates are not bound yet"); }
+        if (kind == "FunctionTemplateDecl") {
+            auto bound = false;
+            const auto ftk = jget(x, "inner");
+            for (auto i : 0..jlen(ftk)) {
+                const auto c = jat(ftk, i);
+                if (jstr(jget(c, "kind"), "") != "FunctionDecl") { continue; }
+                auto has = false;
+                const auto ci = jget(c, "inner");
+                for (auto j : 0..jlen(ci)) { if (jstr(jget(jat(ci, j), "kind"), "") == "TemplateArgument") { has = true; } }
+                if (!has) { continue; }
+                this->func(c, scope, name, false)?;
+                bound = true;
+            }
+            if (!bound) { return this->skip(qn, "template without an instantiation; add 'template ... NAME<...>(...);' to a wrapper header"); }
+            return;
+        }
         if (kind == "ClassTemplateDecl") {
             auto l = List<Json*>::init(this->a);
             const auto k = jget(x, "inner");
@@ -1368,6 +1457,11 @@ struct CxWalk {
     }
 
     !str tok(CType* t) {
+        if (t.k == .Named && t.rec == null && t.name.len > 0 && ((t.name[0] >= '0' && t.name[0] <= '9') || t.name[0] == '-')) { return t.name; }
+        if (t.stdk == 1 || t.stdk == 2) { return "str"; }
+        if (t.stdk == 3) { const auto e = this->tok(t.arg)?; if (e.len == 0) { return ""; } return str_concat(this->a, [e, "arr"])?; }
+        if (t.stdk == 4) { const auto e = this->tok(t.arg)?; if (e.len == 0) { return ""; } return str_concat(this->a, [e, "own"])?; }
+        if (t.stdk == 5) { return "std"; }
         auto x = t;
         while (x.k == .Named && x.rec == null) {
             const auto d = this->zd.get_or(x.name, null);
@@ -1456,7 +1550,23 @@ struct CxWalk {
             if (n > 1) { return this->badt("ambiguous template arguments"); }
             if (one != null) { r = this->spec(one, q, key)?; }
         }
-        if (r == null) { return this->badt(CX_TODO); }
+        if (r == null) {
+            if (q.len == 0) { return this->badt(CX_TODO); }
+            auto cs = List<str>::init(this->a);
+            for (auto x : args.slice()) { cs.push(cx_spell(this->a, x, "")?)?; }
+            const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
+            const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", str_join(this->a, ks.slice(), "_")?])?;
+            r = this->newrec(cxx)?;
+            r.d = this->decl(.Struct, zn)?;
+            r.d.cxx = cxx;
+            r.d.cx = r;
+            r.d.complete = false;
+            this->recs.put(key, r)?;
+            this->zrec.put(zn, r)?;
+            this->names.put(key, zn)?;
+            this->specs.put(key, r)?;
+            this->tused.put(q, true)?;
+        }
         if (this->bad.has(r.d.name)) { return this->badt(str_concat(this->a, ["uses skipped ", r.qn])?); }
         const auto t = this->named(r.d.name)?;
         t.rec = r.d;
@@ -1470,12 +1580,17 @@ struct CxWalk {
         auto ks = List<str>::init(this->a);
         auto cs = List<str>::init(this->a);
         const auto k = jget(c, "inner");
-        auto meth = false;
         for (auto i : 0..jlen(k)) {
             const auto x = jat(k, i);
             const auto kind = jstr(jget(x, "kind"), "");
-            if ((kind == "CXXMethodDecl" || kind == "CXXConstructorDecl" || kind == "CXXDestructorDecl" || kind == "CXXConversionDecl") && !jbool(jget(x, "isImplicit"), false)) { meth = true; }
             if (kind != "TemplateArgument") { continue; }
+            if (jget(x, "value") != null) {
+                auto v = jstr(jget(x, "value"), "");
+                if (v.len == 0) { v = cb_num(this->a, CVal{ .v = jint(jget(x, "value"), 0) })?; }
+                ks.push(v)?;
+                cs.push(v)?;
+                continue;
+            }
             if (jget(x, "type") == null) { return null; }
             const auto t = this->tnode(jat(jget(x, "inner"), 0))?;
             if (t == null) { return null; }
@@ -1484,6 +1599,7 @@ struct CxWalk {
             ks.push(tk)?;
             cs.push(cx_spell(this->a, t, "")?)?;
         }
+        if (ks.len == 0) { return null; }
         const auto key = str_concat(this->a, [q, "<", str_join(this->a, ks.slice(), ",")?, ">"])?;
         this->skey = key;
         if (key != want || this->specs.has(key)) { return null; }
@@ -1492,14 +1608,34 @@ struct CxWalk {
         const auto r = this->rec_decl(c, cxx, zn)?;
         if (r == null) { return null; }
         this->specs.put(key, r)?;
+        this->tused.put(q, true)?;
         r.key = cx_tkey(this->a, cxx)?;
+        this->record_bases(c, cxx, r.qn)?;
+        const auto ci = jget(c, "inner");
+        for (auto i : 0..jlen(ci)) {
+            const auto x = jat(ci, i);
+            const auto kind = jstr(jget(x, "kind"), "");
+            if (kind == "CXXMethodDecl" || kind == "CXXConstructorDecl" || kind == "CXXDestructorDecl" || kind == "CXXConversionDecl") {
+                if (!jbool(jget(x, "isImplicit"), false)) { this->method(x, r, cxx, kind)?; }
+            }
+        }
         this->define(c, r, cxx)?;
         r.tag = str_concat(this->a, [jstr(jget(c, "tagUsed"), ""), " "])?;
         r.d.complete = true;
         r.d.is_union = r.is_union;
+        const auto bs = jget(c, "bases");
+        for (auto i : 0..jlen(bs)) {
+            const auto b = jat(bs, i);
+            if (jstr(jget(b, "access"), "") != "public") { continue; }
+            const auto virt = jbool(jget(b, "isVirtual"), false);
+            const auto bt = this->expand(this->type_of(jget(b, "type"), cxx)?);
+            if (bt.k == .Named && bt.rec != null) {
+                r.allbases.push(CxBase{ .qn = bt.rec.cx.qn, .r = bt.rec.cx, .virt = virt })?;
+                if (!virt) { r.pubs.push(bt.rec.cx.qn)?; }
+            }
+        }
         this->cxx_ops(c, r)?;
         this->rlist.push(r)?;
-        if (meth) { this->skip(cxx, "methods of template specializations are not bound yet")?; }
         return r;
     }
 
@@ -1635,6 +1771,10 @@ struct CxWalk {
                     name = nb.slice();
                 }
             } else {
+                if (ty.stdk > 0) {
+                    this->note(r, label, "std:: member")?;
+                    continue;
+                }
                 const auto why = cx_why(ty);
                 if (why.len > 0) {
                     this->note(r, label, why)?;
@@ -2064,11 +2204,16 @@ struct CxSig {
     bool own;
     bool none;
     bool refrvalue;
+    i64 stdres;
+    i64 stdview;
+    bool uptrres;
+    CType* vecelem;
+    str pre;
 }
 
 !CxSig cx_sig(CEmit* e, CType* f) {
     const auto a = e.a;
-    auto s = CxSig{ .zps = "", .xps = "", .zas = "", .cps = "", .cas = "", .ccps = "", .zret = "void", .cret = "void", .zty = "", .why = "", .out = false, .own = false, .none = false, .refrvalue = false };
+    auto s = CxSig{ .zps = "", .xps = "", .zas = "", .cps = "", .cas = "", .ccps = "", .zret = "void", .cret = "void", .zty = "", .why = "", .out = false, .own = false, .none = false, .refrvalue = false, .stdres = 0, .stdview = 0, .uptrres = false, .vecelem = null, .pre = "" };
     auto zp = List<u8>::init(a);
     auto xp = List<u8>::init(a);
     auto za = List<u8>::init(a);
@@ -2088,6 +2233,53 @@ struct CxSig {
         sprint(&an, "a{i}")?;
         auto zn = cb_pname(a, f.params.slice(), i)?;
         if (p.name.len > 0) { zn = e.ename(p.name)?; }
+        const auto pst = p.ty.stdk;
+        const auto pref = p.ty.k == .Ptr && p.ty.ref && p.ty.elem.stdk > 0;
+        if (pst > 0 || pref) {
+            auto kind = pst;
+            auto et = p.ty;
+            if (pref) { kind = p.ty.elem.stdk; et = p.ty.elem; }
+            if (pref && !p.ty.rvalue && !p.ty.elem.konst && kind != 4) {
+                if (s.why.len == 0) { s.why = str_concat(a, [et.cxx, "& is not supported"])?; }
+                continue;
+            }
+            const auto cx = cx_spell(a, p.ty, "")?;
+            sprint(&cc, "{cx}")?;
+            if (kind == 1 || kind == 2) {
+                sprint(&zp, "str {zn}")?;
+                sprint(&xp, "u8* {zn}_p, u64 {zn}_n")?;
+                sprint(&za, "{zn}.ptr, {zn}.len as u64")?;
+                sprint(&cp, "const char* {zn}_p, unsigned long long {zn}_n")?;
+                if (kind == 1) { sprint(&ca, "std::string({zn}_p, {zn}_n)")?; }
+                else { sprint(&ca, "std::string_view({zn}_p, {zn}_n)")?; }
+            } else if (kind == 3) {
+                auto eb = List<u8>::init(a);
+                e.ty(&eb, et.arg)?;
+                const auto zes = eb.slice();
+                const auto ces = cx_spell(a, et.arg, "")?;
+                sprint(&zp, "{zes}[] {zn}")?;
+                sprint(&xp, "{zes}* {zn}_p, u64 {zn}_n")?;
+                sprint(&za, "{zn}.ptr, {zn}.len as u64")?;
+                sprint(&cp, "{ces}* {zn}_p, unsigned long long {zn}_n")?;
+                sprint(&ca, "std::vector<{ces}>({zn}_p, {zn}_p + {zn}_n)")?;
+            } else if (kind == 4) {
+                auto eb = List<u8>::init(a);
+                e.ty(&eb, et.arg)?;
+                const auto zes = eb.slice();
+                const auto ces = cx_spell(a, et.arg, "")?;
+                sprint(&zp, "move {zes}_own {zn}")?;
+                sprint(&xp, "{zes}* {zn}_p, bool {zn}_z")?;
+                sprint(&za, "{zn}.ptr, {zn}.a.alloc_fn != null")?;
+                sprint(&cp, "{ces}* {zn}_p, bool {zn}_z")?;
+                sprint(&ca, "std::unique_ptr<{ces}>({zn}_p)")?;
+                auto pb = List<u8>::init(a);
+                sprint(&pb, "    if ({zn}_z) zark_cxx_panic(\"cannot hand a Zark-allocated object to std::unique_ptr\");\n")?;
+                s.pre = str_concat(a, [s.pre, pb.slice()])?;
+            } else {
+                if (s.why.len == 0) { s.why = et.why; }
+            }
+            continue;
+        }
         auto st = p.ty;
         CType* xt = null;
         auto arg = an.slice();
@@ -2155,6 +2347,45 @@ struct CxSig {
     s.ccps = cc.slice();
     if (s.why.len > 0) { return s; }
     const auto rt = f.elem;
+    if (rt.stdk == 1) { s.stdres = 1; s.zret = "str"; s.zty = "u8"; return s; }
+    if (rt.stdk == 2) { s.stdview = 1; s.zret = "str"; s.zty = "u8"; return s; }
+    if (rt.k == .Ptr && rt.ref && rt.elem.stdk == 1) {
+        if (!rt.elem.konst && !rt.rvalue) { s.why = str_concat(a, [rt.elem.cxx, "& result is not supported"])?; return s; }
+        s.stdview = 1;
+        s.zret = "str";
+        s.zty = "u8";
+        return s;
+    }
+    if (rt.stdk == 3) {
+        s.stdres = 3;
+        s.vecelem = rt.arg;
+        auto z = List<u8>::init(a);
+        e.ty(&z, rt.arg)?;
+        s.zty = z.slice();
+        s.zret = str_concat(a, [s.zty, "[]"])?;
+        return s;
+    }
+    if (rt.k == .Ptr && rt.ref && rt.elem.stdk == 3) {
+        if (!rt.elem.konst && !rt.rvalue) { s.why = str_concat(a, [rt.elem.cxx, "& result is not supported"])?; return s; }
+        s.stdview = 3;
+        s.vecelem = rt.elem.arg;
+        auto z = List<u8>::init(a);
+        e.ty(&z, rt.elem.arg)?;
+        s.zty = z.slice();
+        s.zret = str_concat(a, [s.zty, "[]"])?;
+        return s;
+    }
+    if (rt.stdk == 4) {
+        s.uptrres = true;
+        s.vecelem = rt.arg;
+        auto z = List<u8>::init(a);
+        e.ty(&z, rt.arg)?;
+        s.zty = z.slice();
+        s.zret = str_concat(a, [s.zty, "_own"])?;
+        s.cret = str_concat(a, [cx_spell(a, rt.arg, "")?, "*"])?;
+        return s;
+    }
+    if (rt.stdk == 5) { s.why = rt.why; return s; }
     if (rt.k == .Void) { s.none = true; return s; }
     const auto rr = e.rec_of(rt);
     if (rr != null && rr.cx != null && rr.cx.value) {
@@ -2332,19 +2563,36 @@ str cx_leaf(str qn) {
     if (d.cx_dtor) {
         cargs = str_concat(a, ["__self->~", cx_leaf(selfc), "()"])?;
     }
+    auto xs2 = xs;
+    if (s.stdres > 0) {
+        if (inst) {
+            xs2 = str_concat(a, [selfz, "* __self, Allocator* __a"])?;
+            if (s.xps.len > 0) { xs2 = str_concat(a, [xs2, ", ", s.xps])?; }
+        } else {
+            xs2 = "Allocator* __a";
+            if (s.xps.len > 0) { xs2 = str_concat(a, [xs2, ", ", s.xps])?; }
+        }
+    }
     auto outs = List<u8>::init(a);
     if (s.out) {
         const auto o = str_concat(a, [s.zret, "* __r"])?;
-        if (xs.len > 0) { const auto os = str_concat(a, [", ", o])?; sprint(&outs, "{os}")?; } else { sprint(&outs, "{o}")?; }
+        if (xs2.len > 0) { const auto os = str_concat(a, [", ", o])?; sprint(&outs, "{os}")?; } else { sprint(&outs, "{o}")?; }
     }
     if (s.own) {
         const auto o = str_concat(a, [s.zty, "* __r"])?;
-        if (xs.len > 0) { const auto os = str_concat(a, [", ", o])?; sprint(&outs, "{os}")?; } else { sprint(&outs, "{o}")?; }
+        if (xs2.len > 0) { const auto os = str_concat(a, [", ", o])?; sprint(&outs, "{os}")?; } else { sprint(&outs, "{o}")?; }
+    }
+    if (s.stdres > 0 || s.stdview > 0) {
+        auto o = "u8** __p, u64* __n";
+        if (s.vecelem != null) { o = str_concat(a, [s.zty, "** __p, u64* __n"])?; }
+        if (xs2.len > 0) { o = str_concat(a, [", ", o])?; }
+        sprint(&outs, "{o}")?;
     }
     auto zr = s.zret;
-    if (s.none || s.out || s.own) { zr = "void"; }
+    if (s.none || s.out || s.own || s.stdres > 0 || s.stdview > 0) { zr = "void"; }
+    if (s.uptrres) { zr = str_concat(a, [s.zty, "*"])?; }
     auto xdecl = List<u8>::init(a);
-    sprint(&xdecl, "extern {zr} {sn}({xs}{outs.slice()});")?;
+    sprint(&xdecl, "extern {zr} {sn}({xs2}{outs.slice()});")?;
 
     auto path = "";
     auto stat = "";
@@ -2382,6 +2630,29 @@ str cx_leaf(str qn) {
         if (s.zps.len > 0) { zp2 = str_concat(a, ["Allocator __a, ", s.zps])?; }
         const auto own = str_concat(a, [selfz, "_own"])?;
         sprint(&zt, "{xdecl.slice()}\nstatic !{own} {path}({zp2}) {{ const auto __p = __a.create<{selfz}>()?; {sn}(__p{csep}); return {own}::init(__p, sizeof({selfz}), __a); }}")?;
+    } else if (s.stdres > 0 || s.stdview > 0) {
+        auto zp2 = s.zps;
+        auto retty = s.zret;
+        if (s.stdres > 0) {
+            if (zp2.len > 0) { zp2 = str_concat(a, ["Allocator __a, ", zp2])?; } else { zp2 = "Allocator __a"; }
+            retty = str_concat(a, ["!", s.zret])?;
+        }
+        auto argp = "";
+        if (inst) { argp = "this"; }
+        if (s.stdres > 0) {
+            if (argp.len > 0) { argp = str_concat(a, [argp, ", &__a"])?; } else { argp = "&__a"; }
+        }
+        if (s.zas.len > 0) {
+            if (argp.len > 0) { argp = str_concat(a, [argp, ", ", s.zas])?; } else { argp = s.zas; }
+        }
+        if (argp.len > 0) { argp = str_concat(a, [argp, ", &__p, &__n"])?; } else { argp = "&__p, &__n"; }
+        if (s.zty == "u8") {
+            sprint(&zt, "{xdecl.slice()}\n{stat}{retty} {path}({zp2}) {{ u8* __p = null; u64 __n = 0; {sn}({argp}); return __p[0..__n as i64]; }}")?;
+        } else {
+            sprint(&zt, "{xdecl.slice()}\n{stat}{retty} {path}({zp2}) {{ {s.zty}* __p = null; u64 __n = 0; {sn}({argp}); return __p[0..__n as i64]; }}")?;
+        }
+    } else if (s.uptrres) {
+        sprint(&zt, "{xdecl.slice()}\n{stat}{s.zret} {path}({s.zps}) {{ const auto __p = {sn}({zargs}); return {s.zret}::init(__p, 0, Allocator{{}}); }}")?;
     } else if (s.own) {
         auto zp2 = "Allocator __a";
         if (s.zps.len > 0) { zp2 = str_concat(a, ["Allocator __a, ", s.zps])?; }
@@ -2407,7 +2678,15 @@ str cx_leaf(str qn) {
     }
     if (!e.line(path, 3, zt.slice())?) { return; }
 
-    auto full = cs;
+    auto full = "";
+    if (inst) { full = str_concat(a, [selfc, "* __self"])?; }
+    if (s.stdres > 0) {
+        const auto ap = "zark_allocator* __a";
+        if (full.len > 0) { full = str_concat(a, [full, ", ", ap])?; } else { full = ap; }
+    }
+    if (s.cps.len > 0) {
+        if (full.len > 0) { full = str_concat(a, [full, ", ", s.cps])?; } else { full = s.cps; }
+    }
     if (s.out) {
         const auto o = str_concat(a, [s.cret, "* __r"])?;
         if (full.len > 0) { full = str_concat(a, [full, ", ", o])?; } else { full = o; }
@@ -2416,9 +2695,17 @@ str cx_leaf(str qn) {
         const auto o = str_concat(a, [s.cret, "* __r"])?;
         if (full.len > 0) { full = str_concat(a, [full, ", ", o])?; } else { full = o; }
     }
+    if (s.stdres > 0 || s.stdview > 0) {
+        auto ct = "unsigned char";
+        if (s.vecelem != null) { ct = cx_spell(a, s.vecelem, "")?; }
+        const auto o = str_concat(a, [ct, "** __p, unsigned long long* __n"])?;
+        if (full.len > 0) { full = str_concat(a, [full, ", ", o])?; } else { full = o; }
+    }
     auto def = "";
-    if (s.none || s.out || s.own) {
+    if (s.none || s.out || s.own || s.stdres > 0 || s.stdview > 0) {
         def = str_concat(a, ["void ", sn, "(", full, ")"])?;
+    } else if (s.uptrres) {
+        def = str_concat(a, [s.cret, " ", sn, "(", full, ")"])?;
     } else if (f.elem.k == .Ptr && f.elem.ref) {
         def = cx_spell(a, cx_ptr(a, f.elem.elem)?, str_concat(a, [sn, "(", full, ")"])?)?;
     } else {
@@ -2441,8 +2728,27 @@ str cx_leaf(str qn) {
     } else if (!d.cx_dtor) {
         sprint(&e.c, "    (void)static_cast<{fp}>(&{d.cxx});\n")?;
     }
+    if (s.pre.len > 0) { sprint(&e.c, "{s.pre}")?; }
     auto body = "";
-    if (s.out) {
+    if (s.stdres > 0 || s.stdview > 0) {
+        auto ct = "unsigned char";
+        if (s.vecelem != null) { ct = cx_spell(a, s.vecelem, "")?; }
+        if (s.stdres > 0) {
+            if (s.vecelem != null) {
+                body = str_concat(a, ["auto __v = ", cargs, "; *__n = __v.size(); *__p = (", ct, "*)__a->alloc_fn(__a->ctx, *__n * sizeof(", ct, "), alignof(", ct, ")); if (*__p != nullptr && *__n > 0) __builtin_memcpy((void*)*__p, (const void*)__v.data(), *__n * sizeof(", ct, "));"])?;
+            } else {
+                body = str_concat(a, ["auto __v = ", cargs, "; *__n = __v.size(); *__p = (unsigned char*)__a->alloc_fn(__a->ctx, *__n, 1); if (*__p != nullptr && *__n > 0) __builtin_memcpy((void*)*__p, (const void*)__v.data(), *__n);"])?;
+            }
+        } else {
+            if (s.vecelem != null) {
+                body = str_concat(a, ["const auto& __v = ", cargs, "; *__n = __v.size(); *__p = (", ct, "*)__v.data();"])?;
+            } else {
+                body = str_concat(a, ["const auto& __v = ", cargs, "; *__n = __v.size(); *__p = (unsigned char*)__v.data();"])?;
+            }
+        }
+    } else if (s.uptrres) {
+        body = str_concat(a, ["return ", cargs, ".release();"])?;
+    } else if (s.out) {
         body = str_concat(a, ["auto &&v = ", cargs, "; __builtin_memcpy((void*)__r, (const void*)&v, sizeof(v));"])?;
     } else if (s.own) {
         body = str_concat(a, ["::new ((void*)__r) ", s.cret, "(", cargs, ");"])?;
@@ -3047,6 +3353,7 @@ bool cx_is_operator(str n) {
         uniq.push(d)?;
     }
     e.run(uniq)?;
+    if (str_find(e.c.slice(), "zark_allocator") >= 0) { e.out.append("comptime assert(sizeof(Allocator) == 24);\n")?; }
     return e;
 }
 
@@ -3054,6 +3361,12 @@ bool cx_is_operator(str n) {
     if (e.c.len == 0) { return ""; }
     auto b = List<u8>::init(a);
     sprint(&b, "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"\n")?;
+    if (str_find(e.c.slice(), "zark_allocator") >= 0) {
+        sprint(&b, "struct zark_allocator {{ void* ctx; void* (*alloc_fn)(void*, unsigned long long, unsigned long long); void (*free_fn)(void*, void*, unsigned long long); }};\nstatic_assert(sizeof(zark_allocator) == 24, \"Allocator layout\");\nstatic_assert(__builtin_offsetof(zark_allocator, alloc_fn) == 8, \"Allocator layout\");\nstatic_assert(__builtin_offsetof(zark_allocator, free_fn) == 16, \"Allocator layout\");\n")?;
+    }
+    if (str_find(e.c.slice(), "zark_cxx_panic(") >= 0) {
+        sprint(&b, "[[maybe_unused]] [[noreturn]] static inline void zark_cxx_panic(const char *m) {{ __builtin_printf(\"zark: %s\\n\", m); __builtin_trap(); }}\n")?;
+    }
     if (cross_target()) {
         sprint(&b, "#include \"{abs}\"\n#pragma clang diagnostic ignored \"-Weverything\"\ninline void *operator new(__SIZE_TYPE__, void *p) noexcept {{ return p; }}\ninline void operator delete(void *, void *) noexcept {{ }}\n[[noreturn]] static inline void zark_cxx_fail(const char *f) {{ (void)f; __builtin_trap(); }}\n")?;
     } else {
@@ -3188,7 +3501,7 @@ bool cx_is_operator(str n) {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a) };
     cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
@@ -3197,11 +3510,11 @@ bool cx_is_operator(str n) {
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
-    cx_names(&w)?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
-        if (!used) { w.skip(q, "class templates are not bound yet")?; }
+        if (w.tused.get_or(q, false)) { used = true; }
+        if (!used) { w.skip(q, str_concat(w.a, ["template without an instantiation; add 'template struct ", cx_last(q), "<...>;' to a wrapper header"])?)?; }
     }
     for (auto r : w.rlist.slice()) {
         r.key = w.dkey(r.key)?;
@@ -3209,6 +3522,7 @@ bool cx_is_operator(str n) {
     }
     w.layouts(header, from_dir, cflags)?;
     for (auto r : w.rlist.slice()) { w.flat(r)?; }
+    cx_names(&w)?;
     auto deps = List<str>::init(a);
     auto from = List<str>::init(a);
     for (auto d : dep_files(a, dtext)?) {
