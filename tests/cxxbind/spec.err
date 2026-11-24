@@ -1,7 +1,4 @@
 skipped Box: partial template specializations are not supported
-skipped U2::a: ambiguous template arguments
-skipped U2::b: ambiguous template arguments
 skipped U2::c: ambiguous template arguments
-skipped U2::d: ambiguous template arguments
+skipped U2::d: template specialization Box<const char *> is not instantiated; add 'template struct Box<...>;' to a wrapper header
 skipped Unused: template without an instantiation; add 'template struct Unused<...>;' to a wrapper header
-skipped Box: template without an instantiation; add 'template struct Box<...>;' to a wrapper header

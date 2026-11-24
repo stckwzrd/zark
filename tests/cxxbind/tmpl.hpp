@@ -27,3 +27,22 @@ template<class T> struct Bad {
     int ok() const;
 };
 struct UseBad { Bad<int> b; };
+template<class T> struct Res;
+Res<int> parse();
+int use(Res<int>);
+Res<int>* ptr();
+template<class T, int N> struct Num { int n; };
+struct Neg { Num<int, -4> a; };
+enum Kind { KA, KB };
+template<class T, Kind K> struct ByEnum { int n; T v; };
+struct HasEnum { ByEnum<int, KB> a; };
+
+template<class T> struct VStore {
+    T* p;
+    int n;
+    VStore(const VStore& o) { n = o.n; p = (T*)malloc(n * sizeof(T)); }
+    VStore& operator=(const VStore& o) { n = o.n; p = (T*)malloc(n * sizeof(T)); return *this; }
+    ~VStore() { }
+};
+struct Item;
+struct CopyBad { int a; VStore<Item> v; };

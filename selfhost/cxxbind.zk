@@ -35,21 +35,36 @@ str cx_up(str s) {
     return s[0..k];
 }
 
-str cx_why(CType* t) {
+str cx_why2(CType* t, bool behind) {
     if (t.k == .Bad) { return t.name; }
     if (t.stdk == 5) { return t.why; }
     if (t.k == .Ptr && t.elem.stdk > 0) { return t.elem.why; }
     if (t.k == .Ptr || t.k == .Array || t.k == .Func) {
-        const auto w = cx_why(t.elem);
+        const auto w = cx_why2(t.elem, true);
         if (w.len > 0) { return w; }
     }
     if (t.k == .Func) {
         for (auto p : t.params.slice()) {
-            const auto w = cx_why(p.ty);
+            const auto w = cx_why2(p.ty, true);
             if (w.len > 0) { return w; }
         }
     }
+    if (!behind && t.k == .Named && t.rec != null && t.rec.cx != null && t.rec.cx.need.len > 0) { return t.rec.cx.need; }
     return "";
+}
+
+str cx_why(CType* t) { return cx_why2(t, false); }
+
+bool cx_nocopy(CType* t) {
+    if (t == null) { return false; }
+    if (str_find(t.cxx, "<") >= 0) { return true; }
+    if (t.stdk > 0) { return true; }
+    if (t.k == .Array) { return cx_nocopy(t.elem); }
+    if (t.k != .Named) { return false; }
+    if (t.rec == null) { return false; }
+    if (str_find(t.rec.cxx, "<") >= 0) { return true; }
+    if (t.rec.cx != null && t.rec.cx.need.len > 0) { return true; }
+    return false;
 }
 
 bool cx_bad(CType* t) { return cx_why(t).len > 0; }
@@ -136,6 +151,7 @@ struct CxRec {
     i64 align;
     str why;
     str skip;
+    str need;
     List<CDecl*> meths;
     List<CDecl*> svars;
     bool abstract;
@@ -146,6 +162,8 @@ struct CxRec {
     bool virtual_dtor;
     bool dtor_pub;
     bool own;
+    bool no_own;
+    bool nocopy;
     bool user_default;
     bool deleted_copy;
     CDecl* dtor_decl;
@@ -306,6 +324,12 @@ struct CxType {
                     named = this->w.stdty(5, t, t, null)?;
                 } else {
                     named = this->w.lookup(t, this->scope)?;
+                    if (named.k == .Bad && this->w.enums.has(t)) {
+                        const auto cv = this->w.enums.get(t)?;
+                        const auto vs = cb_num(this->w.a, cv)?;
+                        named = this->w.named(vs)?;
+                        named.cxx = t;
+                    }
                 }
             } else {
                 break;
@@ -318,6 +342,19 @@ struct CxType {
             auto ok = true;
             while (ok) {
                 const auto pt = this->peek();
+                if (pt == "-" && this->i + 1 < this->toks.len) {
+                    const auto nx = this->toks.get(this->i + 1);
+                    if (nx.len > 0 && nx[0] >= '0' && nx[0] <= '9') {
+                        const auto vs = str_concat(this->w.a, ["-", nx])?;
+                        const auto v = this->w.named(vs)?;
+                        v.cxx = vs;
+                        args.push(v)?;
+                        this->i += 2;
+                        if (this->eat(">")) { break; }
+                        ok = this->eat(",");
+                        continue;
+                    }
+                }
                 if (pt.len > 0 && ((pt[0] >= '0' && pt[0] <= '9') || (pt[0] == '-' && pt.len > 1 && pt[1] >= '0' && pt[1] <= '9'))) {
                     const auto v = this->w.named(pt)?;
                     v.cxx = pt;
@@ -556,6 +593,8 @@ struct CxWalk {
     Map<str> names;
     Map<CType*> anon;
     Map<CVal> vals;
+    Map<CVal> enums;
+    Map<List<str>> tparms;
     Map<f64> fvals;
     Map<List<str>> bases;
     Map<bool> declared;
@@ -1046,6 +1085,14 @@ struct CxWalk {
                 const auto c = jat(k, i);
                 if (jstr(jget(c, "kind"), "") == "ClassTemplateSpecializationDecl" && jbool(jget(c, "completeDefinition"), false)) { l.push(c)?; }
             }
+            auto tp = List<str>::init(this->a);
+            for (auto i : 0..jlen(k)) {
+                const auto c = jat(k, i);
+                const auto ck = jstr(jget(c, "kind"), "");
+                if (ck == "TemplateTypeParmDecl") { tp.push("")?; }
+                else if (ck == "NonTypeTemplateParmDecl") { tp.push(jstr(jget(jget(c, "type"), "qualType"), ""))?; }
+            }
+            this->tparms.put(qn, tp)?;
             this->pend.put(qn, l)?;
             this->tzn.put(qn, zn)?;
             return this->tmpl.push(qn);
@@ -1185,6 +1232,12 @@ struct CxWalk {
         r.poly = jbool(jget(dd, "isPolymorphic"), false);
         const auto dc = jget(dd, "defaultCtor");
         r.user_default = jbool(jget(dc, "userProvided"), false);
+        auto has_assign = false;
+        auto has_amove = false;
+        for (auto md : r.meths.slice()) {
+            if (md.cx_cname == "assign") { has_assign = true; }
+            if (md.cx_cname == "assign_move") { has_amove = true; }
+        }
         const auto cc = jget(dd, "copyCtor");
         const auto mc = jget(dd, "moveCtor");
         const auto pubdef = jstr(jget(x, "tagUsed"), "") != "class";
@@ -1208,7 +1261,17 @@ struct CxWalk {
         }
         r.own = !r.value && r.has_dtor;
         r.copyable = !r.deleted_copy && !((cc == null || jlen(cc) == 0) && mc != null && jlen(mc) > 0);
-        if (!r.abstract && r.copy_decl == null && r.own) {
+        for (auto f : r.flds.slice()) {
+            if (f.ty != null && cx_nocopy(f.ty)) { r.nocopy = true; r.copyable = false; }
+        }
+        if (r.nocopy) {
+            r.copyable = false;
+            r.copy_decl = null;
+            for (auto md : r.meths.slice()) {
+                if (md.cx_ctor && (md.cx_copy || md.cx_move)) { md.reason = "copying this class is not supported"; }
+            }
+        }
+        if (!r.abstract && r.copyable && r.copy_decl == null && r.own) {
             const auto p = cx_ptr(this->a, this->self_type(r)?)?;
             p.ref = true;
             p.elem.konst = true;
@@ -1229,7 +1292,7 @@ struct CxWalk {
             d.ty = t;
             r.copy_decl = d;
         }
-        if (!r.abstract && r.own && r.copyable && r.assign_decl == null) {
+        if (!has_assign && !r.abstract && r.own && r.copyable && r.assign_decl == null) {
             const auto p = cx_ptr(this->a, this->self_type(r)?)?;
             p.ref = true;
             p.elem.konst = true;
@@ -1249,7 +1312,7 @@ struct CxWalk {
             d.ty = t;
             r.assign_decl = d;
         }
-        if (!r.abstract && r.own && r.assign_move_decl == null) {
+        if (!has_amove && !r.abstract && r.own && !r.nocopy && r.assign_move_decl == null) {
             const auto p = cx_ptr(this->a, this->self_type(r)?)?;
             p.ref = true;
             p.rvalue = true;
@@ -1413,8 +1476,20 @@ struct CxWalk {
         };
         drop(stub);
         if (r.code != 0) {
-            eprint(r.err);
-            return error.CompileFailed;
+            auto et = str_lines(r.err);
+            while (et.next()) {
+                const auto le = et.line;
+                const auto z = str_find(le, "zark_layout_");
+                if (z < 0) { continue; }
+                auto j = z + 12;
+                auto ni = 0;
+                while (j < le.len && le[j] >= '0' && le[j] <= '9') { ni = ni * 10 + (le[j] - '0'); j += 1; }
+                if (ni >= 0 && ni < this->rlist.len) {
+                    const auto rr = this->rlist.get(ni);
+                    rr.why = "layout not found";
+                    rr.need = "layout not found";
+                }
+            }
         }
         auto state = 0;
         auto key = "";
@@ -1476,15 +1551,22 @@ struct CxWalk {
         match x.k {
             .Int => {
                 if (x.plain && x.width == 8) { return "u8"; }
-                if (x.signed) { return str_concat(this->a, ["i", cb_num(this->a, CVal{ .v = x.width })?]); }
-                return str_concat(this->a, ["u", cb_num(this->a, CVal{ .v = x.width })?]);
+                auto suf = "";
+                if (x.cxx == "signed char" || x.cxx == "unsigned char") { suf = "c"; }
+                if (x.cxx == "long") { suf = "l"; }
+                if (x.cxx == "long long") { suf = "ll"; }
+                if (x.signed) { return str_concat(this->a, ["i", cb_num(this->a, CVal{ .v = x.width })?, suf])?; }
+                return str_concat(this->a, ["u", cb_num(this->a, CVal{ .v = x.width })?, suf])?;
             }
             .Float => { return str_concat(this->a, ["f", cb_num(this->a, CVal{ .v = x.width })?]); }
             .Bool => { return "bool"; }
             .Ptr => {
                 const auto e = this->tok(x.elem)?;
                 if (e.len == 0) { return ""; }
-                return str_concat(this->a, [e, "p"]);
+                auto s = str_concat(this->a, [e, "p"])?;
+                if (x.ref) { s = str_concat(this->a, [s, "r"])?; }
+                if (x.elem.konst) { s = str_concat(this->a, [s, "c"])?; }
+                return s;
             }
             .Array => {
                 const auto e = this->tok(x.elem)?;
@@ -1555,12 +1637,13 @@ struct CxWalk {
             auto cs = List<str>::init(this->a);
             for (auto x : args.slice()) { cs.push(cx_spell(this->a, x, "")?)?; }
             const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
-            const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", str_join(this->a, ks.slice(), "_")?])?;
+            const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", cx_zn(this->a, ks)?])?;
             r = this->newrec(cxx)?;
             r.d = this->decl(.Struct, zn)?;
             r.d.cxx = cxx;
             r.d.cx = r;
             r.d.complete = false;
+            r.need = str_concat(this->a, ["template specialization ", cxx, " is not instantiated; add 'template struct ", cx_last(q), "<...>;' to a wrapper header"])?;
             this->recs.put(key, r)?;
             this->zrec.put(zn, r)?;
             this->names.put(key, zn)?;
@@ -1568,6 +1651,9 @@ struct CxWalk {
             this->tused.put(q, true)?;
         }
         if (this->bad.has(r.d.name)) { return this->badt(str_concat(this->a, ["uses skipped ", r.qn])?); }
+        auto kcs = List<str>::init(this->a);
+        for (auto x : args.slice()) { kcs.push(cx_spell(this->a, x, "")?)?; }
+        r.key = cx_tkey(this->a, str_concat(this->a, [q, "<", str_join(this->a, kcs.slice(), ", ")?, ">"])?)?;
         const auto t = this->named(r.d.name)?;
         t.rec = r.d;
         t.tag = 1;
@@ -1579,6 +1665,7 @@ struct CxWalk {
         this->skey = "";
         auto ks = List<str>::init(this->a);
         auto cs = List<str>::init(this->a);
+        auto atys = List<CType*>::init(this->a);
         const auto k = jget(c, "inner");
         for (auto i : 0..jlen(k)) {
             const auto x = jat(k, i);
@@ -1587,8 +1674,16 @@ struct CxWalk {
             if (jget(x, "value") != null) {
                 auto v = jstr(jget(x, "value"), "");
                 if (v.len == 0) { v = cb_num(this->a, CVal{ .v = jint(jget(x, "value"), 0) })?; }
+                auto cvs = v;
+                const auto tp = this->tparms.get_or(q, List<str>{});
+                if (ks.len < tp.len) {
+                    const auto pt = tp.get(ks.len);
+                    if (pt.len > 0 && pt != "int" && pt != "unsigned int" && pt != "bool" && pt != "long" && pt != "unsigned long" && pt != "long long" && pt != "unsigned long long" && pt != "short" && pt != "unsigned short") {
+                        cvs = str_concat(this->a, ["(", pt, ")", v])?;
+                    }
+                }
                 ks.push(v)?;
-                cs.push(v)?;
+                cs.push(cvs)?;
                 continue;
             }
             if (jget(x, "type") == null) { return null; }
@@ -1596,6 +1691,7 @@ struct CxWalk {
             if (t == null) { return null; }
             const auto tk = this->tok(t)?;
             if (tk.len == 0) { return null; }
+            atys.push(t)?;
             ks.push(tk)?;
             cs.push(cx_spell(this->a, t, "")?)?;
         }
@@ -1604,9 +1700,13 @@ struct CxWalk {
         this->skey = key;
         if (key != want || this->specs.has(key)) { return null; }
         const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
-        const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", str_join(this->a, ks.slice(), "_")?])?;
+        const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", cx_zn(this->a, ks)?])?;
         const auto r = this->rec_decl(c, cxx, zn)?;
         if (r == null) { return null; }
+        for (auto at : atys.slice()) {
+            const auto ax = this->expand(at);
+            if (ax.k == .Named && ax.rec != null && ax.rec.cx != null && (ax.rec.cx.need.len > 0 || !ax.rec.complete)) { r.nocopy = true; }
+        }
         this->specs.put(key, r)?;
         this->tused.put(q, true)?;
         r.key = cx_tkey(this->a, cxx)?;
@@ -1704,7 +1804,8 @@ struct CxWalk {
         r.flat = true;
         const auto l = this->lays.get_or(r.key, null);
         if (l == null) {
-            r.skip = "layout not found";
+            r.why = "layout not found";
+            r.need = "layout not found";
             return;
         }
         if (l.dup) {
@@ -1925,6 +2026,9 @@ struct CxWalk {
             auto cv = vals.get(i);
             if (fixed == null && !cb_fits(cv, 32, true)) { cv = cb_cast(cv, t.width, t.signed && !t.c_unsigned); }
             this->vals.put(ids.get(i), cv)?;
+            this->enums.put(n, cv)?;
+            this->enums.put(cx_qual(this->a, scope, n)?, cv)?;
+            this->enums.put(str_concat(this->a, [qn, "::", n])?, cv)?;
             auto cz = cx_zname(this->a, zs, n)?;
             if (scoped) { cz = cx_zname(this->a, zn, n)?; }
             const auto d = this->decl(.Const, cz)?;
@@ -2285,6 +2389,10 @@ struct CxSig {
         auto arg = an.slice();
         auto pass = zn;
         const auto pr = e.rec_of(p.ty);
+        if (pr != null && pr.cx != null && pr.cx.need.len > 0) {
+            if (s.why.len == 0) { s.why = pr.cx.need; }
+            continue;
+        }
         if (pr != null && pr.cx != null) {
             if (pr.cx.value) {
                 xt = cx_ptr(a, p.ty)?;
@@ -2388,6 +2496,7 @@ struct CxSig {
     if (rt.stdk == 5) { s.why = rt.why; return s; }
     if (rt.k == .Void) { s.none = true; return s; }
     const auto rr = e.rec_of(rt);
+    if (rr != null && rr.cx != null && rr.cx.need.len > 0) { s.why = rr.cx.need; return s; }
     if (rr != null && rr.cx != null && rr.cx.value) {
         s.out = true;
         auto z = List<u8>::init(a);
@@ -2396,6 +2505,7 @@ struct CxSig {
         s.zty = rr.cx.d.name;
         s.cret = cx_spell(a, rt, "")?;
     } else if (rr != null && rr.cx != null) {
+        if (rr.cx.no_own) { s.why = "generated name X_own clashes with a bound type"; return s; }
         s.own = true;
         s.zty = rr.cx.d.name;
         s.zret = str_concat(a, [s.zty, "_own"])?;
@@ -2423,9 +2533,12 @@ struct CxSig {
 }
 
 str cx_leaf(str qn) {
-    const auto k = str_rfind(qn, "::");
-    if (k < 0) { return qn; }
-    return qn[k + 2..];
+    auto n = qn;
+    const auto lt = str_find(n, "<");
+    if (lt >= 0) { n = n[0..lt]; }
+    const auto k = str_rfind(n, "::");
+    if (k < 0) { return n; }
+    return n[k + 2..];
 }
 
 !void cx_del(CEmit* e, CDecl* d) {
@@ -2553,7 +2666,9 @@ str cx_leaf(str qn) {
         if (d.cx_cname.len > 0) { cm = d.cx_cname; }
         cargs = str_concat(a, ["__self->", cm, "(", cargs, ")"])?;
     } else if (meth) {
-        cargs = str_concat(a, [selfc, "::", d.cx_mname, "(", cargs, ")"])?;
+        auto cm = d.cx_mname;
+        if (d.cx_cname.len > 0) { cm = d.cx_cname; }
+        cargs = str_concat(a, [selfc, "::", cm, "(", cargs, ")"])?;
     } else {
         cargs = str_concat(a, [d.cxx, "(", cargs, ")"])?;
     }
@@ -2874,6 +2989,19 @@ bool cx_is_operator(str n) {
     return false;
 }
 
+!str cx_zn(Allocator a, List<str> ks) {
+    auto b = List<u8>::init(a);
+    for (auto [i, k] : ks.slice()) {
+        if (i > 0) { sprint(&b, "_")?; }
+        auto s = k;
+        s = str_replace(a, s, "-", "n")?;
+        s = str_replace(a, s, "+", "p")?;
+        s = str_replace(a, s, ".", "_")?;
+        sprint(&b, "{s}")?;
+    }
+    return b.slice();
+}
+
 !CType* cx_trunc(CxWalk* w, CType* f, i64 k) {
     const auto t = w.a.create<CType>()?;
     t.k = .Func;
@@ -2946,6 +3074,11 @@ bool cx_is_operator(str n) {
             const auto br = b.r;
             if (br == null || br.d == null) { continue; }
             const auto up = str_concat(w.a, ["as_", br.d.name])?;
+            if (hidden.has(up)) {
+                const auto sd = w.decl(.Skip, str_concat(w.a, [r.d.name, "::", up])?)?;
+                sd.reason = "name clash";
+                continue;
+            }
             const auto d = w.decl(.Func, str_concat(w.a, [r.d.name, "::", up])?)?;
             const auto bt = w.a.create<CType>()?;
             bt.k = .Named;
@@ -2977,11 +3110,35 @@ bool cx_is_operator(str n) {
                 fw.put(bd.cx_mname, true)?;
                 r.fwds.push(CxFwd{ .m = bd, .b = br })?;
             }
+            auto bhide = Map<bool>::init(w.a);
+            for (auto bd : br.meths.slice()) {
+                if (bd.cx_cname.len > 0 && bd.reason.len == 0) { bhide.put(bd.cx_cname, true)?; }
+            }
+            for (auto bf : br.fwds.slice()) {
+                const auto bd = bf.m;
+                if (bd.reason.len > 0 || bd.is_static) { continue; }
+                if (bd.cx_cname.len > 0 && (hidden.has(bd.cx_cname) || bhide.has(bd.cx_cname))) { continue; }
+                if (fw.has(bd.cx_mname)) { continue; }
+                fw.put(bd.cx_mname, true)?;
+                r.fwds.push(CxFwd{ .m = bd, .b = br })?;
+            }
         }
     }
 }
 
 !void cx_names(CxWalk* w) {
+    auto ztypes = Map<bool>::init(w.a);
+    auto zt = w.zrec.iter();
+    while (zt.next()) { ztypes.put(zt.key(), true)?; }
+    auto zd = w.zd.iter();
+    while (zd.next()) { ztypes.put(zd.key(), true)?; }
+    for (auto r : w.rlist.slice()) {
+        if (r.d == null) { continue; }
+        if (ztypes.has(str_concat(w.a, [r.d.name, "_own"])?)) {
+            r.no_own = true;
+            r.own = false;
+        }
+    }
     auto groups = Map<List<CDecl*>*>::init(w.a);
     auto order = List<str>::init(w.a);
     for (auto d : w.decls.slice()) {
@@ -3020,6 +3177,8 @@ bool cx_is_operator(str n) {
                 if (d.cx_rec != null && d.cx_rec.abstract) {
                     d.reason = "abstract class (implementing it in Zark is not supported)";
                     d.cxx = str_concat(w.a, [d.cx_rec.qn, "::create"])?;
+                } else if (d.cx_create && d.cx_rec != null && d.cx_rec.no_own) {
+                    d.reason = "generated name X_own clashes with a bound type";
                 }
             } else if (d.cx_opname.len > 0) {
                 const auto sym = str_trim(d.cx_opname[8..]);
@@ -3039,12 +3198,41 @@ bool cx_is_operator(str n) {
         auto nm = 0;
         for (auto d : live.slice()) { if (!d.cx_zctor) { nm += 1; } }
         if (nm > 1) {
-            auto opseen = false;
+            auto vop = List<CDecl*>::init(w.a);
+            auto vt = List<str>::init(w.a);
             for (auto d : live.slice()) {
                 if (d.cx_zctor) { continue; }
                 if (d.cx_opname.len > 0 && d.cx_rec != null && d.cx_rec.value && cx_isop(str_trim(d.cx_opname[8..]))) {
-                    if (opseen) { d.reason = "operator overloads are not supported"; }
-                    opseen = true;
+                    vop.push(d)?;
+                    vt.push(cx_ptokens(w, d.ty)?)?;
+                }
+            }
+            auto best = 0 - 1;
+            for (auto [i, d] : vop.slice()) {
+                if (best < 0) { best = i; continue; }
+                const auto bd = vop.get(best);
+                auto ds = d.ty.params.len * 1000;
+                for (auto pp : d.ty.params.slice()) {
+                    const auto xx = w.expand(pp.ty);
+                    if (xx.k == .Named && xx.rec != null && xx.rec == d.cx_rec.d) { ds += 1; }
+                }
+                auto bs = bd.ty.params.len * 1000;
+                for (auto pp : bd.ty.params.slice()) {
+                    const auto xx = w.expand(pp.ty);
+                    if (xx.k == .Named && xx.rec != null && xx.rec == bd.cx_rec.d) { bs += 1; }
+                }
+                if (ds > bs) { best = i; }
+                else if (ds == bs) {
+                    const auto hi = fnv64(0xcbf29ce484222325 as u64, vt.get(i));
+                    const auto hb = fnv64(0xcbf29ce484222325 as u64, vt.get(best));
+                    if (hi < hb) { best = i; }
+                }
+            }
+            for (auto [i, d] : live.slice()) {
+                if (d.cx_zctor) { continue; }
+                if (d.cx_opname.len > 0 && d.cx_rec != null && d.cx_rec.value && cx_isop(str_trim(d.cx_opname[8..]))) {
+                    const auto at = vop.index_of(d);
+                    if (at != best) { d.reason = "operator overloads are not supported"; }
                     continue;
                 }
                 const auto tk = cx_ptokens(w, d.ty)?;
@@ -3189,6 +3377,13 @@ bool cx_is_operator(str n) {
     auto body = List<u8>::init(a);
     auto c = List<u8>::init(a);
     auto al = 1;
+    if (r.why.len > 0 && (r.size == 0 || r.align == 0)) {
+        auto b = List<u8>::init(a);
+        sprint(&b, "struct {zr} {{ }}")?;
+        if (!e.line(d.name, 1, b.slice())?) { return; }
+        e.note(r.qn, r.why)?;
+        return;
+    }
     if (r.is_union || r.why.len > 0) {
         const auto w = min(r.align, 8);
         auto el = "u8";
@@ -3442,8 +3637,9 @@ bool cx_is_operator(str n) {
         n += 1;
     }
     if (n == 0) {
+        eprintln("warning: cannot attribute a C++ diagnostic to a shim; keeping the shims");
         eprint(r.err);
-        return error.CompileFailed;
+        return -1;
     }
     return n;
 }
@@ -3501,7 +3697,7 @@ bool cx_is_operator(str n) {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .enums = Map<CVal>::init(a), .tparms = Map<List<str>>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a) };
     cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
