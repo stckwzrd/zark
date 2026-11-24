@@ -152,7 +152,7 @@
 </tr>
 <tr>
 <td><code>operator+</code>, <code>==</code>, <code>&lt;</code> and the like on a value type</td>
-<td>Zark operators: <code>a + b</code>, <code>a == b</code></td>
+<td>Zark operators: <code>a + b</code>, <code>a == b</code>; an operator with more than one overload on the same type gets no short form, each overload is a method with a parameter suffix (<code>op_add_i32</code>, <code>op_add_V</code>)</td>
 </tr>
 <tr>
 <td>other operators</td>
@@ -160,7 +160,7 @@
 </tr>
 <tr>
 <td><code>T&amp;</code>, <code>T*</code></td>
-<td><code>T*</code>; a <code>const T&amp;</code> parameter of a number, enum or value type is taken by value (unless the function returns a reference or a pointer)</td>
+<td><code>T*</code>; a <code>const T&amp;</code> parameter of a number or enum is taken by value, and so is one of a plain value type unless the function returns a reference or a pointer, or something else in the signature (the object the method belongs to, a non-const pointer or reference, a <code>void*</code>) could reach the same storage; then it stays <code>T*</code>. The <code>by_value</code> manifest key lists value types that are always taken by value</td>
 </tr>
 <tr>
 <td><code>static</code> data member, global variable</td>
@@ -582,6 +582,10 @@ true</code></pre></div></div>
 <tr>
 <td><code>pkg-config</code></td>
 <td>packages whose <code>pkg-config --cflags --libs</code> is added</td>
+</tr>
+<tr>
+<td><code>by_value</code></td>
+<td>C++ value types (<code>&quot;ImVec2&quot;</code> or <code>&quot;ns::Vec&quot;</code>) that a C++ binding always takes by value as <code>const T&amp;</code> parameters, even when the rest of the signature could reach the same storage; you assert that this is safe. <code>zark cbind</code> takes <code>--by-value=A,B</code></td>
 </tr>
 </tbody></table></div>
 <p>Paths are relative to <code>zark.toml</code>. More about manifests is in <a href="projects.html">projects</a>.</p>
