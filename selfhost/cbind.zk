@@ -225,6 +225,7 @@ struct CType {
     i64 stdk;
     CType* arg;
     str why;
+    i64 fmt;
 }
 
 enum CDK { Func, Struct, Typedef, Macro, Var, Skip, Enum, Const }

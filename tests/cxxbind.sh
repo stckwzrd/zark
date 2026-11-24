@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors fmt macros"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -43,6 +43,10 @@ grep -q "nosuch.hpp" err.txt || fail "missing header: clang message not shown: $
 printf 'import "consts.zk";\nimport "enums.zk";\nvoid main() { println("{cfg_Twice} {Wide} {Pi} {On} {Kind_Tri} {geo_Dir_Left} {Huge} {sizeof(geo_Dir)} {sizeof(Big)}"); }\n' > use_vals.zk
 out=$("$ZARK" run use_vals.zk 2>&1) || fail "values: run: $out"
 [ "$out" = "6 -5000000000 3.5 true 7 -1 18446744073709551615 1 8" ] || fail "values: got: $out"
+
+printf 'import "macros.zk";\nvoid main() { println("{MAC_VERSION} {MAC_NUM} {MAC_RATIO} {MAC_NEG} {MAC_EXPR} {MAC_BASE} {MAC_DERIVED} {MAC_TWO} {MAC_SIZE}"); }\n' > use_macrovals.zk
+out=$("$ZARK" run use_macrovals.zk 2>&1) || fail "macros: run: $out"
+[ "$out" = "1.2 42 1.5 -7 7 3 6 ab 4" ] || fail "macros: got: $out"
 
 "$ZARK" cbind tests/cxxbind/free.hpp --inline-c free.cpp > /dev/null 2>&1 || fail "free: exit $?"
 sed "s|@DIR@|$(realpath "$T")|" tests/cxxbind/free.cpp.out > free.cpp.exp
@@ -122,6 +126,11 @@ for f in "" --llvm -O; do
 done
 out=$(cd interop && ZARK_JOBS=1 "$ZARK" run std.zk std.cpp 2>&1) || fail "interop std jobs=1: $out"
 [ "$out" = "$(cat interop/std.out)" ] || fail "interop std jobs=1: got: $out"
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f fmt.zk fmt.cpp 2>&1) || fail "interop fmt $f: $out"
+    [ "$out" = "$(cat interop/fmt.out)" ] || fail "interop fmt $f: got: $out"
+done
 
 mkdir -p neg
 printf 'import "../methods.zk";\n!void main() { const auto a = c_allocator(); auto n = geo_NT::create(a, 1)?; println(n.get().get()); }\n' > neg/leak.zk

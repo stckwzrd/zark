@@ -615,6 +615,7 @@ struct CxWalk {
     List<str> inl;
     Map<CxRec*> bykey;
     Map<bool> tused;
+    Map<str> src;
     str skey;
     bool uchar;
     bool short_enums;
@@ -1156,6 +1157,7 @@ struct CxWalk {
     !void method(Json* x, CxRec* r, str scope, str kind) {
         const auto name = jstr(jget(x, "name"), "");
         const auto qn = cx_qual(this->a, scope, name)?;
+        if (this->has_valist(x)) { return this->skip(qn, "va_list parameter"); }
         const auto deleted = jbool(jget(x, "explicitlyDeleted"), false);
         const auto implicit = jbool(jget(x, "isImplicit"), false);
         const auto virt = jbool(jget(x, "virtual"), false);
@@ -1204,6 +1206,7 @@ struct CxWalk {
             d.cx_move = move;
             d.cx_deleted = deleted;
             d.cx_implicit = implicit;
+            if (t.varargs) { d.reason = "variadic constructor is not supported"; }
             if ((copy || move) && deleted) { d.reason = "deleted constructor"; }
             if (copy && deleted) { r.deleted_copy = true; }
             if (copy && !deleted && r.copy_decl == null) { r.copy_decl = d; }
@@ -1223,6 +1226,29 @@ struct CxWalk {
         d.cx_deleted = deleted;
         d.cx_implicit = implicit;
         if (jbool(jget(x, "pure"), false)) { d.cx_assign = false; }
+        if (t.varargs) {
+            auto fi = this->fmt_index(x)?;
+            if (fi > 0 && !stat) { fi -= 1; }
+            if (fi == 0) {
+                d.reason = "printf format parameter is out of range";
+            } else if (fi > 0) {
+                if (fi > t.params.len) {
+                    d.reason = "printf format parameter is out of range";
+                } else if (fi != t.params.len) {
+                    d.reason = "printf format string is not the last parameter";
+                } else if (!this->is_text(t.params.get(fi - 1).ty)) {
+                    d.reason = "printf format parameter is not a string";
+                } else {
+                    t.fmt = fi;
+                }
+            } else if (fi == -2) {
+                d.reason = "variadic function with a non-printf format attribute";
+            } else if (fi == -1) {
+                d.reason = "variadic function with an unsupported format attribute";
+            } else {
+                d.reason = "variadic function without a printf format attribute";
+            }
+        }
         r.meths.push(d)?;
     }
 
@@ -2164,6 +2190,112 @@ struct CxWalk {
         d.ty = ft;
     }
 
+    !str source(str f) {
+        if (f.len == 0) { return ""; }
+        if (this->src.has(f)) { return this->src.get(f)?; }
+        const auto s = read_file(this->a, f) catch "";
+        this->src.put(f, s)?;
+        return s;
+    }
+
+    !i64 fmt_index(Json* x) {
+        const auto k = jget(x, "inner");
+        for (auto i : 0..jlen(k)) {
+            const auto c = jat(k, i);
+            if (jstr(jget(c, "kind"), "") != "FormatAttr") { continue; }
+            const auto r = jget(c, "range");
+            auto bb = jget(r, "begin");
+            auto ee = jget(r, "end");
+            const auto bs = jget(bb, "spellingLoc");
+            if (bs != null) { bb = bs; }
+            const auto es = jget(ee, "spellingLoc");
+            if (es != null) { ee = es; }
+            auto f = jstr(jget(bb, "file"), "");
+            if (f.len == 0) { f = jstr(jget(ee, "file"), ""); }
+            if (f.len == 0) { f = this->cur; }
+            const auto bo = jint(jget(bb, "offset"), -1);
+            const auto eo = jint(jget(ee, "offset"), -1);
+            const auto et = jint(jget(ee, "tokLen"), 1);
+            if (bo < 0 || eo < bo || f.len == 0) { return -1; }
+            const auto src = this->source(f)?;
+            const auto end = eo + et;
+            if (end > src.len) { return -1; }
+            const auto s = src[bo..end];
+            const auto at = str_find(s, "format");
+            if (at < 0) { return -1; }
+            const auto op = str_find(s[at..], "(");
+            const auto cl = str_rfind(s, ")");
+            if (op < 0 || cl < 0 || at + op >= cl) { return -1; }
+            const auto inside = s[at + op + 1..cl];
+            auto parts = str_split_all(this->a, inside, ",") catch { return -1; };
+            if (parts.len < 2) { return -1; }
+            const auto arch = str_trim(parts.get(0));
+            if (arch != "printf" && arch != "gnu_printf" && arch != "ms_printf" && arch != "__printf__") { return -2; }
+            const auto fld = str_trim(parts.get(1));
+            const auto direct = parse_int(fld) catch 0;
+            if (direct > 0) { return direct; }
+            const auto exb = jget(r, "begin");
+            auto ex = jget(exb, "expansionLoc");
+            if (ex == null) { return -1; }
+            auto ef = jstr(jget(ex, "file"), "");
+            if (ef.len == 0) { ef = this->cur; }
+            const auto xo = jint(jget(ex, "offset"), -1);
+            if (xo < 0 || ef.len == 0) { return -1; }
+            const auto esrc = this->source(ef)?;
+            auto xe = xo + 256;
+            if (xe > esrc.len) { xe = esrc.len; }
+            const auto xtext = esrc[xo..xe];
+            const auto op2 = str_find(xtext, "(");
+            const auto cl2 = str_find(xtext, ")");
+            if (op2 < 0 || cl2 <= op2) { return -1; }
+            const auto xargs = str_split_all(this->a, xtext[op2 + 1..cl2], ",") catch { return -1; };
+            auto id = List<u8>::init(this->a);
+            for (auto ci : 0..fld.len) {
+                const auto ch = fld[ci];
+                if (!is_alnum(ch) && ch != '_') { break; }
+                sprint(&id, "{ch}")?;
+            }
+            const auto idn = id.slice();
+            auto pi = 0;
+            if (xargs.len > 1) {
+                const auto nl = str_rfind(src[0..bo], "\n");
+                const auto line = src[nl + 1..];
+                const auto po = str_find(line, "(");
+                const auto pc = str_find(line, ")");
+                pi = -1;
+                if (po >= 0 && pc > po) {
+                    const auto params = str_split_all(this->a, line[po + 1..pc], ",") catch { return -1; };
+                    for (auto [j, p] : params.slice()) {
+                        if (str_trim(p) == idn) { pi = j; }
+                    }
+                }
+                if (pi < 0) { return -1; }
+            }
+            if (pi >= xargs.len) { return -1; }
+            const auto xfi = parse_int(str_trim(xargs.get(pi))) catch { return -1; };
+            if (xfi <= 0) { return -1; }
+            return xfi;
+        }
+        return 0;
+    }
+
+    bool has_valist(Json* x) {
+        const auto k = jget(x, "inner");
+        for (auto i : 0..jlen(k)) {
+            const auto c = jat(k, i);
+            if (jstr(jget(c, "kind"), "") != "ParmVarDecl") { continue; }
+            const auto q = jstr(jget(jget(c, "type"), "qualType"), "");
+            if (str_find(q, "va_list") >= 0) { return true; }
+        }
+        return false;
+    }
+
+    bool is_text(CType* t) {
+        if (t.k != .Ptr || t.ref) { return false; }
+        const auto e = t.elem;
+        return e.k == .Int && e.width == 8 && e.plain;
+    }
+
     !void func(Json* x, str scope, str name, bool c) {
         this->kids(x);
         if (jbool(jget(x, "explicitlyDeleted"), false) || jget(x, "previousDecl") != null) { return; }
@@ -2171,6 +2303,7 @@ struct CxWalk {
         auto label = qn;
         if (c) { label = name; }
         if (str_starts_with(name, "operator\"\"")) { return this->skip(label, "user-defined literals are not bound"); }
+        if (this->has_valist(x)) { return this->skip(label, "va_list parameter"); }
         const auto t = this->type_of(jget(x, "type"), scope)?;
         if (t.k == .Bad) { return this->skip(label, t.name); }
         if (t.k != .Func) { return this->skip(label, CX_TODO); }
@@ -2189,7 +2322,26 @@ struct CxWalk {
         d.cxx = qn;
         if (cx_is_operator(name)) { d.cx_mname = name; }
         d.is_extern = c && !jbool(jget(x, "inline"), false) && !jbool(jget(x, "constexpr"), false) && jstr(jget(x, "storageClass"), "") != "static" && cx_cshape(this, t);
-        if (t.varargs && !d.is_extern) { d.reason = "variadic C++ functions are not bound yet"; }
+        if (t.varargs && !d.is_extern) {
+            const auto fi = this->fmt_index(x)?;
+            if (fi > 0) {
+                if (fi > t.params.len) {
+                    d.reason = "printf format parameter is out of range";
+                } else if (fi != t.params.len) {
+                    d.reason = "printf format string is not the last parameter";
+                } else if (!this->is_text(t.params.get(fi - 1).ty)) {
+                    d.reason = "printf format parameter is not a string";
+                } else {
+                    t.fmt = fi;
+                }
+            } else if (fi == -2) {
+                d.reason = "variadic function with a non-printf format attribute";
+            } else if (fi == -1) {
+                d.reason = "variadic function with an unsupported format attribute";
+            } else {
+                d.reason = "variadic function without a printf format attribute";
+            }
+        }
     }
 }
 
@@ -2443,7 +2595,11 @@ struct CxSig {
         sprint(&za, "{pass}")?;
         const auto cs = cx_spell(a, xt, an.slice())?;
         sprint(&cp, "{cs}")?;
-        sprint(&ca, "{arg}")?;
+        if (f.varargs && f.fmt > 0 && i == f.fmt - 1) {
+            sprint(&ca, "\"%s\", {arg}")?;
+        } else {
+            sprint(&ca, "{arg}")?;
+        }
         const auto cpt = cx_spell(a, p.ty, "")?;
         sprint(&cc, "{cpt}")?;
     }
@@ -2550,7 +2706,11 @@ str cx_leaf(str qn) {
     auto zt = List<u8>::init(a);
     sprint(&zt, "extern void {sn}({zr}* __self);")?;
     if (!e.line(str_concat(a, [zr, "::~delete"])?, 3, zt.slice())?) { return; }
-    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self) {{\n    try {{\n        delete __self;\n    }} catch (...) {{\n        zark_cxx_fail(\"{cr}\");\n    }}\n}}\n#endif\n")?;
+    if (cx_exc) {
+        sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self) {{\n    try {{\n        delete __self;\n    }} catch (...) {{\n        zark_cxx_fail(\"{cr}\");\n    }}\n}}\n#endif\n")?;
+    } else {
+        sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self) {{\n    delete __self;\n}}\n#endif\n")?;
+    }
 }
 
 !void cx_assign(CEmit* e, CDecl* d) {
@@ -2571,7 +2731,11 @@ str cx_leaf(str qn) {
     auto ap = "::assign";
     if (d.cx_amove) { ap = "::assign_move"; }
     if (!e.line(str_concat(a, [zr, ap])?, 3, zt.slice())?) { return; }
-    sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self, {cr}* __other) {{\n    try {{\n        {body}\n    }} catch (...) {{\n        zark_cxx_fail(\"{cr}\");\n    }}\n}}\n#endif\n")?;
+    if (cx_exc) {
+        sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self, {cr}* __other) {{\n    try {{\n        {body}\n    }} catch (...) {{\n        zark_cxx_fail(\"{cr}\");\n    }}\n}}\n#endif\n")?;
+    } else {
+        sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" void {sn}({cr}* __self, {cr}* __other) {{\n    {body}\n}}\n#endif\n")?;
+    }
 }
 
 !void cx_var(CEmit* e, CDecl* d) {
@@ -3644,6 +3808,47 @@ bool cx_is_operator(str n) {
     return n;
 }
 
+!void cx_macros(Allocator a, CxWalk* w, str header, str from_dir, List<str> flags) {
+    const auto dir = ".zark-cache/cbind";
+    fs::make_dirs(dir)?;
+    auto sb = List<u8>::init(a);
+    sprint(&sb, "{dir}/mstub-{os::pid()}.cpp")?;
+    const auto stub = sb.slice();
+    auto body = List<u8>::init(a);
+    sprint(&body, "#include \"{header}\"\n")?;
+    write_file(stub, body.slice())?;
+    auto argv = List<str>::init(a);
+    argv.append(["clang++", "-E", "-dD", "-iquote", from_dir])?;
+    argv.append(flags.slice())?;
+    argv.append(["-x", "c++", stub])?;
+    const auto r = os::exec(a, argv.slice()) catch |e| {
+        drop(stub);
+        eprintln("error: cannot run clang++: {e}");
+        return error.CompileFailed;
+    };
+    drop(stub);
+    if (r.code != 0) {
+        eprint(r.err);
+        return error.CompileFailed;
+    }
+    auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a), .from = List<str>::init(a) } };
+    lx.run()?;
+    auto et = List<CTok>::init(a);
+    et.push(CTok{ .k = .Eof, .text = "" })?;
+    auto p = CParser{ .a = a, .toks = et.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
+    p.flush(lx.out.toks.len)?;
+    p.macros()?;
+    for (auto d : p.decls.slice()) {
+        if (d.k != .Macro || !d.rel) { continue; }
+        const auto m = w.decl(.Macro, d.name)?;
+        m.body = d.body;
+        m.reason = d.reason;
+        m.ty = d.ty;
+        m.func_like = d.func_like;
+    }
+}
+
 !CBind cxxbind_header(Allocator a, str header, str from_dir, List<str> flags) {
     const auto dir = ".zark-cache/cbind";
     fs::make_dirs(dir)?;
@@ -3697,7 +3902,7 @@ bool cx_is_operator(str n) {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .enums = Map<CVal>::init(a), .tparms = Map<List<str>>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .enums = Map<CVal>::init(a), .tparms = Map<List<str>>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a), .src = Map<str>::init(a) };
     cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
@@ -3706,6 +3911,7 @@ bool cx_is_operator(str n) {
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
+    cx_macros(a, &w, header, from_dir, cflags)?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }

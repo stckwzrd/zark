@@ -1,0 +1,10 @@
+struct MacroClash { }
+const auto MAC_VERSION = "1.2";
+const auto MAC_NUM = 42;
+const auto MAC_RATIO = 1.5;
+const auto MAC_NEG = -7;
+const auto MAC_EXPR = 7;
+const auto MAC_BASE = 3;
+const auto MAC_DERIVED = 6;
+const auto MAC_TWO = "ab";
+const auto MAC_SIZE = 4;
