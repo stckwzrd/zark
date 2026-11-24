@@ -86,7 +86,8 @@ bool cx_cshape(CxWalk* w, CType* t) {
 str cx_lkey(str s) {
     auto t = s;
     if (str_ends_with(t, " (empty)")) { t = t[0..t.len - 8]; }
-    for (auto k : ["struct ", "class ", "union "]) { if (str_starts_with(t, k)) { return t[k.len..]; } }
+    for (auto k : ["struct ", "class ", "union "]) { if (str_starts_with(t, k)) { t = t[k.len..]; } }
+    while (str_starts_with(t, "(anonymous namespace)::")) { t = t[23..]; }
     return t;
 }
 
