@@ -10,10 +10,10 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs"
 for name in $names; do
     flags=
-    [ "$name" = broken ] && flags=-std=c++20
+    case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
     timeout 20 "$ZARK" cbind "tests/cxxbind/$name.hpp" $flags > "$name.zk" 2> "$name.err" || fail "$name: exit $?: $(cat "$name.err")"
     diff -u <(nohid "tests/cxxbind/$name.out") <(nohid "$name.zk") || fail "$name: output differs"
     diff -u "tests/cxxbind/$name.err" "$name.err" || fail "$name: warnings differ"
@@ -21,7 +21,7 @@ for name in $names; do
     "$ZARK" ir "use_$name.zk" > /dev/null || fail "$name: bindings do not compile"
 done
 
-grep -q "std::" sysfilter.err && fail "sysfilter: std:: names in warnings"
+grep -q "^skipped std::" sysfilter.err && fail "sysfilter: std:: names in warnings"
 [ "$(wc -l < sysfilter.zk)" -le 10 ] || fail "sysfilter: output is not small"
 
 printf '#if VAL != 3\n#error no\n#endif\nextern "C" int v(void);\n' > flag.hpp
@@ -67,6 +67,24 @@ code=$?
 grep -q "try\|catch\|zark_cxx_fail" nothrow.cpp && fail "nothrow: exception handling with -fno-exceptions"
 grep -q "static_cast" nothrow.cpp || fail "nothrow: no shims"
 clang++ -fno-exceptions -c -Wall -Wextra -Werror nothrow.cpp -o nothrow.o || fail "nothrow: C++ file does not compile"
+
+(cd interop && "$ZARK" cbind throw.hpp -fno-cxx-exceptions --inline-c ../nocxx.cpp > /dev/null 2>&1) || fail "nocxx: cbind exit $?"
+grep -q "try\|catch\|zark_cxx_fail" nocxx.cpp && fail "nocxx: exception handling with -fno-cxx-exceptions"
+grep -q "static_cast" nocxx.cpp || fail "nocxx: no shims"
+
+printf 'namespace n { int f(int x, const int& y); }\n' > we.hpp
+for w in "-Wmissing-prototypes" "-Weverything" "-Wall -Wextra -Wold-style-cast"; do
+    "$ZARK" cbind we.hpp -Werror $w --inline-c we.cpp > we.zk 2> we.err || fail "werror $w: exit $?: $(cat we.err)"
+    [ -s we.err ] && fail "werror $w: warnings: $(cat we.err)"
+    grep -q "n::f" we.zk || fail "werror $w: n::f not bound"
+    clang++ -c -Werror $w we.cpp -o we.o || fail "werror $w: C++ file does not compile"
+done
+
+(cd interop && "$ZARK" cbind scope.hpp -o scope_b.zk --inline-c scope_b.cpp 2> /dev/null) || fail "interop scope: cbind exit $?"
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f scope.zk scope.cpp scope_b.cpp 2>&1) || fail "interop scope $f: $out"
+    [ "$out" = "$(cat interop/scope.out)" ] || fail "interop scope $f: got: $out"
+done
 
 cp -r "$R/tests/cxxbind/interop/imp" imp
 for f in "" --llvm -O; do

@@ -9,4 +9,4 @@ type D_DT = B_T;
 type P_PT = B_T;
 type Q_QT = i64;
 type m_M = i64;
-extern void um(i64 x);
+extern void um(m_M x);

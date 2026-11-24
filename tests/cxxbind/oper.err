@@ -1,0 +1,5 @@
+skipped operator|: operator functions are not bound yet
+skipped operator!: operator functions are not bound yet
+skipped operator""_kb: user-defined literals are not bound
+skipped n::operator+: operator functions are not bound yet
+skipped operator new: operator functions are not bound yet
