@@ -120,6 +120,7 @@ struct CxRec {
     bool is_union;
     bool anon;
     bool flat;
+    str tag;
     List<CxFld> flds;
     List<CxRec*> subs;
     List<str> pubs;
@@ -501,6 +502,9 @@ struct CxWalk {
     Map<List<Json*>> pend;
     Map<str> tzn;
     List<str> tmpl;
+    List<str> inl;
+    Map<CxRec*> bykey;
+    str skey;
     bool uchar;
     bool short_enums;
 
@@ -867,6 +871,7 @@ struct CxWalk {
         const auto zn = cx_zname(this->a, zs, name)?;
         if (kind == "NamespaceDecl") {
             if (name.len == 0) { return this->walk(x, scope, zs, c, false, true); }
+            if (jbool(jget(x, "isInline"), false)) { this->inl.push(qn)?; }
             return this->walk(x, qn, zn, c, false, true);
         }
         if (kind == "LinkageSpecDecl") { return this->walk(x, scope, zs, jstr(jget(x, "language"), "") == "C", false, true); }
@@ -979,6 +984,7 @@ struct CxWalk {
                 if (t.k == .Named && t.rec != null) { r.pubs.push(t.rec.cx.qn)?; }
             }
             this->define(x, r, r.qn)?;
+            r.tag = str_concat(this->a, [jstr(jget(x, "tagUsed"), ""), " "])?;
             r.d.complete = true;
             r.d.is_union = r.is_union;
             this->rlist.push(r)?;
@@ -1072,7 +1078,7 @@ struct CxWalk {
         const auto stub = sb.slice();
         auto body = List<u8>::init(this->a);
         sprint(&body, "#pragma clang diagnostic ignored \"-Weverything\"\n#include \"{header}\"\n")?;
-        for (auto [i, r] : this->rlist.slice()) { sprint(&body, "typedef char zark_layout_{i}[sizeof({r.qn})];\n")?; }
+        for (auto [i, r] : this->rlist.slice()) { sprint(&body, "typedef char zark_layout_{i}[sizeof({r.tag}{r.qn})];\n")?; }
         write_file(stub, body.slice())?;
         auto argv = List<str>::init(this->a);
         argv.append(["clang++", "-fsyntax-only", "-Xclang", "-fdump-record-layouts", "-iquote", from_dir])?;
@@ -1198,10 +1204,17 @@ struct CxWalk {
         const auto key = str_concat(this->a, [q, "<", str_join(this->a, ks.slice(), ",")?, ">"])?;
         auto r = this->specs.get_or(key, null);
         if (r == null) {
+            auto n = 0;
+            Json* one = null;
             for (auto c : this->pend.get_or(q, List<Json*>{}).slice()) {
-                r = this->spec(c, q, key)?;
-                if (r != null) { break; }
+                _ = this->spec(c, q, "")?;
+                if (this->skey == key) {
+                    n += 1;
+                    one = c;
+                }
             }
+            if (n > 1) { return this->badt("ambiguous template arguments"); }
+            if (one != null) { r = this->spec(one, q, key)?; }
         }
         if (r == null) { return this->badt(CX_TODO); }
         if (this->bad.has(r.d.name)) { return this->badt(str_concat(this->a, ["uses skipped ", r.qn])?); }
@@ -1213,6 +1226,7 @@ struct CxWalk {
     }
 
     !CxRec* spec(Json* c, str q, str want) {
+        this->skey = "";
         auto ks = List<str>::init(this->a);
         auto cs = List<str>::init(this->a);
         const auto k = jget(c, "inner");
@@ -1231,6 +1245,7 @@ struct CxWalk {
             cs.push(cx_spell(this->a, t, "")?)?;
         }
         const auto key = str_concat(this->a, [q, "<", str_join(this->a, ks.slice(), ",")?, ">"])?;
+        this->skey = key;
         if (key != want || this->specs.has(key)) { return null; }
         const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
         const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", str_join(this->a, ks.slice(), "_")?])?;
@@ -1239,11 +1254,30 @@ struct CxWalk {
         this->specs.put(key, r)?;
         r.key = cx_tkey(this->a, cxx)?;
         this->define(c, r, cxx)?;
+        r.tag = str_concat(this->a, [jstr(jget(c, "tagUsed"), ""), " "])?;
         r.d.complete = true;
         r.d.is_union = r.is_union;
         this->rlist.push(r)?;
         if (meth) { this->skip(cxx, "methods of template specializations are not bound yet")?; }
         return r;
+    }
+
+    !str lkey(str t) {
+        const auto k = cx_lkey(t);
+        if (str_find(k, "<") >= 0) { return cx_tkey(this->a, k); }
+        return k;
+    }
+
+    !str dkey(str k) {
+        auto s = k;
+        for (auto x : this->inl.slice()) {
+            auto u = cx_up(x);
+            if (u.len > 0) { u = str_concat(this->a, [u, "::"])?; }
+            if (str_starts_with(s, str_concat(this->a, [x, "::"])?)) { s = str_concat(this->a, [u, s[x.len + 2..]])?; }
+            s = str_replace(this->a, s, str_concat(this->a, ["<", x, "::"])?, str_concat(this->a, ["<", u])?)?;
+            s = str_replace(this->a, s, str_concat(this->a, [",", x, "::"])?, str_concat(this->a, [",", u])?)?;
+        }
+        return s;
     }
 
     !void note(CxRec* r, str label, str why) {
@@ -1304,7 +1338,7 @@ struct CxWalk {
             auto t = e.text;
             if (str_ends_with(t, " (empty)")) { t = t[0..t.len - 8]; }
             if (str_ends_with(t, " (base)") || str_ends_with(t, " (primary base)")) {
-                const auto b = this->recs.get_or(cx_lkey(t[0..str_rfind(t, " (")]), null);
+                const auto b = this->bykey.get_or(this->lkey(t[0..str_rfind(t, " (")])?, null);
                 if (b == null || b.d == null || r.pubs.index_of(b.qn) < 0) { continue; }
                 this->flat(b)?;
                 if (b.skip.len > 0 || b.why.len > 0) { continue; }
@@ -1317,7 +1351,7 @@ struct CxWalk {
                 }
                 continue;
             }
-            if (str_ends_with(t, " (virtual base)")) { continue; }
+            if (str_ends_with(t, "virtual base)")) { continue; }
             if (str_ends_with(t, " vtable pointer)")) {
                 if (e.off == 0) {
                     const auto v = this->a.create<CType>()?;
@@ -1343,8 +1377,8 @@ struct CxWalk {
             if (f.sub != null) {
                 const auto s = f.sub;
                 s.qn = r.qn;
-                s.key = cx_lkey(t);
-                if (f.name.len > 0) { s.key = cx_lkey(t[0..t.len - f.name.len - 1]); }
+                s.key = this->lkey(t)?;
+                if (f.name.len > 0) { s.key = this->lkey(t[0..t.len - f.name.len - 1])?; }
                 this->flat(s)?;
                 ty = this->named("")?;
                 ty.rec = s.d;
@@ -1687,6 +1721,23 @@ bool cx_exc = true;
     return b.slice();
 }
 
+bool cx_ptrs(CEmit* e, CType* t) {
+    if (t.k == .Ptr || t.k == .Func || t.k == .Bad) { return true; }
+    if (t.k == .Array) { return cx_ptrs(e, t.elem); }
+    if (t.k == .Named && t.rec != null) { return t.rec.cx == null || cx_hasptr(e, t.rec.cx); }
+    if (t.k == .Named && cb_known(t.name).len == 0) {
+        const auto x = e.typedefs.get_or(t.name, null);
+        return x == null || cx_ptrs(e, x);
+    }
+    return false;
+}
+
+bool cx_hasptr(CEmit* e, CxRec* r) {
+    if (r.why.len > 0 || r.skip.len > 0) { return true; }
+    for (auto it : r.items.slice()) { if (cx_ptrs(e, it.ty)) { return true; } }
+    return false;
+}
+
 str cx_byval(CDecl* r) {
     if (!r.complete) { return "incomplete class by value"; }
     if (!r.cx.value) { return "non-trivial class by value is not bound yet"; }
@@ -1747,7 +1798,9 @@ bool cx_scalar(CEmit* e, CType* t) {
         } else if (p.ty.k == .Ptr && p.ty.ref) {
             const auto er = e.rec_of(p.ty.elem);
             const auto vr = er != null && er.cx != null && cx_byval(er).len == 0;
-            if ((p.ty.rvalue || p.ty.elem.konst) && !(f.elem.k == .Ptr && f.elem.ref) && (cx_scalar(e, p.ty.elem) || vr)) {
+            const auto rr = e.rec_of(f.elem);
+            const auto esc = f.elem.k == .Ptr || (rr != null && (rr.cx == null || cx_hasptr(e, rr.cx)));
+            if ((p.ty.rvalue || p.ty.elem.konst) && ((!(f.elem.k == .Ptr && f.elem.ref) && cx_scalar(e, p.ty.elem)) || (vr && !esc))) {
                 st = p.ty.elem;
                 if (vr) {
                     xt = cx_ptr(a, p.ty.elem)?;
@@ -2106,7 +2159,7 @@ bool cx_scalar(CEmit* e, CType* t) {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a) };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a) };
     cx_exc = true;
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
@@ -2119,6 +2172,10 @@ bool cx_scalar(CEmit* e, CType* t) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
         if (!used) { w.skip(q, "class templates are not bound yet")?; }
+    }
+    for (auto r : w.rlist.slice()) {
+        r.key = w.dkey(r.key)?;
+        w.bykey.put(r.key, r)?;
     }
     w.layouts(header, from_dir, cflags)?;
     for (auto r : w.rlist.slice()) { w.flat(r)?; }

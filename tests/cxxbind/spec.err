@@ -6,6 +6,7 @@ skipped Vec<int>: methods of template specializations are not bound yet
 skipped IO::list: C++ declaration not bound yet
 skipped Vec<n::Pair>: methods of template specializations are not bound yet
 skipped HasArr::a: C++ declaration not bound yet
+skipped Box: C++ declaration not bound yet
 skipped U2::a: ambiguous template arguments
 skipped U2::b: ambiguous template arguments
 skipped U2::c: ambiguous template arguments
