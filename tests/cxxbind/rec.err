@@ -1,0 +1,9 @@
+skipped a::b_c: name clash
+skipped a_b::c: name clash
+skipped Outer::f: methods are not bound yet
+skipped Outer::g: methods are not bound yet
+skipped Outer::Outer: constructors are not bound yet
+skipped Outer::~Outer: destructors are not bound yet
+skipped Outer::operator int: methods are not bound yet
+skipped Outer::count: variables are not bound yet
+skipped Outer::t: member templates are not bound

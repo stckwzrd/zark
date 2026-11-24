@@ -1,0 +1,5 @@
+skipped Num.bits: bitfield
+skipped NTm::NTm: constructors are not bound yet
+opaque NTU: union with non-trivial members
+skipped NTU::NTU: constructors are not bound yet
+skipped NTU::~NTU: destructors are not bound yet
