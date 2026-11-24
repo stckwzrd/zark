@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros boxspec boxclash"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac
@@ -114,6 +114,11 @@ done
 for f in "" --llvm -O; do
     out=$(cd interop && "$ZARK" run $f alias.zk alias.cpp 2>&1) || fail "interop alias $f: $out"
     [ "$out" = "$(cat interop/alias.out)" ] || fail "interop alias $f: got: $out"
+done
+
+for f in "" --llvm -O; do
+    out=$(cd interop && "$ZARK" run $f boxes.zk boxes.cpp 2>&1) || fail "interop boxes $f: $out"
+    [ "$out" = "$(cat interop/boxes.out)" ] || fail "interop boxes $f: got: $out"
 done
 
 for f in "" --llvm -O; do
