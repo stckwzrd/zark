@@ -7,6 +7,10 @@ import "std/path" as path;
 
 const auto CX_TODO = "C++ declaration not bound yet";
 
+bool cx_todo(str why) {
+    return why == CX_TODO || str_starts_with(why, "unknown type ") || str_starts_with(why, "uses unbound type ");
+}
+
 bool cx_is_header(str p) {
     return str_ends_with(p, ".hpp") || str_ends_with(p, ".hh") || str_ends_with(p, ".hxx") || str_ends_with(p, ".h++");
 }
@@ -47,6 +51,17 @@ str cx_why(CType* t) {
 }
 
 bool cx_bad(CType* t) { return cx_why(t).len > 0; }
+
+bool cx_named(CType* t) {
+    if (t.k == .Named) { return true; }
+    if (t.k == .Ptr || t.k == .Array || t.k == .Func) {
+        if (cx_named(t.elem)) { return true; }
+    }
+    if (t.k == .Func) {
+        for (auto p : t.params.slice()) { if (cx_named(p.ty)) { return true; } }
+    }
+    return false;
+}
 
 !str cx_fnum(Allocator a, f64 v) {
     u8[40] buf;
@@ -186,6 +201,20 @@ struct CxType {
                 nunsigned += 1;
             } else if (t == "void" || t == "char" || t == "int" || t == "float" || t == "double" || t == "bool") {
                 base = t;
+            } else if (t == "wchar_t" || t == "char8_t" || t == "char16_t" || t == "char32_t" || t == "__int128" || t == "__int128_t" || t == "__uint128_t" || t == "nullptr_t" || t == "std::nullptr_t") {
+                named = this->w.badt(str_concat(this->w.a, ["type '", t, "' is not supported yet"])?)?;
+            } else if (t == "decltype") {
+                named = this->w.badt("decltype types are not supported yet")?;
+                auto depth = 0;
+                while (this->i + 1 < this->toks.len) {
+                    this->i += 1;
+                    const auto x = this->peek();
+                    if (x == "(") { depth += 1; }
+                    if (x == ")") {
+                        depth -= 1;
+                        if (depth == 0) { break; }
+                    }
+                }
             } else if (t.len > 0 && (cb_ident_char(t[0]) || t[0] == ':') && named == null && base.len == 0 && nlong + nshort + nsigned + nunsigned == 0) {
                 if (t == "auto") {
                     named = this->mk(.Bad)?;
@@ -228,7 +257,7 @@ struct CxType {
         if (base == "void") { return this->leaf(.Void, base); }
         if (base == "bool") { return this->leaf(.Bool, base); }
         if (base == "float" || base == "double") {
-            if (nlong > 0) { return this->bad(); }
+            if (nlong > 0) { return this->w.badt("type 'long double' is not supported yet"); }
             const auto t = this->leaf(.Float, base)?;
             t.width = 32;
             if (base == "double") { t.width = 64; }
@@ -481,8 +510,8 @@ struct CxWalk {
             const auto q = this->find(s, n)?;
             if (q.len > 0) {
                 const auto z = this->names.get_or(q, "");
-                if (z.len == 0) { return this->badt(CX_TODO); }
-                if (this->bad.has(z)) { return this->badt(str_concat(this->a, ["uses skipped ", z])?); }
+                if (z.len == 0) { return this->badt(str_concat(this->a, ["uses unbound type '", q, "'"])?); }
+                if (this->bad.has(z)) { return this->badt(str_concat(this->a, ["uses skipped ", q])?); }
                 const auto t = this->named(z)?;
                 t.cxx = q;
                 return t;
@@ -496,7 +525,7 @@ struct CxWalk {
             t.cxx = name;
             return t;
         }
-        return this->badt(CX_TODO);
+        return this->badt(str_concat(this->a, ["unknown type '", name, "'"])?);
     }
 
     !str find(str s, str n) {
@@ -522,7 +551,7 @@ struct CxWalk {
     !void declare(Json* x, str kind, str scope) {
         auto name = jstr(jget(x, "name"), "");
         if (kind == "UsingShadowDecl") { name = jstr(jget(jget(x, "target"), "name"), ""); }
-        if (name.len == 0 || name == "std") { return; }
+        if (name.len == 0 || name == "std" || jget(x, "parentDeclContextId") != null) { return; }
         for (auto q : ["CXXRecordDecl", "EnumDecl", "TypedefDecl", "TypeAliasDecl", "ClassTemplateDecl", "TypeAliasTemplateDecl", "NamespaceDecl", "NamespaceAliasDecl", "UsingShadowDecl"]) {
             if (kind == q) { return this->declared.put(cx_qual(this->a, scope, name)?, true); }
         }
@@ -580,15 +609,23 @@ struct CxWalk {
         const auto t = this->parse(q, scope)?;
         const auto d = jstr(jget(ty, "desugaredQualType"), "");
         const auto why = cx_why(t);
-        if (why.len > 0) {
-            if (d.len == 0 || why != CX_TODO) { return t; }
-            return this->parse(d, scope);
-        }
         const auto id = jstr(jget(ty, "typeAliasDeclId"), "");
+        if (why.len > 0) {
+            if (d.len == 0 || !cx_todo(why)) { return t; }
+            const auto at = this->byid.get_or(id, "");
+            if (t.k == .Bad && at.len > 0) {
+                const auto r = this->lookup(str_concat(this->a, ["::", at])?, "")?;
+                r.konst = str_starts_with(q, "const ");
+                return r;
+            }
+            const auto dt = this->parse(d, scope)?;
+            if (cx_named(dt) || cx_bad(dt)) { return t; }
+            return dt;
+        }
         auto ok = id.len == 0 || (t.k == .Named && (this->tid.get_or(t.cxx, "") == id || cb_known(t.name).len > 0));
         if (ok && d.len > 0) {
             const auto dt = this->parse(d, scope)?;
-            ok = cx_bad(dt) || this->same(t, dt)?;
+            ok = cx_bad(dt) || cx_named(dt) || this->same(t, dt)?;
         }
         if (!ok) { return this->badt(str_concat(this->a, ["cannot resolve type '", q, "'"])?); }
         return t;
@@ -747,9 +784,24 @@ struct CxWalk {
             return this->walk(x, qn, zn, c, false, true);
         }
         if (kind == "LinkageSpecDecl") { return this->walk(x, scope, zs, jstr(jget(x, "language"), "") == "C", false, true); }
+        const auto out = jget(x, "parentDeclContextId") != null;
+        if (kind == "EnumDecl" && out) {
+            const auto p = this->byid.get_or(jstr(jget(x, "previousDecl"), ""), "");
+            if (p.len == 0) {
+                this->kids(x);
+                return this->skip(name, "enum defined outside its scope");
+            }
+            const auto s = cx_up(p);
+            const auto z = str_replace(this->a, s, "::", "_")?;
+            return this->enum_decl(x, s, name, p, cx_zname(this->a, z, name)?, z);
+        }
+        if (kind == "CXXRecordDecl" && out) {
+            this->kids(x);
+            return this->skip(name, "class defined outside its scope");
+        }
         if (kind == "CXXRecordDecl" && name.len > 0) {
             this->record_bases(x, scope, qn)?;
-            this->skip(qn, CX_TODO)?;
+            this->skip(qn, "C++ classes are not bound yet")?;
             return this->walk(x, qn, zn, false, true, jstr(jget(x, "tagUsed"), "") != "class");
         }
         if (kind == "EnumDecl") { return this->enum_decl(x, scope, name, qn, zn, zs); }
@@ -761,6 +813,8 @@ struct CxWalk {
         for (auto q : ["UsingDecl", "UsingShadowDecl", "UsingDirectiveDecl", "UsingEnumDecl", "NamespaceAliasDecl", "StaticAssertDecl", "EmptyDecl"]) {
             if (kind == q) { return; }
         }
+        if (kind == "FunctionTemplateDecl") { return this->skip(qn, "function templates are not bound yet"); }
+        if (kind == "ClassTemplateDecl") { return this->skip(qn, "class templates are not bound yet"); }
         this->skip(qn, CX_TODO)?;
     }
 
@@ -823,12 +877,19 @@ struct CxWalk {
             t = p.enum_type(vals, this->short_enums)?;
         }
         if (t.k == .Bad) { return this->skip(label, t.name); }
+        if (t.plain) {
+            const auto u = this->a.create<CType>()?;
+            *u = *t;
+            u.plain = false;
+            t = u;
+        }
         if (name.len > 0 && this->zq.get_or(zn, "") == qn) {
             this->byid.put(id, qn)?;
         } else if (name.len > 0) {
             if (this->claim(zn, qn)?) {
                 const auto d = this->decl(.Enum, zn)?;
                 d.ty = t;
+                d.cxx = qn;
                 this->zd.put(zn, d)?;
                 this->typedefs.put(zn, t)?;
                 this->names.put(qn, zn)?;
@@ -868,6 +929,7 @@ struct CxWalk {
         if (!this->claim(zn, qn)?) { return; }
         const auto d = this->decl(.Typedef, zn)?;
         d.ty = t;
+        d.cxx = qn;
         this->zd.put(zn, d)?;
         this->typedefs.put(zn, t)?;
         this->names.put(qn, zn)?;
@@ -886,7 +948,7 @@ struct CxWalk {
         for (auto i : 0..jlen(k)) { if (!str_ends_with(jstr(jget(jat(k, i), "kind"), ""), "Attr")) { init = jat(k, i); } }
         const auto konst = jbool(jget(x, "constexpr"), false) || str_starts_with(q, "const ");
         if (init == null || jstr(jget(x, "init"), "").len == 0 || !konst || (t.k != .Int && t.k != .Float && t.k != .Bool)) {
-            if (!cls) { this->skip(qn, CX_TODO)?; }
+            if (!cls) { this->skip(qn, "variables are not bound yet")?; }
             return;
         }
         const auto id = jstr(jget(x, "id"), "");
@@ -924,7 +986,10 @@ struct CxWalk {
         const auto qn = cx_qual(this->a, scope, name)?;
         auto label = qn;
         if (c) { label = name; }
+        if (str_starts_with(name, "operator\"\"")) { return this->skip(label, "user-defined literals are not bound"); }
+        if (str_starts_with(name, "operator") && (name.len == 8 || !cb_ident_char(name[8]))) { return this->skip(label, "operator functions are not bound yet"); }
         const auto t = this->type_of(jget(x, "type"), scope)?;
+        if (t.k == .Bad) { return this->skip(label, t.name); }
         if (t.k != .Func) { return this->skip(label, CX_TODO); }
         const auto k = jget(x, "inner");
         auto n = 0;
@@ -938,8 +1003,8 @@ struct CxWalk {
         const auto d = this->decl(.Func, label)?;
         d.ty = t;
         d.cxx = qn;
-        d.is_extern = c && !jbool(jget(x, "inline"), false) && jstr(jget(x, "storageClass"), "") != "static" && cx_cshape(t);
-        if (t.varargs && !d.is_extern) { d.reason = CX_TODO; }
+        d.is_extern = c && !jbool(jget(x, "inline"), false) && !jbool(jget(x, "constexpr"), false) && jstr(jget(x, "storageClass"), "") != "static" && cx_cshape(t);
+        if (t.varargs && !d.is_extern) { d.reason = "variadic C++ functions are not bound yet"; }
     }
 }
 
@@ -1034,7 +1099,7 @@ bool cx_scalar(CEmit* e, CType* t) {
         }
         auto an = List<u8>::init(a);
         sprint(&an, "a{i}")?;
-        auto zn = an.slice();
+        auto zn = cb_pname(a, f.params.slice(), i)?;
         if (p.name.len > 0) { zn = e.ename(p.name)?; }
         auto st = p.ty;
         auto arg = an.slice();
@@ -1062,12 +1127,13 @@ bool cx_scalar(CEmit* e, CType* t) {
     auto pre = "";
     auto post = "";
     if (rt.k == .Void) { ret = ""; }
+    auto cret = ret;
     if (rt.k == .Ptr && rt.ref) {
         pre = "&";
         if (rt.rvalue) {
-            const auto lt = cx_spell(a, rt.elem, "&")?;
-            pre = str_concat(a, ["&static_cast<", lt, ">("])?;
-            post = ")";
+            cret = "";
+            pre = "auto &&r = ";
+            post = "; return &r";
         }
         rt = cx_ptr(a, rt.elem)?;
     }
@@ -1105,15 +1171,16 @@ bool cx_scalar(CEmit* e, CType* t) {
     const auto fp = cx_spell(a, f, "(*)")?;
     sprint(&e.c, "#if !defined(ZARK_PICK) || defined(ZARK_USE_{e.hid}_{d.seq})\nextern \"C\" {def} {{\n    (void)static_cast<{fp}>(&{d.cxx});\n")?;
     if (cx_exc && !f.noexc) {
-        sprint(&e.c, "    try {{\n        {ret}{pre}{d.cxx}({cas}){post};\n    }} catch (...) {{\n        zark_cxx_fail(\"{d.cxx}\");\n    }}\n")?;
+        sprint(&e.c, "    try {{\n        {cret}{pre}{d.cxx}({cas}){post};\n    }} catch (...) {{\n        zark_cxx_fail(\"{d.cxx}\");\n    }}\n")?;
     } else {
-        sprint(&e.c, "    {ret}{pre}{d.cxx}({cas}){post};\n")?;
+        sprint(&e.c, "    {cret}{pre}{d.cxx}({cas}){post};\n")?;
     }
     e.c.append("}\n#endif\n")?;
 }
 
 !CEmit cx_emit(Allocator a, CxWalk* w, str hid) {
-    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .bad = w.bad, .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
+    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .cxn = Map<str>::init(a), .bad = w.bad, .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
+    for (auto d : w.decls.slice()) { if (d.k != .Func && d.cxx.len > 0) { e.cxn.put(d.name, d.cxx)?; } }
     e.run(w.decls)?;
     return e;
 }
@@ -1123,7 +1190,7 @@ bool cx_scalar(CEmit* e, CType* t) {
     auto b = List<u8>::init(a);
     sprint(&b, "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"\n")?;
     if (cx_exc) { sprint(&b, "#include <cstdio>\n#include <cstdlib>\n#include <exception>\n")?; }
-    sprint(&b, "#include \"{abs}\"\n")?;
+    sprint(&b, "#include \"{abs}\"\n#pragma clang diagnostic ignored \"-Weverything\"\n")?;
     if (cx_exc) {
         sprint(&b, "[[noreturn]] static inline void zark_cxx_fail(const char *f) {{\n    fflush(stdout);\n    try {{\n        throw;\n    }} catch (const std::exception &e) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s: %s\\n\", f, e.what());\n    }} catch (...) {{\n        fprintf(stderr, \"zark: uncaught C++ exception in %s\\n\", f);\n    }}\n    abort();\n}}\n")?;
     }
@@ -1140,6 +1207,7 @@ bool cx_scalar(CEmit* e, CType* t) {
     auto argv = List<str>::init(a);
     argv.append(["clang++", "-fsyntax-only", "-ferror-limit=0", "-iquote", from_dir])?;
     argv.append(flags.slice())?;
+    argv.push("-w")?;
     argv.append(["-x", "c++", p])?;
     const auto r = os::exec(a, argv.slice()) catch |err| {
         drop(p);
@@ -1205,7 +1273,7 @@ bool cx_scalar(CEmit* e, CType* t) {
     const auto stub = sb.slice();
     const auto dep = str_concat(a, [stub, ".d"])?;
     auto body = List<u8>::init(a);
-    sprint(&body, "enum zark_char_sign {{ zark_char_v = (char)-1 < 0 }};\n#include \"{header}\"\n")?;
+    sprint(&body, "#pragma clang diagnostic push\n#pragma clang diagnostic ignored \"-Weverything\"\nenum zark_char_sign {{ zark_char_v = (char)-1 < 0 }};\n#pragma clang diagnostic pop\n#include \"{header}\"\n")?;
     write_file(stub, body.slice())?;
     auto cflags = List<str>::init(a);
     for (auto f : flags.slice()) { if (!cx_c_std(f)) { cflags.push(f)?; } }
@@ -1255,13 +1323,13 @@ bool cx_scalar(CEmit* e, CType* t) {
     for (auto f : flags.slice()) {
         if (f == "-fshort-enums") { w.short_enums = true; }
         if (f == "-fno-short-enums") { w.short_enums = false; }
-        if (f == "-fno-exceptions") { cx_exc = false; }
-        if (f == "-fexceptions") { cx_exc = true; }
+        if (f == "-fno-exceptions" || f == "-fno-cxx-exceptions") { cx_exc = false; }
+        if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
     auto count = Map<i64>::init(a);
     for (auto d : w.decls.slice()) { if (d.k == .Func) { count.put(d.cxx, count.get_or(d.cxx, 0) + 1)?; } }
-    for (auto d : w.decls.slice()) { if (d.k == .Func && count.get_or(d.cxx, 0) > 1) { d.reason = CX_TODO; } }
+    for (auto d : w.decls.slice()) { if (d.k == .Func && count.get_or(d.cxx, 0) > 1) { d.reason = "overloads are not bound yet"; } }
     auto deps = List<str>::init(a);
     auto from = List<str>::init(a);
     for (auto d : dep_files(a, dtext)?) {
