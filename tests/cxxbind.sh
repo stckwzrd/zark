@@ -68,4 +68,82 @@ grep -q "try\|catch\|zark_cxx_fail" nothrow.cpp && fail "nothrow: exception hand
 grep -q "static_cast" nothrow.cpp || fail "nothrow: no shims"
 clang++ -fno-exceptions -c -Wall -Wextra -Werror nothrow.cpp -o nothrow.o || fail "nothrow: C++ file does not compile"
 
+cp -r "$R/tests/cxxbind/interop/imp" imp
+for f in "" --llvm -O; do
+    out=$(cd imp && "$ZARK" run $f main.zk lib.cpp 2>&1) || fail "import $f: $out"
+    [ "$out" = "$(cat imp/main.out)" ] || fail "import $f: got: $out"
+done
+cached=$(ls imp/.zark-cache/cbind/*.zk)
+[ $(echo "$cached" | wc -l) -eq 1 ] || fail "import: expected one cached binding: $cached"
+grep -q "missing" "${cached%.zk}.cpp" || fail "import: no shim for the undefined function"
+grep -q "try {" "${cached%.zk}.cpp" || fail "import: no try in the shims"
+(cd imp && "$ZARK" cbind lib.hpp --inline-c ../same.cpp > ../same.zk 2> /dev/null) || fail "import_same: cbind exit $?"
+diff -u same.zk "$cached" || fail "import_same: cbind and import differ"
+diff -u same.cpp "${cached%.zk}.cpp" || fail "import_same: C++ files differ"
+
+mkdir -p shim
+real=$(command -v clang++)
+printf '#!/bin/sh\necho "$*" >> "%s/clang.log"\n[ "$1" = --version ] && [ -n "$FAKE" ] && { echo "clang version $FAKE"; exit 0; }\nexec "%s" "$@"\n' "$T" "$real" > shim/clang++
+chmod +x shim/clang++
+before=$(ls imp/.zark-cache/cbind)
+: > clang.log
+out=$(cd imp && PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.cpp 2>&1) || fail "import_cache_hit: $out"
+[ "$out" = "$(cat imp/main.out)" ] || fail "import_cache_hit: got: $out"
+grep -q -- "--version" clang.log || fail "import_cache_hit: shim not used: $(cat clang.log)"
+if grep -q -- "ast-dump" clang.log; then fail "import_cache_hit: parsed again"; fi
+[ "$(ls imp/.zark-cache/cbind)" = "$before" ] || fail "import_cache_hit: new cache files: $(ls imp/.zark-cache/cbind)"
+
+: > clang.log
+out=$(cd imp && FAKE=99 PATH="$T/shim:$PATH" "$ZARK" run main.zk lib.cpp 2>&1) || fail "import_clang_change: $out"
+[ "$out" = "$(cat imp/main.out)" ] || fail "import_clang_change: got: $out"
+grep -q -- "ast-dump" clang.log || fail "import_clang_change: stale binding reused"
+[ $(ls imp/.zark-cache/cbind/*.zk | wc -l) -eq 2 ] || fail "import_clang_change: expected two cached bindings: $(ls imp/.zark-cache/cbind)"
+if command -v python3 >/dev/null; then
+    python3 - "$ZARK" zark2 <<'EOF' || fail "import_compiler_change: cannot patch the compiler"
+import sys
+b = open(sys.argv[1], "rb").read()
+old = b'CXXBIND_SRC = embed("cxxbind.zk")'
+assert b.count(old) == 1, b.count(old)
+open(sys.argv[2], "wb").write(b.replace(old, b'CXXBIND_SRC = embed("cxxbind.zz")'))
+EOF
+    chmod +x zark2
+    [ "$(uname -s)" = Darwin ] && codesign -f -s - zark2 2> /dev/null
+    : > clang.log
+    out=$(cd imp && PATH="$T/shim:$PATH" "$T/zark2" run main.zk lib.cpp 2>&1) || fail "import_compiler_change: $out"
+    [ "$out" = "$(cat imp/main.out)" ] || fail "import_compiler_change: got: $out"
+    grep -q -- "ast-dump" clang.log || fail "import_compiler_change: stale binding reused"
+    [ $(ls imp/.zark-cache/cbind/*.zk | wc -l) -eq 3 ] || fail "import_compiler_change: expected three cached bindings: $(ls imp/.zark-cache/cbind)"
+else
+    echo "skip import_compiler_change: python3 is not installed"
+fi
+
+sed 's/magic = 42/magic = 43/' imp/lib.hpp > imp/lib.hpp.new && mv imp/lib.hpp.new imp/lib.hpp
+out=$(cd imp && "$ZARK" run main.zk lib.cpp 2>&1) || fail "import_header_edit: $out"
+[ "$out" = "5 32 42 43 5" ] || fail "import_header_edit: got: $out"
+
+out=$(cd imp && "$ZARK" run main.zk lib.cpp -std=c11 2>&1) || fail "import_c_std: $out"
+[ "$out" = "5 32 42 43 5" ] || fail "import_c_std: got: $out"
+
+printf 'import "lib.hpp" as lib;\ntest "add" { assert(lib::m::add(2, 3) == 5); assert(lib::digits(7) == 1); }\n' > imp/t.zk
+out=$(cd imp && "$ZARK" test t.zk lib.cpp 2>&1) || fail "import_test: $out"
+case "$out" in *"1 passed, 0 failed"*) ;; *) fail "import_test: got: $out" ;; esac
+
+mkdir -p proj/src proj/inc
+cp "$R/tests/cxxbind/interop/imp/lib.hpp" "$R/tests/cxxbind/interop/imp/lib.cpp" proj/inc/
+printf '[package]\nname = "cxp"\n\n[build]\nsources = ["inc/lib.cpp"]\ninclude = ["inc"]\nstd = "c++17"\ncflags = ["-fno-exceptions"]\n' > proj/zark.toml
+printf 'import "lib.hpp" as lib;\nvoid main() { println("{lib::m::add(1, 2)} {lib::digits(100)} {lib::strict}"); }\n' > proj/src/main.zk
+out=$(cd proj && "$ZARK" run 2>&1) || fail "import_manifest: $out"
+[ "$out" = "3 3 1" ] || fail "import_manifest: got: $out"
+grep -q "try\|zark_cxx_fail" proj/.zark-cache/cbind/*.cpp && fail "import_manifest: exception handling with -fno-exceptions"
+
+mkdir -p hdr
+printf 'namespace n { inline int f() { return 7; } }\n' > hdr/cx.h
+printf 'import "cx.h";\nvoid main() {}\n' > hdr/bad.zk
+if out=$(cd hdr && "$ZARK" run bad.zk 2>&1); then fail "import_h_cxx: expected failure"; fi
+case "$out" in *"if this is a C++ header, import it through a .hpp file that includes it"*) ;; *) fail "import_h_cxx: got: $out" ;; esac
+printf '#include "cx.h"\n' > hdr/cx.hpp
+printf 'import "cx.hpp" as cx;\nvoid main() { println("{cx::n::f()}"); }\n' > hdr/good.zk
+out=$(cd hdr && "$ZARK" run good.zk 2>&1) || fail "import_h_wrapper: $out"
+[ "$out" = 7 ] || fail "import_h_wrapper: got: $out"
+
 echo "ok   cxxbind ($names)"
