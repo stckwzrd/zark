@@ -8,3 +8,4 @@ skipped Outer::operator int: methods are not bound yet
 skipped Outer::count: variables are not bound yet
 skipped Outer::t: member templates are not bound
 skipped useh: shim does not compile: function 'useh' is used but not defined in this translation unit, and cannot be defined in any other translation unit because its type does not have linkage
+skipped VA::f: methods are not bound yet
