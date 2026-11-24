@@ -21,6 +21,9 @@ for name in $names; do
     "$ZARK" ir "use_$name.zk" > /dev/null || fail "$name: bindings do not compile"
 done
 
+"$ZARK" cbind tests/cxxbind/layout.hpp --arch aarch64 --os linux > layout.a64.zk 2> /dev/null || fail "layout a64: exit $?"
+diff -u tests/cxxbind/layout.a64.out layout.a64.zk || fail "layout a64: output differs"
+
 grep -q "^skipped std::" sysfilter.err && fail "sysfilter: std:: names in warnings"
 [ "$(wc -l < sysfilter.zk)" -le 10 ] || fail "sysfilter: output is not small"
 
