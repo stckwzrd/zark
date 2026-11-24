@@ -1,6 +1,6 @@
 import "SDL2/SDL.h" as sdl;
 import "GL/gl.h" as gl;
-import "cimgui_all.h" as ig;
+import "imgui_all.hpp" as ig;
 
 struct App {
     bool show_demo;
@@ -18,35 +18,59 @@ f32 wave(void* data, i32 i) {
     return app->amp * sin(app->phase + i as f64 * app->freq as f64 * 0.1) as f32;
 }
 
-void panel(App* app, f32 dt) {
+!void panel(App* app, f32 dt) {
     u8[96] line;
-    ig::igSetNextWindowPos(ig::ImVec2{ .x = 24.0, .y = 24.0 }, ig::ImGuiCond_FirstUseEver, ig::ImVec2{ .x = 0.0, .y = 0.0 });
-    ig::igSetNextWindowSize(ig::ImVec2{ .x = 440.0, .y = 0.0 }, ig::ImGuiCond_FirstUseEver);
-    ig::igBegin("Zark + Dear ImGui", null, 0);
-    ig::igText("Dear ImGui %s (C++) driven from Zark", ig::igGetVersion());
-    ig::igText("%.1f FPS, frame %.2f ms", (1.0 / dt as f64), dt as f64 * 1000.0);
+    ig::ImGui::SetNextWindowPos(ig::ImVec2(24.0, 24.0), ig::ImGuiCond_FirstUseEver, ig::ImVec2(0.0, 0.0));
+    ig::ImGui::SetNextWindowSize(ig::ImVec2(440.0, 0.0), ig::ImGuiCond_FirstUseEver);
+    ig::ImGui::Begin("Zark + Dear ImGui", null, 0);
 
-    ig::igSeparatorText("Widgets");
-    if (ig::igButton("Click me", ig::ImVec2{ .x = 0.0, .y = 0.0 })) { app->clicks += 1; }
-    ig::igSameLine(0.0, 8.0);
+    const auto version = bprint(line[..], "Dear ImGui {cstr(ig::ImGui::GetVersion())} driven from Zark") catch "";
+    ig::ImGui::Text(version.ptr);
+    const auto timing = bprint(line[..], "{1.0 / dt as f64:.1} FPS, frame {dt as f64 * 1000.0:.2} ms") catch "";
+    ig::ImGui::Text(timing.ptr);
+
+    ig::ImGui::SeparatorText("Widgets");
+    if (ig::ImGui::Button_1("Click me")) { app->clicks += 1; }
+    ig::ImGui::SameLine(0.0, 8.0);
     const auto label = bprint(line[..], "clicked {app->clicks} times") catch "";
-    ig::igText("%s", label.ptr);
-    ig::igInputText("name", &app->name[0], 64, 0, null, null);
+    ig::ImGui::Text(label.ptr);
+    ig::ImGui::InputText("name", &app->name[0], 64, 0, null, null);
     const auto hello = bprint(line[..], "hello, {cstr(&app->name[0])}!") catch "";
-    ig::igText("%s", hello.ptr);
+    ig::ImGui::Text(hello.ptr);
 
-    ig::igSeparatorText("Plot driven by a Zark callback");
-    ig::igSliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
-    ig::igSliderFloat("amplitude", &app->amp, 0.1, 1.0, "%.2f", 0);
-    ig::igCheckbox("pause", &app->paused);
-    ig::igPlotLines_FnFloatPtr("wave", wave, app, 120, 0, null, -1.0, 1.0, ig::ImVec2{ .x = 0.0, .y = 80.0 });
-    ig::igProgressBar((app->phase / 6.2831853) as f32, ig::ImVec2{ .x = -1.0, .y = 0.0 }, null);
+    ig::ImGui::SeparatorText("Plot driven by a Zark callback");
+    ig::ImGui::SliderFloat("frequency", &app->freq, 0.1, 5.0, "%.2f", 0);
+    ig::ImGui::SliderFloat("amplitude", &app->amp, 0.1, 1.0, "%.2f", 0);
+    ig::ImGui::Checkbox("pause", &app->paused);
+    ig::ImGui::PlotLines_u8p_fnp_voidp_i32_i32_u8p_f32_f32_ImVec2("wave", wave, app, 120, 0, null, -1.0, 1.0, ig::ImVec2(0.0, 80.0));
+    ig::ImGui::ProgressBar((app->phase / 6.2831853) as f32, ig::ImVec2(-1.0, 0.0), null);
 
-    ig::igSeparatorText("Window");
-    ig::igColorEdit3("background", &app->clear[0], 0);
-    ig::igCheckbox("show the ImGui demo window", &app->show_demo);
-    ig::igEnd();
-    if (app->show_demo) { ig::igShowDemoWindow(&app->show_demo); }
+    ig::ImGui::SeparatorText("Draw list");
+    const auto dl = ig::ImGui::GetWindowDrawList();
+    const auto p = ig::ImGui::GetCursorScreenPos();
+    dl.AddLine(ig::ImVec2(p.x, p.y), ig::ImVec2(p.x + 240.0, p.y + 24.0), 0xFF00FFFF, 2.0);
+
+    ig::ImGui::SeparatorText("Owned object");
+    auto clipper = ig::ImGuiListClipper::create(c_allocator())?;
+    defer clipper.deinit();
+    clipper.get().Begin(1000, -1.0);
+    while (clipper.get().Step()) {
+        const auto row = bprint(line[..], "row {clipper.get().DisplayStart}") catch "";
+        ig::ImGui::Text(row.ptr);
+    }
+
+    ig::ImGui::SeparatorText("Window");
+    ig::ImGui::ColorEdit3("background", &app->clear[0], 0);
+    ig::ImGui::Checkbox("show the ImGui demo window", &app->show_demo);
+    ig::ImGui::End();
+    if (app->show_demo) { ig::ImGui::ShowDemoWindow(&app->show_demo); }
+    if (app->clicks > 0) {
+        if (ig::ImGui::Begin_1("clicks")) {
+            const auto count = bprint(line[..], "you clicked {app->clicks} times") catch "";
+            ig::ImGui::Text(count.ptr);
+        }
+        ig::ImGui::End();
+    }
 }
 
 !void main() {
@@ -73,10 +97,10 @@ void panel(App* app, f32 dt) {
     defer sdl::SDL_GL_DeleteContext(ctx);
     sdl::SDL_GL_SetSwapInterval(1);
 
-    ig::igCreateContext(null);
-    const auto io = ig::igGetIO_Nil();
+    ig::ImGui::CreateContext(null);
+    const auto io = ig::ImGui::GetIO();
     io->IniFilename = null;
-    ig::igStyleColorsDark(null);
+    ig::ImGui::StyleColorsDark(null);
     ig::ImGui_ImplSDL2_InitForOpenGL(win as *ig::SDL_Window, ctx);
     ig::ImGui_ImplOpenGL3_Init("#version 130");
     defer ig::ImGui_ImplOpenGL3_Shutdown();
@@ -101,12 +125,12 @@ void panel(App* app, f32 dt) {
         }
         ig::ImGui_ImplOpenGL3_NewFrame();
         ig::ImGui_ImplSDL2_NewFrame();
-        ig::igNewFrame();
+        ig::ImGui::NewFrame();
         const auto dt = io->DeltaTime;
         if (!app.paused) { app.phase += dt as f64 * app.freq as f64 * 2.0; }
         if (app.phase > 6.2831853) { app.phase -= 6.2831853; }
-        panel(&app, dt);
-        ig::igRender();
+        panel(&app, dt)?;
+        ig::ImGui::Render();
 
         i32 w = 0;
         i32 h = 0;
@@ -114,7 +138,7 @@ void panel(App* app, f32 dt) {
         gl::glViewport(0, 0, w, h);
         gl::glClearColor(app.clear[0], app.clear[1], app.clear[2], 1.0);
         gl::glClear(gl::GL_COLOR_BUFFER_BIT);
-        ig::ImGui_ImplOpenGL3_RenderDrawData(ig::igGetDrawData());
+        ig::ImGui_ImplOpenGL3_RenderDrawData(ig::ImGui::GetDrawData());
         sdl::SDL_GL_SwapWindow(win);
 
         frames += 1;

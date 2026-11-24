@@ -4,3 +4,6 @@ const auto Level_Info = 0;
 const auto Level_Warn = 1;
 const auto Ok = 0;
 extern Code check(Level l);
+extern void zark_cxx_cdc2e38d789b4778_6(Allocator* __a, u8* who_p, u64 who_n, u8** __p, u64* __n);
+!str greet(Allocator __a, str who) { u8* __p = null; u64 __n = 0; zark_cxx_cdc2e38d789b4778_6(&__a, who.ptr, who.len as u64, &__p, &__n); return __p[0..__n as i64]; }
+comptime assert(sizeof(Allocator) == 24);
