@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr"
 for name in $names; do
     flags=
     [ "$name" = broken ] && flags=-std=c++20
