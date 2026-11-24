@@ -3181,10 +3181,11 @@ str c_header_name(str p) {
             eprint(r.err);
             return error.CompileFailed;
         }
+        const auto src = cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?;
         if (cxx) {
-            cx_version = str_concat(c_allocator(), [it.line, " c++ ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CXXBIND_SRC))?])?;
+            cx_version = str_concat(c_allocator(), [it.line, " c++ ", src, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CXXBIND_SRC))?])?;
         } else {
-            c_version = str_concat(c_allocator(), [it.line, " ", cb_hex(a, fnv64(0xcbf29ce484222325 as u64, CBIND_SRC))?])?;
+            c_version = str_concat(c_allocator(), [it.line, " ", src])?;
         }
     }
     auto ver = c_version;
