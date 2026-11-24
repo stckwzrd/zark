@@ -28,3 +28,5 @@ int over(double);
 int say(const char* fmt, ...);
 int twice_decl(int x);
 int twice_decl(int x);
+namespace a_b { int f(int x); }
+namespace a { namespace b { int f(int x); } }

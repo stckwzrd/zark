@@ -8,6 +8,8 @@ extern i32 apply(fn(i32) -> i32 f, i32 x);
 extern bool flag(bool b);
 extern i32 say(u8* fmt, ...);
 extern i32 quiet(i32 x);
+extern i32 zark_cxx_d009f80dc00306be_10(i32 x);
+i32 twice(i32 x) { return zark_cxx_d009f80dc00306be_10(x); }
 type Kind = i32;
 const auto KA = 0;
 const auto KB = 1;
@@ -16,3 +18,7 @@ type net_Proto = u16;
 const auto net_Proto_Tcp = 6;
 const auto net_Proto_Udp = 17;
 extern i32 net_port(net_Proto p, u8* host);
+extern i32 zark_cxx_d009f80dc00306be_19(i32* r);
+i32 with_ref(i32* r) { return zark_cxx_d009f80dc00306be_19(r); }
+extern i32 zark_cxx_d009f80dc00306be_20(i32 x);
+i32 not_c(i32 x) { return zark_cxx_d009f80dc00306be_20(x); }

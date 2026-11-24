@@ -5,6 +5,7 @@
 #include <exception>
 #include "@DIR@/tests/cxxbind/free.hpp"
 [[noreturn]] static inline void zark_cxx_fail(const char *f) {
+    fflush(stdout);
     try {
         throw;
     } catch (const std::exception &e) {
