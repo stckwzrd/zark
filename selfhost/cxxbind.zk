@@ -2704,6 +2704,16 @@ bool cx_may(CEmit* e, CDecl* v, CType* t, bool konst) {
     return cx_recmay(e, v, r.cx, k);
 }
 
+bool cx_byval(CEmit* e, CType* t) {
+    const auto r = e.rec_of(t);
+    if (r == null || r.cx == null) { return false; }
+    const auto at = str_rfind(r.cx.qn, "::");
+    for (auto n : c_by_value.slice()) {
+        if (n == r.cx.qn || (at >= 0 && n == r.cx.qn[at + 2..])) { return true; }
+    }
+    return false;
+}
+
 bool cx_alias(CEmit* e, CDecl* d, i64 idx) {
     const auto f = d.ty;
     const auto target = e.rec_of(f.params.get(idx).ty.elem);
@@ -2860,7 +2870,7 @@ struct CxSig {
             const auto rr = e.rec_of(f.elem);
             const auto fe = cx_expand(e, f.elem);
             const auto esc = fe.k == .Ptr || (rr != null && (rr.cx == null || cx_hasptr(e, rr.cx)));
-            const auto aliased = !p.ty.rvalue && cx_alias(e, d, i);
+            const auto aliased = !p.ty.rvalue && !cx_byval(e, p.ty.elem) && cx_alias(e, d, i);
             if (!aliased && (p.ty.rvalue || p.ty.elem.konst) && ((!(fe.k == .Ptr && fe.ref) && cx_scalar(e, p.ty.elem)) || (vr && !esc))) {
                 st = p.ty.elem;
                 if (vr) {

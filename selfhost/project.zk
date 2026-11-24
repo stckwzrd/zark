@@ -251,6 +251,7 @@ struct Manifest {
     List<str> cflags;
     List<str> pkgs;
     List<str> lib_dirs;
+    List<str> by_value;
 }
 
 /// the directory with a zark.toml, searching upward from `start`; "" when there is none
@@ -286,6 +287,7 @@ struct Manifest {
     p.cflags = List<str>::init(a);
     p.pkgs = List<str>::init(a);
     p.lib_dirs = List<str>::init(a);
+    p.by_value = List<str>::init(a);
     p.name = toml_str(doc, "package.name", path::base(dir), manifest)?;
     p.main = path::join(a, [dir, toml_str(doc, "package.main", "src/main.zk", manifest)?])?;
     p.lib = path::join(a, [dir, toml_str(doc, "package.lib", "src/lib.zk", manifest)?])?;
@@ -319,6 +321,7 @@ struct Manifest {
     }
     toml_strs(doc, "build.cflags", &p.cflags, manifest)?;
     toml_strs(doc, "build.pkg-config", &p.pkgs, manifest)?;
+    toml_strs(doc, "build.by_value", &p.by_value, manifest)?;
     auto ldirs = List<str>::init(a);
     toml_strs(doc, "build.lib-dirs", &ldirs, manifest)?;
     for (auto d : ldirs) { p.lib_dirs.push(path::join(a, [dir, d])?)?; }
@@ -359,6 +362,7 @@ struct Manifest {
             for (auto c : sub.cflags) { p.cflags.push(c)?; }
             for (auto k : sub.pkgs) { p.pkgs.push(k)?; }
             for (auto d : sub.lib_dirs) { p.lib_dirs.push(d)?; }
+            for (auto v : sub.by_value) { p.by_value.push(v)?; }
         } else {
             auto lib = path::join(a, [ddir, "src/lib.zk"])?;
             if (!fs::is_file(lib)) { lib = path::join(a, [ddir, "lib.zk"])?; }
@@ -411,6 +415,15 @@ struct Manifest {
     for (auto d : p.lib_dirs) {
         auto b = List<u8>::init(a);
         sprint(&b, "-L{d}")?;
+        out.push(b.slice())?;
+    }
+    if (p.by_value.len > 0) {
+        auto b = List<u8>::init(a);
+        sprint(&b, "--by-value=")?;
+        for (auto [i, v] : p.by_value.slice()) {
+            if (i > 0) { sprint(&b, ",")?; }
+            sprint(&b, "{v}")?;
+        }
         out.push(b.slice())?;
     }
     return out;
@@ -484,4 +497,5 @@ void project_setup_for(Allocator a, str file) {
     const auto args = project_c_args(a, p) catch { return; };
     const auto sp = split_extras(a, args) catch { return; };
     c_flags = sp.flags;
+    c_by_value = sp.by_value;
 }
