@@ -11,8 +11,26 @@ struct S2__anon0__anon0 { i16 lo; i16 hi; }
 struct S2__anon0 { u32[1] storage; i32* as_x() { void* p = this; return p; } S2__anon0__anon0* as_h() { void* p = this; return p; } }
 struct S2 { S2__anon0 w; }
 struct NTm { i32 z; }
+owned struct NTm_own { NTm* ptr; void* mem; u64 size; Allocator a; static Self init(NTm* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } NTm* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_de7ddfb0da9f7512_16(this->ptr); } else { zark_cxx_de7ddfb0da9f7512_13(this->ptr); this->a.destroy(this->ptr); } } NTm* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<NTm>()?; zark_cxx_de7ddfb0da9f7512_12(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(NTm), .a = a }; } }
 struct NTU { u32[1] storage; }
-extern i32 zark_cxx_H_19(P* p);
-i32 takep(P p) { return zark_cxx_H_19(&p); }
-extern i32 zark_cxx_H_20(NamedP p);
-i32 taken(NamedP p) { return zark_cxx_H_20(p); }
+owned struct NTU_own { NTU* ptr; void* mem; u64 size; Allocator a; static Self init(NTU* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } NTU* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_de7ddfb0da9f7512_24(this->ptr); } else { zark_cxx_de7ddfb0da9f7512_21(this->ptr); this->a.destroy(this->ptr); } } NTU* release() move { return this->ptr; } !Self clone(Allocator a) { const auto __p = a.create<NTU>()?; zark_cxx_de7ddfb0da9f7512_20(__p, this->ptr); return Self{ .ptr = __p, .mem = __p, .size = sizeof(NTU), .a = a }; } }
+extern void zark_cxx_de7ddfb0da9f7512_12(NTm* __self, NTm* a0);
+extern void zark_cxx_de7ddfb0da9f7512_13(NTm* __self);
+extern void zark_cxx_de7ddfb0da9f7512_14(NTm* __self, NTm* __other);
+void NTm::assign(NTm* __other) { zark_cxx_de7ddfb0da9f7512_14(this, __other); }
+extern void zark_cxx_de7ddfb0da9f7512_15(NTm* __self, NTm* __other);
+void NTm::assign_move(NTm* __other) { zark_cxx_de7ddfb0da9f7512_15(this, __other); }
+extern void zark_cxx_de7ddfb0da9f7512_16(NTm* __self);
+extern void zark_cxx_de7ddfb0da9f7512_19(NTU* __self);
+static !NTU_own NTU::create(Allocator __a) { const auto __p = __a.create<NTU>()?; zark_cxx_de7ddfb0da9f7512_19(__p); return NTU_own::init(__p, sizeof(NTU), __a); }
+extern void zark_cxx_de7ddfb0da9f7512_20(NTU* __self, NTU* a0);
+extern void zark_cxx_de7ddfb0da9f7512_21(NTU* __self);
+extern void zark_cxx_de7ddfb0da9f7512_22(NTU* __self, NTU* __other);
+void NTU::assign(NTU* __other) { zark_cxx_de7ddfb0da9f7512_22(this, __other); }
+extern void zark_cxx_de7ddfb0da9f7512_23(NTU* __self, NTU* __other);
+void NTU::assign_move(NTU* __other) { zark_cxx_de7ddfb0da9f7512_23(this, __other); }
+extern void zark_cxx_de7ddfb0da9f7512_24(NTU* __self);
+extern i32 zark_cxx_de7ddfb0da9f7512_26(P* p);
+i32 takep(P p) { return zark_cxx_de7ddfb0da9f7512_26(&p); }
+extern i32 zark_cxx_de7ddfb0da9f7512_27(NamedP p);
+i32 taken(NamedP p) { return zark_cxx_de7ddfb0da9f7512_27(p); }

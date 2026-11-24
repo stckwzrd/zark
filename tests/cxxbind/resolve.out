@@ -1,28 +1,28 @@
 type a_Id = i16;
-struct a { }
-extern a_Id zark_cxx_H_1(a_Id x);
-static a_Id a::first(a_Id x) { return zark_cxx_H_1(x); }
 type b_Id = i64;
-struct b { }
-extern b_Id zark_cxx_H_3(b_Id x);
-static b_Id b::first(b_Id x) { return zark_cxx_H_3(x); }
-extern a_Id zark_cxx_H_4(b_Id x);
-static a_Id b::cross(b_Id x) { return zark_cxx_H_4(x); }
 type Holder_Size = u32;
 struct Holder { u8[1] __pad0; }
 struct Kid { u8[1] __pad0; }
-extern Holder_Size zark_cxx_H_10(Holder_Size s);
-Holder_Size size_of(Holder_Size s) { return zark_cxx_H_10(s); }
-extern Holder_Size zark_cxx_H_11(Holder_Size s);
-Holder_Size kid_size(Holder_Size s) { return zark_cxx_H_11(s); }
 type Real = f64;
-extern Real zark_cxx_H_13(Real r);
-static Real b::half(Real r) { return zark_cxx_H_13(r); }
-struct b_c { }
-extern b_Id zark_cxx_H_14(b_Id x, a_Id y);
-static b_Id b_c::inner(b_Id x, a_Id y) { return zark_cxx_H_14(x, y); }
 type Mode = u8;
 const auto Mode_Off = 0;
 const auto Mode_On = 1;
-extern Mode zark_cxx_H_18(Mode m, Mode prev);
-Mode toggle(Mode m, Mode prev) { return zark_cxx_H_18(m, prev); }
+struct a { }
+extern a_Id zark_cxx_652972d0bb10dda1_1(a_Id x);
+static a_Id a::first(a_Id x) { return zark_cxx_652972d0bb10dda1_1(x); }
+struct b { }
+extern b_Id zark_cxx_652972d0bb10dda1_3(b_Id x);
+static b_Id b::first(b_Id x) { return zark_cxx_652972d0bb10dda1_3(x); }
+extern a_Id zark_cxx_652972d0bb10dda1_4(b_Id x);
+static a_Id b::cross(b_Id x) { return zark_cxx_652972d0bb10dda1_4(x); }
+extern Holder_Size zark_cxx_652972d0bb10dda1_10(Holder_Size s);
+Holder_Size size_of(Holder_Size s) { return zark_cxx_652972d0bb10dda1_10(s); }
+extern Holder_Size zark_cxx_652972d0bb10dda1_11(Holder_Size s);
+Holder_Size kid_size(Holder_Size s) { return zark_cxx_652972d0bb10dda1_11(s); }
+extern Real zark_cxx_652972d0bb10dda1_13(Real r);
+static Real b::half(Real r) { return zark_cxx_652972d0bb10dda1_13(r); }
+struct b_c { }
+extern b_Id zark_cxx_652972d0bb10dda1_14(b_Id x, a_Id y);
+static b_Id b_c::inner(b_Id x, a_Id y) { return zark_cxx_652972d0bb10dda1_14(x, y); }
+extern Mode zark_cxx_652972d0bb10dda1_18(Mode m, Mode prev);
+Mode toggle(Mode m, Mode prev) { return zark_cxx_652972d0bb10dda1_18(m, prev); }

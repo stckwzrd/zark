@@ -1,5 +1,2 @@
 skipped geo::W::n default: not a constant
-skipped geo::NT::NT: constructors are not bound yet
-skipped geo::copy: non-trivial class by value is not bound yet
-skipped geo::back: non-trivial class by value is not bound yet
-skipped geo::usefwd: incomplete class by value
+skipped geo::usefwd: shim does not compile: argument type 'Fwd' is incomplete

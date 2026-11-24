@@ -1,6 +1,6 @@
-skipped g: uses skipped a_b::E
 skipped a_b::E: name clash
 skipped a::b::E: name clash
 skipped a_b::T: name clash
 skipped a::b::T: name clash
+skipped g: uses skipped a_b::E
 skipped h: uses skipped a::b::T

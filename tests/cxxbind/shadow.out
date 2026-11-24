@@ -3,12 +3,8 @@ type Handle = void*;
 type T = i16;
 struct lib_Id { i64 v; }
 struct lib_Handle { }
-extern void zark_cxx_23ab4d6a8b01a3ca_6(lib_Id* x);
-void use_id(lib_Id x) { zark_cxx_23ab4d6a8b01a3ca_6(&x); }
-extern void close_h(lib_Handle* h);
 type lib_Alias = lib_Id;
 type a_T = i64;
-extern void f(a_T x);
 type b_BT = a_T;
 type B_T = i64;
 struct B { u8[1] __pad0; }
@@ -19,4 +15,8 @@ struct P { u8[1] __pad0; }
 type Q_QT = i64;
 struct Q { u8[1] __pad0; }
 type m_M = i64;
+extern void zark_cxx_23ab4d6a8b01a3ca_6(lib_Id* x);
+void use_id(lib_Id x) { zark_cxx_23ab4d6a8b01a3ca_6(&x); }
+extern void close_h(lib_Handle* h);
+extern void f(a_T x);
 extern void um(m_M x);

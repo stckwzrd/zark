@@ -1,13 +1,7 @@
 skipped a::b_c: name clash
 skipped a_b::c: name clash
-skipped Outer::f: methods are not bound yet
-skipped Outer::g: methods are not bound yet
-skipped Outer::Outer: constructors are not bound yet
-skipped Outer::~Outer: destructors are not bound yet
-skipped Outer::operator int: methods are not bound yet
-skipped Outer::count: variables are not bound yet
 skipped Outer::t: member templates are not bound
+skipped Outer::operator int: operator functions are not bound yet
 skipped useh: shim does not compile: function 'useh' is used but not defined in this translation unit, and cannot be defined in any other translation unit because its type does not have linkage
 skipped st: uses skipped st
 skipped usein: unknown type 'In'
-skipped VA::f: methods are not bound yet
