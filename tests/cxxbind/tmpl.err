@@ -1,2 +1,6 @@
 skipped Unused: template without an instantiation; add 'template struct Unused<...>;' to a wrapper header
 skipped Bad<int>::no: shim does not compile: member reference base type 'int' is not a structure or union
+skipped parse: template specialization Res<int> is not instantiated; add 'template struct Res<...>;' to a wrapper header
+skipped use: template specialization Res<int> is not instantiated; add 'template struct Res<...>;' to a wrapper header
+skipped VStore<Item>::VStore: copying this class is not supported
+skipped VStore<Item>::operator=: operator = is not supported
