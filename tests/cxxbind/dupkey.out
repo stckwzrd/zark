@@ -1,11 +1,11 @@
 struct ns_Item { i64 a; i64 b; i64 c; }
 struct Fine { i32 a; }
-extern i32 zark_cxx_H_3();
-i32 f() { return zark_cxx_H_3(); }
+extern i32 zark_cxx_c978a1e9daa7049c_3();
+i32 f() { return zark_cxx_c978a1e9daa7049c_3(); }
 struct ns { }
-extern i32 zark_cxx_H_4();
-static i32 ns::g() { return zark_cxx_H_4(); }
-extern void zark_cxx_H_7(ns_Item* __r);
-static ns_Item ns::mkitem() { ns_Item __r; zark_cxx_H_7(&__r); return __r; }
-extern void zark_cxx_H_13(Fine* __r);
-Fine fine() { Fine __r; zark_cxx_H_13(&__r); return __r; }
+extern i32 zark_cxx_c978a1e9daa7049c_4();
+static i32 ns::g() { return zark_cxx_c978a1e9daa7049c_4(); }
+extern void zark_cxx_c978a1e9daa7049c_7(ns_Item* __r);
+static ns_Item ns::mkitem() { ns_Item __r; zark_cxx_c978a1e9daa7049c_7(&__r); return __r; }
+extern void zark_cxx_c978a1e9daa7049c_13(Fine* __r);
+Fine fine() { Fine __r; zark_cxx_c978a1e9daa7049c_13(&__r); return __r; }

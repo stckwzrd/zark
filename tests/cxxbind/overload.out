@@ -22,7 +22,7 @@ static i32 ui::Hit_ui_Vec2_ui_Vec2(ui_Vec2 p, ui_Vec2 q) { return zark_cxx_52e90
 extern f32 zark_cxx_52e9012f82d14023_11(ui_Vec2* p, f32 r);
 static f32 ui::Hit_ui_Vec2prc_f32(ui_Vec2 p, f32 r) { return zark_cxx_52e9012f82d14023_11(&p, r); }
 extern f32* zark_cxx_52e9012f82d14023_13(ui_Buf* __self, i32 i);
-f32* ui_Buf::at_i32(i32 i) { return zark_cxx_52e9012f82d14023_13(this, i); }
+f32* ui_Buf::at(i32 i) { return zark_cxx_52e9012f82d14023_13(this, i); }
 extern i32 zark_cxx_52e9012f82d14023_17(i32 a, i32 b);
 static i32 ui_S::pick_i32_i32(i32 a, i32 b) { return zark_cxx_52e9012f82d14023_17(a, b); }
 extern i32 zark_cxx_52e9012f82d14023_18(f64 d);

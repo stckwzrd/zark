@@ -21,7 +21,7 @@ struct Item { }
 struct VStore_Item { Item* p; i32 n; u8[4] __pad0; }
 owned struct VStore_Item_own { VStore_Item* ptr; void* mem; u64 size; Allocator a; static Self init(VStore_Item* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(VStore_Item* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } VStore_Item* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_93478ef57a5aa840_46(this->ptr); } else { zark_cxx_93478ef57a5aa840_45(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } VStore_Item* release() move { return this->ptr; } }
 struct CopyBad { i32 a; u8[4] __pad0; VStore_Item v; }
-owned struct CopyBad_own { CopyBad* ptr; void* mem; u64 size; Allocator a; static Self init(CopyBad* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(CopyBad* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } CopyBad* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_93478ef57a5aa840_48(this->ptr); } else { zark_cxx_93478ef57a5aa840_47(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } CopyBad* release() move { return this->ptr; } }
+owned struct CopyBad_own { CopyBad* ptr; void* mem; u64 size; Allocator a; static Self init(CopyBad* p, u64 z, Allocator al) { return Self{ .ptr = p, .mem = p, .size = z, .a = al }; } static Self adopt(CopyBad* p, void* hm, u64 z, Allocator al) { return Self{ .ptr = p, .mem = hm, .size = z, .a = al }; } CopyBad* get() borrows { return this->ptr; } void deinit() move { if (this->a.alloc_fn == null) { zark_cxx_93478ef57a5aa840_49(this->ptr); } else { zark_cxx_93478ef57a5aa840_47(this->ptr); if (this->a.free_fn != null) { this->a.free_fn(this->a.ctx, this->mem, this->size); } } } CopyBad* release() move { return this->ptr; } }
 extern i32 zark_cxx_93478ef57a5aa840_1(Box_i32* __self);
 i32 Box_i32::get() const { return zark_cxx_93478ef57a5aa840_1(this); }
 extern void zark_cxx_93478ef57a5aa840_2(Box_i32* __self, i32 x);
@@ -49,4 +49,4 @@ Res_i32* ptr() { return zark_cxx_93478ef57a5aa840_30(); }
 extern void zark_cxx_93478ef57a5aa840_45(VStore_Item* __self);
 extern void zark_cxx_93478ef57a5aa840_46(VStore_Item* __self);
 extern void zark_cxx_93478ef57a5aa840_47(CopyBad* __self);
-extern void zark_cxx_93478ef57a5aa840_48(CopyBad* __self);
+extern void zark_cxx_93478ef57a5aa840_49(CopyBad* __self);

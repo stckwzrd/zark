@@ -1,11 +1,11 @@
-extern i32 zark_cxx_H_12(B1* p);
-extern void zark_cxx_H_13(B1* p, i32 v);
-struct B1 { u8[4] __pad0; i32 plain; i32 get_bf() { return zark_cxx_H_12(this); } void set_bf(i32 v) { zark_cxx_H_13(this, v); } }
+extern i32 zark_cxx_2cb2d3adc112b6b0_12(B1* p);
+extern void zark_cxx_2cb2d3adc112b6b0_13(B1* p, i32 v);
+struct B1 { u8[4] __pad0; i32 plain; i32 get_bf() { return zark_cxx_2cb2d3adc112b6b0_12(this); } void set_bf(i32 v) { zark_cxx_2cb2d3adc112b6b0_13(this, v); } }
 struct B2 { u8[4] __pad0; i32 plain; i32 more; }
 struct Flex { i32 n; }
 struct Box_bool { bool v; }
 struct Box_i32 { i32 v; }
 struct UB { Box_bool b; u8[3] __pad0; Box_i32 i; i32 z; }
-struct x_An { i32 a; }
-extern B1* zark_cxx_H_14(B2* __self);
-B1* B2::as_B1() const { return zark_cxx_H_14(this); }
+struct x_anon1_An { i32 a; }
+extern B1* zark_cxx_2cb2d3adc112b6b0_14(B2* __self);
+B1* B2::as_B1() const { return zark_cxx_2cb2d3adc112b6b0_14(this); }

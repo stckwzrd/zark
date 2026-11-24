@@ -1,0 +1,3 @@
+skipped Priv::create: destructor is not public
+skipped PrivS::create: destructor is not public
+skipped ProtS::create: destructor is not public
