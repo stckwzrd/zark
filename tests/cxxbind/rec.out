@@ -18,3 +18,8 @@ extern i32 zark_cxx_H_28(UT* x);
 i32 takeut(UT* x) { return zark_cxx_H_28(x); }
 struct Self { Self* next; i32 v; u8[4] __pad0; }
 struct type_ { i32 match_; }
+struct Hid { i32 h; }
+extern i32 zark_cxx_H_34(Hid* h);
+i32 useh(Hid* h) { return zark_cxx_H_34(h); }
+extern i32* zark_cxx_H_36(i32* a, i32* b);
+i32* imax(i32* a, i32* b) { return zark_cxx_H_36(a, b); }

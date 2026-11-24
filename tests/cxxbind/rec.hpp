@@ -28,3 +28,6 @@ typedef u::T UT;
 int takeut(UT* x);
 struct Self { Self* next; int v; };
 struct type { int match; };
+namespace { struct Hid { int h; }; }
+int useh(Hid* h);
+const int& imax(const int& a, const int& b);
