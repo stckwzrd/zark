@@ -12,6 +12,8 @@ struct M2 { virtual void f(); int b; };
 struct MM : M1, M2 { int c; };
 struct Bits { unsigned a : 3; int s : 5; unsigned b : 7; };
 struct An { int tag; union { int i; float f; }; struct { short lo, hi; } pr; };
+template<class T> struct Box { char c; T v; };
+struct HB { char c; Box<double> b; Box<short> s; };
 V add(const V& a, V b);
 V scale(V v, float k);
 float len2(const V& v);

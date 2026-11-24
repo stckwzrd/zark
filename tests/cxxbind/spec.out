@@ -1,3 +1,4 @@
+type Wchar = u16;
 struct Cmd { i32 id; }
 type Key = i32;
 const auto K0 = 0;
@@ -6,10 +7,10 @@ struct Vec_Cmd { i32 Size; i32 Capacity; Cmd* Data; }
 struct Vec_f32 { i32 Size; i32 Capacity; f32* Data; }
 struct Vec_Key { i32 Size; i32 Capacity; Key* Data; }
 struct Vec_i32 { i32 Size; i32 Capacity; i32* Data; }
-struct IO { Vec_u16 chars; Vec_Cmd cmds; Vec_Cmdp* list; Vec_f32 fl; Vec_Key keys; Vec_i32 ints; }
+struct IO { Vec_u16 chars; Vec_Cmd cmds; u8[8] __pad0; Vec_f32 fl; Vec_Key keys; Vec_i32 ints; }
 struct n_Pair { i32 k; }
 struct Vec_n_Pair { i32 Size; i32 Capacity; n_Pair* Data; }
 struct n_Store { Vec_n_Pair data; }
 align(4) struct HasArr { u8[16] __pad0; }
-extern i32 zark_cxx_H_20(Vec_Cmd* v);
-i32 count(Vec_Cmd* v) { return zark_cxx_H_20(v); }
+extern i32 zark_cxx_H_25(Vec_Cmd* v);
+i32 count(Vec_Cmd* v) { return zark_cxx_H_25(v); }

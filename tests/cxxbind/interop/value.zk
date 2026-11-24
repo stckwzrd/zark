@@ -18,6 +18,7 @@ void main() {
     vb::geo_MM mm;
     vb::geo_An an;
     vb::geo_Bits bits;
+    vb::geo_HB hb;
     auto o = cxx(0);
     println("V c++ {o[0]} {o[1]} {o[2]} {o[3]}");
     println("V zark {sizeof(vb::geo_V)} {alignof(vb::geo_V)} {off(&v, &v.x)} {off(&v, &v.y)}");
@@ -45,6 +46,9 @@ void main() {
     o = cxx(8);
     println("Bits c++ {o[0]} {o[1]}");
     println("Bits zark {sizeof(vb::geo_Bits)} {alignof(vb::geo_Bits)}");
+    o = cxx(9);
+    println("HB c++ {o[0]} {o[1]} {o[2]} {o[3]} {o[4]}");
+    println("HB zark {sizeof(vb::geo_HB)} {alignof(vb::geo_HB)} {off(&hb, &hb.b.v)} {off(&hb, &hb.s)} {off(&hb, &hb.s.v)}");
 
     vb::geo::fill(&mm, &tp, &c, &bits, &an, &p, &a);
     println("{mm.a} {mm.b} {mm.c} {tp.n} {tp.c} {tp.t} {c.id} {c.r} {bits.get_a()} {bits.get_s()} {bits.get_b()} {an.tag} {*an.__anon0.as_f()} {an.pr.lo} {an.pr.hi} {p.pub} {a.c} {a.v}");

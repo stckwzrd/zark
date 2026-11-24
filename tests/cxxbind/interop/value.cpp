@@ -22,6 +22,7 @@ void lay(int which, long* out) {
     static A16 a;
     static MM mm;
     static An an;
+    static HB hb;
     switch (which) {
     case 0: out[0] = sizeof(V); out[1] = alignof(V); out[2] = OFF(v, x); out[3] = OFF(v, y); break;
     case 1: out[0] = sizeof(Vec); out[1] = alignof(Vec); out[2] = OFF(vec, x); out[3] = OFF(vec, y); out[4] = OFF(vec, k); break;
@@ -32,6 +33,7 @@ void lay(int which, long* out) {
     case 6: out[0] = sizeof(MM); out[1] = alignof(MM); out[2] = OFF(mm, a); out[3] = OFF(mm, b); out[4] = OFF(mm, c); break;
     case 7: out[0] = sizeof(An); out[1] = alignof(An); out[2] = OFF(an, tag); out[3] = OFF(an, i); out[4] = OFF(an, pr.lo); out[5] = OFF(an, pr.hi); break;
     case 8: out[0] = sizeof(Bits); out[1] = alignof(Bits); break;
+    case 9: out[0] = sizeof(HB); out[1] = alignof(HB); out[2] = OFF(hb, b.v); out[3] = OFF(hb, s); out[4] = OFF(hb, s.v); break;
     }
 }
 
