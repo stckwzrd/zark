@@ -1,0 +1,7 @@
+struct H { List<i64> xs; }
+void eat(List<i64> xs) { xs.deinit(); }
+void main() {
+    auto h = H{ .xs = List<i64>::init(c_allocator()) };
+    eat(h.xs);
+    eat(h.xs);
+}

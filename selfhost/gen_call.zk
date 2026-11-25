@@ -428,7 +428,7 @@ bool Gen::names_type(Expr* e) {
     this->check_constraints(decl.name, tps.slice(), decl.constraints.slice(), targs.slice(), line)?;
     const auto fi = this->inst_fn(decl, env, targs)?;
     this->move_args(decl, args.slice(), off, line)?;
-    this->copy_args(fi.decl, fi.params, args.slice(), off, line)?;
+    this->copy_args(fi.decl, fi.params.slice(), args.slice(), off, line)?;
 
     auto argtxt = this->sb();
     auto cmodes = List<i64>::init(this->a);
@@ -473,7 +473,7 @@ bool Gen::names_type(Expr* e) {
         }
     }
     auto vsig = "";
-    if (decl.is_extern && decl.variadic) { vsig = this->c_vsig(fi.params, fi.ret, cmodes)?; }
+    if (decl.is_extern && decl.variadic) { vsig = this->c_vsig(fi.params.slice(), fi.ret, cmodes.slice())?; }
     if (decl.is_extern && this->is_empty_c(fi.ret)?) {
         sprint(this->ins()?, "  call void{vsig} @{fi.llname}({argtxt.slice()})\n")?;
         const auto slot = this->alloca(fi.ret, "cempty")?;
@@ -923,7 +923,7 @@ str c_ret_ext(Type* t) {
     return b.slice();
 }
 
-!str Gen::c_vsig(List<Type*> params, Type* ret, List<i64> modes) {
+!str Gen::c_vsig(Type*[] params, Type* ret, i64[] modes) {
     auto b = this->sb();
     b.append(" (")?;
     auto n = 0;
@@ -932,7 +932,7 @@ str c_ret_ext(Type* t) {
         n += 1;
     }
     for (auto [i, p] : params) {
-        const auto m = modes.get(i);
+        const auto m = modes[i];
         if (m == 3) { continue; }
         if (n > 0) { b.append(", ")?; }
         if (m == 0) {

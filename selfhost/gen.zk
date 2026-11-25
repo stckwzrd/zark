@@ -508,7 +508,7 @@ struct Gen {
         if (ty.vol) {
             sprint(this->ins()?, "  {t} = load volatile {this->llty(ty)?}, ptr {ptr}\n")?;
             const auto plain = this->a.create<Type>()?;
-            *plain = *ty;
+            copy_raw(plain, ty);
             plain.vol = false;
             return Value{ .ty = plain, .v = t };
         }

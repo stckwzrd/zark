@@ -1,0 +1,7 @@
+struct H { List<i64> xs; }
+void main() {
+    auto h = H{ .xs = List<i64>::init(c_allocator()) };
+    auto p = &h;
+    auto q = p;
+    auto y = *q;
+}

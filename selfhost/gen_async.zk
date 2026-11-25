@@ -145,7 +145,8 @@ void Gen::set_await(Expr* e) {
 }
 
 !void Gen::gen_poll(FnInst* fi, FnInst* pi, Type* ret) {
-    const auto s = *this;
+    const auto s = this->a.create<Gen>()?;
+    copy_raw(s, this);
     defer {
         this->file = s.file;
         this->dbg = s.dbg;
@@ -181,7 +182,11 @@ void Gen::set_await(Expr* e) {
     const auto decl = fi.decl;
     const auto ft = fi.ret;
     const auto bf = this->a.create<FnInst>()?;
-    *bf = FnInst{ .decl = decl, .env = fi.env, .llname = fi.llname, .params = fi.params, .ret = ret, .generated = true };
+    copy_raw(bf, fi);
+    bf.decl = decl;
+    bf.llname = fi.llname;
+    bf.ret = ret;
+    bf.generated = true;
     this->file = decl.file;
     this->dbg = decl.file.len > 0 && decl.file[0] != '<';
     this->last_line = 0;

@@ -186,7 +186,7 @@ bool Gen::satisfies(Type* t, str name) {
     const auto t = this->resolve_type_core(te, env)?;
     if (!te.vol) { return t; }
     const auto v = this->a.create<Type>()?;
-    *v = *t;
+    copy_raw(v, t);
     v.vol = true;
     return v;
 }

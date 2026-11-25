@@ -18,7 +18,9 @@ struct Origin { i64 kind; str name; str cptr; str by; }
 
 List<MoveRec> Gen::snap() {
     this->shared = true;
-    return this->moved;
+    auto out = List<MoveRec>::init(this->a);
+    copy_raw(&out, &this->moved);
+    return out;
 }
 
 !void Gen::clear_place(str key) {
@@ -421,7 +423,9 @@ bool rec_in(MoveRec[] st, MoveRec r) {
 !void Gen::join_finish(Join* j, bool fallthrough) {
     if (fallthrough) {
         j.acc = this->move_join(j.acc.slice(), j.s0.slice())?;
-        j.arms.push(j.s0)?;
+        auto arm = List<MoveRec>::init(this->a);
+        copy_raw(&arm, &j.s0);
+        j.arms.push(arm)?;
         j.any = true;
     }
     if (!j.any) {
@@ -538,39 +542,53 @@ bool Gen::declared_before(str ptr, i64 depth) {
 
 bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.decl.owned; }
 
-/// A value of this type owns a resource: an `owned struct`, or a struct with a
-/// method that consumes its receiver (`deinit() move`, `close() move`, ...).
-/// Copying such a value is treated as a move.
-bool Gen::is_resource(Type* t) { return this->resource_of(t, 0); }
-
-/// The type itself owns a resource (it is `owned` or has a move method), even if
-/// none of its fields does. Used where a field-wise resource is still fine.
-bool Gen::is_owner(Type* t) {
-    if (t == null || t.k != .Strct || t.si.decl.is_union || t.si.decl.is_iface) { return false; }
-    if (t.si.decl.owned) { return true; }
-    for (auto e : this->methods.entries) {
-        if (!e.used) { continue; }
-        const auto f = e.value;
-        if (f.receiver == t.si.decl.name && f.params.len > 0 && f.params.get(0).move) { return true; }
-    }
-    return false;
+/// Copy the bytes of a value without the ownership rules. The compiler uses it
+/// for arena nodes whose `List` fields are shared on purpose: those copies never
+/// free anything, so a shallow copy cannot double-free. User code should not
+/// need it; `*a = *b` on a resource is rejected for a reason.
+template<T> List<T> share_list(List<T>* l) {
+    auto out = List<T>::init(l.a);
+    copy_raw(&out, l);
+    return out;
 }
 
-/// A struct is a resource when it is `owned`, when it has a method that consumes
-/// the receiver, or when any field is a resource (arrays and error unions hold
-/// their element by value too).
-bool Gen::resource_of(Type* t, i64 d) {
-    if (t == null || d > 16) { return false; }
-    if (t.k == .Array || t.k == .Errun) { return this->resource_of(t.elem, d + 1); }
-    if (t.k != .Strct || t.si.decl.is_union || t.si.decl.is_iface) { return false; }
+template<T> void copy_raw(T* dst, T* src) {
+    const auto d = dst as u8*;
+    const auto s = src as u8*;
+    for (auto i : 0..(sizeof(T) as i64)) { d[i] = s[i]; }
+}
+
+/// A value of this type owns a resource: an `owned struct`, or a struct with a
+/// method that consumes its receiver (`deinit() move`, `close() move`, ...).
+
+/// A struct or union is a resource when it is `owned`, when it has a method that
+/// consumes the receiver, or when any field or variant is a resource (arrays and
+/// error unions hold their element by value too). `seen` holds the types on the
+/// current path: a by-value cycle is illegal, but the type checker does not
+/// reject it yet, so it is treated as a resource instead of recursing forever.
+bool Gen::resource_of(Type* t, List<str>* seen) {
+    if (t == null) { return false; }
+    if (t.k == .Array || t.k == .Errun) { return this->resource_of(t.elem, seen); }
+    if (t.k != .Strct || t.si.decl.is_iface) { return false; }
     if (t.si.decl.owned) { return true; }
     for (auto e : this->methods.entries) {
         if (!e.used) { continue; }
         const auto f = e.value;
         if (f.receiver == t.si.decl.name && f.params.len > 0 && f.params.get(0).move) { return true; }
     }
-    for (auto f : t.si.fields) { if (this->resource_of(f.ty, d + 1)) { return true; } }
-    return false;
+    if (seen.contains(t.si.decl.name)) { return true; }
+    seen.push(t.si.decl.name) catch {};
+    auto found = false;
+    for (auto f : t.si.fields) {
+        if (this->resource_of(f.ty, seen)) { found = true; break; }
+    }
+    _ = seen.pop() catch "";
+    return found;
+}
+
+bool Gen::is_resource(Type* t) {
+    auto seen = List<str>::init(this->a);
+    return this->resource_of(t, &seen);
 }
 
 /// `auto y = x;`, `y = x;`, `S{ .f = x }`, `f(x)` and `return x` copy the value
@@ -580,15 +598,11 @@ bool Gen::resource_of(Type* t, i64 d) {
 !void Gen::copy_moves(Expr* e, Type* ty, str dest, str by, i64 line) {
     if (e == null || ty == null || !this->is_resource(ty)) { return; }
     if (e.k == .Unary && e.op == .star) {
-        if (!this->is_owner(ty)) { return; }
         this->err(line);
         eprintln("'{this->type_name(ty)?}' is a resource; copying it out of a pointer would alias it, use clone() or take the pointer instead");
         return error.CompileFailed;
     }
     if (e.k == .Field) {
-        // only a binding (`auto y = h.l;`, `y = h.l;`) takes the path over;
-        // passing a field to a call is still a copy the check does not follow
-        if (dest.len == 0) { return; }
         const auto k = this->place_key(e)?;
         if (k.len == 0) { return; }
         this->move_use_key(k, this->place_name(e), line)?;
@@ -603,13 +617,13 @@ bool Gen::resource_of(Type* t, i64 d) {
     this->move_mark(e, by, line)?;
 }
 
-!void Gen::copy_args(FnDecl* decl, List<Type*> ptypes, Expr*[] args, i64 off, i64 line) {
+!void Gen::copy_args(FnDecl* decl, Type*[] ptypes, Expr*[] args, i64 off, i64 line) {
     for (auto [i, x] : args) {
         const auto pi = i + off;
         if (pi >= decl.params.len) { continue; }
         if (decl.params.get(pi).move) { continue; }
         if (pi >= ptypes.len) { continue; }
-        this->copy_moves(x, ptypes.get(pi), "", decl.name, line)?;
+        this->copy_moves(x, ptypes[pi], "", decl.name, line)?;
     }
 }
 

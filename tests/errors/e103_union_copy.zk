@@ -1,0 +1,6 @@
+union U { List<i64> xs; i64 n; }
+void main() {
+    U a = .n(1);
+    U b = a;
+    U c = a;
+}

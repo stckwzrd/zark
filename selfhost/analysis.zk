@@ -198,7 +198,7 @@ struct Project {
             return te;
         }
         const auto t = this->a.create<TypeExpr>()?;
-        *t = *te;
+        copy_raw(t, te);
         t.args = List<TypeExpr*>::init(this->a);
         for (auto x : te.args) { t.args.push(this->subst(x, names, args)?)?; }
         t.elem = this->subst(te.elem, names, args)?;

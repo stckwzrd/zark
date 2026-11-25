@@ -2775,15 +2775,15 @@ struct CEmit {
         for (auto s : d.subs.slice()) { this->need_rec(s)?; }
     }
 
-    !void prep(List<CDecl*> decls) {
-        for (auto d : decls.slice()) {
+    !void prep(CDecl*[] decls) {
+        for (auto d : decls) {
             if (d.k == .Struct && d.complete && d.name.len > 0) {
                 this->defined.put(d.name, true)?;
                 this->records.put(d.name, d)?;
             }
             if (d.k == .Struct && !d.complete && !this->fwd.has(d.name)) { this->fwd.put(d.name, d)?; }
         }
-        for (auto d : decls.slice()) {
+        for (auto d : decls) {
             if (!d.rel) { continue; }
             if (d.k == .Func && (!d.is_static || (d.is_inline && d.has_body)) && !d.asm_label) { this->need(d.ty)?; }
             if (d.k == .Typedef) { this->need(d.ty)?; }
@@ -2792,8 +2792,8 @@ struct CEmit {
         }
     }
 
-    !void force(List<u8>* b, List<CDecl*> decls) {
-        for (auto [i, d] : decls.slice()) {
+    !void force(List<u8>* b, CDecl*[] decls) {
+        for (auto [i, d] : decls) {
             if (d.k != .Struct || !d.complete || !d.rel || d.name.len == 0) { continue; }
             auto kind = "struct ";
             if (d.is_union) { kind = "union "; }
@@ -3035,8 +3035,8 @@ bool cross_parse_x86() { return c_arch == 1 && vrt_arch() == 0; }
     }
     p.parse_all()?;
     auto e = CEmit{ .a = a, .toks = p.toks, .macs = p.macs, .bad = Map<bool>::init(a), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = p.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a) };
-    e.prep(p.decls)?;
-    e.force(&body, p.decls)?;
+    e.prep(p.decls.slice())?;
+    e.force(&body, p.decls.slice())?;
     write_file(stub, body.slice())?;
     auto lflags = List<str>::init(a);
     lflags.append(["-iquote", from_dir])?;

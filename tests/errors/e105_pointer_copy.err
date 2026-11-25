@@ -1,0 +1,1 @@
+error: 'H' is a resource; copying it out of a pointer would alias it, use clone() or take the pointer instead

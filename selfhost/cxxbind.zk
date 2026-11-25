@@ -1821,7 +1821,7 @@ struct CxWalk {
             const auto qs = jstr(jget(n, "qualifiers"), "");
             if (qs.len == 0) { return t; }
             const auto c = this->a.create<CType>()?;
-            *c = *t;
+            copy_raw(c, t);
             if (str_find(qs, "const") >= 0) { c.konst = true; }
             if (str_find(qs, "volatile") >= 0) { c.vol = true; }
             return c;
@@ -2289,7 +2289,7 @@ struct CxWalk {
         if (t.k == .Bad) { return this->skip(label, t.name); }
         if (t.plain) {
             const auto u = this->a.create<CType>()?;
-            *u = *t;
+            copy_raw(u, t);
             u.plain = false;
             t = u;
         }
@@ -3766,7 +3766,7 @@ bool cx_is_operator(str n) {
             for (auto k : req..full) {
                 const auto v = w.decl(.Func, "")?;
                 const auto seq = v.seq;
-                *v = *d;
+                copy_raw(v, d);
                 v.seq = seq;
                 v.cx_cast = cast;
                 v.cx_over = true;
