@@ -317,11 +317,12 @@ bool Gen::heap_place(Expr* e) {
     }
     if (init.k == .Ident) {
         const auto src = this->local_ptr(init.name);
+        auto copies = List<MoveRec>::init(this->a);
         for (auto r : this->moved) {
-            if (r.ptr == src && (r.kind == 1 || r.kind == 2)) {
-                this->add_rec(MoveRec{ .ptr = slot, .by = r.by, .line = r.line, .kind = r.kind, .cont = r.cont, .cname = r.cname })?;
-                return;
-            }
+            if (r.ptr == src && (r.kind == 1 || r.kind == 2 || r.kind == 6)) { copies.push(r)?; }
+        }
+        for (auto r : copies) {
+            this->add_rec(MoveRec{ .ptr = slot, .by = r.by, .line = r.line, .kind = r.kind, .cont = r.cont, .cname = r.cname })?;
         }
         return;
     }
