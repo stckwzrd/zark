@@ -112,6 +112,75 @@ struct JoinHandle<T> {
     }
 }
 
+struct Pair<A, B> { A first; B second; }
+
+struct Join2<A, B> {
+    JoinHandle<A> a;
+    JoinHandle<B> b;
+    bool adone;
+    bool bdone;
+    A av;
+    B bv;
+
+    Poll<Pair<A, B>> poll(Context* cx) {
+        if (!this->adone) {
+            match (this->a.poll(cx)) {
+                .Ready(v) => { this->av = v; this->adone = true; }
+                .Pending => {}
+            }
+        }
+        if (!this->bdone) {
+            match (this->b.poll(cx)) {
+                .Ready(v) => { this->bv = v; this->bdone = true; }
+                .Pending => {}
+            }
+        }
+        if (this->adone && this->bdone) {
+            return .Ready(Pair<A, B>{ .first = this->av, .second = this->bv });
+        }
+        return .Pending;
+    }
+}
+
+/// wait for both handles and return their values
+template<A, B> Join2<A, B> join(JoinHandle<A> a, JoinHandle<B> b) {
+    return Join2<A, B>{ .a = a, .b = b };
+}
+
+union Select2Result<A, B> { A First; B Second; }
+
+struct Select2<A, B> {
+    JoinHandle<A> a;
+    JoinHandle<B> b;
+    bool done;
+
+    Poll<Select2Result<A, B>> poll(Context* cx) {
+        if (this->done) { return .Pending; }
+        match (this->a.poll(cx)) {
+            .Ready(v) => {
+                this->done = true;
+                this->b.detach();
+                return .Ready(Select2Result<A, B>::First(v));
+            }
+            .Pending => {}
+        }
+        match (this->b.poll(cx)) {
+            .Ready(v) => {
+                this->done = true;
+                this->a.detach();
+                return .Ready(Select2Result<A, B>::Second(v));
+            }
+            .Pending => {}
+        }
+        return .Pending;
+    }
+}
+
+/// the value of whichever handle finishes first; the other task is detached
+template<A, B> Select2<A, B> select(JoinHandle<A> a, JoinHandle<B> b) {
+    return Select2<A, B>{ .a = a, .b = b };
+}
+
 owned struct Executor {
     Allocator a;
     i64 poller;
