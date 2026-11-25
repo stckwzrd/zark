@@ -1,0 +1,1 @@
+error: 'f' captured 'l', which was consumed on line 5; assign it a new value before calling the closure

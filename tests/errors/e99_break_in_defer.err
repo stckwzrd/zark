@@ -1,0 +1,1 @@
+error: 'break' cannot be used in deferred code (defer/errdefer)

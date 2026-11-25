@@ -71,7 +71,7 @@ struct MatchRes { Type* ty; str slot; }
             };
             this->reinit = false;
             this->assign_target = false;
-            if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
+            if (addr.imm) { this->err(s.line); eprintln("cannot assign: the target is const; declare it with 'auto' (mutable) or assign to a mutable variable"); return error.CompileFailed; }
             if (s.op == .eq) {
                 this->bor_field = null;
                 if (s.e2.k == .Ident) { this->set_await(s.e); }

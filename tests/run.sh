@@ -54,10 +54,13 @@ if [ $linux = 1 ] && command -v addr2line >/dev/null; then
   else pass=$((pass+1)); echo "ok   crash_thunk_names"; fi
 fi
 for f in tests/errors/*.zk; do
-  timeout 20 $ZARK run "$f" >/dev/null 2>&1; rc=$?
-  if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected an error)"
-  elif [ $rc -eq 124 ]; then fail=$((fail+1)); echo "FAIL $f (timed out)"
-  else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
+  out=$(timeout 20 $ZARK run "$f" 2>&1); rc=$?
+  if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; continue; fi
+  if [ $rc -eq 124 ]; then fail=$((fail+1)); echo "FAIL $f (timed out)"; continue; fi
+  got=$(printf '%s\n' "$out" | awk 'NF{print; exit}' | sed -E 's/^[^:]+:[0-9]+: //')
+  want=$(cat "${f%.zk}.err")
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "ok   $f (rejected)"
+  else fail=$((fail+1)); echo "FAIL $f (diagnostic)"; echo "  want: $want"; echo "  got:  $got"; fi
 done
 for f in tests/std/*.zk; do
   if out=$($ZARK test "$f" $FLAGS 2>&1); then pass=$((pass+1)); echo "ok   $f ($(echo "$out" | tail -1))"

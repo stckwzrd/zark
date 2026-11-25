@@ -1,0 +1,1 @@
+error: a value of type 'thread.Thread' is dropped here; keep it in a variable and consume it (for example join it), or pass it to something that does

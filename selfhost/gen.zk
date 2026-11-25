@@ -211,6 +211,16 @@ struct Gen {
         this->has_pend = true;
     }
 
+    List<str> method_names(str rname) {
+        auto out = List<str>::init(this->a);
+        for (auto e : this->methods.entries) {
+            if (!e.used) { continue; }
+            const auto f = e.value;
+            if (f.receiver == rname) { out.push(f.name) catch return out; }
+        }
+        return out;
+    }
+
     str hint(str name, List<str> cands) {
         const auto c = closest(name, cands);
         if (c.len == 0) { return ""; }

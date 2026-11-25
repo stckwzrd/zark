@@ -1,0 +1,1 @@
+error: 'f' is used after 'spawn' consumed it on line 7; assign it a new value first

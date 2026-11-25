@@ -1,0 +1,1 @@
+error: 'g' captured 'a', which was consumed on line 6; assign it a new value before calling the closure

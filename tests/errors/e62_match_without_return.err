@@ -1,0 +1,1 @@
+error: function 'f' does not return a value on every path; add a 'return' at the end
