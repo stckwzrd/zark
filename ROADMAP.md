@@ -1,5 +1,7 @@
 # Zark roadmap: what to improve and how
 
+Known limitations and planned work are tracked in GitHub Issues (labels `bug`, `soundness`, `crash`, `miscompile`, `diagnostics`, `docs`, `platform`, `speed`). The roadmap below explains *how*; the issues carry the repros and acceptance criteria.
+
 Ordered by payoff. Each item says *how*, not just *what*.
 
 ## 1. Native backend: generated code quality (debug builds run 3x slower than gcc -O0)
