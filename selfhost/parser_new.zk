@@ -553,7 +553,7 @@ bool Parser::new_member(bool is_union) {
         step_ok = true;
     }
     if (!ok || !step_ok) {
-        this->pos -= 1;
+        if (this->pos > 0) { this->pos -= 1; }
         this->fail("this for loop is not of the form for (T i = a; i < b; i++); use while for other loops")?;
     }
     _ = this->expect(.rparen)?;

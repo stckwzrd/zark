@@ -863,7 +863,7 @@ struct Parser {
             }
             _ => {}
         }
-        this->pos -= 1;
+        if (this->pos > 0) { this->pos -= 1; }
         this->fail("expected expression")?;
         return error.ParseFailed;
     }
@@ -936,6 +936,9 @@ struct Parser {
                     lit = List<u8>::init(this->a);
                 }
                 auto inner = raw[i + 1..close];
+                if (str_trim(inner).len == 0) {
+                    this->fail("empty interpolation in a string; write an expression between the braces, or double the braces to print them")?;
+                }
                 auto spec = "";
                 auto has_spec = false;
                 const auto ci = spec_colon(inner);
