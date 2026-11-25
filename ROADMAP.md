@@ -32,7 +32,7 @@ Done: closures with explicit captures, `T: Ord` constraints (checked at the call
 - **Modules / namespaces:** `import "net.zk" as net`, then `net.connect(...)`.
 - **SIMD types**: done through LLVM (`f32x4`, `i32x8`, ...). Missing: vector instructions in the own backend, comparisons and masks, shuffles.
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
-- **Async cancellation and channels.** A suspended frame abandoned by `detach`, `select` or `Executor.deinit` does not run its deferred code yet: a generated `drop` for the frame is needed. `join` and `select` over `JoinHandle`s exist; channels, `select` over channels and a multithreaded executor do not.
+- **Async cancellation and channels.** A suspended frame abandoned by `detach`, `select` or `Executor.deinit` does not run its deferred code yet: a generated `drop` for the frame is needed. It must run `defer` and `errdefer` (cancellation is an unfinished operation), `select` must cancel the losing task instead of only detaching it, and `drop` stays optional in the future protocol (call `drop`, else `cancel`, else nothing) so existing futures keep working. `join` and `select` over `JoinHandle`s exist; channels, `select` over channels and a multithreaded executor do not.
 
 ## 7. Tooling
 Done: `zark lsp` (language server), `zark test`, `zark fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
