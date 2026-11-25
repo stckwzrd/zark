@@ -23,6 +23,7 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS_DIRS = ("examples", "tests", "std", "selfhost")
+SKIP_FILES = {"tests/edge/comptime.zk"}  # intentionally exponential compile-time program
 KEYWORDS = [
     "auto", "const", "static", "template", "fn", "struct", "union", "enum",
     "match", "type", "import", "extern", "export", "defer", "errdefer",
@@ -48,8 +49,12 @@ def corpus():
         for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, base)):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
             for f in filenames:
-                if f.endswith(".zk") and not f.startswith("."):
-                    out.append(os.path.join(dirpath, f))
+                if not f.endswith(".zk") or f.startswith("."):
+                    continue
+                path = os.path.join(dirpath, f)
+                if os.path.relpath(path, ROOT) in SKIP_FILES:
+                    continue
+                out.append(path)
     return sorted(out)
 
 

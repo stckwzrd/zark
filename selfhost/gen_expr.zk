@@ -187,6 +187,11 @@ bool can_coerce(Type* from, Type* to) {
             return this->cast(v, target, e.line);
         }
         .Try => {
+            if (this->in_defer) {
+                this->err(e.line);
+                eprintln("'?' cannot be used in deferred code (defer/errdefer); handle the error with 'catch' instead");
+                return error.CompileFailed;
+            }
             Type* ex = null;
             const auto lt = lit_target(expected);
             if (lt != null) { ex = this->mk_elem(.Errun, lt)?; }
