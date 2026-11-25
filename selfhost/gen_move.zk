@@ -222,6 +222,36 @@ str Gen::place_name(Expr* e) {
     }
 }
 
+/// Type of a place expression rooted at a local variable, without generating code.
+!Type* Gen::place_type(Expr* e) {
+    if (e.k == .Ident) { return this->local_type(e.name)?; }
+    if (e.k == .Field) {
+        const auto bt = this->place_type(e.l) catch null;
+        if (bt == null || bt.k != .Strct || bt.si.decl.is_union) { return null; }
+        const auto idx = field_index(bt.si, e.name);
+        if (idx < 0) { return null; }
+        return bt.si.fields.get(idx).ty;
+    }
+    return null;
+}
+
+/// Does this place live behind a pointer or slice (the heap) rather than in a
+/// local value?
+bool Gen::heap_place(Expr* e) {
+    if (e.k == .Field) { return this->heap_place(e.l); }
+    if (e.k == .Index || e.k == .Slice) {
+        const auto ct = this->place_type(e.l) catch null;
+        if (ct != null && ct.k == .Array) { return this->heap_place(e.l); }
+        if (ct != null && (ct.k == .Ptr || ct.k == .Slice)) { return true; }
+        return this->heap_place(e.l);
+    }
+    if (e.k == .Ident) {
+        const auto t = this->local_type(e.name) catch null;
+        return t != null && (t.k == .Ptr || t.k == .Slice);
+    }
+    return false;
+}
+
 !Origin Gen::origin_of(Expr* e) {
     auto none = Origin{ .kind = 0, .name = "", .cptr = "" };
     if (e == null) { return none; }
@@ -237,24 +267,27 @@ str Gen::place_name(Expr* e) {
         return Origin{ .kind = 2, .name = this->bor_name, .cptr = this->bor_ptr, .by = e.l.name };
     }
     auto base = e;
-    auto indirect_ok = false;
-    if (e.k == .Unary && e.op == .amp) { base = e.l; indirect_ok = true; }
-    if (e.k == .Slice) { base = e; }
-    if (e.k == .Ident) { return none; }
-    if (!indirect_ok && e.k != .Slice) { return none; }
+    if (e.k == .Unary && e.op == .amp) { base = e.l; }
+    else if (e.k != .Slice) { return none; }
+    if (base.k == .Ident) {
+        // &x points at the local value itself
+        const auto p0 = this->local_ptr(base.name);
+        if (p0.len == 0 || base.name == "this") { return none; }
+        return Origin{ .kind = 1, .name = base.name, .cptr = p0 };
+    }
     auto root = base;
-    auto direct = base.k == .Ident;
-    if (base.k == .Field || base.k == .Index || base.k == .Slice) { root = base.l; }
-    if (root.k != .Ident) { return none; }
+    while (root.k == .Field || root.k == .Index || root.k == .Slice) { root = root.l; }
+    if (root.k != .Ident || root.name == "this") { return none; }
     const auto p = this->local_ptr(root.name);
     if (p.len == 0) { return none; }
-    if (root.name == "this") { return none; }
     const auto ty = this->local_type(root.name)?;
     if (ty == null) { return none; }
-    if (direct) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
-    if (ty.k == .Array || (ty.k == .Strct && base.k == .Field)) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
-    if (ty.k == .Ptr || ty.k == .Slice) { return Origin{ .kind = 2, .name = root.name, .cptr = p }; }
-    return none;
+    if (!this->heap_place(base)) { return Origin{ .kind = 1, .name = root.name, .cptr = p }; }
+    auto cont = base;
+    if (base.k == .Index || base.k == .Slice) { cont = base.l; }
+    const auto k = this->place_key(cont)?;
+    if (k.len == 0) { return none; }
+    return Origin{ .kind = 2, .name = this->place_name(cont), .cptr = k };
 }
 
 !void Gen::set_origin(str slot, str name, Expr* init, i64 line) {
