@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")/.."
 ZARK=${ZARK:-./build/zark}
-( ulimit -v 3000000 ) 2>/dev/null || { echo "ok   scale (skipped, ulimit -v is not available)"; exit 0; }
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
+MEM=3000000
+TMO=30
+if grep -aqm1 "__asan" "$ZARK" 2>/dev/null; then
+    # AddressSanitizer reserves terabytes of virtual address space; keep the
+    # memory bound only for normal builds and give the instrumented one time.
+    MEM=unlimited
+    TMO=180
+fi
+( ulimit -v "$MEM" ) 2>/dev/null || { echo "ok   scale (skipped, ulimit -v is not available)"; exit 0; }
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 python3 - "$dir" <<'PY'
@@ -26,9 +34,9 @@ guards += ["    println(s);", "}"]
 open(d + "/guards.zk", "w").write("\n".join(guards) + "\n")
 PY
 fail() { echo "FAIL scale ($1)"; head -3 "$dir/err"; exit 1; }
-( ulimit -v 3000000; timeout 30 "$ZARK" ir "$dir/big.zk" >/dev/null 2>"$dir/err" ) || fail "2000 loops"
+( ulimit -v "$MEM"; timeout "$TMO" "$ZARK" ir "$dir/big.zk" >/dev/null 2>"$dir/err" ) || fail "2000 loops"
 echo "ok   scale (a function with 2000 loops compiles in bounded time and memory)"
-( ulimit -v 3000000; timeout 30 "$ZARK" ir "$dir/guards.zk" >/dev/null 2>"$dir/err" ) || fail "8000 checked operations"
+( ulimit -v "$MEM"; timeout "$TMO" "$ZARK" ir "$dir/guards.zk" >/dev/null 2>"$dir/err" ) || fail "8000 checked operations"
 echo "ok   scale (a function with 8000 checked operations compiles in time)"
-if ( ulimit -v 3000000; timeout 30 "$ZARK" ir "$dir/live.zk" >/dev/null 2>"$dir/err" ); then fail "600 live borrows must be reported"; fi
+if ( ulimit -v "$MEM"; timeout "$TMO" "$ZARK" ir "$dir/live.zk" >/dev/null 2>"$dir/err" ); then fail "600 live borrows must be reported"; fi
 grep -q "tracks more than 512" "$dir/err" || fail "no clear message for too many tracked variables"
