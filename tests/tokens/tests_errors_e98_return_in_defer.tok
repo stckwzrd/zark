@@ -1,0 +1,18 @@
+1 .bang !
+1 .ident void
+1 .ident main
+1 .lparen (
+1 .rparen )
+1 .lbrace {
+2 .kw_defer defer
+2 .lbrace {
+2 .kw_return return
+2 .semi ;
+2 .rbrace }
+3 .ident println
+3 .lparen (
+3 .str_lit x
+3 .rparen )
+3 .semi ;
+4 .rbrace }
+5 .eof 

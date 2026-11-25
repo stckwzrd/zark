@@ -1,0 +1,6 @@
+!void main() {
+    for (auto i : 0..2) {
+        defer { continue; }
+        println(i);
+    }
+}
