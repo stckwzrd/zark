@@ -20,6 +20,16 @@ sh scripts/install-deps.sh
 zark run examples/hello.zk
 ```
 
+`bootstrap.sh` уже прогнал тесты. Повторить их (и проходы `--llvm` / `-O`):
+
+```
+ZARK=build/zark tests/run.sh
+ZARK=build/zark tests/run.sh --llvm
+ZARK=build/zark tests/run.sh -O
+```
+
+Для тестов нужен `python3` (фаззеры и генераторы); `scripts/install-deps.sh` его ставит.
+
 ## Что нужно
 
 | Инструмент | Зачем |
@@ -28,17 +38,17 @@ zark run examples/hello.zk
 | библиотека C с заголовками | glibc, musl или SDK macOS |
 | binutils (`ld`) | линковка на Linux |
 | bash, gzip, diffutils, make | скрипт бутстрапа |
-| python3 | только для тестов |
+| python3 | набор тестов, который запускает `bootstrap.sh` (фаззеры и генераторы) |
 
 ## Поддерживаемые системы
 
 | Система | Статус | Бэкенд |
 |---|---|---|
-| Linux x86-64, glibc (Debian, Ubuntu, Fedora, Arch, openSUSE) | собирается и проверяется в CI | свой x86-64 бэкенд по умолчанию, LLVM через `--llvm` / `-O` |
-| Linux x86-64, musl (Alpine) | собирается и проверяется в CI | то же |
-| Linux arm64 | собирается в CI | только LLVM |
-| macOS, Apple Silicon и Intel | собирается в CI | только LLVM |
-| Windows | через WSL2, собирается в CI | как на Linux |
+| Linux x86-64, glibc (Debian, Ubuntu, Fedora, Arch, openSUSE) | собирается и проверяется | свой x86-64 бэкенд по умолчанию, LLVM через `--llvm` / `-O` |
+| Linux x86-64, musl (Alpine) | собирается и проверяется | то же |
+| Linux arm64 | поддерживается | только LLVM |
+| macOS, Apple Silicon и Intel | поддерживается | только LLVM |
+| Windows | через WSL2 | как на Linux |
 
 Windows без WSL не поддерживается: рантайм использует `fork`, `poll` и потоки POSIX.
 
@@ -144,3 +154,6 @@ docker run --rm -it -v "$PWD":/src -w /src debian:stable sh -c "sh scripts/insta
 - При падении программа печатает `fatal: ...` и трассировку. `ZARK_CRASH_HANDLER=0` возвращает обычный core dump.
 - Не используйте один `.zark-cache` на разных системах (например, каталог, смонтированный в Docker и из Linux, и из macOS): при смене системы удаляйте его.
 - Компилятор кэширует объекты в `.zark-cache` рядом с местом запуска; удалите каталог, чтобы начать с чистого листа.
+- Docker на Fedora с SELinux: рабочая директория в bind-mount имеет тип `user_home_t`, и `container_t` не может её прочитать (`bootstrap.sh: permission denied`). Монтируйте с `:z` (`-v "$PWD":/src:z`) или запускайте контейнер с `--security-opt label=disable`.
+- Зависание в `tests/cbuild.sh`, если `clang` — обёртка ccache: это исправлено в `tests/compiler.sh`; если появилось снова, проверьте, что добавленный вами shim не запускает обёртку.
+- `pthread_create: Resource temporarily unavailable` в тестах потоков: поднимите `ulimit -u` (набор тестов запускает много процессов и потоков).

@@ -35,15 +35,15 @@
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> s </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "abc"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    s[</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">0</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">] </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 65</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>
-fatal: segmentation fault at address 0x40e010
+fatal: segmentation fault at address 0x40e150
 backtrace:
-  #0 0x25df in .zark-cache/main
-  #1 0xd04c in .zark-cache/main
-  #2 0x27781 in /usr/lib/libc.so.6
-  #3 0x278b9 in /usr/lib/libc.so.6
-  #4 0x2485 in .zark-cache/main
+  #0 0x8ff in .zark-cache/main
+  #1 0xb966 in .zark-cache/main
+  #2 0x3681 in /lib64/libc.so.6
+  #3 0x3798 in /lib64/libc.so.6
+  #4 0x7b5 in .zark-cache/main
 where (addr2line):
-vb.main at main.zk:3
+main at main.zk:3
 main at ??:?
 _start at ??:?
 error: error.Signaled</code></pre></div></div>

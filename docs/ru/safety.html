@@ -183,17 +183,17 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">destroy</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(p);</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    touch</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(copy);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>
-fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f68609d7ff8)
+fatal: segmentation fault: use after free: block #1 (8 bytes) was already freed (address 0x7f78856c0ff8)
 backtrace:
-  #0 0x2c69 in .zark-cache/main
-  #1 0x26bf in .zark-cache/main
-  #2 0x118ae in .zark-cache/main
-  #3 0x27781 in /usr/lib/libc.so.6
-  #4 0x278b9 in /usr/lib/libc.so.6
-  #5 0x24b5 in .zark-cache/main
+  #0 0xf89 in .zark-cache/main
+  #1 0x9df in .zark-cache/main
+  #2 0x104d2 in .zark-cache/main
+  #3 0x3681 in /lib64/libc.so.6
+  #4 0x3798 in /lib64/libc.so.6
+  #5 0x7e5 in .zark-cache/main
 where (addr2line):
-vb.touch at main.zk:1
-vb.main at main.zk:9
+touch at main.zk:1
+main at main.zk:9
 main at ??:?
 _start at ??:?
 error: error.Signaled</code></pre></div></div>
@@ -203,8 +203,8 @@ error: error.Signaled</code></pre></div></div>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.create</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;i64></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    _ </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a.alloc</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">&#x3C;u8></span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">100</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">)</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    dbg.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">deinit</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">()</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">?</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">;</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7fdba0f13ff8
-leak: block #2, 100 bytes at 0x7fdba0f11f9c
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out run"><div class="out-head"><span>Вывод</span><span class="exit">код выхода 1</span></div><pre><code>leak: block #1, 8 bytes at 0x7fb30faf9ff8
+leak: block #2, 100 bytes at 0x7fb30faf7f9c
 DebugAllocator: 2 block(s) leaked, 108 bytes (set trap_id to a block number to stop in gdb where it is allocated)
 error: MemoryLeak</code></pre></div></div>
 <p>Запускайте тесты с <code>DebugAllocator</code> в роли аллокатора. Поскольку функции получают аллокатор параметром, менять код для этого не нужно.</p>
