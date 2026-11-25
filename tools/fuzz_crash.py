@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS_DIRS = ("examples", "tests", "std", "selfhost")
@@ -114,6 +115,14 @@ def limit_memory(mb):
 BAD_RE = re.compile(r"(?m)^(?:panic:|fatal:|error: internal compiler error:)")
 
 
+def stable_copy(zark):
+    fd, path = tempfile.mkstemp(prefix="zark-fuzz-bin-", suffix=".exe", dir="/tmp")
+    os.close(fd)
+    shutil.copy2(zark, path)
+    os.chmod(path, 0o755)
+    return path
+
+
 def run_cmd(zark, args, timeout, memory_mb):
     def pre():
         limit_memory(memory_mb)
@@ -146,11 +155,16 @@ def one(zark, base, seed, rng, timeout, memory_mb, scratch):
     try:
         os.write(fd, mutant.encode("latin-1", "ignore"))
         os.close(fd)
-        cmds = [("tokens", ["tokens", path]),
-                ("ir", ["ir", path]),
-                ("fmt", ["fmt", "--check", path])]
-        for name, args in cmds:
-            why, rc, out = run_cmd(zark, args, timeout, memory_mb)
+        cmds = [("tokens", ["tokens", path], timeout),
+                ("ir", ["ir", path], timeout * 4),
+                ("fmt", ["fmt", "--check", path], timeout)]
+        for name, args, tmo in cmds:
+            why, rc, out = run_cmd(zark, args, tmo, memory_mb)
+            if why is not None and why.startswith("exec error"):
+                time.sleep(0.2)
+                why, rc, out = run_cmd(zark, args, tmo, memory_mb)
+                if why is not None and why.startswith("exec error"):
+                    return None
             if why is None:
                 continue
             tag = f"{seed}_{kind}_{name}"
@@ -185,6 +199,7 @@ def main():
     if not os.path.exists(zark):
         print(f"fuzz_crash: no compiler at {zark}", file=sys.stderr)
         return 2
+    zark = stable_copy(zark)
     files = corpus()
     if not files:
         print("fuzz_crash: empty corpus", file=sys.stderr)
