@@ -357,6 +357,8 @@ str Gen::missing_variant(Value v, List<MatchArm> arms) {
             }
         }
         if (seen_true && seen_false) { return ""; }
+        if (!seen_true) { return "true"; }
+        return "false";
     }
     auto names = List<str>::init(this->a);
     for (auto arm : arms) {
@@ -388,7 +390,9 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     const auto m = this->missing_variant(v, arms);
     if (m.len == 0) { return; }
     this->err(line);
-    if (m == "?") {
+    if (v.ty.k == .Bool && m != "?") {
+        eprintln("match on 'bool' is not exhaustive: missing '{m}'");
+    } else if (m == "?") {
         eprintln("a match expression on '{this->type_name(v.ty)?}' needs a '_' arm");
     } else {
         eprintln("match is not exhaustive: missing '.{m}' (add the arm or a '_' arm)");
