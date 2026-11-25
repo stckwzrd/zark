@@ -170,12 +170,12 @@ struct Resolver {
 
 /// in `decls`, references written through the import name `from` (from::x) are rewritten to
 /// the name `to` the module was first imported under ("" = the global namespace)
-!void alias_module(Allocator a, List<Decl> decls, str from, str to) {
+!void alias_module(Allocator a, Decl[] decls, str from, str to) {
     auto r = Resolver{ .a = a, .prefix = "", .names = Map<bool>::init(a), .locals = List<str>::init(a), .from = from, .to = to };
     r.walk(decls)?;
 }
 
-!void resolve_module(Allocator a, List<Decl> decls, str prefix) {
+!void resolve_module(Allocator a, Decl[] decls, str prefix) {
     auto r = Resolver{ .a = a, .prefix = prefix, .names = Map<bool>::init(a), .locals = List<str>::init(a) };
     for (auto d : decls) {
         match d.k {
@@ -192,10 +192,10 @@ struct Resolver {
     r.walk(decls)?;
 }
 
-!void Resolver::walk(List<Decl> decls) {
+!void Resolver::walk(Decl[] decls) {
     const auto r = this;
     for (auto i : 0..decls.len) {
-        const auto d = &decls.items[i];
+        const auto d = &decls[i];
         match d.k {
             .Func => r.rfn(d.f)?;
             .Struct => {

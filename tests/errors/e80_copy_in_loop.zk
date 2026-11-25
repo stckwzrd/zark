@@ -1,0 +1,8 @@
+!void main() {
+    auto l = List<i64>::init(c_allocator());
+    for (auto i : 0..2) {
+        auto l2 = l;
+        l2.deinit();
+    }
+    l.deinit();
+}

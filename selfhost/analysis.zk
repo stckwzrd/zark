@@ -88,7 +88,7 @@ struct Project {
             const auto full = import_target(this->a, dir, d.path)?;
             this->load(full, d.alias)?;
         }
-        if (prefix.len > 0 && fi.ok) { resolve_module(this->a, fi.decls, prefix)?; }
+        if (prefix.len > 0 && fi.ok) { resolve_module(this->a, fi.decls.slice(), prefix)?; }
         this->files.push(fi)?;
     }
 
@@ -188,11 +188,11 @@ struct Project {
         return t;
     }
 
-    !TypeExpr* subst(TypeExpr* te, List<str> names, List<TypeExpr*> args) {
+    !TypeExpr* subst(TypeExpr* te, str[] names, TypeExpr*[] args) {
         if (te == null) { return null; }
         if (te.k == .Name && te.args.len == 0) {
             for (auto [i, n] : names) {
-                if (n == te.name && i < args.len) { return args.get(i); }
+                if (n == te.name && i < args.len) { return args[i]; }
             }
             return te;
         }
@@ -326,13 +326,13 @@ struct Walker {
         const auto t = this->peel(owner);
         if (t == null || ms == null) { return null; }
         if (ms.k == .Field && ms.sd != null) {
-            if (ms.sd.type_params.len == t.args.len) { return this->p.subst(ms.ty, ms.sd.type_params, t.args) catch ms.ty; }
+            if (ms.sd.type_params.len == t.args.len) { return this->p.subst(ms.ty, ms.sd.type_params.slice(), t.args.slice()) catch ms.ty; }
             return ms.ty;
         }
         if (ms.k == .Method && ms.fd != null) {
             auto r = ms.fd.ret;
             if (r == null) { return null; }
-            if (ms.fd.receiver_params.len == t.args.len) { r = this->p.subst(r, ms.fd.receiver_params, t.args) catch r; }
+            if (ms.fd.receiver_params.len == t.args.len) { r = this->p.subst(r, ms.fd.receiver_params.slice(), t.args.slice()) catch r; }
             if (r.k == .Name && r.name == "Self") { return t; }
             return r;
         }
@@ -445,13 +445,13 @@ struct Walker {
             if (ms == null) { return null; }
             if (ms.k == .Field && ms.ty != null && ms.ty.k == .Func) { return ms.ty.ret };
             const auto r = this->member_type(bt, ms);
-            if (r != null && ms.fd != null && mentions(r, ms.fd.type_params)) { return this->call_ret(ms.fd, e); }
+            if (r != null && ms.fd != null && mentions(r, ms.fd.type_params.slice())) { return this->call_ret(ms.fd, e); }
             return r;
         }
         return null;
     }
 
-    void bind(TypeExpr* pat, TypeExpr* actual, List<str> names, List<TypeExpr*>*out) {
+    void bind(TypeExpr* pat, TypeExpr* actual, str[] names, List<TypeExpr*>*out) {
         if (pat == null || actual == null) { return; }
         if (pat.k == .Name && pat.args.len == 0) {
             for (auto [i, n] : names) {
@@ -472,10 +472,10 @@ struct Walker {
         for (auto _t : fd.type_params) { found.push(null) catch return null; }
         for (auto [i, p] : fd.params) {
             if (i >= e.args.len) { break; }
-            this->bind(p.ty, this->infer(e.args.get(i)), fd.type_params, &found);
+            this->bind(p.ty, this->infer(e.args.get(i)), fd.type_params.slice(), &found);
         }
         for (auto x : found) { if (x == null) { return null; } }
-        return this->p.subst(fd.ret, fd.type_params, found) catch null;
+        return this->p.subst(fd.ret, fd.type_params.slice(), found.slice()) catch null;
     }
 
     void wtype(TypeExpr* te) {
@@ -745,7 +745,7 @@ struct Walker {
     }
 }
 
-bool mentions(TypeExpr* te, List<str> names) {
+bool mentions(TypeExpr* te, str[] names) {
     if (te == null) { return false; }
     if (te.k == .Name && te.args.len == 0) { return contains_str(names, te.name); }
     for (auto x : te.args) { if (mentions(x, names)) { return true; } }

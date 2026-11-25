@@ -131,7 +131,7 @@ bool can_coerce(Type* from, Type* to) {
                 if (fd.type_params.len > 0) { this->err(e.line); eprintln("generic function '{n}' cannot be used as a value"); return error.CompileFailed; }
                 if (fd.variadic) { this->err(e.line); eprintln("variadic function '{n}' cannot be used as a value"); return error.CompileFailed; }
                 const auto fi = this->inst_fn(fd, this->new_env()?, this->no_types())?;
-                this->c_vecs(fi.params, fi.ret, e.line)?;
+                this->c_vecs(fi.params.slice(), fi.ret, e.line)?;
                 const auto t = this->mk(.Func)?;
                 t.params = fi.params;
                 t.ret = fi.ret;
@@ -346,6 +346,7 @@ bool can_coerce(Type* from, Type* to) {
         given.set(idx, true);
         const auto fty = si.fields.get(idx).ty;
         const auto v = this->coerce(this->gen_expr(fi.value, fty)?, fty, e.line)?;
+        this->copy_moves(fi.value, "", "the struct literal", e.line)?;
         cur = this->insert(t, cur, v, idx)?;
     }
     for (auto [i, f] : si.fields) {
@@ -473,11 +474,13 @@ bool has_defaults(Type* t) {
     this->nclos += 1;
     auto name = this->sb();
     sprint(&name, "vb.closure.{this->nclos}")?;
+    auto tparams = List<Type*>::init(this->a);
+    for (auto p : params) { tparams.push(p)?; }
     const auto fi = this->a.create<FnInst>()?;
     *fi = FnInst{ .decl = fd, .env = this->env, .llname = name.slice(), .params = params, .ret = ret, .generated = false, .is_closure = true, .caps = caps };
     this->pending.push(fi)?;
     const auto t = this->mk(.Closure)?;
-    t.params = params;
+    t.params = tparams;
     t.ret = ret;
     auto fnptr = this->sb();
     sprint(&fnptr, "@{fi.llname}")?;
@@ -585,7 +588,12 @@ bool has_defaults(Type* t) {
     }
     this->pop_scope()?;
     const auto err_reaches = !this->terminated;
-    if (err_reaches) { this->restore_state(this->filter_must(this->move_join(pre_moved, this->moved)?, pre_moved)?); } else { this->restore_state(pre_moved); }
+    if (err_reaches) {
+        const auto joined = this->move_join(pre_moved.slice(), this->moved.slice())?;
+        this->restore_state(this->filter_must(joined, pre_moved.slice())?);
+    } else {
+        this->restore_state(pre_moved);
+    }
     const auto err_lbl = this->cur_label;
     if (err_reaches && vt.k != .Void && !has_errv) { this->err(e.line); eprintln("catch block must produce a value or leave (return/break/panic)"); return error.CompileFailed; }
     if (err_reaches) { this->br(lend)?; }
@@ -836,7 +844,7 @@ str operator_name(Tag t) {
         this->label(lr)?;
         const auto pre_rhs = this->snap();
         const auto r = this->gen_cond(re)?;
-        this->restore_state(this->filter_must(this->move_join(pre_rhs, this->moved)?, pre_rhs)?);
+        this->restore_state(this->filter_must(this->move_join(pre_rhs.slice(), this->moved.slice())?, pre_rhs.slice())?);
         const auto r_lbl = this->cur_label;
         this->br(lend)?;
         this->label(lend)?;

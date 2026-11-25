@@ -172,7 +172,7 @@ TypeExpr* Parser::try_type() {
 }
 
 // ------------------------------------------------------------ parameters
-!List<Param> Parser::parse_params_new(i64 line, bool* variadic, str this_ty, List<str> ptps) {
+!List<Param> Parser::parse_params_new(i64 line, bool* variadic, str this_ty) {
     _ = this->expect(.lparen)?;
     auto params = List<Param>::init(this->a);
     if (this_ty.len > 0) {
@@ -228,7 +228,7 @@ bool Parser::lambda_ahead() {
     }
     _ = this->expect(.rbracket)?;
     auto variadic = false;
-    const auto params = this->parse_params_new(t.line, &variadic, "", this->strs())?;
+    const auto params = this->parse_params_new(t.line, &variadic, "")?;
     TypeExpr* ret = null;
     if (this->eat(.arrow)) {
         const auto saved = this->arrow_only;
@@ -247,11 +247,11 @@ bool Parser::lambda_ahead() {
 }
 
 // ------------------------------------------------------------ declarations
-!FnDecl* Parser::fn_rest(List<str> tps, List<str> cons, i64 flags, TypeExpr* ret_te, Token nt, str receiver, List<str> recv_params, i64 recv_off, bool is_static) {
+!FnDecl* Parser::fn_rest(List<str> tps, List<str> cons, i64 flags, TypeExpr* ret_te, Token nt, str receiver, str[] recv_params, i64 recv_off, bool is_static) {
     auto variadic = false;
     auto this_ty = "";
     if (receiver.len > 0 && !is_static) { this_ty = receiver; }
-    auto params = this->parse_params_new(nt.line, &variadic, this_ty, recv_params)?;
+    auto params = this->parse_params_new(nt.line, &variadic, this_ty)?;
     const auto is_const = this->eat(.kw_const);
     auto invalidates = false;
     auto borrows = false;
@@ -266,6 +266,8 @@ bool Parser::lambda_ahead() {
     }
     auto ret = ret_te;
     if (ret != null && ret.k == .Name && ret.name == "void" && ret.args.len == 0) { ret = null; }
+    auto rps = List<str>::init(this->a);
+    rps.append(recv_params)?;
     const auto is_extern = flags == 1;
     const auto is_export = flags == 2;
     Stmt* body = null;
@@ -274,7 +276,7 @@ bool Parser::lambda_ahead() {
     *f = FnDecl{
         .name = nt.text, .type_params = tps, .constraints = cons, .params = params, .ret = ret, .body = body,
         .is_extern = is_extern, .is_export = is_export, .variadic = variadic, .line = nt.line,
-        .file = this->file, .receiver = receiver, .receiver_params = recv_params, .name_off = nt.off, .receiver_off = recv_off, .is_const = is_const
+        .file = this->file, .receiver = receiver, .receiver_params = rps, .name_off = nt.off, .receiver_off = recv_off, .is_const = is_const
     };
     f.invalidates = invalidates;
     f.borrows = borrows;
@@ -342,7 +344,7 @@ bool Parser::await_ahead() {
         if (this->peek_at(k + 1).tag == .gt && this->peek_at(k + 2).tag == .coloncolon && this->peek_at(k + 3).tag == .ident && this->peek_at(k + 4).tag == .lparen) {
             this->pos += k + 3;
             const auto mt = this->advance();
-            const auto f = this->fn_rest(this->strs(), this->strs(), flags, ty, mt, nt.text, rps, nt.off, out_static)?;
+            const auto f = this->fn_rest(this->strs(), this->strs(), flags, ty, mt, nt.text, rps.slice(), nt.off, out_static)?;
             f.is_async = is_async;
             out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
             return;
@@ -351,13 +353,13 @@ bool Parser::await_ahead() {
     if (this->at(.coloncolon) && this->peek_at(1).tag == .ident && this->peek_at(2).tag == .lparen) {
         _ = this->advance();
         const auto mt = this->advance();
-        const auto f = this->fn_rest(tps, cons, flags, ty, mt, nt.text, this->strs(), nt.off, out_static)?;
+        const auto f = this->fn_rest(tps, cons, flags, ty, mt, nt.text, this->strs().slice(), nt.off, out_static)?;
         f.is_async = is_async;
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
     }
     if (this->at(.lparen) && !is_const) {
-        const auto f = this->fn_rest(tps, cons, flags, ty, nt, "", this->strs(), 0, true)?;
+        const auto f = this->fn_rest(tps, cons, flags, ty, nt, "", this->strs().slice(), 0, true)?;
         f.is_async = is_async;
         out.push(Decl{ .k = .Func, .f = f, .line = t.line })?;
         return;
@@ -382,7 +384,7 @@ bool Parser::new_member(bool is_union) {
     return true;
 }
 
-!void Parser::parse_member_new(str sname, List<str> tps, bool is_union, List<Field>*fields, List<Decl>*out) {
+!void Parser::parse_member_new(str sname, str[] tps, bool is_union, List<Field>*fields, List<Decl>*out) {
     const auto t = this->peek();
     auto is_static = false;
     auto is_async = false;

@@ -227,7 +227,7 @@ struct Parser {
                 this->skip_semis();
                 while (!this->at(.rbrace)) {
                     if (this->new_member(is_union)) {
-                        this->parse_member_new(name, tps, is_union, &fields, out)?;
+                        this->parse_member_new(name, tps.slice(), is_union, &fields, out)?;
                         this->skip_semis();
                         continue;
                     }
@@ -258,7 +258,7 @@ struct Parser {
                 while (!this->at(.rbrace)) {
                     const auto nx = this->peek_at(1).tag;
                     if (!(this->at(.ident) && (nx == .comma || nx == .semi || nx == .rbrace))) {
-                        this->parse_member_new(name, this->strs(), false, &no_fields, out)?;
+                        this->parse_member_new(name, this->strs().slice(), false, &no_fields, out)?;
                         this->skip_semis();
                         continue;
                     }

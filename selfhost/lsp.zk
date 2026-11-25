@@ -359,9 +359,11 @@ void run_frontend(Server* s, Allocator a, Doc* d) {
     for (auto e : s.docs.entries) {
         if (e.used && e.value.open) { overrides.put(e.value.path, e.value.text) catch return; }
     }
+    auto ovcopy = Map<str>::init(a);
+    for (auto e : overrides.entries) { if (e.used) { ovcopy.put(e.key, e.value) catch return; } }
     auto loader = Loader{ .a = a, .g = g, .seen = Map<str>::init(a), .prefixes = Map<str>::init(a), .overrides = overrides };
     diag_prelude = PRELUDE;
-    diag_files = overrides;
+    diag_files = ovcopy;
     g.test_root = d.path;
     loader.load_source(PRELUDE, "<std>", "") catch {
         g.flush_diag();
@@ -504,7 +506,7 @@ void run_checks(Server* s) {
     auto paths = List<str>::init(a);
     paths.push(d.path)?;
     for (auto dg : diags) {
-        if (!contains_str(paths, dg.path)) { paths.push(dg.path)?; }
+        if (!contains_str(paths.slice(), dg.path)) { paths.push(dg.path)?; }
     }
     for (auto p : paths) {
         auto w = new_jw(a);
@@ -518,7 +520,7 @@ void run_checks(Server* s) {
     if (s.published.has(d.path)) {
         const auto olds = s.published.get(d.path)?;
         for (auto old : olds) {
-            if (!contains_str(paths, old)) { s.publish(a, path_to_uri(a, old)?, "[]")?; }
+            if (!contains_str(paths.slice(), old)) { s.publish(a, path_to_uri(a, old)?, "[]")?; }
             s.a.free(old);
         }
         olds.deinit();
@@ -938,12 +940,12 @@ u8 lc(u8 c) {
     while (changed) {
         changed = false;
         for (auto f : files) {
-            if (contains_str(reach, f)) { continue; }
+            if (contains_str(reach.slice(), f)) { continue; }
             const auto im = imports.get(f) catch {
                 continue;
             };
             for (auto x : im) {
-                if (contains_str(reach, x)) {
+                if (contains_str(reach.slice(), x)) {
                     reach.push(f)?;
                     changed = true;
                     break;
@@ -959,7 +961,7 @@ u8 lc(u8 c) {
             const auto im = imports.get(g) catch {
                 continue;
             };
-            if (contains_str(im, f)) { imported = true; }
+            if (contains_str(im.slice(), f)) { imported = true; }
         }
         if (!imported) { roots.push(f)?; }
     }
@@ -1029,7 +1031,7 @@ u8 lc(u8 c) {
     const auto refs = all_refs(s, a, d, off)?;
     if (refs.len == 0 || rename_blocked) { return "null"; }
     auto files = List<str>::init(a);
-    for (auto r : refs) { if (!contains_str(files, r.file)) { files.push(r.file)?; } }
+    for (auto r : refs) { if (!contains_str(files.slice(), r.file)) { files.push(r.file)?; } }
     auto w = new_jw(a);
     w.obj()?;
     w.key("changes")?;

@@ -52,6 +52,7 @@ struct MatchRes { Type* ty; str slot; }
                     this->register_owned(slot, s.name, ty, s.line)?;
                     if (is_owned(ty)) { this->taint_owned(slot, s.e, s.line)?; }
                 }
+                this->copy_moves(s.e, s.name, s.name, s.line)?;
             }
         }
         .Assign => {
@@ -75,6 +76,10 @@ struct MatchRes { Type* ty; str slot; }
                 this->check_store_escape(s.e2, s.e, s.line)?;
                 if (plain_local) { this->check_overwrite(s.e2.name, s.line)?; }
                 this->store_to(v, addr)?;
+                auto tname = "";
+                auto tby = "this assignment";
+                if (s.e2.k == .Ident) { tname = s.e2.name; tby = s.e2.name; }
+                this->copy_moves(s.e, tname, tby, s.line)?;
                 if (plain_local) {
                     const auto tp = this->local_ptr(s.e2.name);
                     this->set_origin(tp, s.e2.name, s.e, s.line)?;
@@ -360,7 +365,7 @@ str Gen::missing_variant(Value v, List<MatchArm> arms) {
         return "?";
     }
     for (auto name : all) {
-        if (!contains_str(names, name)) { return name; }
+        if (!contains_str(names.slice(), name)) { return name; }
     }
     return "";
 }
@@ -581,6 +586,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         maybe_err = raw.ty.k == .Errun || raw.ty.k == .ErrVal;
         val = this->coerce(raw, rt, line)?;
         has_val = true;
+        this->copy_moves(re, "", "return", line)?;
     } else if (rt.k == .Errun && rt.elem.k == .Void) {
         val = Value{ .ty = rt, .v = "zeroinitializer" };
         has_val = true;

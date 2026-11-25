@@ -610,7 +610,7 @@ struct Native {
         return i + 1;
     }
 
-    !void alloc_regs(List<Arg> params, List<Block> blocks) {
+    !void alloc_regs(List<Arg>* params, List<Block>* blocks) {
         this->byn.len = 0;
         this->idxm = Map<i64>::init(this->a);
         this->saved = List<Save>::init(this->a);
@@ -756,7 +756,6 @@ struct Native {
             if (iv.start >= 0 && iv.start <= iv.end) { iv.nocall = cc.get(iv.end + 1) - cc.get(iv.start + 1) == 0; }
         }
         this->scan(&ivs, total)?;
-        this->ivs = ivs;
 
         auto seen = 0;
         this->ivreg.len = 0;
@@ -772,6 +771,7 @@ struct Native {
                 this->saved.push(Save{ .reg = reg, .off = this->new_slot(8, 8) })?;
             }
         }
+        this->ivs = ivs;
     }
 
     !void scan(List<Iv>*ivs, i64 total) {
@@ -953,7 +953,7 @@ struct Native {
             }
         }
 
-        this->alloc_regs(params, blocks)?;
+        this->alloc_regs(&params, &blocks)?;
         for (auto p : params) {
             if (this->reg_of(p.v) < 0) { this->def_slot(p.v, p.ty)?; }
         }

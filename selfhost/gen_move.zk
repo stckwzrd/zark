@@ -10,7 +10,7 @@ struct Origin { i64 kind; str name; str cptr; str by; }
         return error.CompileFailed;
     }
     if (this->shared) {
-        this->moved = this->move_copy(this->moved)?;
+        this->moved = this->move_copy(this->moved.slice())?;
         this->shared = false;
     }
     this->moved.push(r)?;
@@ -44,16 +44,13 @@ bool Gen::live_ptr(str ptr, str except) {
     return false;
 }
 
-!List<MoveRec> Gen::move_copy(List<MoveRec> src) {
+!List<MoveRec> Gen::move_copy(MoveRec[] src) {
     auto out = List<MoveRec>::init(this->a);
     for (auto r : src) { out.push(r)?; }
     return out;
 }
 
-!List<MoveRec> Gen::move_join(List<MoveRec> x, List<MoveRec> y) {
-    if (y.len == 0) { return x; }
-    if (x.len == 0) { return y; }
-    if (x.len == y.len && x.items.ptr == y.items.ptr) { return x; }
+!List<MoveRec> Gen::move_join(MoveRec[] x, MoveRec[] y) {
     auto out = this->move_copy(x)?;
     for (auto r : y) {
         auto found = false;
@@ -201,7 +198,7 @@ str Gen::place_name(Expr* e) {
     if (ty != null && is_owned(ty)) { this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 4 })?; }
 }
 
-!void Gen::move_args(FnDecl* decl, List<Expr*> args, i64 off, i64 line) {
+!void Gen::move_args(FnDecl* decl, Expr*[] args, i64 off, i64 line) {
     for (auto [i, x] : args) {
         const auto pi = i + off;
         if (pi < decl.params.len && decl.params.get(pi).move) { this->move_mark(x, decl.name, line)?; }
@@ -316,7 +313,7 @@ str Gen::escaped_local(Expr* e) {
 
 !void Gen::join_end(Join* j) {
     if (this->terminated) { return; }
-    j.acc = this->move_join(j.acc, this->moved)?;
+    j.acc = this->move_join(j.acc.slice(), this->moved.slice())?;
     j.arms.push(this->snap())?;
     j.any = true;
 }
@@ -328,14 +325,14 @@ bool state_has(List<MoveRec> st, str ptr, i64 kind) {
     return false;
 }
 
-bool rec_in(List<MoveRec> st, MoveRec r) {
+bool rec_in(MoveRec[] st, MoveRec r) {
     for (auto q : st) {
         if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { return true; }
     }
     return false;
 }
 
-!List<MoveRec> Gen::filter_must(List<MoveRec> x, List<MoveRec> allowed) {
+!List<MoveRec> Gen::filter_must(List<MoveRec> x, MoveRec[] allowed) {
     auto drop = false;
     for (auto r : x) { if (is_must(r.kind) && !rec_in(allowed, r)) { drop = true; } }
     if (!drop) { return x; }
@@ -344,7 +341,7 @@ bool rec_in(List<MoveRec> st, MoveRec r) {
     return out;
 }
 
-!List<MoveRec> Gen::must_meet(List<MoveRec> acc, i64 n, List<MoveRec> st) {
+!List<MoveRec> Gen::must_meet(MoveRec[] acc, i64 n, MoveRec[] st) {
     auto out = List<MoveRec>::init(this->a);
     for (auto r : st) { if (is_must(r.kind) && (n == 0 || rec_in(acc, r))) { out.push(r)?; } }
     return out;
@@ -352,7 +349,7 @@ bool rec_in(List<MoveRec> st, MoveRec r) {
 
 !void Gen::join_finish(Join* j, bool fallthrough) {
     if (fallthrough) {
-        j.acc = this->move_join(j.acc, j.s0)?;
+        j.acc = this->move_join(j.acc.slice(), j.s0.slice())?;
         j.arms.push(j.s0)?;
         j.any = true;
     }
@@ -364,7 +361,7 @@ bool rec_in(List<MoveRec> st, MoveRec r) {
     auto changed = false;
     for (auto r : j.acc) {
         auto keep = true;
-        if (is_must(r.kind)) { for (auto arm : j.arms) { if (!rec_in(arm, r)) { keep = false; } } }
+        if (is_must(r.kind)) { for (auto arm : j.arms) { if (!rec_in(arm.slice(), r)) { keep = false; } } }
         if (keep) { out.push(r)?; } else { changed = true; }
     }
     if (changed) { this->restore_state(out); } else { this->restore_state(j.acc); }
@@ -410,12 +407,12 @@ bool Gen::declared_before(str ptr, i64 depth) {
 !void Gen::loop_edge(i64 li, bool is_break) {
     const auto lp = &this->loops.items[li];
     if (is_break) {
-        lp.brks = this->move_join(lp.brks, this->moved)?;
-        lp.bmust = this->must_meet(lp.bmust, lp.nbrk, this->moved)?;
+        lp.brks = this->move_join(lp.brks.slice(), this->moved.slice())?;
+        lp.bmust = this->must_meet(lp.bmust.slice(), lp.nbrk, this->moved.slice())?;
         lp.nbrk += 1;
     } else {
-        lp.conts = this->move_join(lp.conts, this->moved)?;
-        lp.cmust = this->must_meet(lp.cmust, lp.ncont, this->moved)?;
+        lp.conts = this->move_join(lp.conts.slice(), this->moved.slice())?;
+        lp.cmust = this->must_meet(lp.cmust.slice(), lp.ncont, this->moved.slice())?;
         lp.ncont += 1;
     }
 }
@@ -425,8 +422,8 @@ bool Gen::declared_before(str ptr, i64 depth) {
     auto back_must = lp.cmust;
     auto nback = lp.ncont;
     if (!this->terminated) {
-        back = this->move_join(back, this->moved)?;
-        back_must = this->must_meet(back_must, nback, this->moved)?;
+        back = this->move_join(back.slice(), this->moved.slice())?;
+        back_must = this->must_meet(back_must.slice(), nback, this->moved.slice())?;
         nback += 1;
     }
     for (auto r : back) {
@@ -436,7 +433,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
             return error.CompileFailed;
         }
         if (r.kind != 0 && r.kind != 3) { continue; }
-        if (rec_in(s0, r) || !this->declared_before(r.ptr, lp.md)) { continue; }
+        if (rec_in(s0.slice(), r) || !this->declared_before(r.ptr, lp.md)) { continue; }
         auto used = false;
         for (auto ev : lp.evs) { if (ev.ptr == r.ptr) { used = true; } }
         if (!used) { continue; }
@@ -448,20 +445,20 @@ bool Gen::declared_before(str ptr, i64 depth) {
         }
         return error.CompileFailed;
     }
-    auto may = this->move_join(lp.brks, back)?;
-    if (!lp.infinite) { may = this->move_join(s0, may)?; }
+    auto may = this->move_join(lp.brks.slice(), back.slice())?;
+    if (!lp.infinite) { may = this->move_join(s0.slice(), may.slice())?; }
     auto post = List<MoveRec>::init(this->a);
     for (auto r : may) { if (!is_must(r.kind) && this->live_ptr(r.ptr, lp.iter)) { post.push(r)?; } }
-    auto cand = s0;
-    if (lp.infinite) { cand = lp.bmust; }
+    auto cand = s0.slice();
+    if (lp.infinite) { cand = lp.bmust.slice(); }
     for (auto r : cand) {
         if (!is_must(r.kind) || (r.kind == 5 && r.cont == lp.id) || !this->live_ptr(r.ptr, "")) { continue; }
         auto keep = true;
         if (lp.infinite) {
-            if (rec_in(s0, r) && nback > 0 && !rec_in(back_must, r)) { keep = false; }
+            if (rec_in(s0.slice(), r) && nback > 0 && !rec_in(back_must.slice(), r)) { keep = false; }
         } else {
-            if (nback > 0 && !rec_in(back_must, r)) { keep = false; }
-            if (lp.nbrk > 0 && !rec_in(lp.bmust, r)) { keep = false; }
+            if (nback > 0 && !rec_in(back_must.slice(), r)) { keep = false; }
+            if (lp.nbrk > 0 && !rec_in(lp.bmust.slice(), r)) { keep = false; }
         }
         if (keep) { post.push(r)?; }
     }
@@ -469,6 +466,43 @@ bool Gen::declared_before(str ptr, i64 depth) {
 }
 
 bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.decl.owned; }
+
+/// A value of this type owns a resource: an `owned struct`, or a struct with a
+/// method that consumes its receiver (`deinit() move`, `close() move`, ...).
+/// Copying such a value is treated as a move.
+bool Gen::is_resource(Type* t) {
+    if (t == null || t.k != .Strct || t.si.decl.is_union || t.si.decl.is_iface) { return false; }
+    if (t.si.decl.owned) { return true; }
+    for (auto e : this->methods.entries) {
+        if (!e.used) { continue; }
+        const auto f = e.value;
+        if (f.receiver == t.si.decl.name && f.params.len > 0 && f.params.get(0).move) { return true; }
+    }
+    return false;
+}
+
+/// `auto y = x;`, `y = x;`, `S{ .f = x }`, `f(x)` and `return x` copy the value
+/// of a resource type, so they move it: `x` is consumed unless it is the target.
+!void Gen::copy_moves(Expr* e, str dest, str by, i64 line) {
+    if (e == null || e.k != .Ident) { return; }
+    if (dest.len > 0 && e.name == dest) { return; }
+    if (this->local_ptr(e.name).len == 0) { return; }
+    const auto ty = this->local_type(e.name)?;
+    if (ty == null || !this->is_resource(ty)) { return; }
+    this->move_mark(e, by, line)?;
+}
+
+!void Gen::copy_args(FnDecl* decl, List<Type*> ptypes, Expr*[] args, i64 off, i64 line) {
+    for (auto [i, x] : args) {
+        const auto pi = i + off;
+        if (pi >= decl.params.len) { continue; }
+        if (decl.params.get(pi).move) { continue; }
+        if (pi >= ptypes.len) { continue; }
+        const auto ty = ptypes.get(pi);
+        if (ty == null || !this->is_resource(ty)) { continue; }
+        this->copy_moves(x, "", decl.name, line)?;
+    }
+}
 
 !void Gen::register_owned(str slot, str name, Type* ty, i64 line) {
     if (!is_owned(ty)) { return; }
