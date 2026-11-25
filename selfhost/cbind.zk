@@ -983,12 +983,12 @@ struct CParser {
         }
     }
 
-    !CType* enum_type(List<CVal> vals, bool packed) {
+    !CType* enum_type(CVal[] vals, bool packed) {
         auto neg = false;
         auto big = false;
         auto int_ok = true;
         auto u32_ok = true;
-        for (auto v : vals.slice()) {
+        for (auto v : vals) {
             if (!v.u && v.v < 0) { neg = true; }
             if (cb_big(v)) { big = true; }
             if (!cb_fits(v, 32, true)) { int_ok = false; }
@@ -998,7 +998,7 @@ struct CParser {
         if (packed) {
             for (auto w : [8, 16, 32, 64]) {
                 auto ok = true;
-                for (auto v : vals.slice()) { if (!cb_fits(v, w, neg)) { ok = false; } }
+                for (auto v : vals) { if (!cb_fits(v, w, neg)) { ok = false; } }
                 if (ok) { return this->int_ty(w, neg); }
             }
         }
@@ -1060,7 +1060,7 @@ struct CParser {
         } else if (fixed != null) {
             t = fixed;
         } else if (body) {
-            t = this->enum_type(vals, this->attr_layout || this->short_enums)?;
+            t = this->enum_type(vals.slice(), this->attr_layout || this->short_enums)?;
         } else {
             if (tag.len > 0 && this->enum_tys.has(tag)) { return this->enum_tys.get(tag); }
             return this->bad("incomplete enum");
@@ -1739,7 +1739,7 @@ struct CEmit {
         this->warnings.push(b.slice())?;
     }
     !str ename(str name) {
-        if (keyword(name) == .ident && !cb_is_prim(name)) { return name; }
+        if (keyword(name) == .ident && name != "type" && !cb_is_prim(name)) { return name; }
         auto b = List<u8>::init(this->a);
         sprint(&b, "{name}_")?;
         return b.slice();
@@ -1811,6 +1811,7 @@ struct CEmit {
                 const auto r = this->records.get_or(t.name, null);
                 if (r != null) { return this->rec_align(r); }
             }
+            _ => {}
         }
         return 1;
     }
@@ -1946,7 +1947,7 @@ struct CEmit {
         if (d.is_static && !d.is_inline) { return this->warn(d.name, "static function"); }
         if (this->relabeled.has(d.name)) { return this->warn(d.name, "asm label"); }
         if (d.reason.len > 0) { return this->warn(d.name, d.reason); }
-        if (keyword(d.name) != .ident) { return this->warn(d.name, "Zark keyword"); }
+        if (keyword(d.name) != .ident || d.name == "type") { return this->warn(d.name, "Zark keyword"); }
         if (cb_is_prim(d.name)) { return this->warn(d.name, "Zark type name"); }
         if (d.is_inline && d.has_body) { return this->inline_fn(d); }
         if (d.cxx.len > 0 && (this->bad.has(d.name) || this->done.get_or(d.name, 0) == 3)) {
@@ -2276,6 +2277,7 @@ struct CEmit {
                     if (x != null) { return this->size(x); }
                 }
             }
+            _ => {}
         }
         return CSize{ .size = -1 };
     }
@@ -2761,6 +2763,7 @@ struct CEmit {
                 if (r == null) { r = this->fwd.get_or(t.name, null); }
                 if (r != null) { this->need_rec(r)?; }
             }
+            _ => {}
         }
     }
 
@@ -2992,7 +2995,7 @@ struct CBind {
     List<str> warnings;
 }
 
-!CBind cbind_header(Allocator a, str header, str from_dir, List<str> flags) {
+!CBind cbind_header(Allocator a, str header, str from_dir, str[] flags) {
     const auto dir = ".zark-cache/cbind";
     fs::make_dirs(dir)?;
     auto sb = List<u8>::init(a);
@@ -3003,7 +3006,7 @@ struct CBind {
     write_file(stub, body.slice())?;
     auto argv = List<str>::init(a);
     argv.append(["clang", "-E", "-dD", "-iquote", from_dir])?;
-    argv.append(flags.slice())?;
+    argv.append(flags)?;
     argv.append(["-x", "c", stub])?;
     const auto r = os::exec(a, argv.slice()) catch |e| {
         drop(stub);
@@ -3019,7 +3022,7 @@ struct CBind {
     lx.run()?;
     auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
-    for (auto f : flags.slice()) {
+    for (auto f : flags) {
         if (f == "-fshort-enums") { p.short_enums = true; }
         if (f == "-fno-short-enums") { p.short_enums = false; }
     }
@@ -3030,7 +3033,7 @@ struct CBind {
     write_file(stub, body.slice())?;
     auto lflags = List<str>::init(a);
     lflags.append(["-iquote", from_dir])?;
-    lflags.append(flags.slice())?;
+    lflags.append(flags)?;
     e.lay = read_layouts(a, stub, lflags) catch |err| {
         drop(stub);
         return err;
@@ -3039,7 +3042,7 @@ struct CBind {
     e.keys(p.decls)?;
     const auto abs = path::absolute(a, lx.out.header)?;
     auto h = fnv64(fnv64(0xcbf29ce484222325 as u64, abs), read_file(a, lx.out.header)?);
-    for (auto f : flags.slice()) { h = fnv64(h, f); }
+    for (auto f : flags) { h = fnv64(h, f); }
     auto hb = List<u8>::init(a);
     sprint(&hb, "{h:016x}")?;
     e.hid = hb.slice();
@@ -3096,7 +3099,7 @@ struct CBind {
         return 1;
     }
     if (cross_target()) { flags.push(target_flag())?; }
-    const auto b = cx_bind(a, header, ".", flags) catch |e| {
+    const auto b = cx_bind(a, header, ".", flags.slice()) catch |e| {
         if (e != error.CompileFailed) { eprintln("error: cannot bind {header}: {e}"); }
         return 1;
     };
@@ -3144,14 +3147,14 @@ str c_header_name(str p) {
     fs::move(tb.slice(), dst)?;
 }
 
-!str cb_find(Allocator a, str header, str from_dir, List<str> flags) {
+!str cb_find(Allocator a, str header, str from_dir, str[] flags) {
     if (header.len > 0 && header[0] == '/') {
         if (fs::is_file(header)) { return path::absolute(a, header); }
         return "";
     }
     auto dirs = List<str>::init(a);
     dirs.push(from_dir)?;
-    for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { dirs.push(f[2..])?; } }
+    for (auto f : flags) { if (str_starts_with(f, "-I") && f.len > 2) { dirs.push(f[2..])?; } }
     for (auto d : dirs.slice()) {
         const auto p = path::join(a, [d, header])?;
         if (fs::is_file(p)) { return path::absolute(a, p); }
@@ -3159,10 +3162,10 @@ str c_header_name(str p) {
     return "";
 }
 
-!str cb_key(Allocator a, str ver, List<str> flags, List<str> deps) {
+!str cb_key(Allocator a, str ver, str[] flags, str[] deps) {
     auto h = fnv64(0xcbf29ce484222325 as u64, ver);
-    for (auto f : flags.slice()) { h = fnv64(h, f); }
-    for (auto d : deps.slice()) { h = fnv64(fnv64(h, d), read_file(a, d)?); }
+    for (auto f : flags) { h = fnv64(h, f); }
+    for (auto d : deps) { h = fnv64(fnv64(h, d), read_file(a, d)?); }
     return cb_hex(a, h);
 }
 
@@ -3178,10 +3181,10 @@ str c_header_name(str p) {
     return read_file(a, p);
 }
 
-!List<str> cb_sys_dirs(Allocator a, List<str> flags, bool cxx) {
+!List<str> cb_sys_dirs(Allocator a, str[] flags, bool cxx) {
     auto argv = List<str>::init(a);
     if (cxx) { argv.append(["clang++", "-E", "-v"])?; } else { argv.append(["clang", "-E", "-v"])?; }
-    argv.append(flags.slice())?;
+    argv.append(flags)?;
     if (cxx) { argv.append(["-x", "c++", "/dev/null"])?; } else { argv.append(["-x", "c", "/dev/null"])?; }
     const auto r = os::exec(a, argv.slice())?;
     if (r.code != 0) { return error.CompileFailed; }
@@ -3206,10 +3209,10 @@ str c_header_name(str p) {
     return p;
 }
 
-!List<str> cb_probes(Allocator a, str from_dir, List<str> flags, List<str> deps, List<str> from, bool cxx) {
+!List<str> cb_probes(Allocator a, str from_dir, str[] flags, str[] deps, str[] from, bool cxx) {
     auto raw = List<str>::init(a);
     raw.push(from_dir)?;
-    for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { raw.push(f[2..])?; } }
+    for (auto f : flags) { if (str_starts_with(f, "-I") && f.len > 2) { raw.push(f[2..])?; } }
     raw.append(cb_sys_dirs(a, flags, cxx)?.slice())?;
     auto dirs = List<str>::init(a);
     for (auto d : raw.slice()) {
@@ -3219,7 +3222,7 @@ str c_header_name(str p) {
     auto out = List<str>::init(a);
     for (auto [i, d] : deps) {
         auto l = List<str>::init(a);
-        l.push(from.get(i))?;
+        l.push(from[i])?;
         l.append(dirs.slice())?;
         for (auto [x, xd] : l) {
             if (d.len <= xd.len + 1 || !str_starts_with(d, xd) || d[xd.len] != '/') { continue; }
@@ -3283,7 +3286,7 @@ str c_header_name(str p) {
     auto rh = fnv64(fnv64(fnv64(0xcbf29ce484222325 as u64, ver), header), from_dir);
     for (auto f : flags.slice()) { rh = fnv64(rh, f); }
     const auto index = path::join(a, [dir, str_concat(a, [cb_hex(a, rh)?, ".deps"])?])?;
-    const auto found = cb_find(a, header, from_dir, flags)?;
+    const auto found = cb_find(a, header, from_dir, flags.slice())?;
     auto key = "";
     if (fs::is_file(index)) {
         auto head = "";
@@ -3308,14 +3311,14 @@ str c_header_name(str p) {
         for (auto d : deps.slice()) { if (!fs::is_file(d)) { fresh = false; } }
         for (auto p : probes.slice()) { if (fs::is_file(p)) { fresh = false; } }
         if (fresh) {
-            const auto k = cb_key(a, ver, flags, deps) catch "";
+            const auto k = cb_key(a, ver, flags.slice(), deps.slice()) catch "";
             const auto zk = path::join(a, [dir, str_concat(a, [k, ".zk"])?])?;
             const auto c = path::join(a, [dir, str_concat(a, [k, ext])?])?;
             if (k.len > 0 && fs::is_file(zk) && cb_sum(a, cb_text(a, zk) catch "", cb_text(a, c) catch "")? == check) { key = k; }
         }
     }
     if (key.len == 0) {
-        const auto b = cx_bind(a, header, from_dir, flags) catch |e| {
+        const auto b = cx_bind(a, header, from_dir, flags.slice()) catch |e| {
             if (found.len > 0) {
                 if (!cxx) { eprintln("hint: if this is a C++ header, import it through a .hpp file that includes it"); }
                 return e;
@@ -3324,7 +3327,7 @@ str c_header_name(str p) {
                 eprintln("error: cannot find {kind} header '{header}'");
                 return error.CompileFailed;
             }
-            const auto sys = cb_sys_dirs(a, flags, cxx) catch { return error.CompileFailed; };
+            const auto sys = cb_sys_dirs(a, flags.slice(), cxx) catch { return error.CompileFailed; };
             auto ids = List<str>::init(a);
             for (auto f : flags.slice()) { if (str_starts_with(f, "-I") && f.len > 2) { ids.push(f[2..])?; } }
             auto sb = List<u8>::init(a);
@@ -3346,7 +3349,7 @@ str c_header_name(str p) {
                 from.push(cb_abs_dir(a, path::dir(b.from.get(i)))?)?;
             }
         }
-        const auto probes = cb_probes(a, from_dir, flags, deps, from, cxx) catch |e| {
+        const auto probes = cb_probes(a, from_dir, flags.slice(), deps.slice(), from.slice(), cxx) catch |e| {
             eprintln("error: cannot read the include search path of clang for {header}: {e}");
             return error.CompileFailed;
         };
@@ -3356,7 +3359,7 @@ str c_header_name(str p) {
         sprint(&lines, "{head}\n{cb_sum(a, b.zk, b.inline_c)?}\n")?;
         for (auto d : deps.slice()) { sprint(&lines, "{d}\n")?; }
         for (auto p : probes.slice()) { sprint(&lines, "?{p}\n")?; }
-        key = cb_key(a, ver, flags, deps)?;
+        key = cb_key(a, ver, flags.slice(), deps.slice())?;
         const auto c = path::join(a, [dir, str_concat(a, [key, ext])?])?;
         if (b.inline_c.len > 0) { cb_put(a, c, b.inline_c)?; } else if (!drop(c)) { return error.CompileFailed; }
         cb_put(a, path::join(a, [dir, str_concat(a, [key, ".zk"])?])?, b.zk)?;

@@ -22,6 +22,7 @@ str op_text(Tag t) {
         .percent => return "%";
         .eqeq => return "==";
         .neq => return "!=";
+        _ => {}
     }
     return "";
 }
@@ -31,6 +32,7 @@ i64 op_level(Tag t) {
         .lt, .le, .gt, .ge => return 2;
         .plus, .minus, .star, .slash, .percent => return 3;
         .eqeq, .neq => return 1;
+        _ => {}
     }
     return 0;
 }

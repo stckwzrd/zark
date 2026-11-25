@@ -52,6 +52,7 @@ struct MatchRes { Type* ty; str slot; }
                     this->register_owned(slot, s.name, ty, s.line)?;
                     if (is_owned(ty)) { this->taint_owned(slot, s.e, s.line)?; }
                 }
+                this->copy_moves(s.e, ty, s.name, s.name, s.line)?;
             }
         }
         .Assign => {
@@ -62,11 +63,14 @@ struct MatchRes { Type* ty; str slot; }
             }
             const auto plain_local = s.op == .eq && s.e2.k == .Ident && this->local_ptr(s.e2.name).len > 0;
             this->reinit = plain_local;
+            this->assign_target = true;
             const auto addr = this->gen_addr(s.e2) catch |e| {
                 this->reinit = false;
+                this->assign_target = false;
                 return e;
             };
             this->reinit = false;
+            this->assign_target = false;
             if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
             if (s.op == .eq) {
                 this->bor_field = null;
@@ -75,10 +79,17 @@ struct MatchRes { Type* ty; str slot; }
                 this->check_store_escape(s.e2, s.e, s.line)?;
                 if (plain_local) { this->check_overwrite(s.e2.name, s.line)?; }
                 this->store_to(v, addr)?;
+                auto tname = "";
+                auto tby = "this assignment";
+                if (s.e2.k == .Ident) { tname = s.e2.name; tby = s.e2.name; }
+                this->copy_moves(s.e, addr.ty, tname, tby, s.line)?;
                 if (plain_local) {
                     const auto tp = this->local_ptr(s.e2.name);
                     this->set_origin(tp, s.e2.name, s.e, s.line)?;
                     this->note_reinit(tp)?;
+                } else if (this->moved.len > 0) {
+                    const auto tk = this->place_key(s.e2) catch |e| return e;
+                    this->clear_place(tk)?;
                 }
             } else {
                 const auto cur = this->load(addr.ty, addr.v)?;
@@ -94,6 +105,7 @@ struct MatchRes { Type* ty; str slot; }
                     .caret_eq => op = .caret;
                     .shl_eq => op = .shl;
                     .shr_eq => op = .shr;
+                    _ => {}
                 }
                 const auto r = this->arith(op, cur, rhs, s.line)?;
                 this->store_to(r, addr)?;
@@ -150,7 +162,7 @@ struct MatchRes { Type* ty; str slot; }
             this->label(lb)?;
             this->gen_stmt(s.body)?;
             const auto lp2 = this->loops.get(this->loops.len - 1);
-            this->loop_end(lp2, s0)?;
+            this->loop_end(&lp2, s0)?;
             this->loops.len -= 1;
             if (!this->terminated) { this->br(lc)?; }
             this->label(le)?;
@@ -199,7 +211,7 @@ struct MatchRes { Type* ty; str slot; }
             this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
             this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?)?;
             this->gen_stmt(s.body)?;
-            this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
+            this->loop_end(&this->loops.items[this->loops.len - 1], s0)?;
             this->loops.len -= 1;
             this->pop_scope()?;
             this->label(lstep)?;
@@ -232,6 +244,9 @@ struct MatchRes { Type* ty; str slot; }
         .Match => {
             this->set_await(s.e);
             const auto v = this->gen_expr(s.e, null)?;
+            if (v.ty.k == .Enm || v.ty.k == .Bool || is_union(v.ty)) {
+                this->check_exhaustive(v, s.arms, s.line)?;
+            }
             this->gen_match(v, s.arms, null)?;
         }
     }
@@ -342,6 +357,8 @@ str Gen::missing_variant(Value v, List<MatchArm> arms) {
             }
         }
         if (seen_true && seen_false) { return ""; }
+        if (!seen_true) { return "true"; }
+        return "false";
     }
     auto names = List<str>::init(this->a);
     for (auto arm : arms) {
@@ -360,7 +377,7 @@ str Gen::missing_variant(Value v, List<MatchArm> arms) {
         return "?";
     }
     for (auto name : all) {
-        if (!contains_str(names, name)) { return name; }
+        if (!contains_str(names.slice(), name)) { return name; }
     }
     return "";
 }
@@ -373,7 +390,9 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     const auto m = this->missing_variant(v, arms);
     if (m.len == 0) { return; }
     this->err(line);
-    if (m == "?") {
+    if (v.ty.k == .Bool && m != "?") {
+        eprintln("match on 'bool' is not exhaustive: missing '{m}'");
+    } else if (m == "?") {
         eprintln("a match expression on '{this->type_name(v.ty)?}' needs a '_' arm");
     } else {
         eprintln("match is not exhaustive: missing '.{m}' (add the arm or a '_' arm)");
@@ -552,7 +571,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
     lp.iter = this->iter_borrow(s.e, via_slice, slice_by)?;
     this->loops.push(lp)?;
     this->gen_stmt(s.body)?;
-    this->loop_end(this->loops.get(this->loops.len - 1), s0)?;
+    this->loop_end(&this->loops.items[this->loops.len - 1], s0)?;
     this->loops.len -= 1;
     this->pop_scope()?;
     this->label(lstep)?;
@@ -581,6 +600,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         maybe_err = raw.ty.k == .Errun || raw.ty.k == .ErrVal;
         val = this->coerce(raw, rt, line)?;
         has_val = true;
+        this->copy_moves(re, rt, "", "return", line)?;
     } else if (rt.k == .Errun && rt.elem.k == .Void) {
         val = Value{ .ty = rt, .v = "zeroinitializer" };
         has_val = true;

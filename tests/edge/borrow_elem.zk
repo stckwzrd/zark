@@ -1,0 +1,20 @@
+struct Holder { List<i64> l; }
+
+!void main() {
+    auto l = List<i64>::init(c_allocator());
+    l.push(10)?;
+    l.push(11)?;
+    const auto p = &l.items[0];
+    println(*p);
+    l.push(12)?;
+    println(l.items[2]);
+
+    auto c = Holder{ .l = List<i64>::init(c_allocator()) };
+    c.l.push(20)?;
+    const auto q = &c.l.items[0];
+    println(*q);
+    c.l.push(21)?;
+    println(c.l.items[1]);
+    c.l.deinit();
+    l.deinit();
+}

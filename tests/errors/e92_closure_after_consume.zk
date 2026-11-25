@@ -1,0 +1,7 @@
+!void main() {
+    auto l = List<i64>::init(c_allocator());
+    l.push(1)?;
+    const auto f = [l]() -> i64 { return l.get(0); };
+    l.deinit();
+    println(f());
+}

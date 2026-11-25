@@ -104,7 +104,7 @@ void Gen::set_await(Expr* e) {
     return pt.si.fields.get(field_index(pt.si, "Ready")).ty;
 }
 
-!void Gen::infer_from_poll(List<str> tps, Env env) {
+!void Gen::infer_from_poll(str[] tps, Env env) {
     auto free = "";
     auto nfree = 0;
     Type* out = null;

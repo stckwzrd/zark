@@ -131,7 +131,7 @@ bool can_coerce(Type* from, Type* to) {
                 if (fd.type_params.len > 0) { this->err(e.line); eprintln("generic function '{n}' cannot be used as a value"); return error.CompileFailed; }
                 if (fd.variadic) { this->err(e.line); eprintln("variadic function '{n}' cannot be used as a value"); return error.CompileFailed; }
                 const auto fi = this->inst_fn(fd, this->new_env()?, this->no_types())?;
-                this->c_vecs(fi.params, fi.ret, e.line)?;
+                this->c_vecs(fi.params.slice(), fi.ret, e.line)?;
                 const auto t = this->mk(.Func)?;
                 t.params = fi.params;
                 t.ret = fi.ret;
@@ -328,6 +328,7 @@ bool can_coerce(Type* from, Type* to) {
             if (v.ty.k != .Ptr) { this->err(e.line); eprintln("cannot dereference '{this->type_name(v.ty)?}'"); return error.CompileFailed };
             return this->load(v.ty.elem, v.v);
         }
+        _ => {}
     }
     return error.CompileFailed;
 }
@@ -346,6 +347,7 @@ bool can_coerce(Type* from, Type* to) {
         given.set(idx, true);
         const auto fty = si.fields.get(idx).ty;
         const auto v = this->coerce(this->gen_expr(fi.value, fty)?, fty, e.line)?;
+        this->copy_moves(fi.value, fty, "", "the struct literal", e.line)?;
         cur = this->insert(t, cur, v, idx)?;
     }
     for (auto [i, f] : si.fields) {
@@ -473,11 +475,13 @@ bool has_defaults(Type* t) {
     this->nclos += 1;
     auto name = this->sb();
     sprint(&name, "vb.closure.{this->nclos}")?;
+    auto tparams = List<Type*>::init(this->a);
+    for (auto p : params) { tparams.push(p)?; }
     const auto fi = this->a.create<FnInst>()?;
     *fi = FnInst{ .decl = fd, .env = this->env, .llname = name.slice(), .params = params, .ret = ret, .generated = false, .is_closure = true, .caps = caps };
     this->pending.push(fi)?;
     const auto t = this->mk(.Closure)?;
-    t.params = params;
+    t.params = tparams;
     t.ret = ret;
     auto fnptr = this->sb();
     sprint(&fnptr, "@{fi.llname}")?;
@@ -585,7 +589,12 @@ bool has_defaults(Type* t) {
     }
     this->pop_scope()?;
     const auto err_reaches = !this->terminated;
-    if (err_reaches) { this->restore_state(this->filter_must(this->move_join(pre_moved, this->moved)?, pre_moved)?); } else { this->restore_state(pre_moved); }
+    if (err_reaches) {
+        const auto joined = this->move_join(pre_moved.slice(), this->moved.slice())?;
+        this->restore_state(this->filter_must(joined, pre_moved.slice())?);
+    } else {
+        this->restore_state(pre_moved);
+    }
     const auto err_lbl = this->cur_label;
     if (err_reaches && vt.k != .Void && !has_errv) { this->err(e.line); eprintln("catch block must produce a value or leave (return/break/panic)"); return error.CompileFailed; }
     if (err_reaches) { this->br(lend)?; }
@@ -647,6 +656,10 @@ bool has_defaults(Type* t) {
             const auto et = this->mk(.Enm)?;
             et.ei = this->enums.get(e.l.name)?;
             return this->spill(this->enum_value(et, e.name, e.line)?);
+        }
+        if (!this->assign_target && this->moved.len > 0 && e.l.k == .Ident) {
+            const auto pk = this->place_key(e)?;
+            if (pk.len > 0) { this->move_use_key(pk, this->place_name(e), e.line)?; }
         }
         const auto base = this->deref_agg(this->gen_addr(e.l)?)?;
         if (base.ty.k == .Strct) {
@@ -817,6 +830,7 @@ str operator_name(Tag t) {
         .le => return "op_le";
         .gt => return "op_gt";
         .ge => return "op_ge";
+        _ => {}
     }
     return "";
 }
@@ -836,7 +850,7 @@ str operator_name(Tag t) {
         this->label(lr)?;
         const auto pre_rhs = this->snap();
         const auto r = this->gen_cond(re)?;
-        this->restore_state(this->filter_must(this->move_join(pre_rhs, this->moved)?, pre_rhs)?);
+        this->restore_state(this->filter_must(this->move_join(pre_rhs.slice(), this->moved.slice())?, pre_rhs.slice())?);
         const auto r_lbl = this->cur_label;
         this->br(lend)?;
         this->label(lend)?;
@@ -849,6 +863,7 @@ str operator_name(Tag t) {
     auto is_cmp = false;
     match op {
         .eqeq, .neq, .lt, .le, .gt, .ge => is_cmp = true;
+        _ => {}
     }
     auto exp = expected;
     if (is_cmp) { exp = null; }
@@ -974,6 +989,7 @@ str operator_name(Tag t) {
             .caret => ins = "xor";
             .shl => ins = "shl";
             .shr => { if (sg) { ins = "ashr"; } else { ins = "lshr"; } }
+            _ => {}
         }
     } else if (et.k == .Float) {
         match op {
@@ -982,12 +998,14 @@ str operator_name(Tag t) {
             .star => ins = "fmul";
             .slash => ins = "fdiv";
             .percent => ins = "frem";
+            _ => {}
         }
     } else if (l.ty.k == .Bool) {
         match op {
             .amp => ins = "and";
             .pipe => ins = "or";
             .caret => ins = "xor";
+            _ => {}
         }
     } else {
         this->err(line); eprintln("arithmetic on '{this->type_name(l.ty)?}' is not supported");
@@ -1293,6 +1311,7 @@ Type* scalar_hint(Type* t) {
             .le => { if (signed) { pred = "sle"; } else { pred = "ule"; } }
             .gt => { if (signed) { pred = "sgt"; } else { pred = "ugt"; } }
             .ge => { if (signed) { pred = "sge"; } else { pred = "uge"; } }
+            _ => {}
         }
         sprint(this->ins()?, "  {t} = icmp {pred} {this->llty(l.ty)?} {l.v}, {r.v}\n")?;
     } else if (k == .Float) {
@@ -1304,6 +1323,7 @@ Type* scalar_hint(Type* t) {
             .le => pred = "ole";
             .gt => pred = "ogt";
             .ge => pred = "oge";
+            _ => {}
         }
         sprint(this->ins()?, "  {t} = fcmp {pred} {this->llty(l.ty)?} {l.v}, {r.v}\n")?;
     } else {

@@ -8,7 +8,7 @@ str recv_name(Type* t) {
     return "";
 }
 
-bool te_mentions(TypeExpr* te, List<str> names) {
+bool te_mentions(TypeExpr* te, str[] names) {
     match te.k {
         .Name => {
             if (contains_str(names, te.name)) { return true; }
@@ -25,7 +25,7 @@ bool te_mentions(TypeExpr* te, List<str> names) {
     return false;
 }
 
-bool all_bound(List<str> tps, Env env) {
+bool all_bound(str[] tps, Env env) {
     for (auto tp : tps) { if (!env.has(tp)) { return false; } }
     return true;
 }
@@ -58,6 +58,15 @@ bool all_bound(List<str> tps, Env env) {
         if (inner == null) { return null; }
         const auto t = this->a.create<TypeExpr>()?;
         t.k = .Ptr;
+        t.elem = inner;
+        t.args = List<TypeExpr*>::init(this->a);
+        return t;
+    }
+    if (e.k == .Unary && e.op == .bang) {
+        const auto inner = this->expr_to_type_expr(e.l)?;
+        if (inner == null) { return null; }
+        const auto t = this->a.create<TypeExpr>()?;
+        t.k = .Errun;
         t.elem = inner;
         t.args = List<TypeExpr*>::init(this->a);
         return t;
@@ -191,6 +200,7 @@ bool Gen::names_type(Expr* e) {
     for (auto [i, x] : args) {
         const auto pt = sig.params.get(i);
         vals.push(this->coerce(this->gen_expr(x, pt)?, pt, x.line)?)?;
+        this->copy_moves(x, pt, "", "the call", x.line)?;
     }
     return vals;
 }
@@ -214,7 +224,7 @@ bool Gen::names_type(Expr* e) {
 }
 
 !Value Gen::call_c_indirect(str target, Type* sig, List<Value> vals) {
-    const auto modes = this->c_modes(sig.params, sig.ret)?;
+    const auto modes = this->c_modes(sig.params.slice(), sig.ret)?;
     const auto sret = is_c_agg(sig.ret) && this->classify_c(sig.ret)?.memory;
     auto argtxt = this->sb();
     for (auto [i, v] : vals) {
@@ -301,7 +311,7 @@ bool Gen::names_type(Expr* e) {
     return this->call_decl(md, env, &recv, args, explicit, expected, line);
 }
 
-!void Gen::unify(TypeExpr* te, Type* actual, List<str> tps, Env env) {
+!void Gen::unify(TypeExpr* te, Type* actual, str[] tps, Env env) {
     match te.k {
         .Name => {
             if (te.args.len == 0) {
@@ -344,7 +354,7 @@ bool Gen::names_type(Expr* e) {
             return this->call_decl_core(decl, base_env, recv, na, explicit, expected, line);
         }
     }
-    const auto fv = this->gen_fmt(args, nfixed, first)?;
+    const auto fv = this->gen_fmt(args.slice(), nfixed, first)?;
     auto na = List<Expr*>::init(this->a);
     for (auto i : 0..nfixed) { na.push(args.get(i))?; }
     na.push(this->mk_pre(fv, line)?)?;
@@ -375,14 +385,14 @@ bool Gen::names_type(Expr* e) {
         const auto pi = i + off;
         if (pi >= decl.params.len) { continue; }
         const auto pte = decl.params.get(pi).ty;
-        const auto generic = te_mentions(pte, tps);
-        if (generic && !all_bound(tps, env) && is_literal(x)) { continue; }
+        const auto generic = te_mentions(pte, tps.slice());
+        if (generic && !all_bound(tps.slice(), env) && is_literal(x)) { continue; }
         Type* exp = null;
-        if (!generic || all_bound(tps, env)) { exp = this->resolve_type(pte, env)?; }
+        if (!generic || all_bound(tps.slice(), env)) { exp = this->resolve_type(pte, env)?; }
         const auto v = this->gen_expr(x, exp)?;
         vals.set(i, v);
         have.set(i, true);
-        if (generic) { this->unify(pte, v.ty, tps, env)?; }
+        if (generic) { this->unify(pte, v.ty, tps.slice(), env)?; }
     }
     // pass 2: literals, now with known types
     for (auto [i, x] : args) {
@@ -391,25 +401,29 @@ bool Gen::names_type(Expr* e) {
         if (pi >= decl.params.len) { continue; }
         const auto pte = decl.params.get(pi).ty;
         Type* exp = null;
-        if (all_bound(tps, env)) { exp = this->resolve_type(pte, env)?; }
+        if (all_bound(tps.slice(), env)) { exp = this->resolve_type(pte, env)?; }
         const auto v = this->gen_expr(x, exp)?;
         vals.set(i, v);
         have.set(i, true);
-        this->unify(pte, v.ty, tps, env)?;
+        this->unify(pte, v.ty, tps.slice(), env)?;
     }
     if (recv != null) {
         const auto pte = decl.params.get(0).ty;
-        if (pte.k == .Ptr) { this->unify(pte.elem, recv.ty, tps, env)? } else { this->unify(pte, recv.ty, tps, env)?; }
+        if (pte.k == .Ptr) { this->unify(pte.elem, recv.ty, tps.slice(), env)? } else { this->unify(pte, recv.ty, tps.slice(), env)?; }
     }
-    if (!all_bound(tps, env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps, env)?; }
-    if (!all_bound(tps, env)) { this->infer_from_poll(tps, env)?; }
-    if (!all_bound(tps, env)) { this->err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed; }
+    // a type parameter that is a future is inferred from its poll output first:
+    // the expected type of the whole call (which `?` narrows by one level) must
+    // not turn a future of `!i64` into a future of `i64`
+    if (!all_bound(tps.slice(), env)) { this->infer_from_poll(tps.slice(), env)?; }
+    if (!all_bound(tps.slice(), env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps.slice(), env)?; }
+    if (!all_bound(tps.slice(), env)) { this->err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed; }
 
     auto targs = List<Type*>::init(this->a);
     for (auto tp : tps) { targs.push(env.get(tp)?)?; }
-    this->check_constraints(decl.name, tps, decl.constraints, targs, line)?;
+    this->check_constraints(decl.name, tps.slice(), decl.constraints.slice(), targs.slice(), line)?;
     const auto fi = this->inst_fn(decl, env, targs)?;
-    this->move_args(decl, args, off, line)?;
+    this->move_args(decl, args.slice(), off, line)?;
+    this->copy_args(fi.decl, fi.params, args.slice(), off, line)?;
 
     auto argtxt = this->sb();
     auto cmodes = List<i64>::init(this->a);
@@ -438,7 +452,7 @@ bool Gen::names_type(Expr* e) {
         auto tys = List<Type*>::init(this->a);
         for (auto p : fi.params) { tys.push(p)?; }
         for (auto [i, v] : vals) { if (i + off >= fi.params.len) { tys.push(v.ty)?; } }
-        cmodes = this->c_modes(tys, fi.ret)?;
+        cmodes = this->c_modes(tys.slice(), fi.ret)?;
     }
     for (auto [i, x] : args) {
         const auto pi = i + off;
@@ -593,7 +607,7 @@ bool c_has_vec(Type* t) {
         this->err(line); eprintln("vectors inside a struct passed to or from C are not supported");
         return error.CompileFailed;
     }
-    if (t.k == .Func) { return this->c_vecs(t.params, t.ret, line); }
+    if (t.k == .Func) { return this->c_vecs(t.params.slice(), t.ret, line); }
     if (t.k != .Array || !t.vec) { return; }
     const auto size = this->size_of(t)?;
     if (size == 16 || (size == 8 && c_arch == 1)) { return; }
@@ -603,7 +617,7 @@ bool c_has_vec(Type* t) {
     return error.CompileFailed;
 }
 
-!void Gen::c_vecs(List<Type*> params, Type* ret, i64 line) {
+!void Gen::c_vecs(Type*[] params, Type* ret, i64 line) {
     this->c_vec(ret, line)?;
     for (auto p : params) { this->c_vec(p, line)?; }
 }
@@ -685,6 +699,7 @@ void cword(CClass* c, u64 off, u64 size, i64 cls) {
             for (auto f : t.si.fields) { if (!this->hfa(f.ty, c)?) { return false; } }
             return c.hfa != 0 && ((c.n - n0) as u64) * c.hfa == size;
         }
+        _ => {}
     }
     return false;
 }
@@ -806,7 +821,7 @@ str c_ret_ext(Type* t) {
 /// how each parameter of a C function travels: 0 = as itself, 1 = split into registers,
 /// 2 = in memory (byval). A struct that does not fit into the registers that are left goes
 /// to memory as a whole, as the ABI says, so the registers are counted here like clang does.
-!List<i64> Gen::c_modes(List<Type*> params, Type* ret) {
+!List<i64> Gen::c_modes(Type*[] params, Type* ret) {
     auto modes = List<i64>::init(this->a);
     if (c_arch == 1) {
         for (auto p : params) {
@@ -953,7 +968,7 @@ str c_ret_ext(Type* t) {
     return !c.memory && c.words == 0;
 }
 
-bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
+bool Gen::sig_needs_c(Type*[] params, Type* ret) {
     if (is_c_agg(ret)) { return true; }
     for (auto p : params) { if (is_c_agg(p)) { return true; } }
     if (c_arch == 1 && c_apple) {
@@ -965,7 +980,7 @@ bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
 
 !str Gen::func_ptr(FnInst* fi) {
     if (fi.decl.is_extern || fi.is_closure) { return fi.llname; }
-    if (!this->sig_needs_c(fi.params, fi.ret)) { return fi.llname; }
+    if (!this->sig_needs_c(fi.params.slice(), fi.ret)) { return fi.llname; }
     if (!fi.needs_thunk) {
         fi.needs_thunk = true;
         auto b = this->sb();
@@ -1005,7 +1020,7 @@ bool Gen::sig_needs_c(List<Type*> params, Type* ret) {
 
     const auto ret = fi.ret;
     const auto params = fi.params;
-    const auto modes = this->c_modes(params, ret)?;
+    const auto modes = this->c_modes(params.slice(), ret)?;
     const auto sret = is_c_agg(ret) && this->classify_c(ret)?.memory;
     auto hdr = this->sb();
     auto linkage = "internal ";

@@ -26,18 +26,18 @@ struct CSplit {
     List<str> by_value;
 }
 
-!CSplit split_extras(Allocator a, List<str> extras) {
+!CSplit split_extras(Allocator a, str[] extras) {
     auto s = CSplit{ .flags = List<str>::init(a), .sources = List<str>::init(a), .link = List<str>::init(a), .by_value = List<str>::init(a) };
     auto i = 0;
     while (i < extras.len) {
-        const auto x = extras.get(i);
+        const auto x = extras[i];
         if (joins_next(x) && i + 1 < extras.len) {
             i += 1;
-            s.flags.push(str_concat(a, [x, extras.get(i)])?)?;
+            s.flags.push(str_concat(a, [x, extras[i]])?)?;
         } else if (pairs_next(x) && i + 1 < extras.len) {
             s.flags.push(x)?;
             i += 1;
-            s.flags.push(extras.get(i))?;
+            s.flags.push(extras[i])?;
         } else if (str_starts_with(x, "--by-value=")) {
             auto it = str_split(x[11..], ",");
             while (it.next()) { if (it.part.len > 0) { s.by_value.push(it.part)?; } }

@@ -1,0 +1,13 @@
+enum Color { Red, Green, Blue }
+
+void main() {
+    const auto c = Color::Red;
+    match c {
+        .Red => println("red");
+    }
+    match c {
+        .Red => println("red");
+        .Green => println("green");
+        .Blue => println("blue");
+    }
+}

@@ -1,9 +1,9 @@
-1 .kw_type type
+1 .ident type
 1 .ident A
 1 .eq =
 1 .ident B
 1 .semi ;
-2 .kw_type type
+2 .ident type
 2 .ident B
 2 .eq =
 2 .ident A

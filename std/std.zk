@@ -296,7 +296,7 @@ struct List<T> {
 
     void deinit() move {
         this->a.free(this->items);
-        this->items = this->items[0..0];
+        this->items = (null as *T)[0..0];
         this->len = 0;
     }
 
@@ -435,8 +435,19 @@ struct Map<V> {
 
     void deinit() move {
         this->a.free(this->entries);
-        this->entries = this->entries[0..0];
+        this->entries = (null as *MapEntry<V>)[0..0];
         this->len = 0;
+    }
+
+    /// a copy with its own entry array; keys and values are copied as they are
+    !Self clone() {
+        auto m = Self::init(this->a);
+        if (this->entries.len > 0) {
+            m.entries = this->a.alloc<MapEntry<V>>(this->entries.len)?;
+            for (auto i : 0..this->entries.len) { m.entries[i] = this->entries[i]; }
+        }
+        m.len = this->len;
+        return m;
     }
 
     i64 __find(str key) {
@@ -1892,7 +1903,7 @@ struct HashMap<K, V> {
 
     void deinit() move {
         this->a.free(this->entries);
-        this->entries = this->entries[0..0];
+        this->entries = (null as *HashEntry<K, V>)[0..0];
         this->len = 0;
     }
 
@@ -2247,7 +2258,7 @@ void __crash_handler(i32 sig, i64 code, u64 addr, u64 rip, u64 rsp, u64 bp) {
     const auto el = vrt_exe_path(&exe[0], 1023);
     if (el <= 0) { return; }
     exe[el] = 0;
-    for (auto a : ["sh", "-c", "addr2line \"$@\" 2> /dev/null | sed 's/\\$[zc] at / at /'", "sh", "-f", "-C", "-i", "-p", "-e"]) {
+    for (auto a : ["sh", "-c", "addr2line \"$@\" 2> /dev/null | sed 's/\\$[zc] at / at /; s/vb\\.\\([A-Za-z0-9_.]*\\) at /\\1 at /'", "sh", "-f", "-C", "-i", "-p", "-e"]) {
         argv[ac] = a.ptr;
         ac += 1;
     }
