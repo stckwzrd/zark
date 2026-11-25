@@ -257,13 +257,13 @@ async i64 use_counter(Counter* c) {
         println(rm);
     }
     auto top = level1();
-    i64 rt = ex.block_on(&top) catch |e| {
+    i64 rt = ex.block_on(&top)? catch |e| {
         println("{e}");
         -1;
     };
     println(rt);
     auto c = caught();
-    i64 rc = ex.block_on(&c)?;
+    i64 rc = ex.block_on(&c)??;
     println(rc);
     i64 hits = 0;
     auto d = deferred(&hits);
@@ -271,7 +271,7 @@ async i64 use_counter(Counter* c) {
     println("{rd} {hits}");
     i64 hits2 = 0;
     auto de = deferred_err(&hits2);
-    i64 rde = ex.block_on(&de) catch -1;
+    i64 rde = ex.block_on(&de)? catch -1;
     println("{rde} {hits2}");
     auto i1 = identity(41);
     i64 ri = ex.block_on(&i1)?;

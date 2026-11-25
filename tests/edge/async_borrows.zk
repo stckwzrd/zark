@@ -82,7 +82,7 @@ async i64 own_slice() {
     i64 r3 = ex.block_on(&t3)?;
     println(r3);
     auto t4 = spawned(&ex);
-    i64 r4 = ex.block_on(&t4)?;
+    i64 r4 = ex.block_on(&t4)??;
     println(r4);
     auto t5 = own_slice();
     i64 r5 = ex.block_on(&t5)?;
