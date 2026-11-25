@@ -26,6 +26,10 @@ if [ $x86 = 1 ] && [ $linux = 1 ]; then
   else fail=$((fail+1)); echo "FAIL abi ir oracle aarch64"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple 2>&1 | tail -20; fi
   if ZARK="$ZARK" python3 tools/fuzz_prog.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_prog"
   else fail=$((fail+1)); echo "FAIL fuzz_prog"; ZARK="$ZARK" python3 tools/fuzz_prog.py --quick 2>&1 | tail -40; fi
+  if ZARK="$ZARK" python3 tools/fuzz_crash.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_crash"
+  else fail=$((fail+1)); echo "FAIL fuzz_crash"; ZARK="$ZARK" python3 tools/fuzz_crash.py --quick 2>&1 | tail -30; fi
+  if ZARK="$ZARK" python3 tools/fuzz_lsp.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_lsp"
+  else fail=$((fail+1)); echo "FAIL fuzz_lsp"; ZARK="$ZARK" python3 tools/fuzz_lsp.py --quick 2>&1 | tail -20; fi
 fi
 if [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; then
   if out=$(ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --strict --backends llvm,O 2>&1); then pass=$((pass+1)); echo "ok   abi fuzz"
