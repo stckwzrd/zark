@@ -11,7 +11,7 @@
 == fixed point reached: stage2 == stage3       (IR and binaries byte-identical)
 == native backend: compiler built without LLVM, then by itself
 == native fixed point reached: native2 == native3
-== test suite with the self-hosted compiler    (205 checks, including golden tokens)
+== test suite with the self-hosted compiler    (209 checks, including golden tokens)
 ```
 
 | Check | Result |
