@@ -1,0 +1,28 @@
+type Int = i64;
+
+struct Box<T> { T v; }
+struct Node { i64 type; i64 value; }
+
+i64 bump(i64 type) { return type + 1; }
+i64 take(Node* p) { return p.value; }
+
+!void main() {
+    auto n = Node{ .type = bump(2), .value = 3 };
+    const auto p = &n;
+    const auto q = p as Node*;
+    q.value = 4;
+    println(q.type, q.value, take(p as Node*));
+
+    const auto lim = 5;
+    if (3 as i64 < lim) { println("lt"); }
+    println(2 as i64 * 3);
+    println(1.5 as f64 * 2.0);
+
+    auto xs = List<Box<!i64>>::init(c_allocator());
+    xs.push(Box<!i64>{ .v = 7 })?;
+    println(xs.get(0).v);
+    xs.deinit();
+
+    const auto k = 5 as Int;
+    println(k);
+}
