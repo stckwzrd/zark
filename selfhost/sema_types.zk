@@ -383,10 +383,12 @@ bool Gen::satisfies(Type* t, str name) {
                 .amp => return l & r;
                 .pipe => return l | r;
                 .caret => return l ^ r;
+                _ => {}
             }
         }
         .Sizeof => { if (e.ty != null) { return this->size_of(this->resolve_type(e.ty, this->env)?)? as i64; } }
         .Alignof => { if (e.ty != null) { return this->align_of(this->resolve_type(e.ty, this->env)?)? as i64; } }
+        _ => {}
     }
     this->err(e.line); eprintln("expression is not a compile-time constant");
     return error.CompileFailed;
@@ -450,6 +452,7 @@ bool Gen::satisfies(Type* t, str name) {
         .Slice => return 8;
         .Errun => return max(4 as u64, this->align_of(t.elem)?);
         .Void => return 1;
+        _ => {}
     }
     return max(1 as u64, this->size_of(t)?);
 }
@@ -473,6 +476,7 @@ bool Gen::satisfies(Type* t, str name) {
         .Slice => return 8;
         .Errun => return max(4 as u64, this->ll_align(t.elem)?);
         .Void => return 1;
+        _ => {}
     }
     return max(1 as u64, this->size_of(t)?);
 }

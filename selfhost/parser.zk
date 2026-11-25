@@ -7,6 +7,7 @@ bool stmt_ends_with_block(Stmt* s) {
     match s.k {
         .If, .While, .ForRange, .ForEach, .Match, .Block => return true;
         .Defer => return stmt_ends_with_block(s.body);
+        _ => {}
     }
     return false;
 }
@@ -445,6 +446,7 @@ struct Parser {
                 this->parse_match_arms(&s.arms)?;
                 return s;
             }
+            _ => {}
         }
         if (t.tag == .ident || t.tag == .bang || t.tag == .question || (t.tag == .kw_fn && this->peek_at(1).tag == .lparen)) {
             const auto ds = this->try_decl_stmt(t)?;
@@ -465,6 +467,7 @@ struct Parser {
                 s.e = this->parse_expr()?;
                 return s;
             }
+            _ => {}
         }
         const auto s = this->st(.ExprS, t)?;
         s.e = e;
@@ -588,6 +591,7 @@ struct Parser {
                 u.l = this->parse_prefix()?;
                 return u;
             }
+            _ => {}
         }
         return this->parse_postfix();
     }
@@ -857,6 +861,7 @@ struct Parser {
                 _ = this->expect(.rbracket)?;
                 return e;
             }
+            _ => {}
         }
         this->pos -= 1;
         this->fail("expected expression")?;
@@ -992,6 +997,7 @@ i64 prec(Tag t) {
         .shl, .shr => return 7;
         .plus, .minus, .plus_wrap, .minus_wrap => return 8;
         .star, .slash, .percent, .star_wrap => return 9;
+        _ => {}
     }
     return -1;
 }
@@ -1001,6 +1007,7 @@ i64 prec(Tag t) {
 bool starts_expr(Tag t) {
     match t {
         .ident, .int_lit, .float_lit, .str_lit, .char_lit, .lparen, .lbracket, .dot, .minus, .bang, .tilde, .amp, .star, .kw_true, .kw_false, .kw_null, .kw_sizeof, .kw_alignof, .kw_match => return true;
+        _ => {}
     }
     return false;
 }
@@ -1008,6 +1015,7 @@ bool starts_expr(Tag t) {
 bool starts_type(Tag t) {
     match t {
         .ident, .star, .bang, .question, .kw_fn => return true;
+        _ => {}
     }
     return false;
 }

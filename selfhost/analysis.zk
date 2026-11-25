@@ -168,6 +168,7 @@ struct Project {
                         this->add_flat(s, d.alias)?;
                     }
                 }
+                _ => {}
             }
         }
     }
@@ -399,6 +400,7 @@ struct Walker {
             .Binary => {
                 match e.op {
                     .eqeq, .neq, .lt, .le, .gt, .ge, .andand, .oror => return this->p.mk_name("bool") catch null;
+                    _ => {}
                 }
                 const auto l = this->infer(e.l);
                 if (l != null) { return l; }
@@ -420,6 +422,7 @@ struct Walker {
                 return null;
             }
             .Call => return this->infer_call(e);
+            _ => {}
         }
         return null;
     }
@@ -585,6 +588,7 @@ struct Walker {
                 this->wclosure(e.func);
                 return;
             }
+            _ => {}
         }
         this->wexpr(e.l);
         this->wexpr(e.r);
@@ -664,6 +668,7 @@ struct Walker {
                 this->wexpr(s.e);
                 this->warms(s.arms, this->infer(s.e));
             }
+            _ => {}
         }
         this->locals.len = mark;
     }
@@ -741,6 +746,7 @@ struct Walker {
             .Import => {
                 if (d.alias.len > 0) { this->occ(d.name_off, d.alias.len, this->p.flat.get(d.alias) catch null); }
             }
+            _ => {}
         }
     }
 }

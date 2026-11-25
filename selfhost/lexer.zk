@@ -279,6 +279,7 @@ struct Lexer {
             match op.tag {
                 .lparen, .lbracket => this->depth += 1;
                 .rparen, .rbracket => this->depth -= 1;
+                _ => {}
             }
             this->i += op.len;
         }

@@ -6,6 +6,7 @@ import "lexer.zk";
 bool value_end(Tag t) {
     match t {
         .ident, .int_lit, .float_lit, .str_lit, .char_lit, .rparen, .rbracket, .kw_true, .kw_false, .kw_null, .question => return true;
+        _ => {}
     }
     return false;
 }
@@ -79,6 +80,7 @@ struct Formatter {
             .bang, .tilde => return true;
             .minus, .star, .amp => return before;
             .question => return before || prev_orig || (!orig && type_start(cur.tag));
+            _ => {}
         }
         return false;
     }

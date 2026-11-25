@@ -1811,6 +1811,7 @@ struct CEmit {
                 const auto r = this->records.get_or(t.name, null);
                 if (r != null) { return this->rec_align(r); }
             }
+            _ => {}
         }
         return 1;
     }
@@ -2276,6 +2277,7 @@ struct CEmit {
                     if (x != null) { return this->size(x); }
                 }
             }
+            _ => {}
         }
         return CSize{ .size = -1 };
     }
@@ -2761,6 +2763,7 @@ struct CEmit {
                 if (r == null) { r = this->fwd.get_or(t.name, null); }
                 if (r != null) { this->need_rec(r)?; }
             }
+            _ => {}
         }
     }
 

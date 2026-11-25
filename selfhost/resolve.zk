@@ -81,6 +81,7 @@ struct Resolver {
                 this->locals.len = mark;
                 return;
             }
+            _ => {}
         }
         this->rexpr(e.l)?;
         this->rexpr(e.r)?;
@@ -144,6 +145,7 @@ struct Resolver {
                 this->rexpr(s.e)?;
                 this->rarms(s.arms)?;
             }
+            _ => {}
         }
         this->locals.len = mark;
     }
@@ -187,6 +189,7 @@ struct Resolver {
             .Enum => r.names.put(d.en.name, true)?;
             .Const => r.names.put(d.c.name, true)?;
             .Alias => r.names.put(d.path, true)?;
+            _ => {}
         }
     }
     r.walk(decls)?;
@@ -216,6 +219,7 @@ struct Resolver {
                 d.path = r.rename(d.path)?;
             }
             .Check => r.rexpr(d.ct)?;
+            _ => {}
         }
     }
 }

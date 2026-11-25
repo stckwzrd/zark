@@ -320,6 +320,7 @@ struct Gen {
                     this->aliases.put(d.path, d.ty)?;
                 }
                 .Import => {}
+                _ => {}
             }
         }
     }
@@ -1089,6 +1090,7 @@ bool always_returns(Stmt* s) {
             return wild;
         }
         .ExprS => return s.e.k == .Call && s.e.l.k == .Ident && s.e.l.name == "panic";
+        _ => {}
     }
     return false;
 }
@@ -1108,6 +1110,7 @@ bool breaks_out(Stmt* s, str lbl, i64 depth) {
             for (auto arm : s.arms) { if (breaks_out(arm.body, lbl, depth)) { return true; } }
             return false;
         }
+        _ => {}
     }
     return false;
 }
@@ -1129,6 +1132,7 @@ bool type_eq(Type* a, Type* b) {
             for (auto i : 0..a.params.len) { if (!type_eq(a.params.get(i), b.params.get(i))) { return false; } }
             return true;
         }
+        _ => {}
     }
     return true;
 }

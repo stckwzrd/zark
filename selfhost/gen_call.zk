@@ -696,6 +696,7 @@ void cword(CClass* c, u64 off, u64 size, i64 cls) {
             for (auto f : t.si.fields) { if (!this->hfa(f.ty, c)?) { return false; } }
             return c.hfa != 0 && ((c.n - n0) as u64) * c.hfa == size;
         }
+        _ => {}
     }
     return false;
 }
