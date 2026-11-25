@@ -105,6 +105,7 @@ struct MatchRes { Type* ty; str slot; }
                     .caret_eq => op = .caret;
                     .shl_eq => op = .shl;
                     .shr_eq => op = .shr;
+                    _ => {}
                 }
                 const auto r = this->arith(op, cur, rhs, s.line)?;
                 this->store_to(r, addr)?;
@@ -243,6 +244,9 @@ struct MatchRes { Type* ty; str slot; }
         .Match => {
             this->set_await(s.e);
             const auto v = this->gen_expr(s.e, null)?;
+            if (v.ty.k == .Enm || v.ty.k == .Bool || is_union(v.ty)) {
+                this->check_exhaustive(v, s.arms, s.line)?;
+            }
             this->gen_match(v, s.arms, null)?;
         }
     }

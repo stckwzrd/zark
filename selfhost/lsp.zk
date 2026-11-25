@@ -639,6 +639,7 @@ i64 line_start_off(Doc* d, i64 line) {
                 }
                 top.push(n)?;
             }
+            _ => {}
         }
     }
     return top;
@@ -1126,6 +1127,7 @@ i64 symbol_kind_of(SymK k) {
                     kind = 26;
                 }
                 .Import => continue;
+                _ => {}
             }
             auto lower = List<u8>::init(a);
             for (auto c : name) { lower.push(lc(c))?; }

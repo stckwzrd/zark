@@ -328,6 +328,7 @@ bool can_coerce(Type* from, Type* to) {
             if (v.ty.k != .Ptr) { this->err(e.line); eprintln("cannot dereference '{this->type_name(v.ty)?}'"); return error.CompileFailed };
             return this->load(v.ty.elem, v.v);
         }
+        _ => {}
     }
     return error.CompileFailed;
 }
@@ -829,6 +830,7 @@ str operator_name(Tag t) {
         .le => return "op_le";
         .gt => return "op_gt";
         .ge => return "op_ge";
+        _ => {}
     }
     return "";
 }
@@ -861,6 +863,7 @@ str operator_name(Tag t) {
     auto is_cmp = false;
     match op {
         .eqeq, .neq, .lt, .le, .gt, .ge => is_cmp = true;
+        _ => {}
     }
     auto exp = expected;
     if (is_cmp) { exp = null; }
@@ -986,6 +989,7 @@ str operator_name(Tag t) {
             .caret => ins = "xor";
             .shl => ins = "shl";
             .shr => { if (sg) { ins = "ashr"; } else { ins = "lshr"; } }
+            _ => {}
         }
     } else if (et.k == .Float) {
         match op {
@@ -994,12 +998,14 @@ str operator_name(Tag t) {
             .star => ins = "fmul";
             .slash => ins = "fdiv";
             .percent => ins = "frem";
+            _ => {}
         }
     } else if (l.ty.k == .Bool) {
         match op {
             .amp => ins = "and";
             .pipe => ins = "or";
             .caret => ins = "xor";
+            _ => {}
         }
     } else {
         this->err(line); eprintln("arithmetic on '{this->type_name(l.ty)?}' is not supported");
@@ -1305,6 +1311,7 @@ Type* scalar_hint(Type* t) {
             .le => { if (signed) { pred = "sle"; } else { pred = "ule"; } }
             .gt => { if (signed) { pred = "sgt"; } else { pred = "ugt"; } }
             .ge => { if (signed) { pred = "sge"; } else { pred = "uge"; } }
+            _ => {}
         }
         sprint(this->ins()?, "  {t} = icmp {pred} {this->llty(l.ty)?} {l.v}, {r.v}\n")?;
     } else if (k == .Float) {
@@ -1316,6 +1323,7 @@ Type* scalar_hint(Type* t) {
             .le => pred = "ole";
             .gt => pred = "ogt";
             .ge => pred = "oge";
+            _ => {}
         }
         sprint(this->ins()?, "  {t} = fcmp {pred} {this->llty(l.ty)?} {l.v}, {r.v}\n")?;
     } else {

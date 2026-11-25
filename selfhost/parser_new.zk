@@ -15,6 +15,7 @@ str operator_method(Tag t) {
         .le => return "op_le";
         .gt => return "op_gt";
         .ge => return "op_ge";
+        _ => {}
     }
     return "";
 }
@@ -611,6 +612,7 @@ struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
                 .rparen => {
                     if (depth == 0) { close = true; } else { depth -= 1; }
                 }
+                _ => {}
             }
             if (close || (tk.tag == .comma && depth == 0)) {
                 if (cur.len > 0) {

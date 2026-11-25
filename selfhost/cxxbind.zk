@@ -1714,6 +1714,7 @@ struct CxWalk {
             .Void => { return "void"; }
             .Named => { if (x.rec != null) { return x.rec.name; } return x.name; }
             .Func => { return "fn"; }
+            _ => {}
         }
         return "";
     }
@@ -2008,6 +2009,7 @@ struct CxWalk {
                     if (l != null && !l.dup) { return CSize{ .size = l.size, .align = l.align }; }
                 }
             }
+            _ => {}
         }
         return CSize{ .size = -1 };
     }
@@ -2612,6 +2614,7 @@ bool cx_exc = true;
             if (t.noexc) { sprint(&b, " noexcept")?; }
             return cx_spell(a, t.elem, b.slice());
         }
+        _ => {}
     }
     if (t.konst) { sprint(&b, "const ")?; }
     if (t.vol) { sprint(&b, "volatile ")?; }
