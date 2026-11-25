@@ -1,0 +1,1 @@
+error: 'b' is used after 'close' consumed it on line 4; assign it a new value first

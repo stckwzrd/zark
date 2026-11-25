@@ -1,0 +1,1 @@
+error: a top-level comptime must be a statement that returns nothing, like `comptime assert(...);`; this one produces a value (did you forget `assert`?)

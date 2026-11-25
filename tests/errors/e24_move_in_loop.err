@@ -1,0 +1,1 @@
+error: a variable is consumed by 'drop' inside a loop and used again by the next iteration; assign it a new value or leave the loop with break or return

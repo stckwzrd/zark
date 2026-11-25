@@ -1,0 +1,1 @@
+error: 'await' is not allowed in deferred code (defer/errdefer)

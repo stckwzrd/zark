@@ -1,0 +1,1 @@
+error: 't' holds a 'thread.Thread' that is not consumed on every path out of its scope; call t.join(), pass it on, or write `defer t.join();` right after creating it

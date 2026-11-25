@@ -146,7 +146,11 @@ bool Gen::names_type(Expr* e) {
         if (rname.len == 0) { this->err(line); eprintln("'{this->type_name(t)?}' has no methods"); return error.CompileFailed; }
         auto kb = this->sb();
         sprint(&kb, "{rname}.{f.name}")?;
-        if (!this->methods.has(kb.slice())) { this->err(line); eprintln("'{this->type_name(t)?}' has no method '{f.name}'"); return error.CompileFailed; }
+        if (!this->methods.has(kb.slice())) {
+            this->err(line);
+            eprintln("'{this->type_name(t)?}' has no method '{f.name}'{this->hint(f.name, this->method_names(rname))}");
+            return error.CompileFailed;
+        }
         const auto md = this->methods.get(kb.slice())?;
         const auto env = this->recv_env(md, t)?;
         return this->call_decl(md, env, null, args, explicit, expected, line);
@@ -191,7 +195,8 @@ bool Gen::names_type(Expr* e) {
             }
         }
     }
-    this->err(line); eprintln("'{this->type_name(recv.ty)?}' has no method '{f.name}'");
+    this->err(line);
+    eprintln("'{this->type_name(recv.ty)?}' has no method '{f.name}'{this->hint(f.name, this->method_names(rname))}");
     return error.CompileFailed;
 }
 
