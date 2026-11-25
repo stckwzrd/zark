@@ -92,14 +92,47 @@ def conv(v, src, dst):
     raise ValueError(f"cannot convert {src.name} to {dst.name}")
 
 
+def trunc_div(a, b):
+    q = abs(a) // abs(b)
+    return -q if (a < 0) != (b < 0) else q
+
+
+def trunc_mod(a, b):
+    return a - trunc_div(a, b) * b
+
+
+def i64_src(v):
+    if v == -(1 << 63):
+        return "((0 - 9223372036854775807) - 1)"
+    if v < 0:
+        return f"(0 - {-v})"
+    return f"{v}"
+
+
 def lit(v, ty):
     if ty.kind == "int":
-        if v < 0:
-            return f"((0 - {-v}) as {ty.name})"
-        return f"({v} as {ty.name})"
+        if ty.bits == 64:
+            if ty.signed:
+                return f"({i64_src(v)} as i64)"
+            x = v if v < (1 << 63) else v - (1 << 64)
+            return f"({i64_src(x)} as u64)"
+        return f"({i64_src(v)} as {ty.name})"
     if ty.kind == "bool":
         return "true" if v else "false"
     return f"({v!r} as {ty.name})"
+
+
+def int_range(ty):
+    if ty.signed:
+        return -(1 << (ty.bits - 1)), (1 << (ty.bits - 1)) - 1
+    return 0, (1 << ty.bits) - 1
+
+
+def boundary_values(ty):
+    lo, hi = int_range(ty)
+    if ty.signed:
+        return [lo, lo + 1, -1, 0, 1, hi - 1, hi]
+    return [0, 1, (1 << (ty.bits - 1)) - 1, 1 << (ty.bits - 1), hi - 1, hi]
 
 
 def as_int_code(code, ty):
@@ -133,7 +166,12 @@ class ExprGen:
             return name, ty, val
         ty = want if want is not None else r.choice(SCALARS)
         if ty.kind == "int":
-            v = r.choice([-9, -3, -1, 0, 1, 2, 3, 5, 7, 11, 13])
+            if r.random() < 0.35:
+                v = r.choice(boundary_values(ty))
+            elif ty.signed:
+                v = r.choice([-9, -3, -1, 0, 1, 2, 3, 5, 7, 11, 13])
+            else:
+                v = r.choice([0, 1, 2, 3, 5, 7, 11, 13])
             return lit(v, ty), ty, wrap(v, ty)
         if ty.kind == "bool":
             v = r.random() < 0.5
@@ -198,21 +236,41 @@ class ExprGen:
             return f"(-({a}))", want, f32(-av) if want.bits == 32 else -av
         # int
         kind = r.random()
-        if kind < 0.25:
+        if kind < 0.18:
             src = r.choice(INTS + [BOOL])
             a, _, av = self.gen_of(src, depth - 1)
             return f"(({a}) as {want.name})", want, conv(av, src, want)
         a, _, av = self.gen_of(want, depth - 1)
-        b, _, bv = self.gen_of(want, depth - 1)
-        if kind < 0.75:
-            op = r.choice(["+%", "-%", "*%"])
-            if op == "+%":
-                val = av + bv
-            elif op == "-%":
-                val = av - bv
+        lo, hi = int_range(want)
+        if kind < 0.48:
+            # checked + - * when the model knows it does not overflow, else wrapping
+            op = r.choice(["+", "-", "*"])
+            b, _, bv = self.gen_of(want, depth - 1)
+            exact = av + bv if op == "+" else (av - bv if op == "-" else av * bv)
+            if lo <= exact <= hi:
+                return f"(({a}) {op} ({b}))", want, exact
+            return f"(({a}) {op}% ({b}))", want, wrap(exact, want)
+        if kind < 0.63:
+            # / and % truncate toward zero; the divisor is a nonzero literal
+            op = r.choice(["/", "%"])
+            divs = [2, 3, 5, 7] if not want.signed else [2, 3, 5, 7, -1, -2, -3]
+            d = r.choice(divs)
+            if want.signed and av == lo and d == -1:
+                d = 2
+            if op == "/":
+                val = trunc_div(av, d)
             else:
-                val = av * bv
-            return f"(({a}) {op} ({b}))", want, wrap(val, want)
+                val = trunc_mod(av, d)
+            return f"(({a}) {op} ({lit(d, want)}))", want, wrap(val, want)
+        if kind < 0.8:
+            op = r.choice(["<<", ">>"])
+            sh = r.randint(1, want.bits - 1)
+            if op == "<<":
+                val = wrap(av << sh, want)
+            else:
+                val = av >> sh
+            return f"(({a}) {op} {sh})", want, val
+        b, _, bv = self.gen_of(want, depth - 1)
         op = r.choice(["&", "|", "^"])
         val = {"&": av & bv, "|": av | bv, "^": av ^ bv}[op]
         return f"(({a}) {op} ({b}))", want, wrap(val, want)
