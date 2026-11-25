@@ -92,7 +92,7 @@ jobs:
         run: |
           docker run --rm \
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD":/src -w /src \
+            -v "$PWD":/src:z -w /src \
             "$ZARK_CI_IMAGE" bash ./bootstrap.sh
 
   arm64:
@@ -126,7 +126,7 @@ jobs:
         run: |
           docker run --rm --platform linux/arm64 \
             --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD":/src -w /src \
+            -v "$PWD":/src:z -w /src \
             "$ZARK_CI_IMAGE" bash ./bootstrap.sh
 
   # The macOS and Windows jobs in ci.yml cannot run here (they need Apple and
