@@ -1,0 +1,10 @@
+struct S { i64 a; u8 b; bool c; i64* p; i64[3] acc; }
+
+void main() {
+    i64 x;
+    bool b;
+    i64* p;
+    u8[] sl;
+    S s;
+    println(x, b, p == null, sl.len, s.a, s.b, s.c, s.p == null, s.acc[2]);
+}
