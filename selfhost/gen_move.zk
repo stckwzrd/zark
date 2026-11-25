@@ -198,6 +198,13 @@ str Gen::place_name(Expr* e) {
 }
 
 !void Gen::move_mark(Expr* x, str by, i64 line) {
+    if (x != null && x.k == .Field) {
+        const auto k = this->place_key(x)?;
+        if (k.len == 0) { return; }
+        this->invalidate(k, this->place_name(x), by, line)?;
+        if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0 })?; }
+        return;
+    }
     if (x.k != .Ident) { return; }
     const auto p = this->local_ptr(x.name);
     if (p.len == 0) { return; }
@@ -530,6 +537,7 @@ bool Gen::resource_of(Type* t, i64 d) {
         if (dest.len == 0) { return; }
         const auto k = this->place_key(e)?;
         if (k.len == 0) { return; }
+        this->move_use_key(k, this->place_name(e), line)?;
         this->invalidate(k, this->place_name(e), by, line)?;
         if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0 })?; }
         return;
@@ -537,6 +545,7 @@ bool Gen::resource_of(Type* t, i64 d) {
     if (e.k != .Ident) { return; }
     if (dest.len > 0 && e.name == dest) { return; }
     if (this->local_ptr(e.name).len == 0) { return; }
+    this->move_use(e.name, line)?;
     this->move_mark(e, by, line)?;
 }
 

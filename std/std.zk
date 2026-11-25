@@ -296,7 +296,7 @@ struct List<T> {
 
     void deinit() move {
         this->a.free(this->items);
-        this->items = this->items[0..0];
+        this->items = (null as *T)[0..0];
         this->len = 0;
     }
 
@@ -435,7 +435,7 @@ struct Map<V> {
 
     void deinit() move {
         this->a.free(this->entries);
-        this->entries = this->entries[0..0];
+        this->entries = (null as *MapEntry<V>)[0..0];
         this->len = 0;
     }
 
@@ -1903,7 +1903,7 @@ struct HashMap<K, V> {
 
     void deinit() move {
         this->a.free(this->entries);
-        this->entries = this->entries[0..0];
+        this->entries = (null as *HashEntry<K, V>)[0..0];
         this->len = 0;
     }
 
