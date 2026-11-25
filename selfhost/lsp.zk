@@ -424,8 +424,9 @@ void run_frontend(Server* s, Allocator a, Doc* d) {
         auto d = Diag{ .path = path, .line = (parse_int(head[colon + 1..]) catch 1) as i64, .text = "", .col = -1, .msg = ln[at + 9..] };
         if (i + 1 < lines.len) {
             const auto sn = lines.get(i + 1);
-            if (sn.len >= 8 && sn[5..8] == " | " && is_digit(str_trim(sn[0..5])[0])) {
-                d.line = (parse_int(str_trim(sn[0..5])) catch 1) as i64;
+            const auto tn = str_trim(sn[0..5]);
+            if (sn.len >= 8 && sn[5..8] == " | " && tn.len > 0 && is_digit(tn[0])) {
+                d.line = (parse_int(tn) catch 1) as i64;
                 d.text = sn[8..];
                 if (i + 2 < lines.len) {
                     const auto cr = lines.get(i + 2);
