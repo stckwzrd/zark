@@ -90,7 +90,7 @@ i64 offset_of_utf16(str text, i64 from, i64 to, i64 col) {
     return out;
 }
 
-!void try_range(JW* w, Text d, i64 from, i64 to) {
+!void try_range(JW* w, Text* d, i64 from, i64 to) {
     w.obj()?;
     w.key("start")?;
     w.obj()?;

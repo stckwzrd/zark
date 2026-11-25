@@ -62,6 +62,15 @@ bool all_bound(str[] tps, Env env) {
         t.args = List<TypeExpr*>::init(this->a);
         return t;
     }
+    if (e.k == .Unary && e.op == .bang) {
+        const auto inner = this->expr_to_type_expr(e.l)?;
+        if (inner == null) { return null; }
+        const auto t = this->a.create<TypeExpr>()?;
+        t.k = .Errun;
+        t.elem = inner;
+        t.args = List<TypeExpr*>::init(this->a);
+        return t;
+    }
     return null;
 }
 
@@ -191,7 +200,7 @@ bool Gen::names_type(Expr* e) {
     for (auto [i, x] : args) {
         const auto pt = sig.params.get(i);
         vals.push(this->coerce(this->gen_expr(x, pt)?, pt, x.line)?)?;
-        this->copy_moves(x, "", "the call", x.line)?;
+        this->copy_moves(x, pt, "", "the call", x.line)?;
     }
     return vals;
 }

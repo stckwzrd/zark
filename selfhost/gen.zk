@@ -79,6 +79,7 @@ struct Gen {
     i64 rdepth;
     i64 cdepth;
     List<MoveRec> moved;
+    bool assign_target;
     bool shared;
     i64 nloop;
     List<Cold> colds;

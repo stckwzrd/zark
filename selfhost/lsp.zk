@@ -322,7 +322,8 @@ bool rename_blocked = false;
         w.obj()?;
         w.key("range")?;
         auto rw = new_jw(a);
-        try_range(&rw, d.tx(), 0, d.text.len)?;
+        const auto t = d.tx();
+        try_range(&rw, &t, 0, d.text.len)?;
         w.raw(rw.text())?;
         w.key("newText")?;
         w.str(out)?;
@@ -554,11 +555,12 @@ struct Node2 {
     w.int(n.kind)?;
     w.key("range")?;
     auto rw = new_jw(a);
-    try_range(&rw, d.tx(), n.from, n.to)?;
+    const auto tx = d.tx();
+    try_range(&rw, &tx, n.from, n.to)?;
     w.raw(rw.text())?;
     w.key("selectionRange")?;
     auto sw = new_jw(a);
-    try_range(&sw, d.tx(), n.sel, n.sel + n.sel_len)?;
+    try_range(&sw, &tx, n.sel, n.sel + n.sel_len)?;
     w.raw(sw.text())?;
     if (n.kids.len > 0) {
         w.key("children")?;
@@ -1139,7 +1141,7 @@ i64 symbol_kind_of(SymK k) {
             w.str(path_to_uri(a, f)?)?;
             w.key("range")?;
             auto rw = new_jw(a);
-            try_range(&rw, tx, off, off + name.len)?;
+            try_range(&rw, &tx, off, off + name.len)?;
             w.raw(rw.text())?;
             w.end()?;
             w.end()?;

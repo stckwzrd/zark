@@ -305,7 +305,7 @@ Symbol* sym_for(Project* p, str path, str src, i64 off) {
 
 !void range_json(Allocator a, JW* w, Project* p, str path, i64 off, i64 len) {
     const auto t = text_of(a, p, path)?;
-    try_range(w, t, off, off + len)?;
+    try_range(w, &t, off, off + len)?;
 }
 
 !void location(Allocator a, JW* w, Project* p, str path, i64 off, i64 len) {

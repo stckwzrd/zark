@@ -21,6 +21,13 @@ List<MoveRec> Gen::snap() {
     return this->moved;
 }
 
+!void Gen::clear_place(str key) {
+    if (key.len == 0 || this->moved.len == 0) { return; }
+    auto out = List<MoveRec>::init(this->a);
+    for (auto r : this->moved) { if (r.ptr != key) { out.push(r)?; } }
+    if (out.len != this->moved.len) { this->restore_state(out); }
+}
+
 void Gen::restore_state(List<MoveRec> s) {
     this->moved = s;
     this->shared = true;
@@ -115,8 +122,11 @@ void Gen::note_use(str ptr) {
 }
 
 !void Gen::move_use(str name, i64 line) {
+    this->move_use_key(this->local_ptr(name), name, line)?;
+}
+
+!void Gen::move_use_key(str p, str name, i64 line) {
     if (this->reinit) { return; }
-    const auto p = this->local_ptr(name);
     if (p.len == 0) { return; }
     this->note_use(p);
     if (this->moved.len == 0) { return; }
@@ -417,7 +427,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
     }
 }
 
-!void Gen::loop_end(Loop lp, List<MoveRec> s0) {
+!void Gen::loop_end(Loop* lp, List<MoveRec> s0) {
     auto back = lp.conts;
     auto back_must = lp.cmust;
     auto nback = lp.ncont;
@@ -470,7 +480,11 @@ bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.dec
 /// A value of this type owns a resource: an `owned struct`, or a struct with a
 /// method that consumes its receiver (`deinit() move`, `close() move`, ...).
 /// Copying such a value is treated as a move.
-bool Gen::is_resource(Type* t) {
+bool Gen::is_resource(Type* t) { return this->resource_of(t, 0); }
+
+/// The type itself owns a resource (it is `owned` or has a move method), even if
+/// none of its fields does. Used where a field-wise resource is still fine.
+bool Gen::is_owner(Type* t) {
     if (t == null || t.k != .Strct || t.si.decl.is_union || t.si.decl.is_iface) { return false; }
     if (t.si.decl.owned) { return true; }
     for (auto e : this->methods.entries) {
@@ -481,14 +495,48 @@ bool Gen::is_resource(Type* t) {
     return false;
 }
 
+/// A struct is a resource when it is `owned`, when it has a method that consumes
+/// the receiver, or when any field is a resource (arrays and error unions hold
+/// their element by value too).
+bool Gen::resource_of(Type* t, i64 d) {
+    if (t == null || d > 16) { return false; }
+    if (t.k == .Array || t.k == .Errun) { return this->resource_of(t.elem, d + 1); }
+    if (t.k != .Strct || t.si.decl.is_union || t.si.decl.is_iface) { return false; }
+    if (t.si.decl.owned) { return true; }
+    for (auto e : this->methods.entries) {
+        if (!e.used) { continue; }
+        const auto f = e.value;
+        if (f.receiver == t.si.decl.name && f.params.len > 0 && f.params.get(0).move) { return true; }
+    }
+    for (auto f : t.si.fields) { if (this->resource_of(f.ty, d + 1)) { return true; } }
+    return false;
+}
+
 /// `auto y = x;`, `y = x;`, `S{ .f = x }`, `f(x)` and `return x` copy the value
 /// of a resource type, so they move it: `x` is consumed unless it is the target.
-!void Gen::copy_moves(Expr* e, str dest, str by, i64 line) {
-    if (e == null || e.k != .Ident) { return; }
+/// Field paths rooted at a local move that path; a copy through a pointer is a
+/// bitwise copy that would alias the object, so it is rejected.
+!void Gen::copy_moves(Expr* e, Type* ty, str dest, str by, i64 line) {
+    if (e == null || ty == null || !this->is_resource(ty)) { return; }
+    if (e.k == .Unary && e.op == .star) {
+        if (!this->is_owner(ty)) { return; }
+        this->err(line);
+        eprintln("'{this->type_name(ty)?}' is a resource; copying it out of a pointer would alias it, use clone() or take the pointer instead");
+        return error.CompileFailed;
+    }
+    if (e.k == .Field) {
+        // only a binding (`auto y = h.l;`, `y = h.l;`) takes the path over;
+        // passing a field to a call is still a copy the check does not follow
+        if (dest.len == 0) { return; }
+        const auto k = this->place_key(e)?;
+        if (k.len == 0) { return; }
+        this->invalidate(k, this->place_name(e), by, line)?;
+        if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0 })?; }
+        return;
+    }
+    if (e.k != .Ident) { return; }
     if (dest.len > 0 && e.name == dest) { return; }
     if (this->local_ptr(e.name).len == 0) { return; }
-    const auto ty = this->local_type(e.name)?;
-    if (ty == null || !this->is_resource(ty)) { return; }
     this->move_mark(e, by, line)?;
 }
 
@@ -498,9 +546,7 @@ bool Gen::is_resource(Type* t) {
         if (pi >= decl.params.len) { continue; }
         if (decl.params.get(pi).move) { continue; }
         if (pi >= ptypes.len) { continue; }
-        const auto ty = ptypes.get(pi);
-        if (ty == null || !this->is_resource(ty)) { continue; }
-        this->copy_moves(x, "", decl.name, line)?;
+        this->copy_moves(x, ptypes.get(pi), "", decl.name, line)?;
     }
 }
 
