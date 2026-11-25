@@ -33,6 +33,8 @@ if [ $x86 = 1 ] && [ $linux = 1 ]; then
   else fail=$((fail+1)); echo "FAIL fuzz_lsp"; ZARK="$ZARK" python3 tools/fuzz_lsp.py --quick 2>&1 | tail -20; fi
   if ZARK="$ZARK" python3 tools/fuzz_lsp.py --count 1 --seed 5111 >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_lsp regress"
   else fail=$((fail+1)); echo "FAIL fuzz_lsp regress"; ZARK="$ZARK" python3 tools/fuzz_lsp.py --count 1 --seed 5111 2>&1 | tail -10; fi
+  if ZARK="$ZARK" python3 tools/fuzz_own.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_own"
+  else fail=$((fail+1)); echo "FAIL fuzz_own"; ZARK="$ZARK" python3 tools/fuzz_own.py --quick 2>&1 | tail -30; fi
 fi
 if [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; then
   if out=$(ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --strict --backends llvm,O 2>&1); then pass=$((pass+1)); echo "ok   abi fuzz"
