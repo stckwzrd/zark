@@ -2,6 +2,7 @@
 # Runs all examples and compares against expected output.
 cd "$(dirname "$0")/.."
 ZARK=${ZARK:-./build/zark}
+command -v timeout >/dev/null || timeout() { shift; "$@"; }
 pass=0; fail=0
 check() { # name, cmd...
   local name=$1; shift
@@ -49,7 +50,10 @@ if [ $linux = 1 ] && command -v addr2line >/dev/null; then
   else pass=$((pass+1)); echo "ok   crash_thunk_names"; fi
 fi
 for f in tests/errors/*.zk; do
-  if $ZARK run "$f" >/dev/null 2>&1; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
+  timeout 20 $ZARK run "$f" >/dev/null 2>&1; rc=$?
+  if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected an error)"
+  elif [ $rc -eq 124 ]; then fail=$((fail+1)); echo "FAIL $f (timed out)"
+  else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
 done
 for f in tests/std/*.zk; do
   if out=$($ZARK test "$f" $FLAGS 2>&1); then pass=$((pass+1)); echo "ok   $f ($(echo "$out" | tail -1))"
