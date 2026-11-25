@@ -1,0 +1,7 @@
+!i64 f() { return 1; }
+
+!void main() {
+    errdefer auto x = f()?;
+    const auto y = f()?;
+    println(y);
+}
