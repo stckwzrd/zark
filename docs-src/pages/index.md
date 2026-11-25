@@ -8,7 +8,7 @@ description: A complete guide to the Zark programming language
 
 # Zark
 
-A small systems language: you control memory, type conversions are visible in the code, and there are no hidden allocations or hidden control flow. The compiler is written in Zark itself and builds itself (about 15 thousand lines) in about a third of a second.
+A small systems language: you control memory, type conversions are visible in the code, and there are no hidden allocations or hidden control flow. The compiler is written in Zark itself and builds itself (about 25 thousand lines) in about a third of a second.
 
 </div>
 

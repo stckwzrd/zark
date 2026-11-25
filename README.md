@@ -48,7 +48,7 @@ struct Point {
 
 ## Quick start
 
-Requirements: clang (tested with clang 18). Builds on Linux (glibc and musl, x86-64 and arm64), macOS and Windows through WSL2: see [INSTALL.md](INSTALL.md) ([по-русски](INSTALL.ru.md)).
+Requirements: clang 18 or newer (tested with 18, 19 and 22). Builds on Linux (glibc and musl, x86-64 and arm64), macOS and Windows through WSL2: see [INSTALL.md](INSTALL.md) ([по-русски](INSTALL.ru.md)).
 
 ```sh
 ./bootstrap.sh                            # seed -> self-hosted build/zark (+ tests)
@@ -77,6 +77,29 @@ ZARK=build/zark tests/run.sh              # test suite
 | `-- a b` | arguments for `zark run` |
 
 The native backend compiles functions on several threads (up to 8, one per CPU). `ZARK_JOBS=1` forces one thread, `ZARK_JOBS=N` sets the count; the output is the same byte for byte.
+
+## Documentation
+
+The guide is in [`docs/index.html`](docs/index.html): open it in a browser, or serve the
+directory (`python3 -m http.server -d docs`). It is generated from the Markdown in
+`docs-src/pages/` (the Russian translation is `docs-src/pages-ru/`), and every code block
+in it was compiled and run by the real compiler when the site was built.
+
+| If you want to… | Read |
+|---|---|
+| install and build | [INSTALL.md](INSTALL.md), [installation and the first program](docs/getting-started.html) |
+| learn the language | [Learn Zark](docs/learn.html) (a course), [quick tour](docs/tour.html) |
+| look up a feature | [types](docs/types.html), [errors and optionals](docs/errors-and-optionals.html), [memory](docs/memory.html), [strings](docs/strings.html), [collections](docs/collections.html) |
+| call C or C++ | [C interop](docs/c-interop.html), [C++ style](docs/cpp-style.html), [SPEC.md section 8](SPEC.md) |
+| write a real program | [cookbook](docs/cookbook.html), [showcase](docs/showcase.html) (a threaded ray tracer) |
+| use the tools | [testing](docs/testing.html), [tooling](docs/tooling.html), [debugging](docs/debugging.html) |
+| understand the compiler | [how it works](docs/how-it-works.html), [BOOTSTRAP.md](BOOTSTRAP.md) |
+| know the fine print | [SPEC.md](SPEC.md) (the normative reference), [safety model](docs/safety.html), [pitfalls](docs/gotchas.html) |
+| contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+The [SPEC.md](SPEC.md) is the normative description of the language. Sections 11 and 12
+list what the compiler does **not** check and which behaviour is undefined or
+implementation-defined, so read them before relying on a guarantee.
 
 ## Editor support
 
@@ -233,6 +256,53 @@ selfhost/main.zk     driver: imports, IR → backend, linking .c/.cpp/.o
 std/std.zk           prelude written in Zark itself (List, Map, Arena, runtime helpers)
 ```
 The compiler emits textual LLVM IR and calls `clang`, with no linking against libLLVM. Locals become `alloca`s, which LLVM promotes to registers at `-O2`.
+
+### Repository layout
+
+| Path | What is there |
+|---|---|
+| `selfhost/` | the compiler, written in Zark (lexer, parser, type checker, LLVM IR, native x86-64 backend, driver) |
+| `std/` | the prelude (`std.zk`) and the standard modules (`fs`, `path`, `json`, `net`, `http`, `thread`, `async`, …) |
+| `bootstrap/seed.ll.gz` | the compiler's own LLVM IR, the starting point of the bootstrap (see [BOOTSTRAP.md](BOOTSTRAP.md)) |
+| `tests/` | the test suite: golden outputs, edge cases, pinned error messages, C/C++ binding tests, ABI and fuzz drivers |
+| `tools/` | fuzzers, the ASan/UBSan build (`build_asan.sh`), and `update-seed.sh` |
+| `examples/` | runnable programs: `hello.zk`, `bench.zk`, the ImGui UI, the bare-metal kernel, C/C++ interop |
+| `docs-src/`, `docs/` | the guide's Markdown sources and the generated HTML |
+| `editors/vscode/` | the VS Code extension (highlighting, snippets, run/test buttons) |
+| `bench/` | the compile-speed comparison |
+| `legacy/zig-stage0/` | the retired Zig compiler, kept for history only |
+
+## Testing
+
+The suite is one script; it runs the compiler on every test and compares the result with
+the expected output:
+
+```sh
+ZARK=build/zark tests/run.sh            # the default (native) backend
+ZARK=build/zark tests/run.sh --llvm     # the LLVM backend without optimizations
+ZARK=build/zark tests/run.sh -O         # LLVM -O2, bounds checks still on
+```
+
+It covers: the examples and their expected stdout, golden token streams, edge cases
+(`tests/edge`), diagnostics pinned to the first line of every `tests/errors/*.zk` (the
+`.err` files), panics, the crash handler's backtrace, the C and C++ binders
+(`tests/cbind.sh`, `tests/cxxbind.sh`), the C ABI fuzzer, the standard-module tests,
+formatter idempotence (`tests/fmt_idem.sh`), IR determinism (`tests/determinism.sh`),
+every code block in the guide (`tests/docs.sh`) and a compile-time budget for the
+self-hosted compiler (`tests/scale.sh`). The quick passes of the four fuzzers also run
+from `tests/run.sh`; the full runs are in `tools/`:
+
+```sh
+python3 tools/fuzz_prog.py --count 10000    # random programs against a reference model
+python3 tools/fuzz_crash.py --count 100000  # mutations: no crash, no hang
+python3 tools/fuzz_lsp.py --count 2000      # JSON-RPC sessions
+python3 tools/fuzz_own.py --count 300       # ownership: no false errors, no accepted mistakes
+tools/build_asan.sh                     # build/zark-asan (AddressSanitizer + UBSan)
+ZARK=build/zark-asan tests/run.sh       # the suite under the sanitizers
+```
+
+`bootstrap.sh` runs `tests/run.sh` with the compiler it just built, so a broken fixed
+point or a failed test stops the build before `build/zark` is installed.
 
 ## Roadmap
 
