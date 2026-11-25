@@ -445,3 +445,30 @@ The ABI fuzzer (`tests/abi/fuzz/fuzz.py`) runs C and Zark against each other wit
 Heap-allocated closures, operator overloading, exceptions, a GC, implicit copies through a heap, inheritance, and macros.
 
 Candidates for later: `comptime` blocks, `inline for`, and `@cImport`.
+
+## 11. Limits of the checks
+
+The ownership, borrow and async checks follow variable names and field paths rooted in a local; they are not a proof. These cases are accepted and are the caller's responsibility (each has a tracking issue):
+
+- a resource field passed by value: `f(h.l)` where `h.l` is a `List`/`Map`/owned value is a bitwise copy the callee can free (#55);
+- a struct that only holds resources, copied through a pointer (`auto y = *p;` for a `Holder`): the copy aliases the pointee (#56);
+- a pointer stored inside another struct: using it after the container is consumed or reallocated is not detected (#57);
+- `for (auto x : list_of_lists)` copies each resource element (#58);
+- `auto x = *p;` on a non-trivial C++ object is a bitwise copy C++ does not know about (#59);
+- data races between threads sharing a pointer, a `List` or a `Map` are not checked (#60);
+- async cancellation: a suspended frame abandoned by `detach`, `select` or `Executor.deinit` does not run its `defer`/`errdefer` yet (#61);
+- an `extern fn` pointer, a closure stored in a struct, or a pointer returned from a `borrows` method then passed through an integer loses its origin: only the direct cases in section 7 are tracked;
+- `str` equality is an inline `memcmp`; strings with interior NULs compare correctly but are not C strings, and `to_cstr` rejects embedded NULs.
+
+Run `zark fmt` and the tests in `tests/errors` for the diagnostics that *are* enforced; a rejected valid program is a bug, an accepted invalid one is a soundness hole to report.
+
+## 12. Undefined and implementation-defined behaviour
+
+- `--release`, `--fast` and `--freestanding` remove integer overflow, bounds and division-by-zero checks. In those modes overflow wraps (two's complement), an out-of-bounds index is undefined behaviour, and division by zero is undefined behaviour. Safe builds panic with `__ovf`, `__oob`, `__oobs` and `__divz`.
+- Argument evaluation order is not specified; do not rely on side effects in argument lists. `defer` and `errdefer` run in reverse registration order (LIFO); `errdefer` only on an error return and on cancellation once #61 lands.
+- `as` between integers wraps to the target width; `float as int` truncates toward zero; a float-to-integer cast of a value outside the target range is undefined behaviour; `f64 as f32` rounds to nearest even.
+- A union is the C struct `{ i32 tag; _Alignas(8) union { ... } payload; }`; `tag` is the zero-based variant index. Reading a variant other than the active one, or matching a tag that no arm covers when the check is bypassed, is undefined.
+- Struct layout and alignment follow the C ABI of the target (section 8). Padding bytes are not guaranteed to be zero after a copy; field initializers zero the fields, not the padding.
+- Casting a pointer to an integer and back is only defined for the same address space and provenance; the compiler does not track provenance. Dereferencing a pointer with insufficient alignment is undefined.
+- Pointer values printed with `{}` are addresses; they differ between runs and builds, so do not use them as program output in tests.
+- The native backend and the LLVM backend share the frontend and are checked against each other by `tools/fuzz_prog.py`; where they disagree, that is a bug, not an allowed difference.
