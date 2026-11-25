@@ -40,3 +40,21 @@ echo "ok   scale (a function with 2000 loops compiles in bounded time and memory
 echo "ok   scale (a function with 8000 checked operations compiles in time)"
 if ( ulimit -v "$MEM"; timeout "$TMO" "$ZARK" ir "$dir/live.zk" >/dev/null 2>"$dir/err" ); then fail "600 live borrows must be reported"; fi
 grep -q "tracks more than 512" "$dir/err" || fail "no clear message for too many tracked variables"
+
+# Compile-time regression guard: the self-hosted source is the largest input.
+if ! python3 - "$ZARK" <<'PY'
+import os, subprocess, sys, time
+z = sys.argv[1]
+limit = float(os.environ.get("ZARK_MAX_SELFHOST_MS", "15000"))
+t = time.time()
+p = subprocess.run([z, "ir", "selfhost/main.zk"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+ms = (time.time() - t) * 1000
+if p.returncode != 0:
+    print(f"FAIL scale (selfhost ir exited {p.returncode})")
+    sys.exit(1)
+if ms > limit:
+    print(f"FAIL scale (selfhost ir took {ms:.0f} ms, limit {limit:.0f})")
+    sys.exit(1)
+print(f"ok   scale (selfhost ir {ms:.0f} ms)")
+PY
+then exit 1; fi
