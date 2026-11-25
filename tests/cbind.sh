@@ -570,7 +570,8 @@ out=$(cd interop && "$ZARK" test t.zk lib.c -I. 2>&1) || fail "import_test: $out
 case "$out" in *"1 passed, 0 failed"*) ;; *) fail "import_test: got: $out" ;; esac
 
 mkdir -p shim
-real=$(command -v clang)
+. "$R/tests/compiler.sh"
+real=$(compiler_path clang)
 printf '#!/bin/sh\necho "$*" >> "%s/clang.log"\nexec "%s" "$@"\n' "$T" "$real" > shim/clang
 chmod +x shim/clang
 cp -r "$R/tests/cbind/interop" hit
