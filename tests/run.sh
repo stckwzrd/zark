@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 ZARK=${ZARK:-./build/zark}
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
 pass=0; fail=0
+normstd() { sed -E 's#(<std>[^ :]*):[0-9]+#\1#g'; }
 check_out=$(mktemp)
 trap 'rm -f "$check_out"' EXIT
 check() { # name, cmd...  (an optional tests/expected/<name>.rc sets the exit code)
@@ -49,13 +50,13 @@ if [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; then
   if out=$(ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --strict --backends llvm,O 2>&1); then pass=$((pass+1)); echo "ok   abi fuzz"
   else fail=$((fail+1)); echo "FAIL abi fuzz"; echo "$out" | grep -v "PASS     PASS" | tail -40; fi
 fi
-for n in ints memory nan move move_resource parse_types zero_init async_result async_join closure_capture borrow borrow_elem comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
+for n in ints memory nan move move_resource parse_types zero_init async_result async_join closure_capture borrow borrow_elem comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer async_cancel fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
 for f in tests/panics/*.zk; do
   n=panic_$(basename $f .zk)
   out=$($ZARK run "$f" $FLAGS 2>&1); rc=$?
   if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected a panic)"
   elif [ $rc -ne 1 ]; then fail=$((fail+1)); echo "FAIL $f (exit $rc, expected a panic)"
-  elif [ "$(echo "$out" | sed 's/<std>:[0-9]*/<std>/')" = "$(cat tests/expected/$n.out)" ]; then pass=$((pass+1)); echo "ok   $n"
+  elif [ "$(printf '%s\n' "$out" | normstd)" = "$(normstd < "tests/expected/$n.out")" ]; then pass=$((pass+1)); echo "ok   $n"
   else fail=$((fail+1)); echo "FAIL $n"; diff <(echo "$out") tests/expected/$n.out | head -10; fi
 done
 if [ $linux = 1 ] && command -v addr2line >/dev/null; then

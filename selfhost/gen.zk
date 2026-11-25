@@ -63,9 +63,10 @@ struct FnInst {
     bool is_closure;
     List<CapInfo> caps;
     bool busy;
+    i64 cancel_slot;
 }
 
-struct AsyncFn { Type* frame; Type* poll; Value cx; List<str> slots; List<str> resumes; str result; }
+struct AsyncFn { Type* frame; Type* poll; Value cx; List<str> slots; List<str> resumes; str result; str canceled; }
 
 struct Gen {
     Allocator a;

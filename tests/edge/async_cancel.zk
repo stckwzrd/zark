@@ -1,0 +1,91 @@
+import "std/async" as async;
+
+// A future that never becomes ready: the frame stays suspended.
+struct Never {
+    Poll<bool> poll(Context* cx) { return .Pending; }
+    void cancel() {}
+}
+
+i64[4] order = 0;
+i64 n = 0;
+
+async bool outer(bool* err) {
+    defer {
+        order[n] = 2;
+        n += 1;
+    }
+    errdefer *err = true;
+    {
+        defer {
+            order[n] = 1;
+            n += 1;
+        }
+        auto f = Never{};
+        await f;
+    }
+    return true;
+}
+
+async bool child(bool* cleaned) {
+    defer *cleaned = true;
+    auto g = Never{};
+    await g;
+    return true;
+}
+
+async bool parent(bool* cleaned) {
+    auto c = child(cleaned);
+    await c;
+    return true;
+}
+
+async bool quick() { return true; }
+
+async bool hang(bool* cleaned) {
+    defer *cleaned = true;
+    auto n = Never{};
+    await n;
+    return true;
+}
+
+!void main() {
+    auto err = false;
+    {
+        auto ex = async::Executor::init(c_allocator())?;
+        defer ex.deinit();
+        const auto h = ex.spawn(outer(&err))?;
+        ex.run_batch();
+        if (n != 0) { println("cancel: a defer ran before cancellation"); return error.CancelFailed; }
+    }
+    if (n != 2) { println("cancel: expected two defers, got {n}"); return error.CancelFailed; }
+    if (order[0] != 1 || order[1] != 2) { println("cancel: wrong order {order[0]} {order[1]}"); return error.CancelFailed; }
+    if (!err) { println("cancel: errdefer did not run"); return error.CancelFailed; }
+
+    auto cleaned = false;
+    {
+        auto ex2 = async::Executor::init(c_allocator())?;
+        defer ex2.deinit();
+        const auto h2 = ex2.spawn(parent(&cleaned))?;
+        ex2.run_batch();
+    }
+    if (!cleaned) { println("cancel: the child frame was not cleaned"); return error.CancelFailed; }
+
+    auto loser = false;
+    {
+        auto ex3 = async::Executor::init(c_allocator())?;
+        defer ex3.deinit();
+        auto s = async::select(ex3.spawn(quick())?, ex3.spawn(hang(&loser))?);
+        _ = ex3.block_on(&s)?;
+    }
+    if (!loser) { println("cancel: select did not clean the loser"); return error.CancelFailed; }
+
+    auto dead = false;
+    {
+        auto ex4 = async::Executor::init(c_allocator())?;
+        defer ex4.deinit();
+        auto f = hang(&dead);
+        _ = ex4.block_on(&f) catch false;
+    }
+    if (!dead) { println("cancel: block_on error did not clean the frame"); return error.CancelFailed; }
+    println("ok");
+}
