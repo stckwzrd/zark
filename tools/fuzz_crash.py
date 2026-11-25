@@ -47,7 +47,7 @@ def corpus():
         for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, base)):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
             for f in filenames:
-                if f.endswith(".zk"):
+                if f.endswith(".zk") and not f.startswith("."):
                     out.append(os.path.join(dirpath, f))
     return sorted(out)
 
@@ -133,8 +133,11 @@ def run_cmd(zark, args, timeout, memory_mb):
 
 
 def one(zark, base, seed, rng, timeout, memory_mb, scratch):
-    with open(base, "rb") as f:
-        text = f.read().decode("latin-1")
+    try:
+        with open(base, "rb") as f:
+            text = f.read().decode("latin-1")
+    except OSError:
+        return None
     mutant, kind = mutate_text(text, rng)
     if kind < 0:
         return None
