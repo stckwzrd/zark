@@ -76,4 +76,7 @@ if ZARK=$ZARK tests/cbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/cxxbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/determinism.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/fmt_idem.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/docs.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]
