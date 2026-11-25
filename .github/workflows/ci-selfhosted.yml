@@ -19,6 +19,13 @@ name: ci-selfhosted
 # job only needs `self-hosted,linux,x64`.
 
 on:
+  push:
+    branches: [language-fixes]
+    paths-ignore:
+      - "docs/**"
+      - "docs-src/**"
+      - "editors/**"
+      - "**.md"
   pull_request:
     paths-ignore:
       - "docs/**"
@@ -38,7 +45,7 @@ concurrency:
 
 jobs:
   native:
-    if: github.event_name == 'pull_request' || inputs.scope == 'all' || inputs.scope == 'native'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.scope == 'all' || inputs.scope == 'native'
     name: fedora native
     runs-on: [self-hosted, linux, x64, fedora]
     steps:
@@ -46,7 +53,7 @@ jobs:
       - run: ./bootstrap.sh
 
   containers:
-    if: github.event_name != 'pull_request' && (inputs.scope == 'all' || inputs.scope == 'containers')
+    if: github.event_name == 'workflow_dispatch' && (inputs.scope == 'all' || inputs.scope == 'containers')
     name: ${{ matrix.image }} x86_64
     runs-on: [self-hosted, linux, x64]
     strategy:
