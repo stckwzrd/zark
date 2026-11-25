@@ -79,6 +79,7 @@ struct Gen {
     i64 rdepth;
     i64 cdepth;
     List<MoveRec> moved;
+    bool assign_target;
     bool shared;
     i64 nloop;
     List<Cold> colds;
@@ -319,6 +320,7 @@ struct Gen {
                     this->aliases.put(d.path, d.ty)?;
                 }
                 .Import => {}
+                _ => {}
             }
         }
     }
@@ -720,12 +722,13 @@ struct Gen {
         for (auto p : decl.params) { params.push(this->resolve_type(p.ty, env)?)?; }
         auto ret = this->t_void;
         if (decl.ret != null) { ret = this->resolve_type(decl.ret, env)?; }
-        if (decl.is_extern || decl.is_export) { this->c_vecs(params, ret, decl.line)?; }
+        if (decl.is_extern || decl.is_export) { this->c_vecs(params.slice(), ret, decl.line)?; }
+        const auto needs_c = !decl.is_extern && decl.is_export && this->sig_needs_c(params.slice(), ret);
         if (decl.is_async) { return this->inst_async(decl, env, key, params, ret); }
         const auto fi = this->a.create<FnInst>()?;
         *fi = FnInst{ .decl = decl, .env = env, .llname = key, .params = params, .ret = ret, .generated = false };
         this->fn_insts.put(key, fi)?;
-        if (!decl.is_extern && decl.is_export && this->sig_needs_c(params, ret)) {
+        if (needs_c) {
             auto b = this->sb();
             sprint(&b, "{key}$z")?;
             fi.llname = b.slice();
@@ -740,8 +743,8 @@ struct Gen {
             sprint(&txt, "declare {this->c_ret_ty(ret)?} @{key}(")?;
             auto firstp = true;
             if (sret) { sprint(&txt, "ptr sret({this->llty(ret)?})")?; firstp = false; }
-            const auto cm = this->c_modes(params, ret)?;
-            for (auto [i, p] : params) {
+            const auto cm = this->c_modes(fi.params.slice(), ret)?;
+            for (auto [i, p] : fi.params) {
                 auto mode = 0;
                 if (i < cm.len) { mode = cm.get(i); }
                 if (mode == 3) { continue; }
@@ -1087,6 +1090,7 @@ bool always_returns(Stmt* s) {
             return wild;
         }
         .ExprS => return s.e.k == .Call && s.e.l.k == .Ident && s.e.l.name == "panic";
+        _ => {}
     }
     return false;
 }
@@ -1106,6 +1110,7 @@ bool breaks_out(Stmt* s, str lbl, i64 depth) {
             for (auto arm : s.arms) { if (breaks_out(arm.body, lbl, depth)) { return true; } }
             return false;
         }
+        _ => {}
     }
     return false;
 }
@@ -1127,6 +1132,7 @@ bool type_eq(Type* a, Type* b) {
             for (auto i : 0..a.params.len) { if (!type_eq(a.params.get(i), b.params.get(i))) { return false; } }
             return true;
         }
+        _ => {}
     }
     return true;
 }
@@ -1139,7 +1145,7 @@ i64 field_index(StructInst* si, str name) {
     return -1;
 }
 
-bool contains_str(List<str> list, str s) {
+bool contains_str(str[] list, str s) {
     for (auto x : list) { if (x == s) { return true; } }
     return false;
 }

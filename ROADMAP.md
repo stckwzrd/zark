@@ -32,6 +32,7 @@ Done: closures with explicit captures, `T: Ord` constraints (checked at the call
 - **Modules / namespaces:** `import "net.zk" as net`, then `net.connect(...)`.
 - **SIMD types**: done through LLVM (`f32x4`, `i32x8`, ...). Missing: vector instructions in the own backend, comparisons and masks, shuffles.
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
+- **Async cancellation and channels.** A suspended frame abandoned by `detach`, `select` or `Executor.deinit` does not run its deferred code yet: a generated `drop` for the frame is needed. `join` and `select` over `JoinHandle`s exist; channels, `select` over channels and a multithreaded executor do not.
 
 ## 7. Tooling
 Done: `zark lsp` (language server), `zark test`, `zark fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
@@ -51,4 +52,4 @@ Deferred from layer 4:
 - **Lambdas and `std::function`** crossing into C++. Only plain `fn` pointers do today.
 - **An `instantiate` key in `zark.toml`** to ask for template specializations without a wrapper `.hpp`.
 - **Cross targets and macOS CI for C++ headers.** Only the aarch64 Linux bindings of one header are compared in tests, and the `std::` shims are not checked against libc++.
-- **Copying an owned value is a move.** `auto y = x;` on an `_own` handle currently compiles and frees twice; the borrow checker should treat the copy as a move and require an explicit `move`. The same marker should reject `auto x = *p;` on a non-trivial C++ object.
+- **Rejecting a bitwise copy of a non-trivial C++ object.** `auto x = *p;` on a non-trivial C++ object still compiles and copies the bytes; copying a resource through a pointer, an array element or a field of a value is not tracked. Only copies through a variable name are moves today.

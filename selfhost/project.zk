@@ -435,7 +435,7 @@ bool has_main(Manifest* p) {
 
 /// the arguments `zark run/build/test` gets in a project: main file, sources, libs, flags,
 /// then what was typed
-!List<str> project_args(Allocator a, Manifest* p, str cmd, List<str> typed) {
+!List<str> project_args(Allocator a, Manifest* p, str cmd, str[] typed) {
     auto out = List<str>::init(a);
     if (cmd == "test" || has_main(p)) { out.push(p.main)?; }
     out.append(project_c_args(a, p)?.slice())?;
@@ -453,7 +453,7 @@ bool has_main(Manifest* p) {
             out.push(path::join(a, [bdir, p.name])?)?;
         }
     }
-    out.append(typed.slice())?;
+    out.append(typed)?;
     return out;
 }
 
@@ -495,7 +495,7 @@ void project_setup_for(Allocator a, str file) {
     if (dir.len == 0) { return; }
     const auto p = load_project(a, dir, false, 0) catch { return; };
     const auto args = project_c_args(a, p) catch { return; };
-    const auto sp = split_extras(a, args) catch { return; };
+    const auto sp = split_extras(a, args.slice()) catch { return; };
     c_flags = sp.flags;
     c_by_value = sp.by_value;
 }

@@ -210,10 +210,9 @@ struct Stream {
 }
 
 !Stream open_stream(Url u, Request* r) {
-    auto c = net::connect_to(u.host, u.port)?;
-    errdefer c.close();
-    if (r.timeout_ms > 0) { c.set_timeout(r.timeout_ms)?; }
-    auto st = Stream{ .c = c };
+    auto st = Stream{ .c = net::connect_to(u.host, u.port)? };
+    errdefer st.close();
+    if (r.timeout_ms > 0) { st.c.set_timeout(r.timeout_ms)?; }
     if (u.scheme != "https") { return st; }
     const auto api = load_ssl()?;
     const auto ctx = api.ctx_new(api.client_method());
@@ -233,7 +232,7 @@ struct Stream {
     const auto hz = to_cstr(hb[..], u.host)?;
     _ = api.ctrl(ssl, 55, 0, hz as *void);           // SNI
     if (!r.insecure) { _ = api.set1_host(ssl, hz); }  // check the name in the certificate
-    _ = api.set_fd(ssl, c.fd);
+    _ = api.set_fd(ssl, st.c.fd);
     if (api.connect(ssl) != 1) {
         if (api.verify_result(ssl) != 0) { return error.CertificateInvalid; }
         return error.TlsError;

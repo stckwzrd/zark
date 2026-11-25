@@ -31,10 +31,10 @@ async i64 use_note() {
     auto ex = async::Executor::init(c_allocator())?;
     defer ex.deinit();
     auto g = use_checked(4);
-    i64 rg = ex.block_on(&g)?;
+    i64 rg = ex.block_on(&g)??;
     println(rg);
     auto h = use_checked(-1);
-    i64 rh = ex.block_on(&h) catch -1;
+    i64 rh = ex.block_on(&h)? catch -1;
     println(rh);
     auto c1 = use_catch(3);
     i64 r1 = ex.block_on(&c1)?;

@@ -6,6 +6,6 @@ struct Flex { i32 n; }
 struct Box_bool { bool v; }
 struct Box_i32 { i32 v; }
 struct UB { Box_bool b; u8[3] __pad0; Box_i32 i; i32 z; }
-struct x_anon1_An { i32 a; }
+struct x_anon593138544befc8c6_An { i32 a; }
 extern B1* zark_cxx_2cb2d3adc112b6b0_14(B2* __self);
 B1* B2::as_B1() const { return zark_cxx_2cb2d3adc112b6b0_14(this); }

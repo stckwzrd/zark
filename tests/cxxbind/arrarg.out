@@ -1,0 +1,2 @@
+struct Wrap_i32a { i32[3] v; }
+struct UsesWrap { Wrap_i32a w; }

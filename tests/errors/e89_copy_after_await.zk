@@ -1,0 +1,17 @@
+import "std/async" as async;
+
+async i64 g() { return 1; }
+
+async i64 use() {
+    auto f = g();
+    const auto a = await f;
+    auto f2 = f;
+    return a + (await f2);
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto f = use();
+    println(ex.block_on(&f)?);
+}

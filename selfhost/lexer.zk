@@ -54,7 +54,6 @@ Tag keyword(str s) {
         "sizeof" => return .kw_sizeof;
         "alignof" => return .kw_alignof;
         "union" => return .kw_union;
-        "type" => return .kw_type;
         "is" => return .kw_is;
     }
     return .ident;
@@ -280,6 +279,7 @@ struct Lexer {
             match op.tag {
                 .lparen, .lbracket => this->depth += 1;
                 .rparen, .rbracket => this->depth -= 1;
+                _ => {}
             }
             this->i += op.len;
         }

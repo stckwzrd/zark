@@ -1,11 +1,11 @@
-1 .kw_type type
+1 .ident type
 1 .ident Bytes
 1 .eq =
 1 .ident u8
 1 .lbracket [
 1 .rbracket ]
 1 .semi ;
-2 .kw_type type
+2 .ident type
 2 .ident Handler
 2 .eq =
 2 .kw_fn fn

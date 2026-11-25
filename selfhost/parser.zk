@@ -7,6 +7,7 @@ bool stmt_ends_with_block(Stmt* s) {
     match s.k {
         .If, .While, .ForRange, .ForEach, .Match, .Block => return true;
         .Defer => return stmt_ends_with_block(s.body);
+        _ => {}
     }
     return false;
 }
@@ -21,6 +22,7 @@ struct Parser {
     bool quiet;
     i64 depth;
     bool no_post;
+    bool cast_ty;
     bool arrow_only;
     List<i64> splits;
     bool at_packed;
@@ -194,6 +196,17 @@ struct Parser {
             this->at_packed = true;
             return this->parse_decl(out);
         }
+        if (t.tag == .ident && t.text == "type" && this->peek_at(1).tag == .ident && this->peek_at(2).tag == .eq) {
+            _ = this->advance();
+            d.k = .Alias;
+            const auto an = this->expect(.ident)?;
+            d.path = an.text;
+            d.name_off = an.off;
+            _ = this->expect(.eq)?;
+            d.ty = this->parse_type()?;
+            out.push(d)?;
+            return;
+        }
         match t.tag {
             .kw_import => {
                 _ = this->advance();
@@ -207,15 +220,6 @@ struct Parser {
                     this->aliases.push(d.alias)?;
                 }
             }
-            .kw_type => {
-                _ = this->advance();
-                d.k = .Alias;
-                const auto an = this->expect(.ident)?;
-                d.path = an.text;
-                d.name_off = an.off;
-                _ = this->expect(.eq)?;
-                d.ty = this->parse_type()?;
-            }
             .kw_struct, .kw_union => {
                 const auto is_union = this->advance().tag == .kw_union;
                 const auto nt = this->expect(.ident)?;
@@ -227,7 +231,7 @@ struct Parser {
                 this->skip_semis();
                 while (!this->at(.rbrace)) {
                     if (this->new_member(is_union)) {
-                        this->parse_member_new(name, tps, is_union, &fields, out)?;
+                        this->parse_member_new(name, tps.slice(), is_union, &fields, out)?;
                         this->skip_semis();
                         continue;
                     }
@@ -258,7 +262,7 @@ struct Parser {
                 while (!this->at(.rbrace)) {
                     const auto nx = this->peek_at(1).tag;
                     if (!(this->at(.ident) && (nx == .comma || nx == .semi || nx == .rbrace))) {
-                        this->parse_member_new(name, this->strs(), false, &no_fields, out)?;
+                        this->parse_member_new(name, this->strs().slice(), false, &no_fields, out)?;
                         this->skip_semis();
                         continue;
                     }
@@ -331,7 +335,7 @@ struct Parser {
         const auto nt = this->expect(.ident)?;
         const auto t = this->te_name(this->qualified(nt.text)?)?;
         t.off = nt.off;
-        if (this->at(.lt) && (!this->no_post || is_upper(nt.text[0]))) {
+        if (this->at(.lt) && (!(this->no_post || this->cast_ty) || is_upper(nt.text[0]))) {
             _ = this->advance();
             while (!this->at(.gt) && !this->at(.shr)) {
                 t.args.push(this->parse_type()?)?;
@@ -442,6 +446,7 @@ struct Parser {
                 this->parse_match_arms(&s.arms)?;
                 return s;
             }
+            _ => {}
         }
         if (t.tag == .ident || t.tag == .bang || t.tag == .question || (t.tag == .kw_fn && this->peek_at(1).tag == .lparen)) {
             const auto ds = this->try_decl_stmt(t)?;
@@ -462,6 +467,7 @@ struct Parser {
                 s.e = this->parse_expr()?;
                 return s;
             }
+            _ => {}
         }
         const auto s = this->st(.ExprS, t)?;
         s.e = e;
@@ -585,6 +591,7 @@ struct Parser {
                 u.l = this->parse_prefix()?;
                 return u;
             }
+            _ => {}
         }
         return this->parse_postfix();
     }
@@ -595,10 +602,10 @@ struct Parser {
             const auto kw = this->advance();
             const auto c = this->ex(.Cast, kw)?;
             c.l = e;
-            const auto saved_np = this->no_post;
-            this->no_post = true;
+            const auto saved_ct = this->cast_ty;
+            this->cast_ty = true;
             c.ty = this->parse_type()?;
-            this->no_post = saved_np;
+            this->cast_ty = saved_ct;
             e = c;
         }
         return e;
@@ -854,6 +861,7 @@ struct Parser {
                 _ = this->expect(.rbracket)?;
                 return e;
             }
+            _ => {}
         }
         this->pos -= 1;
         this->fail("expected expression")?;
@@ -975,7 +983,7 @@ struct Parser {
 }
 
 Parser new_parser(Allocator a, Token[] toks, str file) {
-    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a) };
+    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .cast_ty = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a) };
 }
 
 i64 prec(Tag t) {
@@ -989,13 +997,25 @@ i64 prec(Tag t) {
         .shl, .shr => return 7;
         .plus, .minus, .plus_wrap, .minus_wrap => return 8;
         .star, .slash, .percent, .star_wrap => return 9;
+        _ => {}
     }
     return -1;
+}
+
+/// may this token start an expression? Used after `as T *` to tell a pointer
+/// type (`p as Node*;`) from a multiplication (`i as f64 * k`).
+bool starts_expr(Tag t) {
+    match t {
+        .ident, .int_lit, .float_lit, .str_lit, .char_lit, .lparen, .lbracket, .dot, .minus, .bang, .tilde, .amp, .star, .kw_true, .kw_false, .kw_null, .kw_sizeof, .kw_alignof, .kw_match => return true;
+        _ => {}
+    }
+    return false;
 }
 
 bool starts_type(Tag t) {
     match t {
         .ident, .star, .bang, .question, .kw_fn => return true;
+        _ => {}
     }
     return false;
 }

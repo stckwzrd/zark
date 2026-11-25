@@ -296,7 +296,7 @@ void restore_stack() {
                 println("== {pth::relative(a, f, pdir)?}");
                 auto full = List<str>::init(a);
                 full.append([self, "test"])?;
-                const auto pa = project_args(a, proj, cmd, argv) catch { return 1; };
+                const auto pa = project_args(a, proj, cmd, argv.slice()) catch { return 1; };
                 full.append(pa.slice())?;
                 full.items[2] = f;
                 const auto code = run(a, full.slice())?;
@@ -304,7 +304,7 @@ void restore_stack() {
             }
             return worst;
         }
-        argv = project_args(a, proj, cmd, argv) catch { return 1; };
+        argv = project_args(a, proj, cmd, argv.slice()) catch { return 1; };
     } else {
         // a file inside a project still sees the project's dependencies
         for (auto x : argv) {
@@ -437,7 +437,7 @@ void restore_stack() {
         }
         i += 1;
     }
-    auto sp = split_extras(a, extras)?;
+    auto sp = split_extras(a, extras.slice())?;
     if (src_file.len == 0 && !(in_project && sp.sources.len > 0)) {
         usage();
         return 1;
