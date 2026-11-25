@@ -1,0 +1,21 @@
+import "std/async" as async;
+
+async !i64 good() { return 7; }
+async !i64 bad() { return error.Boom; }
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+
+    auto f = good();
+    const !i64 r = ex.block_on(&f)?;
+    println(r?);
+
+    auto h = ex.spawn(good())?;
+    const !i64 r2 = ex.block_on(&h)?;
+    println(r2?);
+
+    auto g = bad();
+    const !i64 r3 = ex.block_on(&g)?;
+    println(r3 catch 0);
+}

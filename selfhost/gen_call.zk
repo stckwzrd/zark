@@ -411,8 +411,11 @@ bool Gen::names_type(Expr* e) {
         const auto pte = decl.params.get(0).ty;
         if (pte.k == .Ptr) { this->unify(pte.elem, recv.ty, tps.slice(), env)? } else { this->unify(pte, recv.ty, tps.slice(), env)?; }
     }
-    if (!all_bound(tps.slice(), env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps.slice(), env)?; }
+    // a type parameter that is a future is inferred from its poll output first:
+    // the expected type of the whole call (which `?` narrows by one level) must
+    // not turn a future of `!i64` into a future of `i64`
     if (!all_bound(tps.slice(), env)) { this->infer_from_poll(tps.slice(), env)?; }
+    if (!all_bound(tps.slice(), env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps.slice(), env)?; }
     if (!all_bound(tps.slice(), env)) { this->err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed; }
 
     auto targs = List<Type*>::init(this->a);
