@@ -1,0 +1,1 @@
+error: 'view' points into 'buf', and 'free' on line 5 may have moved or freed that memory; take the pointer again after it

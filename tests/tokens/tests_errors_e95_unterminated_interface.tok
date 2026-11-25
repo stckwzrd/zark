@@ -1,0 +1,14 @@
+1 .ident interface
+1 .ident Shape
+1 .lbrace {
+1 .ident f64
+1 .ident area
+1 .lparen (
+1 .rparen )
+1 .semi ;
+1 .ident f64
+1 .ident perimeter
+1 .lparen (
+1 .rparen )
+1 .semi ;
+2 .eof 

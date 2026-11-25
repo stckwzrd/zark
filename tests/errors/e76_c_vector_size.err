@@ -1,0 +1,1 @@
+error: 'f32x8' cannot be passed to or from C on this target; only 16-byte vectors can

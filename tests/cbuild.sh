@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+R=$(cd "$(dirname "$0")/.." && pwd)
+. "$R/tests/compiler.sh"
 ZARK=$(realpath "${ZARK:-./build/zark}")
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
@@ -52,7 +54,7 @@ printf 'extern u8* lib_name();\nvoid main() { println("{cstr(lib_name())}"); }\n
 out=$("$ZARK" run dl/main.zk dl/n.c -DLIB=libfoo.a 2>&1)
 [ "$out" = "libfoo.a" ] || fail "define_with_suffix: expected libfoo.a, got: $out"
 
-real=$(command -v clang)
+real=$(compiler_path clang)
 mkdir -p shim
 printf '#!/bin/sh\necho "$*" >> "%s/clang.log"\nexec "%s" "$@"\n' "$T" "$real" > shim/clang
 chmod +x shim/clang

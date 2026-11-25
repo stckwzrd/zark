@@ -14,6 +14,7 @@ Zark is distributed as source code. The compiler is written in Zark itself, so i
 | `clang` | linking finished binaries, building `.c`/`.cpp` files, the `-O`/`--release` modes | 18 or newer |
 | `git` | to get the sources | any |
 | `bash`, `gzip` | the `bootstrap.sh` script | any |
+| `python3` | the test suite that `bootstrap.sh` runs | any |
 
 No separate starting compiler is needed. The repository contains a "seed" (`bootstrap/seed.ll.gz`): the Zark compiler written as LLVM IR. `clang` builds the first version from it, and after that the compiler builds itself.
 
@@ -33,7 +34,7 @@ The script runs the whole chain and checks the result:
 4. runs the whole test suite with the new compiler;
 5. copies the result to `build/zark`.
 
-It takes about a minute. At the end you will see the line `== done: build/zark is the self-hosted compiler`.
+A full run takes a few minutes: most of that is the test suite, while the compiler itself builds in seconds. At the end you will see the line `== done: build/zark is the self-hosted compiler`.
 
 > **Warning:** if something in the script does not match (the fixed point is broken, a test fails), it stops with exit code 1 and copies nothing to `build/zark`. Such a compiler must not be used.
 

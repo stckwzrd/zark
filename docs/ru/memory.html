@@ -268,7 +268,22 @@
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">    a.</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">free</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(buf);</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:4: error: 'buf' is used after 'free' consumed it on line 5; assign it a new value first
     4 |     defer a.free(buf);
-      |                  ^</code></pre></div></div>
+      |                  ^
+&lt;std&gt;:2185: error: 'return' cannot be used in deferred code (defer/errdefer)
+ 2185 |     if (e != null &amp;&amp; cstr(e) == &quot;0&quot;) { return; }
+      |                                        ^
+&lt;std&gt;:141: error: 'return' cannot be used in deferred code (defer/errdefer)
+  141 |     return Allocator{ .ctx = null, .alloc_fn = __c_alloc, .free_fn = __c_free };
+      |     ^
+&lt;std&gt;:87: error: 'return' cannot be used in deferred code (defer/errdefer)
+   87 |         if (n == 0) { return (null as *T)[0..0]; }
+      |                       ^
+&lt;std&gt;:225: error: 'return' cannot be used in deferred code (defer/errdefer)
+  225 | str cstr(u8* p) { return p[0..strlen(p) as i64]; }
+      |                   ^
+&lt;std&gt;:52: error: 'return' cannot be used in deferred code (defer/errdefer)
+   52 |     if (a.len != b.len) { return false; }
+      |                           ^</code></pre></div></div>
 <p>Присваивание нового значения возвращает переменную к жизни. Ветки учитываются: переменную, отданную на одном из путей <code>if</code>, нельзя использовать дальше, а переменную, отданную внутри цикла, нужно присвоить заново или выйти из цикла через <code>break</code>/<code>return</code>.</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">    const</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> auto</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> a </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">=</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> c_allocator</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">();</span></span>

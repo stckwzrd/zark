@@ -1,0 +1,1 @@
+error: 'm' is changed by 'put' inside a loop while a pointer into it is kept for the next iteration; take the pointer again inside the loop

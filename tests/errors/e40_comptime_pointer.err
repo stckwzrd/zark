@@ -1,0 +1,1 @@
+error: a comptime value must be a number, bool, enum, str, or an array or struct of those; 'i64*' is not

@@ -2,6 +2,7 @@
 # Runs all examples and compares against expected output.
 cd "$(dirname "$0")/.."
 ZARK=${ZARK:-./build/zark}
+command -v timeout >/dev/null || timeout() { shift; "$@"; }
 pass=0; fail=0
 check() { # name, cmd...
   local name=$1; shift
@@ -24,6 +25,16 @@ if [ $x86 = 1 ] && [ $linux = 1 ]; then
   else fail=$((fail+1)); echo "FAIL abi fuzz"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --quick --strict --backends native,llvm,O 2>&1 | tail -20; fi
   if ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   abi ir oracle aarch64"
   else fail=$((fail+1)); echo "FAIL abi ir oracle aarch64"; ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --ir-oracle aarch64,arm64-apple 2>&1 | tail -20; fi
+  if ZARK="$ZARK" python3 tools/fuzz_prog.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_prog"
+  else fail=$((fail+1)); echo "FAIL fuzz_prog"; ZARK="$ZARK" python3 tools/fuzz_prog.py --quick 2>&1 | tail -40; fi
+  if ZARK="$ZARK" python3 tools/fuzz_crash.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_crash"
+  else fail=$((fail+1)); echo "FAIL fuzz_crash"; ZARK="$ZARK" python3 tools/fuzz_crash.py --quick 2>&1 | tail -30; fi
+  if ZARK="$ZARK" python3 tools/fuzz_lsp.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_lsp"
+  else fail=$((fail+1)); echo "FAIL fuzz_lsp"; ZARK="$ZARK" python3 tools/fuzz_lsp.py --quick 2>&1 | tail -20; fi
+  if ZARK="$ZARK" python3 tools/fuzz_lsp.py --count 1 --seed 5111 >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_lsp regress"
+  else fail=$((fail+1)); echo "FAIL fuzz_lsp regress"; ZARK="$ZARK" python3 tools/fuzz_lsp.py --count 1 --seed 5111 2>&1 | tail -10; fi
+  if ZARK="$ZARK" python3 tools/fuzz_own.py --quick >/dev/null 2>&1; then pass=$((pass+1)); echo "ok   fuzz_own"
+  else fail=$((fail+1)); echo "FAIL fuzz_own"; ZARK="$ZARK" python3 tools/fuzz_own.py --quick 2>&1 | tail -30; fi
 fi
 if [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; then
   if out=$(ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --strict --backends llvm,O 2>&1); then pass=$((pass+1)); echo "ok   abi fuzz"
@@ -43,7 +54,13 @@ if [ $linux = 1 ] && command -v addr2line >/dev/null; then
   else pass=$((pass+1)); echo "ok   crash_thunk_names"; fi
 fi
 for f in tests/errors/*.zk; do
-  if $ZARK run "$f" >/dev/null 2>&1; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; else pass=$((pass+1)); echo "ok   $f (rejected)"; fi
+  out=$(timeout 20 $ZARK run "$f" 2>&1); rc=$?
+  if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; continue; fi
+  if [ $rc -eq 124 ]; then fail=$((fail+1)); echo "FAIL $f (timed out)"; continue; fi
+  got=$(printf '%s\n' "$out" | awk 'NF{print; exit}' | sed -E 's/^[^:]+:[0-9]+: //')
+  want=$(cat "${f%.zk}.err")
+  if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "ok   $f (rejected)"
+  else fail=$((fail+1)); echo "FAIL $f (diagnostic)"; echo "  want: $want"; echo "  got:  $got"; fi
 done
 for f in tests/std/*.zk; do
   if out=$($ZARK test "$f" $FLAGS 2>&1); then pass=$((pass+1)); echo "ok   $f ($(echo "$out" | tail -1))"
@@ -62,4 +79,7 @@ if ZARK=$ZARK tests/cbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/cxxbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/determinism.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/fmt_idem.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/docs.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]

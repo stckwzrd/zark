@@ -1,0 +1,1 @@
+error: 'p' is used after 'drop' consumed it on line 6; assign it a new value first

@@ -1,0 +1,1 @@
+error: type 'A' is nested too deeply or refers to itself (alias cycle?)

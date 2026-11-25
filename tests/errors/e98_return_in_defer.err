@@ -1,0 +1,1 @@
+error: 'return' cannot be used in deferred code (defer/errdefer)

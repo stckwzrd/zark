@@ -2,6 +2,7 @@ build/
 zig-out/
 .zig-cache/
 .zark-cache/
+__pycache__/
 bench/w.zk
 bench/w.c
 bench/wv

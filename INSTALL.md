@@ -20,6 +20,16 @@ Check it:
 zark run examples/hello.zk
 ```
 
+`bootstrap.sh` already ran the test suite. To run it again (and the LLVM and `-O` passes):
+
+```
+ZARK=build/zark tests/run.sh
+ZARK=build/zark tests/run.sh --llvm
+ZARK=build/zark tests/run.sh -O
+```
+
+The suite needs `python3` for the fuzzers and generators; `scripts/install-deps.sh` installs it.
+
 ## What you need
 
 | Tool | Why |
@@ -28,17 +38,17 @@ zark run examples/hello.zk
 | a C library with headers | glibc, musl or the macOS SDK |
 | binutils (`ld`) | linking on Linux |
 | bash, gzip, diffutils, make | the bootstrap script |
-| python3 | only for the test suite |
+| python3 | the test suite that `bootstrap.sh` runs (fuzzers and generators) |
 
 ## Supported systems
 
 | System | Status | Backend |
 |---|---|---|
-| Linux x86-64, glibc (Debian, Ubuntu, Fedora, Arch, openSUSE) | built and tested in CI | own x86-64 backend by default, LLVM with `--llvm` / `-O` |
-| Linux x86-64, musl (Alpine) | built and tested in CI | same |
-| Linux arm64 | built in CI | LLVM only |
-| macOS, Apple Silicon and Intel | built in CI | LLVM only |
-| Windows | through WSL2, built in CI | same as Linux |
+| Linux x86-64, glibc (Debian, Ubuntu, Fedora, Arch, openSUSE) | built and tested | own x86-64 backend by default, LLVM with `--llvm` / `-O` |
+| Linux x86-64, musl (Alpine) | built and tested | same |
+| Linux arm64 | supported | LLVM only |
+| macOS, Apple Silicon and Intel | supported | LLVM only |
+| Windows | through WSL2 | same as Linux |
 
 Windows without WSL is not supported: the runtime uses `fork`, `poll` and POSIX threads.
 
@@ -144,3 +154,6 @@ docker run --rm -it -v "$PWD":/src -w /src debian:stable sh -c "sh scripts/insta
 - Programs print `fatal: ...` and a backtrace when they crash. Set `ZARK_CRASH_HANDLER=0` to get a plain core dump instead.
 - Do not share one `.zark-cache` between different systems (for example a Docker bind mount used from Linux and macOS): delete it when you switch.
 - The compiler caches objects in `.zark-cache` next to where you run it; delete the directory to start clean.
+- Docker on Fedora with SELinux: a bind-mounted workspace is labelled `user_home_t`, and the container's `container_t` cannot read it (`permission denied` for `bootstrap.sh`). Mount it with `:z` (`-v "$PWD":/src:z`) or run the container with `--security-opt label=disable`.
+- A hang in `tests/cbuild.sh` on a machine where `clang` is a ccache wrapper is fixed by `tests/compiler.sh`; if you see it again, check that the wrapper is not being exec'd by a shim you added.
+- `pthread_create: Resource temporarily unavailable` in the threaded tests: raise `ulimit -u` (the suite starts several processes and threads).

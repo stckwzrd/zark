@@ -93,7 +93,7 @@ Hello, world!</code></pre></div></div>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.zk:2: error: cannot assign: target is const
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Compiler output</span></div><pre><code>main.zk:2: error: cannot assign: the target is const; declare it with 'auto' (mutable) or assign to a mutable variable
     2 |     x = 5;
       |     ^</code></pre></div></div>
 <h2 id="returning-a-value"><a class="anchor" href="#returning-a-value">#</a>Returning a value</h2>
@@ -213,7 +213,7 @@ not positive</code></pre></div></div>
     2 |     return a + b;
       |              ^</code></pre></div></div>
 <h3 id="constraints"><a class="anchor" href="#constraints">#</a>Constraints</h3>
-<p>To make the error clear and to report it before the body is compiled, write a constraint: <code>T: Ord</code>.</p>
+<p>To make the error clear and to catch it at the declaration instead of at the instantiation, write a constraint: <code>T: Ord</code>.</p>
 <div class="table-wrap"><table><thead><tr>
 <th>Constraint</th>
 <th>Which types fit</th>

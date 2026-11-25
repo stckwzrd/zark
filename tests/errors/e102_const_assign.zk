@@ -1,0 +1,4 @@
+void main() {
+    const i64 x = 1;
+    x = 2;
+}

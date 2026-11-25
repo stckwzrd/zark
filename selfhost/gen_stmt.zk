@@ -71,7 +71,7 @@ struct MatchRes { Type* ty; str slot; }
             };
             this->reinit = false;
             this->assign_target = false;
-            if (addr.imm) { this->err(s.line); eprintln("cannot assign: target is const"); return error.CompileFailed; }
+            if (addr.imm) { this->err(s.line); eprintln("cannot assign: the target is const; declare it with 'auto' (mutable) or assign to a mutable variable"); return error.CompileFailed; }
             if (s.op == .eq) {
                 this->bor_field = null;
                 if (s.e2.k == .Ident) { this->set_await(s.e); }
@@ -226,6 +226,13 @@ struct MatchRes { Type* ty; str slot; }
         .ForEach => this->gen_for_each(s)?;
         .Ret => this->gen_return(s.line, s.e)?;
         .Brk, .Cont => {
+            if (this->in_defer) {
+                auto word = "continue";
+                if (s.k == .Brk) { word = "break"; }
+                this->err(s.line);
+                eprintln("'{word}' cannot be used in deferred code (defer/errdefer)");
+                return error.CompileFailed;
+            }
             if (this->loops.len == 0) { this->err(s.line); eprintln("break/continue outside of a loop"); return error.CompileFailed; }
             auto li = this->loops.len - 1;
             if (s.label.len > 0) {
@@ -585,6 +592,11 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
 }
 
 !void Gen::gen_return(i64 line, Expr* re) {
+    if (this->in_defer) {
+        this->err(line);
+        eprintln("'return' cannot be used in deferred code (defer/errdefer)");
+        return error.CompileFailed;
+    }
     if (this->cur == null) { this->err(line); eprintln("'return' cannot be used here: this code is not inside a function"); return error.CompileFailed; }
     const auto rt = this->cur.ret;
     auto is_err = false;
