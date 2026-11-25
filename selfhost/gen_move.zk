@@ -61,7 +61,7 @@ bool Gen::live_ptr(str ptr, str except) {
     auto out = this->move_copy(x)?;
     for (auto r : y) {
         auto found = false;
-        for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { found = true; } }
+        for (auto q : out) { if (q.ptr == r.ptr && q.kind == r.kind && ((r.kind != 5 && r.kind != 6) || q.cont == r.cont)) { found = true; } }
         if (!found) {
             if (out.len >= 512) {
                 this->err(this->at_line);
@@ -130,6 +130,18 @@ void Gen::note_use(str ptr) {
     if (p.len == 0) { return; }
     this->note_use(p);
     if (this->moved.len == 0) { return; }
+    for (auto r : this->moved) {
+        if (r.kind != 6 || r.ptr != p) { continue; }
+        auto gone = false;
+        auto cline = 0;
+        for (auto c : this->moved) {
+            if (c.kind == 0 && c.ptr == r.cont) { gone = true; cline = c.line; }
+        }
+        if (!gone) { continue; }
+        this->err(line);
+        eprintln("'{name}' captured '{r.cname}', which was consumed on line {cline}; assign it a new value before calling the closure");
+        return error.CompileFailed;
+    }
     const auto i = this->move_find(p);
     if (i < 0) { return; }
     const auto r = this->moved.get(i);
@@ -295,6 +307,14 @@ bool Gen::heap_place(Expr* e) {
     for (auto r : this->moved) { if (r.ptr != slot) { out.push(r)?; } }
     this->restore_state(out);
     if (init == null) { return; }
+    if (init.k == .Closure) {
+        for (auto cn : init.func.captures) {
+            const auto cp = this->local_ptr(cn);
+            if (cp.len == 0) { continue; }
+            this->add_rec(MoveRec{ .ptr = slot, .kind = 6, .cont = cp, .cname = cn, .by = cn, .line = line })?;
+        }
+        return;
+    }
     if (init.k == .Ident) {
         const auto src = this->local_ptr(init.name);
         for (auto r : this->moved) {
@@ -377,7 +397,7 @@ bool state_has(List<MoveRec> st, str ptr, i64 kind) {
 
 bool rec_in(MoveRec[] st, MoveRec r) {
     for (auto q : st) {
-        if (q.ptr == r.ptr && q.kind == r.kind && (r.kind != 5 || q.cont == r.cont)) { return true; }
+        if (q.ptr == r.ptr && q.kind == r.kind && ((r.kind != 5 && r.kind != 6) || q.cont == r.cont)) { return true; }
     }
     return false;
 }
