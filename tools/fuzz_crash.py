@@ -109,6 +109,8 @@ def mutate_text(text, rng):
 
 
 def limit_memory(mb):
+    if mb <= 0:
+        return
     try:
         import resource
         n = mb * 1024 * 1024
@@ -197,13 +199,20 @@ def main():
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--zark", default=os.environ.get("ZARK", os.path.join(ROOT, "build", "zark")))
     ap.add_argument("--timeout", type=int, default=10)
-    ap.add_argument("--memory-mb", type=int, default=2048)
+    ap.add_argument("--memory-mb", type=int, default=None)
     args = ap.parse_args()
 
     zark = os.path.abspath(args.zark)
     if not os.path.exists(zark):
         print(f"fuzz_crash: no compiler at {zark}", file=sys.stderr)
         return 2
+    asan = False
+    try:
+        with open(zark, "rb") as f:
+            asan = b"__asan" in f.read()
+    except OSError:
+        pass
+    memory_mb = args.memory_mb if args.memory_mb is not None else (0 if asan else 2048)
     zark = stable_copy(zark)
     files = corpus()
     if not files:
@@ -217,7 +226,7 @@ def main():
         seed = args.seed + i
         r = random.Random(seed)
         base = r.choice(files)
-        res = one(zark, base, seed, r, args.timeout, args.memory_mb, scratch)
+        res = one(zark, base, seed, r, args.timeout, memory_mb, scratch)
         if res is None:
             if not args.quick and (i + 1) % 50 == 0:
                 print(f"{i + 1}/{count} mutations ok")
