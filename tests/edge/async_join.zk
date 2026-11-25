@@ -1,0 +1,28 @@
+import "std/async" as async;
+
+async i64 add(i64 a, i64 b) { return a + b; }
+async i64 quick() { return 1; }
+async i64 slow(async::Executor* ex) {
+    await async::Sleep::after(ex, 30);
+    return 9;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+
+    auto a = ex.spawn(add(1, 2))?;
+    auto b = ex.spawn(add(10, 20))?;
+    auto j = async::join(a, b);
+    const auto p = ex.block_on(&j)?;
+    println(p.first, p.second);
+
+    auto s1 = ex.spawn(slow(&ex))?;
+    auto s2 = ex.spawn(quick())?;
+    auto s = async::select(s1, s2);
+    const auto r = ex.block_on(&s)?;
+    match r {
+        .First(v) => println("first", v);
+        .Second(v) => println("second", v);
+    }
+}
