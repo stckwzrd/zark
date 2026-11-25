@@ -2995,6 +2995,12 @@ struct CBind {
     List<str> warnings;
 }
 
+/// The host glibc `gnu/stubs.h` is x86-specific: under a foreign aarch64 target it
+/// asks for stubs-32.h, which 64-bit distributions do not ship. The binder only
+/// parses the header with the host headers; defining __x86_64__ selects stubs-64
+/// while the target triple still drives the layouts. Never used for codegen.
+bool cross_parse_x86() { return c_arch == 1 && vrt_arch() == 0; }
+
 !CBind cbind_header(Allocator a, str header, str from_dir, str[] flags) {
     const auto dir = ".zark-cache/cbind";
     fs::make_dirs(dir)?;
@@ -3007,6 +3013,7 @@ struct CBind {
     auto argv = List<str>::init(a);
     argv.append(["clang", "-E", "-dD", "-iquote", from_dir])?;
     argv.append(flags)?;
+    if (cross_parse_x86()) { argv.push("-D__x86_64__")?; }
     argv.append(["-x", "c", stub])?;
     const auto r = os::exec(a, argv.slice()) catch |e| {
         drop(stub);
@@ -3034,6 +3041,7 @@ struct CBind {
     auto lflags = List<str>::init(a);
     lflags.append(["-iquote", from_dir])?;
     lflags.append(flags)?;
+    if (cross_parse_x86()) { lflags.push("-D__x86_64__")?; }
     e.lay = read_layouts(a, stub, lflags) catch |err| {
         drop(stub);
         return err;

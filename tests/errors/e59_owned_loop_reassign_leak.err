@@ -1,0 +1,1 @@
+error: 'g' holds a 'G' that is not consumed on every path out of its scope; call g.rel(), pass it on, or write `defer g.rel();` right after creating it

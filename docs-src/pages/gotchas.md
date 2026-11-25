@@ -191,9 +191,9 @@ This is deliberate: one form per action. `x++` and the compound assignments (`+=
 
 To leave an outer loop, label it (`outer: for (...)`) and write `break outer;`. Without a label they affect the nearest loop.
 
-### A `match` statement does not have to be complete
+### A `match` statement on an integer, string or pointer does not have to be complete
 
-A forgotten variant causes no error: nothing simply happens. For a `match` expression, exhaustiveness is checked.
+If no pattern fits, nothing happens. A `match` on an enum or union is exhaustive in a statement too, and a `match` expression needs `_` for the other types.
 
 ### A function must return a value on every path
 

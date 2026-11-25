@@ -1,0 +1,1 @@
+error: 'bump' is not const, so a const method cannot call it

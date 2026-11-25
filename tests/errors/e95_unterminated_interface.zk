@@ -1,0 +1,1 @@
+interface Shape { f64 area(); f64 perimeter();

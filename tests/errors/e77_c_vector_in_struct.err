@@ -1,0 +1,1 @@
+error: vectors inside a struct passed to or from C are not supported

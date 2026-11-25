@@ -1,0 +1,1 @@
+error: 'this->items' is changed by 'push' while this loop is still iterating over it; leave the loop right after the change (break or return) or iterate over a copy

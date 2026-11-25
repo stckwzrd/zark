@@ -35,6 +35,11 @@
 <td>the <code>bootstrap.sh</code> script</td>
 <td>any</td>
 </tr>
+<tr>
+<td><code>python3</code></td>
+<td>the test suite that <code>bootstrap.sh</code> runs</td>
+<td>any</td>
+</tr>
 </tbody></table></div>
 <p>No separate starting compiler is needed. The repository contains a &quot;seed&quot; (<code>bootstrap/seed.ll.gz</code>): the Zark compiler written as LLVM IR. <code>clang</code> builds the first version from it, and after that the compiler builds itself.</p>
 <h2 id="building-the-compiler"><a class="anchor" href="#building-the-compiler">#</a>Building the compiler</h2>
@@ -48,7 +53,7 @@
 <li>runs the whole test suite with the new compiler;</li>
 <li>copies the result to <code>build/zark</code>.</li>
 </ol>
-<p>It takes about a minute. At the end you will see the line <code>== done: build/zark is the self-hosted compiler</code>.</p>
+<p>A full run takes a few minutes: most of that is the test suite, while the compiler itself builds in seconds. At the end you will see the line <code>== done: build/zark is the self-hosted compiler</code>.</p>
 <blockquote class="callout warning"><p><strong>Warning:</strong> if something in the script does not match (the fixed point is broken, a test fails), it stops with exit code 1 and copies nothing to <code>build/zark</code>. Such a compiler must not be used.</p>
 </blockquote>
 <h2 id="putting-zark-on-your-path"><a class="anchor" href="#putting-zark-on-your-path">#</a>Putting <code>zark</code> on your PATH</h2>

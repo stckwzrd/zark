@@ -1,0 +1,1 @@
+error: recursive async functions: 'b' calls 'a', which is already being built, so a frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame

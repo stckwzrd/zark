@@ -553,7 +553,7 @@ bool Parser::new_member(bool is_union) {
         step_ok = true;
     }
     if (!ok || !step_ok) {
-        this->pos -= 1;
+        if (this->pos > 0) { this->pos -= 1; }
         this->fail("this for loop is not of the form for (T i = a; i < b; i++); use while for other loops")?;
     }
     _ = this->expect(.rparen)?;
@@ -584,7 +584,7 @@ struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
     const auto name = nt.text;
     _ = this->expect(.lbrace)?;
     auto methods = List<IfaceMethod>::init(this->a);
-    while (!this->at(.rbrace)) {
+    while (!this->at(.rbrace) && !this->at(.eof)) {
         auto ts = List<Token>::init(this->a);
         while (!this->at(.semi) && !this->at(.rbrace) && !this->at(.eof)) { ts.push(this->advance())?; }
         _ = this->eat(.semi);
@@ -633,6 +633,7 @@ struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
         }
         methods.push(m)?;
     }
+    if (this->at(.eof)) { this->fail("unexpected end of file in an interface")?; }
     _ = this->expect(.rbrace)?;
     auto b = List<u8>::init(this->a);
     sprint(&b, "struct {name}Vtable {{ ")?;

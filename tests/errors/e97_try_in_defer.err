@@ -1,0 +1,1 @@
+error: '?' cannot be used in deferred code (defer/errdefer); handle the error with 'catch' instead

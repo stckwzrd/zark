@@ -93,7 +93,7 @@
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">void </span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">    f</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">1</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">);</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:2: error: cannot assign: target is const
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:2: error: cannot assign: the target is const; declare it with 'auto' (mutable) or assign to a mutable variable
     2 |     x = 5;
       |     ^</code></pre></div></div>
 <h2 id="возврат-значения"><a class="anchor" href="#возврат-значения">#</a>Возврат значения</h2>
@@ -213,7 +213,7 @@
     2 |     return a + b;
       |              ^</code></pre></div></div>
 <h3 id="ограничения"><a class="anchor" href="#ограничения">#</a>Ограничения</h3>
-<p>Чтобы ошибка была понятной и звучала до компиляции тела, пишите ограничение: <code>T: Ord</code>.</p>
+<p>Чтобы ошибка была понятной и появлялась уже при объявлении, а не при инстанцировании, пишите ограничение: <code>T: Ord</code>.</p>
 <div class="table-wrap"><table><thead><tr>
 <th>Ограничение</th>
 <th>Какие типы подходят</th>

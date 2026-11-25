@@ -560,7 +560,7 @@ void main() {
 }
 ```
 
-A function or struct can be generic with `template<T>`. A constraint such as `T: Ord` states what the type must support, and a violation is reported at the call, not deep inside the body.
+A function or struct can be generic with `template<T>`. A constraint such as `T: Ord` states what the type must support. The body is checked against it at the declaration, and a call with a type that does not satisfy it is reported at the call.
 
 ```zark run
 template<T: Ord> T largest(T[] xs) {

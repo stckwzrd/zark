@@ -1,0 +1,1 @@
+error: 'await' can only be used directly inside an async function (not in a plain function or a closure)

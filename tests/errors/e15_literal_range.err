@@ -1,0 +1,1 @@
+error: integer literal 300 does not fit in 'u8'; use a wider type or an explicit 'as'

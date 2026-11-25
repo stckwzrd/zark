@@ -1,6 +1,15 @@
 # Zark roadmap: what to improve and how
 
+Known limitations and planned work are tracked in GitHub Issues (labels `bug`, `soundness`, `crash`, `miscompile`, `diagnostics`, `docs`, `platform`, `speed`). The roadmap below explains *how*; the issues carry the repros and acceptance criteria.
+
 Ordered by payoff. Each item says *how*, not just *what*.
+
+## 0. Separate semantic analysis from code generation
+Expression typing, calls, generics and statements are still interleaved with IR emission in `gen*.zk`; layouts already live in `sema_types.zk` and generic bodies are checked in `sema_check.zk`, but there is no typed AST. The next step is the layering from DESIGN.md Phase 3: `parse -> sema (typed AST) -> lowering -> backends`.
+- **sema** resolves every expression to a type, checks calls, returns and assignments, and instantiates generics; it never prints IR.
+- **lowering** turns the typed AST into the existing IR, and later into a real MIR for the native backend (item 2).
+- Diagnostics, the LSP and new backends then read one checked tree, and a change to the type rules no longer touches the emitter.
+- Keep the fixed points and the compile-time budget (no more than +10% on `bench/w.zk` and `selfhost/main.zk`).
 
 ## 1. Native backend: generated code quality (debug builds run 3x slower than gcc -O0)
 - **SSA without allocas.** Locals whose address is never taken can be kept as SSA values directly in the frontend (mem2reg on the AST: no `&x`, no capture by a method that takes `*Self`). This removes most load/store pairs, and LLVM `--release` gets faster too.
@@ -32,13 +41,20 @@ Done: closures with explicit captures, `T: Ord` constraints (checked at the call
 - **Modules / namespaces:** `import "net.zk" as net`, then `net.connect(...)`.
 - **SIMD types**: done through LLVM (`f32x4`, `i32x8`, ...). Missing: vector instructions in the own backend, comparisons and masks, shuffles.
 - **Overflow checks** in safe mode (`add` + `jo` → panic), removed by `--release`.
-- **Async cancellation and channels.** A suspended frame abandoned by `detach`, `select` or `Executor.deinit` does not run its deferred code yet: a generated `drop` for the frame is needed. `join` and `select` over `JoinHandle`s exist; channels, `select` over channels and a multithreaded executor do not.
+- **Async cancellation and channels.** A suspended frame abandoned by `detach`, `select` or `Executor.deinit` does not run its deferred code yet: a generated `drop` for the frame is needed. It must run `defer` and `errdefer` (cancellation is an unfinished operation), `select` must cancel the losing task instead of only detaching it, and `drop` stays optional in the future protocol (call `drop`, else `cancel`, else nothing) so existing futures keep working. `join` and `select` over `JoinHandle`s exist; channels, `select` over channels and a multithreaded executor do not.
 
 ## 7. Tooling
 Done: `zark lsp` (language server), `zark test`, `zark fmt` (token based: it keeps comments and line breaks), compile errors with the source line, a caret and "did you mean" hints.
 - `zark fmt`: the parser already exists; add a printer for the AST.
 - `zark test`: `test "name" { ... }` blocks collected and run by the driver.
 - DWARF line tables from the native backend: done (`break file:line`, `next`, `bt`). `-g` adds variables, structs and arrays (`print x`, `info locals`). Missing: unions, location lists for register variables, and any debug info on the LLVM path.
+- Diagnostics are pinned: every `tests/errors/*.zk` has a `.err` file with the expected first non-empty message, and `tests/run.sh` compares it (the readable `error: ...`, with the file and line stripped). Missing method hints were added (`l.pus` now says `did you mean 'push'?`), and `cannot assign: target is const` now says how to fix it.
+- Invariants: `tests/fmt_idem.sh` formats every `.zk` twice (same bytes) and compares `zark ir` before and after (256 files, 44 s); `tests/determinism.sh` compares `zark ir` across two runs and with `ZARK_JOBS=1`; `tests/docs.sh` executes every `zark run` block in the guide into a temporary site; `tests/scale.sh` now fails if `zark ir selfhost/main.zk` takes more than 15 s (`ZARK_MAX_SELFHOST_MS`). All four run from `tests/run.sh`.
+- Ownership fuzzer: `tools/fuzz_own.py` generates pairs of correct and known-wrong programs (defer/deinit, move into a function, reassign after a move, clone, swap, branches and loops with consumption, borrows, closures, struct literals, overwriting an owned value, `*p` copies, returning a local pointer). The good program must print `ok`; the bad one must fail with the matching ownership diagnostic. 300 pairs are clean (no false errors, no accepted wrong programs); `--quick` runs 20 in `tests/run.sh`.
+- Sanitizers: `tools/build_asan.sh` builds the self-hosted compiler from `build/stage2 ir` with AddressSanitizer and UndefinedBehaviorSanitizer. `tests/run.sh` (199 checks) and the `fuzz_prog`/`fuzz_crash`/`fuzz_lsp` quick and sampled runs are clean under them (leaks are off because the compiler uses arena allocators; `tests/scale.sh` and `tools/fuzz_crash.py` lift their address-space limits for ASan). The sanitizer run found and we fixed the LSP caret-line panic (#72).
+- Crash fuzzer: `tools/fuzz_crash.py` mutates every `.zk` in examples/tests/std/selfhost (delete/duplicate/swap a token or line, insert a bracket, truncate, replace an identifier with a keyword) and runs `zark tokens`, `zark ir` and `zark fmt --check` with a timeout and an address-space limit, using a stable copy of the compiler. It found and we fixed the unterminated-interface hang (#68), the empty-interpolation panic (#69), `?` in deferred code (#70) and `return`/`break`/`continue` in deferred code (#71). 100,000 mutations are clean; `--quick` runs 50 of them in `tests/run.sh`.
+- LSP fuzzer: `tools/fuzz_lsp.py` speaks JSON-RPC to `zark lsp` with mutated documents (`didOpen`/`didChange` plus `hover`/`completion`/`definition`) and checks that every request is answered without a crash or hang; 2,000 sessions are clean, and `--quick` runs 20 in `tests/run.sh`.
+- Differential whole-program fuzzer: `tools/fuzz_prog.py` builds random expression trees over i8-u64/f32/f64/bool (checked `+ - *` when the model proves no overflow, wrapping otherwise, `/` and `%` with truncation toward zero, arithmetic and logical shifts, boundary values including u64 above 2^63), structs of random shape (nested, arrays, by value and by pointer, returned by value), unions with `match`/`_`, enums, nested blocks with `defer`/`errdefer`, loops with `break`/`continue`, and `match` in a closure in a loop. A Python model computes the expected checksum and printed order, so a frontend bug shared by all backends is caught too; each program is built with native, `--llvm`, `-O` and `--release`, and divergences are delta-minimized. The fuzzer was mutation-tested (flipped defer order, `<` lowered as `<=`, shifted field offset, signed `>>` lowered as logical - all caught). 10,000 programs (seeds 1-10000) match the reference, and `--quick` runs 20 of them in `tests/run.sh`.
 
 ## 8. Platforms
 An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.zk` stays the same; only the encoder and the ABI change.
@@ -48,8 +64,9 @@ Done: C headers (`import "x.h"`, `zark cbind`), the C ABI for structs, unions, v
 Deferred from layer 4:
 - **Subclassing C++ classes from Zark** and overriding virtual functions. One way is a generated C++ subclass whose overrides call Zark `fn` pointers with a context pointer.
 - **Exceptions as `!T`.** Today a C++ exception aborts with a message. An opt-in error mode (a manifest key or a `cbind` flag) would map it to an error value.
+- **Overload resolution for C++.** Overloaded functions and methods currently get automatic suffixes (`Begin`, `Begin_1`), which is workable for a small header and painful for a large library. Resolve an overload by the argument types at the call, and fall back to the suffix only when the language cannot decide (for example a function pointer or a template argument).
 - **Direct calls by mangled name** for C-shaped signatures, with an `extern` that takes a link name, instead of going through a shim.
 - **Lambdas and `std::function`** crossing into C++. Only plain `fn` pointers do today.
 - **An `instantiate` key in `zark.toml`** to ask for template specializations without a wrapper `.hpp`.
 - **Cross targets and macOS CI for C++ headers.** Only the aarch64 Linux bindings of one header are compared in tests, and the `std::` shims are not checked against libc++.
-- **Rejecting a bitwise copy of a non-trivial C++ object.** `auto x = *p;` on a non-trivial C++ object still compiles and copies the bytes; copying a resource through a pointer, an array element or a field of a value is not tracked. Only copies through a variable name are moves today.
+- **Rejecting a bitwise copy of a non-trivial C++ object** (soundness). `auto x = *p;` on a non-trivial C++ object still compiles and copies the bytes; a resource copied through a pointer, an array element or a field of a value is not tracked. Only copies through a variable name are moves today. The ownership pass has to treat any value of a non-trivial bound type as a resource: a copy is an error, a move is allowed, and `deinit` is required on every path out.

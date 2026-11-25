@@ -35,6 +35,11 @@
 <td>скрипт <code>bootstrap.sh</code></td>
 <td>любые</td>
 </tr>
+<tr>
+<td><code>python3</code></td>
+<td>набор тестов, который запускает <code>bootstrap.sh</code></td>
+<td>любая</td>
+</tr>
 </tbody></table></div>
 <p>Отдельный стартовый компилятор не нужен. В репозитории лежит «семя» (<code>bootstrap/seed.ll.gz</code>): компилятор Zark, записанный как LLVM IR. <code>clang</code> собирает из него первую версию, а дальше компилятор собирает сам себя.</p>
 <h2 id="сборка-компилятора"><a class="anchor" href="#сборка-компилятора">#</a>Сборка компилятора</h2>
@@ -48,7 +53,7 @@
 <li>прогоняет весь набор тестов собственным компилятором;</li>
 <li>копирует результат в <code>build/zark</code>.</li>
 </ol>
-<p>Занимает около минуты. В конце вы увидите строку <code>== done: build/zark is the self-hosted compiler</code>.</p>
+<p>Полный прогон занимает несколько минут: большая часть — это тесты, сам компилятор собирается за секунды. В конце вы увидите строку <code>== done: build/zark is the self-hosted compiler</code>.</p>
 <blockquote class="callout warning"><p><strong>Важно:</strong> если в скрипте что-то не сошлось (неподвижная точка нарушена, тест упал), он останавливается с кодом 1 и ничего не копирует в <code>build/zark</code>. Такой компилятор использовать нельзя.</p>
 </blockquote>
 <h2 id="положить-zark-в-path"><a class="anchor" href="#положить-zark-в-path">#</a>Положить <code>zark</code> в PATH</h2>

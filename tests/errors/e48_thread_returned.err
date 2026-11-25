@@ -1,0 +1,1 @@
+error: returning something that points into local 'total' (a pointer, a slice, or a closure that captured it), which dies when the function returns; allocate it with an Allocator or take a pointer from the caller

@@ -1,0 +1,1 @@
+error: async function 'fact' calls itself, so its frame would contain itself; a recursive call has to go through a pointer to a separately allocated frame

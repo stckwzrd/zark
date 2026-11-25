@@ -187,7 +187,8 @@ diff -u same.zk "$cached" || fail "import_same: cbind and import differ"
 diff -u same.cpp "${cached%.zk}.cpp" || fail "import_same: C++ files differ"
 
 mkdir -p shim
-real=$(command -v clang++)
+. "$R/tests/compiler.sh"
+real=$(compiler_path clang++)
 printf '#!/bin/sh\necho "$*" >> "%s/clang.log"\n[ "$1" = --version ] && [ -n "$FAKE" ] && { echo "clang version $FAKE"; exit 0; }\nexec "%s" "$@"\n' "$T" "$real" > shim/clang++
 chmod +x shim/clang++
 before=$(ls imp/.zark-cache/cbind)

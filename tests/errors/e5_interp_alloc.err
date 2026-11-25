@@ -1,0 +1,1 @@
+error: string interpolation never allocates: use it as an argument of a function whose last parameter is a Fmt (print, println, bprint, ...)

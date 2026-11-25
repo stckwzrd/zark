@@ -1,0 +1,4 @@
+void main() {
+    auto l = List<i64>::init(c_allocator());
+    l.pus(1);
+}

@@ -1,0 +1,1 @@
+error: 'buf' is used after 'free' consumed it on line 4; assign it a new value first
