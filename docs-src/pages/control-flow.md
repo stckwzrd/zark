@@ -237,9 +237,9 @@ void main() {
 }
 ```
 
-What can be matched: integers, characters (`'a'`), enums, strings (via `==`) and unions. A pattern can be a literal or a constant, and several patterns in one branch are separated by commas. There are no ranges (`1..5`) in patterns.
+What can be matched: integers, characters (`'a'`), enums, strings (via `==`), pointers and unions. A pattern can be a literal or a constant, and several patterns in one branch are separated by commas. There are no ranges (`1..5`) in patterns.
 
-The branch `_` means "everything else". In a `match` **statement** it is optional: if nothing fits, nothing happens.
+The branch `_` means "everything else". In a `match` **statement** it is optional for integers, strings and pointers: if nothing fits, nothing happens. A `match` on an enum or union is exhaustive in a statement too, and a `match` expression needs `_` for the other types.
 
 ```zark run
 void main() {

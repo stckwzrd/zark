@@ -63,13 +63,13 @@ struct P<T> {
 union Shape { f64 Circle; P<f64> Rect; Empty; }
 enum Color { Red, Green }
 template<T> !T name(T a, i64 b) { ... }       // generic, monomorphized on use
-template<T: Ord> void sort(T[] s) { ... }     // constrained generic, checked at the call
+template<T: Ord> void sort(T[] s) { ... }     // constrained: body checked at the declaration
 extern i32 puts(u8* s);                // C symbol
 extern i32 printf(u8* fmt, ...);       // C varargs
 export i64 cb(i64 x) { ... }           // emitted under its C name
 ```
 
-Only reachable functions are compiled. Generic code is type-checked when it is instantiated; constraints (`Eq`, `Ord`, `Num`, `Int`, `Float`) are checked at the call or at the type instantiation, before the body is compiled.
+Only reachable functions are compiled. The body of a generic is checked at its declaration against the declared constraints (`Eq`, `Ord`, `Num`, `Int`, `Float`); a generic without a constraint is checked when it is instantiated. A call whose type does not satisfy the constraint is reported at the call.
 
 ### Modules
 
@@ -134,7 +134,7 @@ match v {
 }
 ```
 
-Arms are tested top to bottom, there is no fall-through, and a `match` is not required to be exhaustive.
+Arms are tested top to bottom and there is no fall-through. A `match` on an enum or union, statement or expression, must be exhaustive: cover every variant or add `_`. A `match` expression on any other type also needs a `_` arm; a `match` statement on an integer, string or pointer may fall through to the next statement.
 
 ## 6. Builtins and formatting
 

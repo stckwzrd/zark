@@ -261,7 +261,7 @@ void main() {
 
 ### Constraints
 
-To make the error clear and to report it before the body is compiled, write a constraint: `T: Ord`.
+To make the error clear and to catch it at the declaration instead of at the instantiation, write a constraint: `T: Ord`.
 
 | Constraint | Which types fit |
 |---|---|

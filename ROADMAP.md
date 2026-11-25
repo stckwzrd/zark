@@ -4,6 +4,13 @@ Known limitations and planned work are tracked in GitHub Issues (labels `bug`, `
 
 Ordered by payoff. Each item says *how*, not just *what*.
 
+## 0. Separate semantic analysis from code generation
+Expression typing, calls, generics and statements are still interleaved with IR emission in `gen*.zk`; layouts already live in `sema_types.zk` and generic bodies are checked in `sema_check.zk`, but there is no typed AST. The next step is the layering from DESIGN.md Phase 3: `parse -> sema (typed AST) -> lowering -> backends`.
+- **sema** resolves every expression to a type, checks calls, returns and assignments, and instantiates generics; it never prints IR.
+- **lowering** turns the typed AST into the existing IR, and later into a real MIR for the native backend (item 2).
+- Diagnostics, the LSP and new backends then read one checked tree, and a change to the type rules no longer touches the emitter.
+- Keep the fixed points and the compile-time budget (no more than +10% on `bench/w.zk` and `selfhost/main.zk`).
+
 ## 1. Native backend: generated code quality (debug builds run 3x slower than gcc -O0)
 - **SSA without allocas.** Locals whose address is never taken can be kept as SSA values directly in the frontend (mem2reg on the AST: no `&x`, no capture by a method that takes `*Self`). This removes most load/store pairs, and LLVM `--release` gets faster too.
 - **Linear-scan register allocation** over the IR the native backend already parses: live ranges are trivial to compute because values are SSA, and there are about 9 free registers (rbx, r12–r15 callee-saved; r8–r11).
@@ -57,8 +64,9 @@ Done: C headers (`import "x.h"`, `zark cbind`), the C ABI for structs, unions, v
 Deferred from layer 4:
 - **Subclassing C++ classes from Zark** and overriding virtual functions. One way is a generated C++ subclass whose overrides call Zark `fn` pointers with a context pointer.
 - **Exceptions as `!T`.** Today a C++ exception aborts with a message. An opt-in error mode (a manifest key or a `cbind` flag) would map it to an error value.
+- **Overload resolution for C++.** Overloaded functions and methods currently get automatic suffixes (`Begin`, `Begin_1`), which is workable for a small header and painful for a large library. Resolve an overload by the argument types at the call, and fall back to the suffix only when the language cannot decide (for example a function pointer or a template argument).
 - **Direct calls by mangled name** for C-shaped signatures, with an `extern` that takes a link name, instead of going through a shim.
 - **Lambdas and `std::function`** crossing into C++. Only plain `fn` pointers do today.
 - **An `instantiate` key in `zark.toml`** to ask for template specializations without a wrapper `.hpp`.
 - **Cross targets and macOS CI for C++ headers.** Only the aarch64 Linux bindings of one header are compared in tests, and the `std::` shims are not checked against libc++.
-- **Rejecting a bitwise copy of a non-trivial C++ object.** `auto x = *p;` on a non-trivial C++ object still compiles and copies the bytes; copying a resource through a pointer, an array element or a field of a value is not tracked. Only copies through a variable name are moves today.
+- **Rejecting a bitwise copy of a non-trivial C++ object** (soundness). `auto x = *p;` on a non-trivial C++ object still compiles and copies the bytes; a resource copied through a pointer, an array element or a field of a value is not tracked. Only copies through a variable name are moves today. The ownership pass has to treat any value of a non-trivial bound type as a resource: a copy is an error, a move is allowed, and `deinit` is required on every path out.

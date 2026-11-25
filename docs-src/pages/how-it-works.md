@@ -120,7 +120,7 @@ Everything lies on the caller's stack, and nothing is allocated on the heap. So 
 
 ## How generics work
 
-Functions and structs with type parameters are **monomorphized**: for each combination of arguments the compiler creates a separate copy. So there is no run-time overhead, and the body of a generic is checked at the **use**. Constraints (`T: Ord`) are checked at the call, before the body is compiled, so that the message is clear.
+Functions and structs with type parameters are **monomorphized**: for each combination of arguments the compiler creates a separate copy. So there is no run-time overhead. The body of a generic is checked at its **declaration** against the declared constraints (`T: Ord`); a call with a type that does not satisfy the constraint is reported at the call. A generic without a constraint is checked when it is instantiated.
 
 ## How `defer` and `errdefer` work
 
