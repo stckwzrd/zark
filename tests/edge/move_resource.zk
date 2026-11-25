@@ -24,6 +24,20 @@ void take(List<i64> l) {
     println(h.l.get(0));
     h.l.deinit();
 
+    auto whole = Holder{ .l = List<i64>::init(c_allocator()) };
+    whole.l.push(4)?;
+    auto moved = whole;
+    moved.l.push(5)?;
+    println(moved.l.get(1));
+    moved.l.deinit();
+
+    auto field = Holder{ .l = List<i64>::init(c_allocator()) };
+    field.l.push(6)?;
+    auto fcopy = field.l;
+    fcopy.push(7)?;
+    println(fcopy.len);
+    fcopy.deinit();
+
     take(List<i64>::init(c_allocator()));
     println("ok");
 }

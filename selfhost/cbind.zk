@@ -1739,7 +1739,7 @@ struct CEmit {
         this->warnings.push(b.slice())?;
     }
     !str ename(str name) {
-        if (keyword(name) == .ident && !cb_is_prim(name)) { return name; }
+        if (keyword(name) == .ident && name != "type" && !cb_is_prim(name)) { return name; }
         auto b = List<u8>::init(this->a);
         sprint(&b, "{name}_")?;
         return b.slice();
@@ -1946,7 +1946,7 @@ struct CEmit {
         if (d.is_static && !d.is_inline) { return this->warn(d.name, "static function"); }
         if (this->relabeled.has(d.name)) { return this->warn(d.name, "asm label"); }
         if (d.reason.len > 0) { return this->warn(d.name, d.reason); }
-        if (keyword(d.name) != .ident) { return this->warn(d.name, "Zark keyword"); }
+        if (keyword(d.name) != .ident || d.name == "type") { return this->warn(d.name, "Zark keyword"); }
         if (cb_is_prim(d.name)) { return this->warn(d.name, "Zark type name"); }
         if (d.is_inline && d.has_body) { return this->inline_fn(d); }
         if (d.cxx.len > 0 && (this->bad.has(d.name) || this->done.get_or(d.name, 0) == 3)) {

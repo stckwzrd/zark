@@ -1,0 +1,8 @@
+struct Holder { List<i64> l; }
+
+!void main() {
+    auto h = Holder{ .l = List<i64>::init(c_allocator()) };
+    auto h2 = h;
+    h.l.deinit();
+    h2.l.deinit();
+}
