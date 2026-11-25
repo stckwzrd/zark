@@ -1,0 +1,1 @@
+error: 'h.xs' is used after 'eat' consumed it on line 5; assign it a new value first

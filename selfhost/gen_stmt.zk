@@ -252,7 +252,7 @@ struct MatchRes { Type* ty; str slot; }
             this->set_await(s.e);
             const auto v = this->gen_expr(s.e, null)?;
             if (v.ty.k == .Enm || v.ty.k == .Bool || is_union(v.ty)) {
-                this->check_exhaustive(v, s.arms, s.line)?;
+                this->check_exhaustive(v, s.arms.slice(), s.line)?;
             }
             this->gen_match(v, s.arms, null)?;
         }
@@ -293,7 +293,7 @@ struct MatchRes { Type* ty; str slot; }
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
-    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms.slice()))?;
     this->end_match(lend, res)?;
     if (!jn.any) {
         sprint(this->ins()?, "  unreachable\n")?;
@@ -332,7 +332,7 @@ struct MatchRes { Type* ty; str slot; }
     }
     if (s.k == .Match) {
         const auto v = this->gen_expr(s.e, null)?;
-        this->check_exhaustive(v, s.arms, s.line)?;
+        this->check_exhaustive(v, s.arms.slice(), s.line)?;
         this->gen_match(v, s.arms, res)?;
         return;
     }
@@ -352,7 +352,7 @@ struct MatchRes { Type* ty; str slot; }
     this->store(v, res.slot)?;
 }
 
-str Gen::missing_variant(Value v, List<MatchArm> arms) {
+str Gen::missing_variant(Value v, MatchArm[] arms) {
     for (auto arm : arms) { if (arm.pats.len == 0) { return ""; } }
     if (v.ty.k == .Bool) {
         auto seen_true = false;
@@ -389,11 +389,11 @@ str Gen::missing_variant(Value v, List<MatchArm> arms) {
     return "";
 }
 
-bool Gen::match_covers(Value v, List<MatchArm> arms) {
+bool Gen::match_covers(Value v, MatchArm[] arms) {
     return this->missing_variant(v, arms).len == 0;
 }
 
-!void Gen::check_exhaustive(Value v, List<MatchArm> arms, i64 line) {
+!void Gen::check_exhaustive(Value v, MatchArm[] arms, i64 line) {
     const auto m = this->missing_variant(v, arms);
     if (m.len == 0) { return; }
     this->err(line);
@@ -409,7 +409,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
 
 !Value Gen::gen_match_expr(Expr* e, Type* expected) {
     const auto v = this->gen_expr(e.l, null)?;
-    this->check_exhaustive(v, e.arms, e.line)?;
+    this->check_exhaustive(v, e.arms.slice(), e.line)?;
     auto res = MatchRes{ .ty = null, .slot = "" };
     if (expected != null && expected.k != .Void && expected.k != .Null) {
         res.ty = expected;
@@ -489,7 +489,7 @@ bool Gen::match_covers(Value v, List<MatchArm> arms) {
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
-    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms.slice()))?;
     this->end_match(lend, res)?;
     if (!jn.any) {
         sprint(this->ins()?, "  unreachable\n")?;

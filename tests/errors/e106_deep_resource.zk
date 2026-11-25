@@ -1,0 +1,23 @@
+struct R { List<i64> xs; }
+struct A0 { R x; }
+struct A1 { A0 x; }
+struct A2 { A1 x; }
+struct A3 { A2 x; }
+struct A4 { A3 x; }
+struct A5 { A4 x; }
+struct A6 { A5 x; }
+struct A7 { A6 x; }
+struct A8 { A7 x; }
+struct A9 { A8 x; }
+struct A10 { A9 x; }
+struct A11 { A10 x; }
+struct A12 { A11 x; }
+struct A13 { A12 x; }
+struct A14 { A13 x; }
+struct A15 { A14 x; }
+struct A16 { A15 x; }
+void main() {
+    auto a = A16{};
+    auto b = a;
+    auto c = a;
+}

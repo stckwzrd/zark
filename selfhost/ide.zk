@@ -584,7 +584,7 @@ const auto KEYWORDS = ["auto", "const", "static", "template", "if", "else", "whi
 const auto PRIMS = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "void", "str"];
 const auto BUILTINS = ["panic", "assert", "embed", "asm"];
 
-void add_globals(Items* it, Project* p, List<Symbol*> near, bool types_only) {
+void add_globals(Items* it, Project* p, Symbol*[] near, bool types_only) {
     if (!types_only) {
         for (auto s : near) { add_symbol(it, s, s.name, false); }
     }
@@ -675,7 +675,7 @@ Symbol* this_literal_fields(Project* p, str text, i64 off) {
     auto ps = off;
     while (ps > 0 && is_idc(text[ps - 1])) { ps -= 1; }
     const auto fi = p.by_path.get(path) catch null;
-    auto w = Walker{ .p = p, .fi = fi, .locals = p.near, .tps = List<Symbol*>::init(a), .self_ty = null };
+    auto w = Walker{ .p = p, .fi = fi, .locals = share_list(&p.near), .tps = List<Symbol*>::init(a), .self_ty = null };
     auto trig = 0;
     if (ps > 0 && text[ps - 1] == '.') { trig = 1; }
     if (ps > 1 && ((text[ps - 1] == ':' && text[ps - 2] == ':') || (text[ps - 1] == '>' && text[ps - 2] == '-'))) { trig = 2; }
@@ -722,7 +722,7 @@ Symbol* this_literal_fields(Project* p, str text, i64 off) {
     }
     const auto prev = prev_sig(text, ps);
     const auto types_only = prev == '!' || prev == '?';
-    add_globals(&it, p, p.near, types_only);
+    add_globals(&it, p, p.near.slice(), types_only);
     return it;
 }
 
@@ -772,7 +772,7 @@ Symbol* this_literal_fields(Project* p, str text, i64 off) {
     if (open < 0) { return "null"; }
     const auto start = back_chain(text, open);
     const auto fi = p.by_path.get(path) catch null;
-    auto w = Walker{ .p = p, .fi = fi, .locals = p.near, .tps = List<Symbol*>::init(a), .self_ty = null };
+    auto w = Walker{ .p = p, .fi = fi, .locals = share_list(&p.near), .tps = List<Symbol*>::init(a), .self_ty = null };
     const auto e = parse_expr_text(a, p, text[start..open]);
     if (e == null) { return "null"; }
     FnDecl* fd = null;
