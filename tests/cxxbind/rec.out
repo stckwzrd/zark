@@ -11,7 +11,7 @@ struct u_T { i32 t; }
 type UT = u_T;
 struct Self { Self* next; i32 v; u8[4] __pad0; }
 struct type_ { i32 match_; }
-struct anon1_Hid { i32 h; }
+struct anon59952985dad7962d_Hid { i32 h; }
 struct st { i32 a; }
 struct In { i32 i; }
 struct VA { void* __vptr; }

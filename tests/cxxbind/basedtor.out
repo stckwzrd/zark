@@ -1,0 +1,8 @@
+struct Secret { i32 n; }
+struct Child { i32 n; i32 m; }
+struct DeletedBase { i32 n; }
+struct DeletedChild { i32 n; i32 m; }
+extern Secret* zark_cxx_f21b17fc7a8d26ff_9(Child* __self);
+Secret* Child::as_Secret() const { return zark_cxx_f21b17fc7a8d26ff_9(this); }
+extern DeletedBase* zark_cxx_f21b17fc7a8d26ff_11(DeletedChild* __self);
+DeletedBase* DeletedChild::as_DeletedBase() const { return zark_cxx_f21b17fc7a8d26ff_11(this); }

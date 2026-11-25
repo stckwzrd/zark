@@ -1,0 +1,2 @@
+struct Box_i32 { i32 v; }
+struct UsesBox { Box_i32 b; }

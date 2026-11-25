@@ -1,2 +1,3 @@
+skipped Box_i32a__c: name clash
 skipped Box<const Foo>: shim does not compile: static assertion failed due to requirement '__is_constructible(Box<const Foo>)'
 skipped Box<const Foo>: shim does not compile: object of type 'Box<const Foo>' cannot be assigned because its copy assignment operator is implicitly deleted

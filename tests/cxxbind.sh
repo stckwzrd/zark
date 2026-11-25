@@ -10,7 +10,7 @@ cd "$T"
 mkdir -p tests
 cp -r "$R/tests/cxxbind" tests/
 
-names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros boxspec boxclash boxauto refalias userdef opsuf"
+names="enums externc consts sysfilter free resolve broken shadow flat cexpr scope oper misc msgs layout value bits anon rec spec methods lifetime overload defaults ops clash inherit tmpl stdtypes dupkey escape minors dtor deleted init alias implicit skiprec redecl constpair abstract anonns packedenum inline cvspec fmt macros boxspec boxclash boxauto refalias userdef opsuf basedtor refval specuse arrarg"
 for name in $names; do
     flags=
     case $name in broken|misc|msgs) flags=-std=c++20 ;; esac

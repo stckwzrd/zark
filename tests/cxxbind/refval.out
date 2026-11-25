@@ -1,0 +1,6 @@
+extern i32 zark_cxx_1be7ebb9d6889cdb_0(i32* x);
+i32 take_i32pr(i32* x) { return zark_cxx_1be7ebb9d6889cdb_0(x); }
+extern i32 zark_cxx_1be7ebb9d6889cdb_1(i32 x);
+i32 take_i32prc(i32 x) { return zark_cxx_1be7ebb9d6889cdb_1(x); }
+extern i32 zark_cxx_1be7ebb9d6889cdb_2(i32 x);
+i32 take_i32prr(i32 x) { return zark_cxx_1be7ebb9d6889cdb_2(x); }
