@@ -2258,7 +2258,7 @@ void __crash_handler(i32 sig, i64 code, u64 addr, u64 rip, u64 rsp, u64 bp) {
     const auto el = vrt_exe_path(&exe[0], 1023);
     if (el <= 0) { return; }
     exe[el] = 0;
-    for (auto a : ["sh", "-c", "addr2line \"$@\" 2> /dev/null | sed 's/\\$[zc] at / at /; s/vb\\.\\([A-Za-z0-9_.]*\\) at /\\1 at /'", "sh", "-f", "-C", "-i", "-p", "-e"]) {
+    for (auto a : ["sh", "-c", "LC_ALL=C addr2line \"$@\" 2> /dev/null | sed 's/\\$[zc] at / at /; s/vb\\.\\([A-Za-z0-9_.]*\\) at /\\1 at /'", "sh", "-f", "-C", "-i", "-p", "-e"]) {
         argv[ac] = a.ptr;
         ac += 1;
     }
