@@ -21,6 +21,7 @@ struct Parser {
     bool quiet;
     i64 depth;
     bool no_post;
+    bool cast_ty;
     bool arrow_only;
     List<i64> splits;
     bool at_packed;
@@ -194,6 +195,17 @@ struct Parser {
             this->at_packed = true;
             return this->parse_decl(out);
         }
+        if (t.tag == .ident && t.text == "type" && this->peek_at(1).tag == .ident && this->peek_at(2).tag == .eq) {
+            _ = this->advance();
+            d.k = .Alias;
+            const auto an = this->expect(.ident)?;
+            d.path = an.text;
+            d.name_off = an.off;
+            _ = this->expect(.eq)?;
+            d.ty = this->parse_type()?;
+            out.push(d)?;
+            return;
+        }
         match t.tag {
             .kw_import => {
                 _ = this->advance();
@@ -206,15 +218,6 @@ struct Parser {
                     d.name_off = at.off;
                     this->aliases.push(d.alias)?;
                 }
-            }
-            .kw_type => {
-                _ = this->advance();
-                d.k = .Alias;
-                const auto an = this->expect(.ident)?;
-                d.path = an.text;
-                d.name_off = an.off;
-                _ = this->expect(.eq)?;
-                d.ty = this->parse_type()?;
             }
             .kw_struct, .kw_union => {
                 const auto is_union = this->advance().tag == .kw_union;
@@ -331,7 +334,7 @@ struct Parser {
         const auto nt = this->expect(.ident)?;
         const auto t = this->te_name(this->qualified(nt.text)?)?;
         t.off = nt.off;
-        if (this->at(.lt) && (!this->no_post || is_upper(nt.text[0]))) {
+        if (this->at(.lt) && (!(this->no_post || this->cast_ty) || is_upper(nt.text[0]))) {
             _ = this->advance();
             while (!this->at(.gt) && !this->at(.shr)) {
                 t.args.push(this->parse_type()?)?;
@@ -595,10 +598,10 @@ struct Parser {
             const auto kw = this->advance();
             const auto c = this->ex(.Cast, kw)?;
             c.l = e;
-            const auto saved_np = this->no_post;
-            this->no_post = true;
+            const auto saved_ct = this->cast_ty;
+            this->cast_ty = true;
             c.ty = this->parse_type()?;
-            this->no_post = saved_np;
+            this->cast_ty = saved_ct;
             e = c;
         }
         return e;
@@ -975,7 +978,7 @@ struct Parser {
 }
 
 Parser new_parser(Allocator a, Token[] toks, str file) {
-    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a) };
+    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .cast_ty = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a) };
 }
 
 i64 prec(Tag t) {
@@ -991,6 +994,15 @@ i64 prec(Tag t) {
         .star, .slash, .percent, .star_wrap => return 9;
     }
     return -1;
+}
+
+/// may this token start an expression? Used after `as T *` to tell a pointer
+/// type (`p as Node*;`) from a multiplication (`i as f64 * k`).
+bool starts_expr(Tag t) {
+    match t {
+        .ident, .int_lit, .float_lit, .str_lit, .char_lit, .lparen, .lbracket, .dot, .minus, .bang, .tilde, .amp, .star, .kw_true, .kw_false, .kw_null, .kw_sizeof, .kw_alignof, .kw_match => return true;
+    }
+    return false;
 }
 
 bool starts_type(Tag t) {

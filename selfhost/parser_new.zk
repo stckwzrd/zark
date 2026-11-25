@@ -53,6 +53,7 @@ void Parser::undo_splits(i64 mark) {
     auto t = base;
     if (this->no_post) { return t; }
     while (this->at(.star)) {
+        if (this->cast_ty && starts_expr(this->peek_at(1).tag)) { break; }
         _ = this->advance();
         const auto p = this->te(.Ptr)?;
         p.elem = t;
@@ -81,6 +82,7 @@ void Parser::undo_splits(i64 mark) {
         t = a;
     }
     while (this->at(.star)) {
+        if (this->cast_ty && starts_expr(this->peek_at(1).tag)) { break; }
         _ = this->advance();
         const auto p = this->te(.Ptr)?;
         p.elem = t;
@@ -297,7 +299,7 @@ bool Parser::await_ahead() {
     if (!this->at(.ident) || this->peek().text != "await") { return false; }
     const auto n = this->peek_at(1).tag;
     if (n == .ident && this->peek_at(1).text == "orelse") { return false; }
-    return n == .ident || n == .int_lit || n == .float_lit || n == .str_lit || n == .char_lit || n == .lparen || n == .kw_true || n == .kw_false || n == .kw_null || n == .kw_sizeof || n == .kw_alignof || n == .kw_match;
+    return n == .ident || n == .int_lit || n == .float_lit || n == .str_lit || n == .char_lit || n == .lparen || n == .kw_true || n == .kw_false || n == .kw_null || n == .kw_sizeof || n == .kw_alignof || n == .kw_match || n == .star;
 }
 
 !void Parser::parse_decl_new(List<Decl>*out) {
