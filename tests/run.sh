@@ -4,10 +4,19 @@ cd "$(dirname "$0")/.."
 ZARK=${ZARK:-./build/zark}
 command -v timeout >/dev/null || timeout() { shift; "$@"; }
 pass=0; fail=0
-check() { # name, cmd...
-  local name=$1; shift
-  if diff -u "tests/expected/$name.out" <("$@" 2>&1) >/dev/null; then pass=$((pass+1)); echo "ok   $name"
-  else fail=$((fail+1)); echo "FAIL $name"; diff -u "tests/expected/$name.out" <("$@" 2>&1) | head -20; fi
+check_out=$(mktemp)
+trap 'rm -f "$check_out"' EXIT
+check() { # name, cmd...  (an optional tests/expected/<name>.rc sets the exit code)
+  local name=$1 rc want_rc=0; shift
+  if [ -f "tests/expected/$name.rc" ]; then want_rc=$(cat "tests/expected/$name.rc"); fi
+  "$@" >"$check_out" 2>&1; rc=$?
+  if [ $rc -ne $want_rc ]; then
+    fail=$((fail+1)); echo "FAIL $name (exit $rc, expected $want_rc)"
+    tail -20 "$check_out"
+    return
+  fi
+  if diff -u "tests/expected/$name.out" "$check_out" >/dev/null; then pass=$((pass+1)); echo "ok   $name"
+  else fail=$((fail+1)); echo "FAIL $name"; diff -u "tests/expected/$name.out" "$check_out" | head -20; fi
 }
 names="hello features edge memory funcs unions minilang stdlib2 io cpp_style interfaces classes operators_oop checks simd align_structs async_echo"
 x86=0; [ "$(uname -m)" = x86_64 ] && x86=1
@@ -43,20 +52,25 @@ fi
 for n in ints memory nan move move_resource parse_types zero_init async_result async_join closure_capture borrow borrow_elem comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
 for f in tests/panics/*.zk; do
   n=panic_$(basename $f .zk)
-  if out=$($ZARK run "$f" $FLAGS 2>&1); then fail=$((fail+1)); echo "FAIL $f (expected a panic)"
+  out=$($ZARK run "$f" $FLAGS 2>&1); rc=$?
+  if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected a panic)"
+  elif [ $rc -ne 1 ]; then fail=$((fail+1)); echo "FAIL $f (exit $rc, expected a panic)"
   elif [ "$(echo "$out" | sed 's/<std>:[0-9]*/<std>/')" = "$(cat tests/expected/$n.out)" ]; then pass=$((pass+1)); echo "ok   $n"
   else fail=$((fail+1)); echo "FAIL $n"; diff <(echo "$out") tests/expected/$n.out | head -10; fi
 done
 if [ $linux = 1 ] && command -v addr2line >/dev/null; then
-  out=$($ZARK run tests/crash/thunk_names.zk $FLAGS 2>&1)
+  out=$($ZARK run tests/crash/thunk_names.zk $FLAGS 2>&1); rc=$?
   want="addp at"; [ "$FLAGS" = -O ] && want="main at"
-  if echo "$out" | grep -qE '\$[zc] at|vb\.' || ! echo "$out" | grep -q "$want"; then fail=$((fail+1)); echo "FAIL crash_thunk_names"; echo "$out" | tail -10
+  if [ $rc -ne 1 ]; then fail=$((fail+1)); echo "FAIL crash_thunk_names (exit $rc)"; echo "$out" | tail -10
+  elif echo "$out" | grep -qE '\$[zc] at|vb\.' || ! echo "$out" | grep -q "$want"; then fail=$((fail+1)); echo "FAIL crash_thunk_names"; echo "$out" | tail -10
   else pass=$((pass+1)); echo "ok   crash_thunk_names"; fi
 fi
 for f in tests/errors/*.zk; do
   out=$(timeout 20 $ZARK run "$f" 2>&1); rc=$?
   if [ $rc -eq 0 ]; then fail=$((fail+1)); echo "FAIL $f (expected an error)"; continue; fi
   if [ $rc -eq 124 ]; then fail=$((fail+1)); echo "FAIL $f (timed out)"; continue; fi
+  if [ $rc -ne 1 ]; then fail=$((fail+1)); echo "FAIL $f (exit $rc, expected a diagnostic)"; continue; fi
+  case "$out" in *"error: error.Signaled"*) fail=$((fail+1)); echo "FAIL $f (the compiler crashed)"; continue ;; esac
   got=$(printf '%s\n' "$out" | awk 'NF{print; exit}' | sed -E 's/^[^:]+:[0-9]+: //')
   want=$(cat "${f%.zk}.err")
   if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "ok   $f (rejected)"
