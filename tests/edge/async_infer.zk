@@ -13,6 +13,8 @@ async void nothing() {}
 struct Countdown {
     i64 n;
 
+    void cancel() {}
+
     Poll<i64> poll(Context* cx) {
         if (this->n == 0) { return .Ready(42); }
         this->n -= 1;

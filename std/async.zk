@@ -14,6 +14,8 @@ import "std/net" as net;
 struct Task {
     void* frame;
     fn[](void*, Context*) -> bool poll_thunk;
+    fn[](void*) cancel_thunk;
+    bool canceled;
     i32 state;
     Executor* ex;
     u64 size;
@@ -94,6 +96,16 @@ struct JoinHandle<T> {
         this->ex.release(t);
     }
 
+    /// cancel the task: it runs its deferred code on the next executor turn
+    void cancel() {
+        auto t = this->live();
+        this->ex.gens.set(this->gi, this->gen + 1);
+        this->ex.spare.push(this->gi) catch {};
+        t.cancel_thunk(t.frame);
+        t.canceled = true;
+        task_wake(t);
+    }
+
     Poll<T> poll(Context* cx) {
         if (this->done()) { return .Ready(this->take()); }
         auto t = this->task;
@@ -121,6 +133,8 @@ struct Join2<A, B> {
     bool bdone;
     A av;
     B bv;
+
+    void cancel() { this->a.cancel(); this->b.cancel(); }
 
     Poll<Pair<A, B>> poll(Context* cx) {
         if (!this->adone) {
@@ -154,12 +168,14 @@ struct Select2<A, B> {
     JoinHandle<B> b;
     bool done;
 
+    void cancel() { this->a.cancel(); this->b.cancel(); }
+
     Poll<Select2Result<A, B>> poll(Context* cx) {
         if (this->done) { return .Pending; }
         match (this->a.poll(cx)) {
             .Ready(v) => {
                 this->done = true;
-                this->b.detach();
+                this->b.cancel();
                 return .Ready(Select2Result<A, B>::First(v));
             }
             .Pending => {}
@@ -167,7 +183,7 @@ struct Select2<A, B> {
         match (this->b.poll(cx)) {
             .Ready(v) => {
                 this->done = true;
-                this->a.detach();
+                this->a.cancel();
                 return .Ready(Select2Result<A, B>::Second(v));
             }
             .Pending => {}
@@ -204,6 +220,14 @@ owned struct Executor {
     }
 
     void deinit() move {
+        for (auto t : this->tasks.slice()) {
+            if (t.state != 3) {
+                t.cancel_thunk(t.frame);
+                t.canceled = true;
+            }
+            this->drop_io(t);
+        }
+        this->timers.clear();
         for (auto t : this->tasks.slice()) { this->a.free<u8>((t as *u8)[0..t.size as i64]); }
         this->tasks.deinit();
         this->queue.deinit();
@@ -237,6 +261,10 @@ owned struct Executor {
                     .Pending => return false;
                 }
                 return false;
+            },
+            .cancel_thunk = [](void* p) {
+                auto b = p as *TaskBox<F, T>;
+                b.fut.cancel();
             } };
         this->tasks.push(&b.head)?;
         this->queue.push(&b.head)?;
@@ -263,10 +291,15 @@ owned struct Executor {
             this->run_batch();
             if (this->main_woken || this->queue.len > 0) { continue; }
             const auto timeout = this->timeout_ms();
-            if (timeout < 0 && this->io == 0) { return error.Deadlock; }
+            if (timeout < 0 && this->io == 0) {
+                this->drop_io(null);
+                fut.cancel();
+                return error.Deadlock;
+            }
             const auto n = vrt_poller_wait(this->poller, &tokens[0], &events[0], 64, timeout);
             if (n < 0) {
                 this->drop_io(null);
+                fut.cancel();
                 return error.SystemCall;
             }
             for (auto i : 0..n as i64) {
@@ -287,7 +320,8 @@ owned struct Executor {
             t.state = 2;
             auto cx = Context{ .waker = Waker{ .data = t as *void, .wake_fn = task_wake } };
             this->current = t;
-            const auto done = t.poll_thunk(t.frame, &cx);
+            auto done = true;
+            if (!t.canceled) { done = t.poll_thunk(t.frame, &cx); }
             this->current = null;
             if (done) {
                 if (t.state == 1) { this->unqueue(t); }
@@ -458,6 +492,8 @@ struct Sleep {
     bool armed;
 
     static Sleep after(Executor* ex, i64 ms) { return Sleep{ .ex = ex, .deadline = now_ns() + ms * 1000000 }; }
+
+    void cancel() {}
 
     Poll<bool> poll(Context* cx) {
         if (now_ns() >= this->deadline) { return .Ready(true); }

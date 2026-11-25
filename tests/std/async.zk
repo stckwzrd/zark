@@ -76,6 +76,7 @@ test "wake interrupts wait" {
 struct Countdown {
     i64 n;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         if (this->n == 0) { return .Ready(42); }
         this->n -= 1;
@@ -89,6 +90,7 @@ struct SleepPush {
     i64 v;
     List<i64>* out;
 
+    void cancel() {}
     Poll<bool> poll(Context* cx) {
         match (this->s.poll(cx)) {
             .Ready(_) => {
@@ -104,6 +106,7 @@ struct SleepPush {
 struct AllDone<T> {
     List<async::JoinHandle<T>>* hs;
 
+    void cancel() {}
     Poll<bool> poll(Context* cx) {
         for (auto h : this->hs.slice()) {
             if (!h.done()) {
@@ -161,6 +164,7 @@ test "ten thousand tasks" {
 }
 
 struct Never {
+    void cancel() {}
     Poll<bool> poll(Context* cx) { return .Pending; }
 }
 
@@ -217,6 +221,7 @@ struct Spin {
     async::Readable r;
     i32 fd;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         if (!this->r.io.armed) {
             this->r = async::Readable::on(this->ex, this->fd);
@@ -237,6 +242,7 @@ struct Wave {
     i64 sum;
     i64 until;
 
+    void cancel() {}
     Poll<bool> poll(Context* cx) {
         if (time::mono_ns() > this->until) { return .Ready(false); }
         auto i = 0;
@@ -296,6 +302,7 @@ struct Guarded {
     async::JoinHandle<Count>* h;
     async::Sleep s;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         match (this->h.poll(cx)) {
             .Ready(r) => return .Ready(r catch -1);
@@ -354,6 +361,7 @@ struct EchoServer {
     u8[64] buf;
     i64 n;
 
+    void cancel() {}
     Poll<bool> poll(Context* cx) {
         while (true) {
             if (this->step == 0) {
@@ -410,6 +418,7 @@ struct EchoClient {
     u8[64] buf;
     i64 n;
 
+    void cancel() {}
     Poll<bool> poll(Context* cx) {
         while (true) {
             if (this->step == 0) {
@@ -464,6 +473,7 @@ struct ConnectClose {
     async::Sleep s;
     async::TcpStream c;
 
+    void cancel() {}
     Poll<bool> poll(Context* cx) {
         if (this->step == 0) {
             this->c = async::TcpStream::connect(this->ex, "127.0.0.1", this->port) catch { return .Ready(false); };
@@ -490,6 +500,7 @@ struct ReadEnd {
     async::Read rd;
     u8[16] buf;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         match (this->guard.poll(cx)) {
             .Ready(_) => {
@@ -541,6 +552,7 @@ test "closed peer ends a pending read" {
 struct Nap {
     async::Sleep s;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         match (this->s.poll(cx)) {
             .Ready(_) => return .Ready(7);
@@ -554,6 +566,7 @@ struct Impatient {
     async::JoinHandle<i64>* h;
     async::Sleep s;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         match (this->h.poll(cx)) {
             .Ready(v) => return .Ready(v);
@@ -595,6 +608,7 @@ struct LostRead {
     async::Sleep s;
     u8[4] buf;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         this->polls += 1;
         if (this->polls > 50) { return .Ready(-1); }
@@ -658,6 +672,7 @@ struct ForgotRead {
     async::Sleep s;
     u8[4] buf;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         this->polls += 1;
         if (this->polls > 50) { return .Ready(-1); }
@@ -717,6 +732,7 @@ struct TwoReads {
     u8[4] b1;
     u8[4] b2;
 
+    void cancel() {}
     Poll<i64> poll(Context* cx) {
         if (this->step == 0) {
             auto st = async::TcpStream{ .ex = this->ex, .fd = this->fd };

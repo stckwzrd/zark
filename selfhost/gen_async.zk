@@ -84,8 +84,29 @@ void Gen::set_await(Expr* e) {
     *pi = FnInst{ .decl = md, .env = penv, .llname = pn.slice(), .params = pparams, .ret = pt, .generated = true };
     this->fn_insts.put(pi.llname, pi)?;
 
+    const auto cd = this->a.create<FnDecl>()?;
+    cd.name = "cancel";
+    cd.line = decl.line;
+    cd.file = decl.file;
+    cd.receiver = name;
+    cd.params = List<Param>::init(this->a);
+    cd.params.push(Param{ .name = "this", .ty = this->ptr_te("Self")?, .off = -1 })?;
+    auto ck = this->sb();
+    sprint(&ck, "{name}.cancel")?;
+    this->methods.put(ck.slice(), cd)?;
+    const auto cenv = this->new_env()?;
+    cenv.put("Self", ft)?;
+    auto cparams = List<Type*>::init(this->a);
+    cparams.push(this->mk_elem(.Ptr, ft)?)?;
+    auto cn = this->sb();
+    sprint(&cn, "vb.{name}.cancel")?;
+    const auto ci = this->a.create<FnInst>()?;
+    *ci = FnInst{ .decl = cd, .env = cenv, .llname = cn.slice(), .params = cparams, .ret = this->t_void, .generated = true };
+    this->fn_insts.put(ci.llname, ci)?;
+
     this->gen_poll(fi, pi, ret)?;
     this->gen_frame_ctor(fi)?;
+    this->gen_cancel(fi, pi, ci)?;
     return fi;
 }
 
@@ -142,6 +163,20 @@ void Gen::set_await(Expr* e) {
         cur = cb.slice();
     }
     sprint(w, "  ret {fty} {cur}\n}}\n\n")?;
+}
+
+!void Gen::gen_cancel(FnInst* fi, FnInst* pi, FnInst* ci) {
+    const auto ft = fi.ret;
+    const auto fty = this->llty(ft)?;
+    const auto w = &this->funcs_out;
+    sprint(w, "define internal void @{ci.llname}(ptr %a.0) {{\nentry:\n")?;
+    sprint(w, "  %v.state = getelementptr {fty}, ptr %a.0, i32 0, i32 0\n")?;
+    sprint(w, "  %v.canceled = getelementptr {fty}, ptr %a.0, i32 0, i32 {this->fidx(ft, fi.cancel_slot)}\n")?;
+    sprint(w, "  %v.st = load i32, ptr %v.state\n")?;
+    sprint(w, "  %v.done = icmp eq i32 %v.st, -1\n  br i1 %v.done, label %v.ret, label %v.run\nv.run:\n")?;
+    sprint(w, "  store i1 true, ptr %v.canceled\n")?;
+    sprint(w, "  %v.r = call {this->llty(pi.ret)?} @{pi.llname}(ptr %a.0, ptr %a.0)\n")?;
+    sprint(w, "  br label %v.ret\nv.ret:\n  ret void\n}\n\n")?;
 }
 
 !void Gen::gen_poll(FnInst* fi, FnInst* pi, Type* ret) {
@@ -222,11 +257,25 @@ void Gen::set_await(Expr* e) {
         const auto slot = this->alloca(pty, p.name)?;
         this->declare_var(p.name, Var{ .ptr = slot, .ty = pty, .mutable = p.mutable }, decl.line)?;
     }
+    const auto canceled = this->alloca(this->t_bool, "canceled")?;
+    af.canceled = canceled;
+    fi.cancel_slot = af.slots.len - 1;
     auto res = ret;
     if (ret.k == .Void) { res = this->t_bool; }
     af.result = this->alloca(res, "result")?;
     this->terminated = true;
     this->label("astart")?;
+    const auto lc0 = this->new_label("acancel")?;
+    const auto lg0 = this->new_label("anormal")?;
+    const auto cf0 = this->load(this->t_bool, af.canceled)?;
+    sprint(this->ins()?, "  br i1 {cf0.v}, label %{lc0}, label %{lg0}\n")?;
+    this->terminated = true;
+    this->label(lc0)?;
+    sprint(this->ins()?, "  store i32 -1, ptr {af.slots.get(0)}\n")?;
+    const auto p0 = this->union_of(af.poll, field_index(af.poll.si, "Pending"), Value{ .ty = null, .v = "" })?;
+    sprint(this->ins()?, "  ret {this->llty(af.poll)?} {p0.v}\n")?;
+    this->terminated = true;
+    this->label(lg0)?;
     this->gen_stmt(decl.body)?;
     if (!this->terminated) {
         this->run_defers(this->scopes.len - 1, 0, false, false)?;
@@ -314,6 +363,27 @@ void Gen::set_await(Expr* e) {
     af.resumes.push(lr)?;
     sprint(this->ins()?, "  store i32 {af.resumes.len}, ptr {af.slots.get(0)}\n")?;
     this->label(lr)?;
+    const auto lcan = this->new_label("acancel")?;
+    const auto lok = this->new_label("anormal")?;
+    const auto cflag = this->load(this->t_bool, af.canceled)?;
+    sprint(this->ins()?, "  br i1 {cflag.v}, label %{lcan}, label %{lok}\n")?;
+    this->terminated = true;
+    this->label(lcan)?;
+    if (fv.ty.k == .Strct) {
+        auto kc = this->sb();
+        sprint(&kc, "{fv.ty.si.decl.name}.cancel")?;
+        if (this->methods.has(kc.slice())) {
+            const auto cmd = this->methods.get(kc.slice())?;
+            auto noargs = List<Expr*>::init(this->a);
+            _ = this->call_method(cmd, Addr{ .ty = fv.ty, .v = slot, .imm = false }, noargs, this->no_types(), null, e.line)?;
+        }
+    }
+    this->run_defers(this->scopes.len - 1, 0, true, false)?;
+    sprint(this->ins()?, "  store i32 -1, ptr {af.slots.get(0)}\n")?;
+    const auto pc = this->union_of(af.poll, field_index(af.poll.si, "Pending"), Value{ .ty = null, .v = "" })?;
+    sprint(this->ins()?, "  ret {this->llty(af.poll)?} {pc.v}\n")?;
+    this->terminated = true;
+    this->label(lok)?;
     auto args = List<Expr*>::init(this->a);
     args.push(this->mk_pre(af.cx, e.line)?)?;
     const auto pv = this->call_method(md, Addr{ .ty = fv.ty, .v = slot, .imm = false }, args, this->no_types(), null, e.line)?;
