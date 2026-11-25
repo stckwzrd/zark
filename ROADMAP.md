@@ -39,6 +39,7 @@ Done: `zark lsp` (language server), `zark test`, `zark fmt` (token based: it kee
 - `zark fmt`: the parser already exists; add a printer for the AST.
 - `zark test`: `test "name" { ... }` blocks collected and run by the driver.
 - DWARF line tables from the native backend: done (`break file:line`, `next`, `bt`). `-g` adds variables, structs and arrays (`print x`, `info locals`). Missing: unions, location lists for register variables, and any debug info on the LLVM path.
+- Differential whole-program fuzzer: `tools/fuzz_prog.py` generates programs over structs, unions, enums, slices, `List`/`Map`, error unions, defer order, loops, closures and generics, runs each with native, `--llvm`, `-O` and `--release`, and compares the printed checksum; divergences are delta-minimized. 10,000 programs (seeds 1-10000) are clean, and `--quick` runs 20 of them in `tests/run.sh`.
 
 ## 8. Platforms
 An aarch64 backend (Raspberry Pi, ARM laptops) and Windows (PE/COFF + Win64 ABI). The lowering structure in `native.zk` stays the same; only the encoder and the ABI change.
