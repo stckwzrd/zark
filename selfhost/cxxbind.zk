@@ -1012,10 +1012,19 @@ struct CxWalk {
         const auto zn = cx_zname(this->a, zs, name)?;
         if (kind == "NamespaceDecl") {
             if (name.len == 0) {
-                this->anon_ns += 1;
+                const auto f = this->locs(x);
+                const auto off = jint(jget(jget(x, "loc"), "offset"), -1);
+                auto ob = List<u8>::init(this->a);
+                sprint(&ob, "{off}")?;
+                const auto offs = ob.slice();
+                // hash the source text and the offset: the printed path depends on
+                // where the header was copied, but the bytes do not
+                const auto txt = this->source(f) catch "";
+                auto h = fnv64(0xcbf29ce484222325 as u64, txt);
+                if (off >= 0) { h = fnv64(h, offs); }
+                const auto s = str_concat(this->a, ["anon", cb_hex(this->a, h)?])?;
                 this->anon_depth += 1;
                 defer this->anon_depth -= 1;
-                const auto s = str_concat(this->a, ["anon", cb_num(this->a, CVal{ .v = this->anon_ns })?])?;
                 return this->walk(x, scope, cx_zname(this->a, zs, s)?, c, false, true);
             }
             if (jbool(jget(x, "isInline"), false)) {
@@ -1291,7 +1300,17 @@ struct CxWalk {
         r.meths.push(d)?;
     }
 
-    !void cxx_ops(Json* x, CxRec* r) {
+    str cx_dtor_reason(CxRec* r) {
+    if (r.dtor_deleted) { return "deleted"; }
+    if (r.dtor_access.len > 0 && r.dtor_access != "public") { return "private"; }
+    for (auto b : r.allbases.slice()) {
+        const auto w = cx_dtor_reason(b.r);
+        if (w.len > 0) { return w; }
+    }
+    return "";
+}
+
+!void cxx_ops(Json* x, CxRec* r) {
         const auto dd = jget(x, "definitionData");
         r.abstract = jbool(jget(dd, "isAbstract"), false);
         r.poly = jbool(jget(dd, "isPolymorphic"), false);
@@ -1324,7 +1343,12 @@ struct CxWalk {
                 r.dtor_deleted = jbool(jget(c, "explicitlyDeleted"), false);
             }
         }
-        const auto dtor_ok = (r.dtor_access.len == 0 || r.dtor_access == "public") && !r.dtor_deleted;
+        auto base_dtor = "";
+        for (auto b : r.allbases.slice()) {
+            const auto w = cx_dtor_reason(b.r);
+            if (w.len > 0) { base_dtor = w; break; }
+        }
+        const auto dtor_ok = (r.dtor_access.len == 0 || r.dtor_access == "public") && !r.dtor_deleted && base_dtor.len == 0;
         if (!r.has_dtor && !r.dtor_pub && !r.abstract && !r.value && dtor_ok) {
             const auto d = this->decl(.Func, str_concat(this->a, [r.d.name, "::~dtor"])?)?;
             const auto t = this->a.create<CType>()?;
@@ -1348,6 +1372,10 @@ struct CxWalk {
             r.no_own = true;
             r.no_own_why = "destructor is not public";
             if (r.dtor_deleted) { r.no_own_why = "destructor is deleted"; }
+            if (base_dtor.len > 0) {
+                r.no_own_why = "a base destructor is not public";
+                if (base_dtor == "deleted") { r.no_own_why = "a base destructor is deleted"; }
+            }
         }
         if (!r.abstract && ((!r.value && r.own) || (r.value && r.user_default))) {
             auto has_ctor = false;
@@ -1702,7 +1730,8 @@ struct CxWalk {
                 const auto e = this->tok(x.elem)?;
                 if (e.len == 0) { return ""; }
                 auto s = str_concat(this->a, [e, "p"])?;
-                if (x.ref) { s = str_concat(this->a, [s, "r"])?; }
+                if (x.ref && x.rvalue) { s = str_concat(this->a, [s, "rr"])?; }
+                else if (x.ref) { s = str_concat(this->a, [s, "r"])?; }
                 if (x.elem.konst) { s = str_concat(this->a, [s, "c"])?; }
                 return s;
             }
@@ -1806,6 +1835,15 @@ struct CxWalk {
             const auto q = this->byid.get_or(jstr(jget(jget(n, "decl"), "id"), ""), "");
             if (q.len == 0) { return null; }
             return this->lookup(str_concat(this->a, ["::", q])?, "");
+        }
+        if (kind == "ConstantArrayType") {
+            const auto e = this->tnode(in)?;
+            if (e == null) { return null; }
+            const auto t = this->a.create<CType>()?;
+            t.k = .Array;
+            t.elem = e;
+            t.n = jint(jget(n, "size"), 0);
+            return t;
         }
         if (kind == "BuiltinType") { return this->parse(jstr(jget(jget(n, "type"), "qualType"), ""), ""); }
         return null;
@@ -1928,11 +1966,24 @@ struct CxWalk {
         if (ks.len == 0) { return null; }
         const auto key = str_concat(this->a, [q, "<", str_join(this->a, cks.slice(), ",")?, ">"])?;
         this->skey = key;
-        if (key != want || this->specs.has(key)) { return null; }
+        if (key != want) { return null; }
+        const auto pending = this->specs.get_or(key, null);
+        if (pending != null && pending.need.len == 0) { return null; }
         const auto cxx = str_concat(this->a, [q, "<", str_join(this->a, cs.slice(), ", ")?, ">"])?;
         const auto zn = str_concat(this->a, [this->tzn.get_or(q, q), "_", cx_zn(this->a, ks)?])?;
-        const auto r = this->rec_decl(c, cxx, zn)?;
-        if (r == null) { return null; }
+        auto r = pending;
+        if (r == null) {
+            r = this->rec_decl(c, cxx, zn)?;
+            if (r == null) { return null; }
+        } else {
+            // a use before `template struct X<...>;` left a placeholder with `need`;
+            // the explicit instantiation now fills it in
+            if (!this->claim(zn, cxx)?) { return null; }
+            r.need = "";
+            r.d.cxx = cxx;
+            this->byid.put(jstr(jget(c, "id"), ""), cxx)?;
+            if (!this->zd.has(zn)) { this->zd.put(zn, r.d)?; }
+        }
         for (auto at : atys.slice()) {
             const auto ax = this->expand(at);
             if (ax.k == .Named && ax.rec != null && ax.rec.cx != null && (ax.rec.cx.need.len > 0 || !ax.rec.complete)) { r.nocopy = true; }
