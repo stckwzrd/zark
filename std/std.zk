@@ -439,6 +439,17 @@ struct Map<V> {
         this->len = 0;
     }
 
+    /// a copy with its own entry array; keys and values are copied as they are
+    !Self clone() {
+        auto m = Self::init(this->a);
+        if (this->entries.len > 0) {
+            m.entries = this->a.alloc<MapEntry<V>>(this->entries.len)?;
+            for (auto i : 0..this->entries.len) { m.entries[i] = this->entries[i]; }
+        }
+        m.len = this->len;
+        return m;
+    }
+
     i64 __find(str key) {
         const auto cap = this->entries.len;
         auto i = (hash_str(key) % (cap as u64)) as i64;

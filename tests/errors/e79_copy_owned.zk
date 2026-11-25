@@ -1,0 +1,16 @@
+owned struct Handle {
+    i64* p;
+    Allocator a;
+}
+
+void close(move Handle* h) {
+    h.a.free(h.p[0..1]);
+}
+
+!void main() {
+    auto p = c_allocator().alloc<i64>(1)?;
+    auto x = Handle{ .p = p.ptr, .a = c_allocator() };
+    auto y = x;
+    close(&x);
+    close(&y);
+}

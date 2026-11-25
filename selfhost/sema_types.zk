@@ -13,12 +13,12 @@ bool Gen::satisfies(Type* t, str name) {
     return false;
 }
 
-!void Gen::check_constraints(str what, List<str> names, List<str> cons, List<Type*> targs, i64 line) {
+!void Gen::check_constraints(str what, str[] names, str[] cons, Type*[] targs, i64 line) {
     for (auto [i, c] : cons) {
         if (c.len == 0 || i >= targs.len) { continue; }
-        const auto t = targs.get(i);
+        const auto t = targs[i];
         if (!this->satisfies(t, c)) {
-            this->err(line); eprintln("type '{this->type_name(t)?}' does not satisfy '{c}', required by '{names.get(i)}' in '{what}'");
+            this->err(line); eprintln("type '{this->type_name(t)?}' does not satisfy '{c}', required by '{names[i]}' in '{what}'");
             return error.CompileFailed;
         }
     }
@@ -237,7 +237,7 @@ bool Gen::satisfies(Type* t, str name) {
                 }
                 auto args = List<Type*>::init(this->a);
                 for (auto x : te.args) { args.push(this->resolve_type(x, env)?)?; }
-                this->check_constraints(sd.name, sd.type_params, sd.constraints, args, sd.line)?;
+                this->check_constraints(sd.name, sd.type_params.slice(), sd.constraints.slice(), args.slice(), sd.line)?;
                 const auto t = this->mk(.Strct)?;
                 t.si = this->get_struct(sd, args)?;
                 return t;
@@ -269,13 +269,13 @@ bool Gen::satisfies(Type* t, str name) {
     }
     const auto inst = this->a.create<StructInst>()?;
     inst.decl = sd;
-    inst.args = args;
     inst.llname = key;
     inst.display = disp.slice();
     inst.fields = List<FieldInfo>::init(this->a);
-    this->struct_insts.put(key, inst)?;
     const auto env = this->new_env()?;
     for (auto [i, tp] : sd.type_params) { env.put(tp, args.get(i))?; }
+    this->struct_insts.put(key, inst)?;
+    inst.args = args;
     for (auto f : sd.fields) { inst.fields.push(FieldInfo{ .name = f.name, .ty = this->resolve_type(f.ty, env)?, .init = f.init })?; }
     if (sd.is_union) {
         u64 maxsz = 0;

@@ -1567,7 +1567,7 @@ struct CxWalk {
         f.why = "not a constant";
     }
 
-    !void layouts(str header, str from_dir, List<str> cflags) {
+    !void layouts(str header, str from_dir, str[] cflags) {
         if (this->rlist.len == 0) { return; }
         auto keep = List<bool>::init(this->a);
         for (auto r : this->rlist.slice()) { keep.push(r.skip.len == 0)?; }
@@ -1605,7 +1605,7 @@ struct CxWalk {
         write_file(stub, body.slice())?;
         auto argv = List<str>::init(this->a);
         argv.append(["clang++", "-fsyntax-only", "-Xclang", "-fdump-record-layouts", "-iquote", from_dir])?;
-        argv.append(cflags.slice())?;
+        argv.append(cflags)?;
         argv.append(["-x", "c++", stub])?;
         const auto r = os::exec(this->a, argv.slice()) catch |e| {
             drop(stub);
@@ -2231,7 +2231,7 @@ struct CxWalk {
             auto packed = this->short_enums;
             for (auto i : 0..jlen(k)) { if (jstr(jget(jat(k, i), "kind"), "") == "PackedAttr") { packed = true; } }
             auto p = CParser{ .a = this->a };
-            t = p.enum_type(vals, packed)?;
+            t = p.enum_type(vals.slice(), packed)?;
         }
         if (t.k == .Bad) { return this->skip(label, t.name); }
         if (t.plain) {
@@ -4030,14 +4030,14 @@ bool cx_is_operator(str n) {
     return b.slice();
 }
 
-!i64 cx_check(Allocator a, CxWalk* w, str hid, str text, List<str> flags, str from_dir) {
+!i64 cx_check(Allocator a, CxWalk* w, str hid, str text, str[] flags, str from_dir) {
     auto pb = List<u8>::init(a);
     sprint(&pb, ".zark-cache/cbind/check-{os::pid()}.cpp")?;
     const auto p = pb.slice();
     write_file(p, text)?;
     auto argv = List<str>::init(a);
     argv.append(["clang++", "-fsyntax-only", "-ferror-limit=0", "-iquote", from_dir])?;
-    argv.append(flags.slice())?;
+    argv.append(flags)?;
     argv.push("-w")?;
     argv.append(["-x", "c++", p])?;
     const auto r = os::exec(a, argv.slice()) catch |err| {
@@ -4097,7 +4097,7 @@ bool cx_is_operator(str n) {
     return n;
 }
 
-!void cx_macros(Allocator a, CxWalk* w, str header, str from_dir, List<str> flags) {
+!void cx_macros(Allocator a, CxWalk* w, str header, str from_dir, str[] flags) {
     const auto dir = ".zark-cache/cbind";
     fs::make_dirs(dir)?;
     auto sb = List<u8>::init(a);
@@ -4108,7 +4108,7 @@ bool cx_is_operator(str n) {
     write_file(stub, body.slice())?;
     auto argv = List<str>::init(a);
     argv.append(["clang++", "-E", "-dD", "-iquote", from_dir])?;
-    argv.append(flags.slice())?;
+    argv.append(flags)?;
     argv.append(["-x", "c++", stub])?;
     const auto r = os::exec(a, argv.slice()) catch |e| {
         drop(stub);
@@ -4138,7 +4138,7 @@ bool cx_is_operator(str n) {
     }
 }
 
-!CBind cxxbind_header(Allocator a, str header, str from_dir, List<str> flags) {
+!CBind cxxbind_header(Allocator a, str header, str from_dir, str[] flags) {
     const auto dir = ".zark-cache/cbind";
     fs::make_dirs(dir)?;
     auto sb = List<u8>::init(a);
@@ -4149,7 +4149,7 @@ bool cx_is_operator(str n) {
     sprint(&body, "#pragma clang diagnostic push\n#pragma clang diagnostic ignored \"-Weverything\"\nenum zark_char_sign {{ zark_char_v = (char)-1 < 0 }};\n#pragma clang diagnostic pop\n#include \"{header}\"\n")?;
     write_file(stub, body.slice())?;
     auto cflags = List<str>::init(a);
-    for (auto f : flags.slice()) { if (!cx_c_std(f)) { cflags.push(f)?; } }
+    for (auto f : flags) { if (!cx_c_std(f)) { cflags.push(f)?; } }
     auto argv = List<str>::init(a);
     argv.append(["clang++", "-fsyntax-only", "-Xclang", "-skip-function-bodies", "-Xclang", "-ast-dump=json", "-H", "-MD", "-MF", dep, "-iquote", from_dir])?;
     argv.append(cflags.slice())?;
@@ -4191,16 +4191,16 @@ bool cx_is_operator(str n) {
     };
     auto sflags = List<str>::init(a);
     for (auto f : cflags.slice()) { if (!str_starts_with(f, "-I")) { sflags.push(f)?; } }
-    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags, true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .enums = Map<CVal>::init(a), .tparms = Map<List<str>>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a), .src = Map<str>::init(a), .inls = Map<List<str>>::init(a), .fbyid = Map<CDecl*>::init(a), .anon_ns = 0, .anon_depth = 0 };
+    auto w = CxWalk{ .a = a, .stub = stub, .sys = cb_sys_dirs(a, sflags.slice(), true)?, .decls = List<CDecl*>::init(a), .typedefs = Map<CType*>::init(a), .names = Map<str>::init(a), .anon = Map<CType*>::init(a), .vals = Map<CVal>::init(a), .enums = Map<CVal>::init(a), .tparms = Map<List<str>>::init(a), .fvals = Map<f64>::init(a), .bases = Map<List<str>>::init(a), .declared = Map<bool>::init(a), .tid = Map<str>::init(a), .byid = Map<str>::init(a), .zq = Map<str>::init(a), .zd = Map<CDecl*>::init(a), .bad = Map<bool>::init(a), .recs = Map<CxRec*>::init(a), .zrec = Map<CxRec*>::init(a), .anonr = Map<CxRec*>::init(a), .rlist = List<CxRec*>::init(a), .lays = Map<CxLay*>::init(a), .specs = Map<CxRec*>::init(a), .pend = Map<List<Json*>>::init(a), .tzn = Map<str>::init(a), .tmpl = List<str>::init(a), .inl = List<str>::init(a), .bykey = Map<CxRec*>::init(a), .tused = Map<bool>::init(a), .src = Map<str>::init(a), .inls = Map<List<str>>::init(a), .fbyid = Map<CDecl*>::init(a), .anon_ns = 0, .anon_depth = 0 };
     cx_exc = true;
-    for (auto f : flags.slice()) {
+    for (auto f : flags) {
         if (f == "-fshort-enums") { w.short_enums = true; }
         if (f == "-fno-short-enums") { w.short_enums = false; }
         if (f == "-fno-exceptions" || f == "-fno-cxx-exceptions") { cx_exc = false; }
         if (f == "-fexceptions" || f == "-fcxx-exceptions") { cx_exc = true; }
     }
     w.walk(root, "", "", false, false, true)?;
-    cx_macros(a, &w, header, from_dir, cflags)?;
+    cx_macros(a, &w, header, from_dir, cflags.slice())?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
         for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
@@ -4212,7 +4212,7 @@ bool cx_is_operator(str n) {
         if (r.alt.len > 0) { r.alt = w.dkey(r.alt)?; }
         w.bykey.put(r.key, r)?;
     }
-    w.layouts(header, from_dir, cflags)?;
+    w.layouts(header, from_dir, cflags.slice())?;
     for (auto r : w.rlist.slice()) { w.flat(r)?; }
     cx_names(&w)?;
     auto deps = List<str>::init(a);
@@ -4228,7 +4228,7 @@ bool cx_is_operator(str n) {
         abs = path::absolute(a, deps.get(0))?;
         h = fnv64(fnv64(h, abs), read_file(a, deps.get(0))?);
     }
-    for (auto f : flags.slice()) { h = fnv64(h, f); }
+    for (auto f : flags) { h = fnv64(h, f); }
     auto hb = List<u8>::init(a);
     sprint(&hb, "{h:016x}")?;
     const auto hid = hb.slice();
@@ -4236,7 +4236,7 @@ bool cx_is_operator(str n) {
     auto ic = cx_cpp(a, abs, &e)?;
     auto pass = 0;
     while (ic.len > 0) {
-        const auto n = cx_check(a, &w, hid, ic, cflags, from_dir)?;
+        const auto n = cx_check(a, &w, hid, ic, cflags.slice(), from_dir)?;
         if (n < 0) { break; }
         if (pass == 2) {
             eprintln("error: the C++ shims of {header} still do not compile");
@@ -4249,7 +4249,7 @@ bool cx_is_operator(str n) {
     return CBind{ .zk = e.out.slice(), .inline_c = ic, .deps = deps, .from = from, .warnings = e.warnings };
 }
 
-!CBind cx_bind(Allocator a, str header, str from_dir, List<str> flags) {
+!CBind cx_bind(Allocator a, str header, str from_dir, str[] flags) {
     if (cx_is_header(header)) { return cxxbind_header(a, header, from_dir, flags); }
     return cbind_header(a, header, from_dir, flags);
 }

@@ -91,7 +91,7 @@ struct Loader {
         const auto decls = p.parse_file()?;
         for (auto c : p.cts) { this->g.cts.put(c.name, c)?; }
         for (auto d : decls) { if (d.k == .Check) { this->g.ct_checks.push(d.ct)?; } }
-        if (prefix.len == 0 && c_headers.len > 0 && c_headers.has(path)) { this->claim_c_types(decls, c_headers.get(path)?)?; }
+        if (prefix.len == 0 && c_headers.len > 0 && c_headers.has(path)) { this->claim_c_types(decls.slice(), c_headers.get(path)?)?; }
         const auto dir = dir_of(path);
         auto renames = List<str>::init(this->a);
         for (auto d : decls) {
@@ -112,16 +112,16 @@ struct Loader {
                 }
             }
         }
-        if (prefix.len > 0) { resolve_module(this->a, decls, prefix)?; }
+        if (prefix.len > 0) { resolve_module(this->a, decls.slice(), prefix)?; }
         auto k = 0;
         while (k < renames.len) {
-            alias_module(this->a, decls, renames.get(k), renames.get(k + 1))?;
+            alias_module(this->a, decls.slice(), renames.get(k), renames.get(k + 1))?;
             k += 2;
         }
         this->g.add_decls(decls, path)?;
     }
 
-    !void claim_c_types(List<Decl> decls, str header) {
+    !void claim_c_types(Decl[] decls, str header) {
         if (this->ctypes.a.alloc_fn == null) { this->ctypes = Map<str>::init(this->a); }
         for (auto d : decls) {
             auto name = "";

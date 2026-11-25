@@ -424,7 +424,7 @@ bool valid_ident(str n) {
     if (s == null || s.file == "<std>" || !valid_ident(new_name)) { return "null"; }
     auto files = List<str>::init(a);
     for (auto o : p.occs) {
-        if (o.sym == s && !contains_str(files, o.file)) { files.push(o.file)?; }
+        if (o.sym == s && !contains_str(files.slice(), o.file)) { files.push(o.file)?; }
     }
     auto w = new_jw(a);
     w.obj()?;

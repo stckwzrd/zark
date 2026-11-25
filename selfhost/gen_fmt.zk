@@ -136,7 +136,7 @@ bool is_agg_type(Type* t) { return t.k == .Strct || t.k == .Array || t.k == .Sli
 
 !void Gen::gen_fail(List<Expr*> args, i64 from, bool is_assert, i64 line) {
     if (!is_assert && args.len != 1) { this->err(line); eprintln("panic takes one argument"); return error.CompileFailed; }
-    const auto fv = this->gen_fmt(args, from, Value{ .ty = null, .v = "" })?;
+    const auto fv = this->gen_fmt(args.slice(), from, Value{ .ty = null, .v = "" })?;
     auto call_args = List<Expr*>::init(this->a);
     const auto fe = this->a.create<Expr>()?;
     fe.k = .StrLit;
@@ -175,11 +175,11 @@ bool is_agg_type(Type* t) { return t.k == .Strct || t.k == .Array || t.k == .Sli
 }
 
 /// Builds a `Fmt` value on the stack from call arguments `args[from..]`.
-!Value Gen::gen_fmt(List<Expr*> args, i64 from, Value first) {
+!Value Gen::gen_fmt(Expr*[] args, i64 from, Value first) {
     auto pieces = List<FPiece>::init(this->a);
     auto cur = this->sb();
     for (auto i : from..args.len) {
-        const auto x = args.get(i);
+        const auto x = args[i];
         if (i > from) { cur.push(' ')?; }
         if (x.k == .Interp) {
             for (auto p : x.parts) {

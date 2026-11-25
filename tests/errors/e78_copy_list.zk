@@ -1,0 +1,6 @@
+!void main() {
+    auto l = List<i64>::init(c_allocator());
+    auto l2 = l;
+    l.deinit();
+    l2.deinit();
+}
