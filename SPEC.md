@@ -85,7 +85,7 @@ Only reachable functions are compiled. Generic code is type-checked when it is i
 
 ## 4. Statements
 
-`T x = e;`, `auto x = e;`, `const T x = e;`, `T x;` (zeroed); `x = e;` and `x op= e;`; `x++;` and `x--;`; `_ = e;` discards a value; `if (c) {} else if (d) {} else {}`; `while (c) {}`; `for (auto i : a..b) {}` (half-open); `for (auto x : seq) {}` and `for (auto [i, x] : seq) {}` over arrays, slices and anything with `slice()`; `break`, `continue` (`name: for ...` labels a loop, `break name;` and `continue name;` leave or continue that loop), `return [e]`; `defer stmt`, `errdefer stmt`; `match`.
+`T x = e;`, `auto x = e;`, `const T x = e;`, `T x;` (the zero value of `T`: `0`, `false`, `null`, or an all-zero struct, array or slice); `x = e;` and `x op= e;`; `x++;` and `x--;`; `_ = e;` discards a value; `if (c) {} else if (d) {} else {}`; `while (c) {}`; `for (auto i : a..b) {}` (half-open); `for (auto x : seq) {}` and `for (auto [i, x] : seq) {}` over arrays, slices and anything with `slice()`; `break`, `continue` (`name: for ...` labels a loop, `break name;` and `continue name;` leave or continue that loop), `return [e]`; `defer stmt`, `errdefer stmt`; `match`.
 
 `const` forbids reassigning the variable and changing it through fields or array elements. Data reached through a pointer or slice can still be changed. Variables and parameters are mutable by default; a parameter is a copy.
 
