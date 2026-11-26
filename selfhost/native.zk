@@ -580,10 +580,27 @@ struct Native {
         }
     }
 
-    !void cmp_br(Ins* ins, Ins* br) {
+    !void cmp_br(Ins* ins, Ins* br, str from, Map<List<Ins*>>* phis_of) {
         const auto asm = &this->obj.text;
         this->cmp_ins(ins)?;
         const auto cc = this->cc_of(ins.pred);
+        const auto p1 = phis_of.has(br.l1);
+        const auto p2 = phis_of.has(br.l2);
+        if (p1 && !p2) {
+            // The cold edge (usually a guard) runs its phi moves on the
+            // fallthrough; the common edge jumps over them.
+            asm.jcc(cc ^ 1, br.l2)?;
+            this->phi_moves_to(from, br.l1, phis_of)?;
+            if (br.l1 != this->next) { asm.jmp(br.l1)?; }
+            return;
+        }
+        if (!p1 && p2) {
+            asm.jcc(cc, br.l1)?;
+            this->phi_moves_to(from, br.l2, phis_of)?;
+            if (br.l2 != this->next) { asm.jmp(br.l2)?; }
+            return;
+        }
+        this->phi_moves(from, br, phis_of)?;
         if (br.l1 == this->next) {
             asm.jcc(cc ^ 1, br.l2)?;
         } else {
@@ -1003,7 +1020,7 @@ struct Native {
                 if (k + 1 >= blk.ins.len) { continue; }
                 if (ins.op == "icmp") {
                     const auto br = blk.ins.get(k + 1);
-                    if (br.op == "br" && br.c == ins.dest && !phis_of.has(br.l1) && !phis_of.has(br.l2)) { cmps.put(ins.dest, 0)?; }
+                    if (br.op == "br" && br.c == ins.dest && !(phis_of.has(br.l1) && phis_of.has(br.l2))) { cmps.put(ins.dest, 0)?; }
                 } else if (ins.op == "load" && is_agg(ins.ty) && this->allocas.has(ins.a)) {
                     auto j = k + 1;
                     while (j < blk.ins.len && blk.ins.get(j).op == "extractvalue" && blk.ins.get(j).a == ins.dest) { j += 1; }
@@ -1050,7 +1067,7 @@ struct Native {
                     row_line = ins.line;
                 }
                 if (ins.op == "icmp" && this->fused.has(ins.dest) && k + 1 < blk.ins.len) {
-                    this->cmp_br(ins, blk.ins.get(k + 1))?;
+                    this->cmp_br(ins, blk.ins.get(k + 1), blk.label, &phis_of)?;
                     break;
                 }
                 const auto is_term = ins.op == "br" || ins.op == "ret" || ins.op == "unreachable";

@@ -222,23 +222,35 @@ template<A, B> Select2<A, B> select(JoinHandle<A> a, JoinHandle<B> b) {
 /// the channel was closed and its queue is empty. Single-threaded: the tasks
 /// must run on one executor.
 owned struct Channel<T> {
-    List<T> q;
+    T[] buf;        // ring buffer; capacity = buf.len
+    i64 head;
+    i64 len;
     List<Waker> waiters;
     Allocator a;
     bool closed;
 
     static !Self init(Allocator a) {
-        return Self{ .q = List<T>::init(a), .waiters = List<Waker>::init(a), .a = a };
+        return Self{ .buf = (null as *T)[0..0], .waiters = List<Waker>::init(a), .a = a };
     }
 
     void deinit() move {
-        this->q.deinit();
+        this->a.free(this->buf);
         this->waiters.deinit();
     }
 
     !void send(T v) {
         if (this->closed) { return error.Closed; }
-        this->q.push(v)?;
+        if (this->len == this->buf.len) {
+            auto cap = this->buf.len * 2;
+            if (cap < 8) { cap = 8; }
+            const auto nb = this->a.alloc<T>(cap)?;
+            for (auto i : 0..this->len) { nb[i] = this->buf[(this->head + i) % this->buf.len]; }
+            this->a.free(this->buf);
+            this->buf = nb;
+            this->head = 0;
+        }
+        this->buf[(this->head + this->len) % this->buf.len] = v;
+        this->len += 1;
         for (auto w : this->waiters.slice()) { w.wake(); }
         this->waiters.clear();
     }
@@ -259,8 +271,10 @@ struct Recv<T> {
     bool waiting;
 
     Poll<!T> poll(Context* cx) {
-        if (this->ch.q.len > 0) {
-            auto v = this->ch.q.remove_at(0) catch { return .Ready(error.Closed); };
+        if (this->ch.len > 0) {
+            const auto v = this->ch.buf[this->ch.head];
+            this->ch.head = (this->ch.head + 1) % this->ch.buf.len;
+            this->ch.len -= 1;
             return .Ready(v);
         }
         if (this->ch.closed) { return .Ready(error.Closed); }

@@ -943,3 +943,28 @@ test "cancelling a receiver unregisters it" {
     h.cancel();
     assert(ch.waiters.len == 0);
 }
+
+async i64 drain(async::Channel<i64>* ch, i64 n) {
+    auto sum = 0;
+    for (auto i : 0..n) {
+        const auto r = await ch.recv();
+        const auto v = r catch { return -1; };
+        sum += v;
+    }
+    return sum;
+}
+
+test "channel ring wraps and grows" {
+    auto a = c_allocator();
+    auto ch = async::Channel<i64>::init(a)?;
+    defer ch.deinit();
+    auto ex = async::Executor::init(a)?;
+    defer ex.deinit();
+
+    for (auto i : 0..100) { ch.send(i)?; }
+    auto f1 = drain(&ch, 90);
+    assert(ex.block_on(&f1)? == 4005);          // 0..89
+    for (auto i : 100..200) { ch.send(i)?; }   // 10 left + 100 new, wraps
+    auto f2 = drain(&ch, 110);
+    assert(ex.block_on(&f2)? == 15895);         // 90..199
+}
