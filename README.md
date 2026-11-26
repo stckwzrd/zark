@@ -91,6 +91,7 @@ in it was compiled and run by the real compiler when the site was built.
 | learn the language | [Learn Zark](docs/learn.html) (a course), [quick tour](docs/tour.html) |
 | look up a feature | [types](docs/types.html), [errors and optionals](docs/errors-and-optionals.html), [memory](docs/memory.html), [strings](docs/strings.html), [collections](docs/collections.html) |
 | call C or C++ | [C interop](docs/c-interop.html), [C++ style](docs/cpp-style.html), [SPEC.md section 8](SPEC.md) |
+| run I/O concurrently | [async](docs/async.html) (futures, join, select, cancellation) |
 | write a real program | [cookbook](docs/cookbook.html), [showcase](docs/showcase.html) (a threaded ray tracer) |
 | use the tools | [testing](docs/testing.html), [tooling](docs/tooling.html), [debugging](docs/debugging.html) |
 | understand the compiler | [how it works](docs/how-it-works.html), [BOOTSTRAP.md](BOOTSTRAP.md) |
