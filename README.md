@@ -106,7 +106,13 @@ implementation-defined, so read them before relying on a guarantee.
 
 `zark lsp` is a language server over stdio, built on the compiler frontend: compiler errors as you type (also in unsaved buffers), hover, completion (members, modules, enum variants, struct literal fields, types), signature help, go to definition (also into imported files), references and rename across the workspace, outline, workspace symbols, highlights, format, and quick fixes for "did you mean". Any LSP client can use it.
 
-`editors/vscode` is a VS Code / code-oss extension that starts the server and adds highlighting, snippets and run/test buttons. Build and install it with `cd editors/vscode && npm install && python3 pack.py out.vsix && code-oss --install-extension out.vsix`. It calls `zark` from `PATH` (or `~/.local/bin/zark`); change that with the `zark.path` setting.
+`editors/vscode` is a VS Code / code-oss extension: syntax highlighting (declarations, types, enum/union variants, fields, namespaces, string interpolation and format specs, modifiers, `error.X`), snippets, the language server (diagnostics, completion, hover, signature help, definition, references, rename, outline, formatting and quick fixes), and Run/Test/Build/Format commands with CodeLens and a status bar. Build and install it in one step:
+
+```sh
+editors/vscode/install.sh
+```
+
+or manually: `cd editors/vscode && npm ci && python3 pack.py && code --install-extension zark-lang-0.3.0.vsix`. The extension finds `build/zark` in the workspace, `zark` on `PATH`, `~/.local/bin/zark`, and the usual install directories; `zark.path` overrides that. See [editors/vscode/README.md](editors/vscode/README.md) for settings and keybindings.
 
 ## How it differs from Zig
 

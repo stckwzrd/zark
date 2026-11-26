@@ -6,7 +6,7 @@ import zipfile
 here = os.path.dirname(os.path.abspath(__file__))
 pkg = json.load(open(os.path.join(here, "package.json")))
 name = "%s-%s.vsix" % (pkg["name"], pkg["version"])
-files = ["package.json", "extension.js", "language-configuration.json", "syntaxes/zark.tmLanguage.json", "snippets/zark.json"]
+files = ["package.json", "extension.js", "language-configuration.json", "README.md", "syntaxes/zark.tmLanguage.json", "snippets/zark.json"]
 for root, dirs, names in os.walk(os.path.join(here, "node_modules")):
     dirs[:] = [d for d in dirs if d not in (".bin", "test", "tests", "docs")]
     for n in names:
@@ -25,6 +25,10 @@ manifest = """<?xml version="1.0" encoding="utf-8"?>
   </Metadata>
   <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation>
   <Dependencies/>
+  <Properties>
+    <Property Id="Microsoft.VisualStudio.Code.Engine" Value="^1.82.0"/>
+    <Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace"/>
+  </Properties>
   <Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/></Assets>
 </PackageManifest>
 """ % (pkg["name"], pkg["version"], pkg["publisher"], pkg["displayName"], pkg["description"])
@@ -34,6 +38,7 @@ types = """<?xml version="1.0" encoding="utf-8"?>
   <Default Extension=".json" ContentType="application/json"/>
   <Default Extension=".js" ContentType="application/javascript"/>
   <Default Extension=".txt" ContentType="text/plain"/>
+  <Default Extension=".md" ContentType="text/markdown"/>
   <Default Extension=".vsixmanifest" ContentType="text/xml"/>
 </Types>
 """
