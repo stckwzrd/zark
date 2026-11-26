@@ -1,0 +1,84 @@
+name: ci-selfhosted
+
+# Run the Linux tests on a machine you own instead of a GitHub-hosted runner.
+# Self-hosted runners do not consume GitHub Actions minutes.
+#
+# Setup on the Fedora machine:
+#   mkdir -p ~/actions-runner && cd ~/actions-runner
+#   curl -LO https://github.com/actions/runner/releases/download/vX.Y.Z/actions-runner-linux-x64-X.Y.Z.tar.gz
+#   tar xzf actions-runner-linux-x64-*.tar.gz
+#   gh api -X POST repos/stckwzrd/zark/actions/runners/registration-token --jq .token
+#   ./config.sh --url https://github.com/stckwzrd/zark --token <TOKEN> \
+#       --labels self-hosted,linux,x64,fedora --unattended
+#   sudo ./svc.sh install "$USER" && sudo ./svc.sh start
+#
+# Prerequisites on the host: clang, binutils, diffutils, gzip, make, bash, git,
+# python3 (sh scripts/install-deps.sh installs them), qemu-system-x86_64 for
+# the baremetal test, and docker for the container job (add the runner user to
+# the docker group). The `fedora` label selects the native job.
+#
+# There is no push/pull_request trigger: without a registered runner those runs
+# would queue forever. Start it by hand from Actions, or add
+#   push: { branches: [main] }
+# once the runner is online. macOS, Windows and arm64 still need hardware that
+# this runner cannot provide; they stay in ci.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        type: choice
+        options: [all, native, containers]
+        default: all
+
+concurrency:
+  group: ci-selfhosted-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    if: inputs.scope == 'all' || inputs.scope == 'native'
+    name: fedora native
+    runs-on: [self-hosted, linux, x64, fedora]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./bootstrap.sh
+
+  containers:
+    if: inputs.scope == 'all' || inputs.scope == 'containers'
+    name: ${{ matrix.image }} x86_64
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - fedora:latest
+          - debian:stable
+          - alpine:latest
+          - ubuntu:24.04
+          - archlinux:latest
+          - opensuse/tumbleweed
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare the ${{ matrix.image }} image
+        run: |
+          set -eu
+          tag="zark-ci-$(printf '%s' '${{ matrix.image }}' | tr '/:' '--')"
+          dir=$(mktemp -d)
+          trap 'rm -rf "$dir"' EXIT
+          cp scripts/install-deps.sh "$dir/install-deps.sh"
+          {
+            echo "FROM ${{ matrix.image }}"
+            echo "COPY install-deps.sh /tmp/install-deps.sh"
+            echo "RUN sh /tmp/install-deps.sh"
+          } > "$dir/Dockerfile"
+          docker build -t "$tag" "$dir"
+          echo "ZARK_CI_IMAGE=$tag" >> "$GITHUB_ENV"
+      - name: Bootstrap inside the container
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD":/src:z -w /src \
+            "$ZARK_CI_IMAGE" bash ./bootstrap.sh
