@@ -138,6 +138,51 @@ throws away a result that was not taken, so a second call panics, exactly like `
 `select` cancels the losing handle; `join` cancels both sides, except a side that already
 produced a value and was taken.
 
+## Channels
+
+`Channel<T>` is an unbounded FIFO between tasks on one executor. `send` never waits; it
+only allocates and returns `error.Closed` after `close()`. `recv()` is a future that yields
+`!T`, and `error.Closed` when the channel is closed and empty.
+
+```zark run
+import "std/async" as async;
+
+async i64 first(async::Channel<i64>* ch) {
+    const auto r = await ch.recv();
+    return r catch -1;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto ch = async::Channel<i64>::init(c_allocator())?;
+    defer ch.deinit();
+    ch.send(21)?;
+    ch.send(22)?;
+    auto f = first(&ch);
+    println(ex.block_on(&f)?);
+}
+```
+
+`select_recv(a.recv(), b.recv())` waits for whichever channel is ready first and unregisters
+the other one; it yields `.First(v)` or `.Second(v)`, where `v` is `!T`:
+
+```zark
+async !i64 pick(async::Channel<i64>* a, async::Channel<i64>* b) {
+    const auto r = await async::select_recv(a.recv(), b.recv());
+    match (r) {
+        .First(v) => return v?,
+        .Second(v) => return v?,
+    }
+}
+```
+
+The channel is single-threaded: all its tasks must run on the same executor. `close()` wakes
+the receivers; after the queue is drained they get `error.Closed`. Cancelling a suspended
+`recv` (via the task or `select_recv`) unregisters its waker, so a later `send` does not wake
+a frame that no longer waits.
+
 `std/async` also has `TcpListener`, `TcpStream`, `Readable`, `Writable` and `Sleep`. The
-executor is single-threaded: it polls one task at a time, and channels and a multithreaded
-executor are not implemented yet.
+executor is single-threaded: it polls one task at a time. A multithreaded executor and a
+channel shared between threads are not implemented yet; `std/thread` has a blocking
+`Channel<T>` for that case.
