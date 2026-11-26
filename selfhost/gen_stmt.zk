@@ -23,9 +23,14 @@ struct MatchRes { Type* ty; str slot; }
 !void Gen::gen_stmt_at(Stmt* s) {
     match s.k {
         .Block => {
+            const auto saved_blk = this->blk;
+            const auto nid = this->blk_parents.len;
+            this->blk_parents.push(saved_blk)?;
+            this->blk = nid;
             this->push_scope()?;
             for (auto st : s.stmts) { this->gen_stmt(st)?; }
             this->pop_scope()?;
+            this->blk = saved_blk;
         }
         .Let => {
             Type* ty = null;
@@ -83,6 +88,7 @@ struct MatchRes { Type* ty; str slot; }
                 auto tby = "this assignment";
                 if (s.e2.k == .Ident) { tname = s.e2.name; tby = s.e2.name; }
                 this->copy_moves(s.e, addr.ty, tname, tby, s.line)?;
+                if (s.e2 != null && s.e2.k == .Ident) { this->fact_clear(s.e2.name); }
                 if (plain_local) {
                     const auto tp = this->local_ptr(s.e2.name);
                     this->set_origin(tp, s.e2.name, s.e, s.line)?;
@@ -109,6 +115,7 @@ struct MatchRes { Type* ty; str slot; }
                 }
                 const auto r = this->arith(op, cur, rhs, s.line)?;
                 this->store_to(r, addr)?;
+                if (s.e2.k == .Ident) { this->fact_clear(s.e2.name); }
             }
         }
         .ExprS => {
@@ -131,6 +138,7 @@ struct MatchRes { Type* ty; str slot; }
             this->label(lt)?;
             this->gen_stmt(s.body)?;
             this->join_end(&jn)?;
+            const auto then_term = this->terminated;
             if (!this->terminated) { this->br(lend)?; }
             if (s.els != null) {
                 this->label(le)?;
@@ -141,6 +149,7 @@ struct MatchRes { Type* ty; str slot; }
             }
             this->join_finish(&jn, s.els == null)?;
             this->label(lend)?;
+            if (s.els == null && then_term) { this->fact_from_cond(s.e); }
             if (!jn.any) {
                 sprint(this->ins()?, "  unreachable\n")?;
                 this->terminated = true;
@@ -209,6 +218,7 @@ struct MatchRes { Type* ty; str slot; }
             const auto slot = this->alloca(lo.ty, s.name)?;
             this->store(cur, slot)?;
             this->declare_var(s.name, Var{ .ptr = slot, .ty = lo.ty, .mutable = false }, s.line)?;
+            this->range_fact(s.name, s.e, s.e2);
             this->loops.push(this->loop_new(le, lstep, this->scopes.len, s.label, md, false)?)?;
             this->gen_stmt(s.body)?;
             this->loop_end(&this->loops.items[this->loops.len - 1], s0)?;

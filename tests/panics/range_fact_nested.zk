@@ -1,0 +1,7 @@
+// A guard inside a nested block proves nothing after that block ends.
+void main() {
+    auto n = 5;
+    if (true) { if (n < 2) { return; } }
+    n = -9223372036854775807 - 1;
+    println(n - 1);
+}

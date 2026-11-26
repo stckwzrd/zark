@@ -68,6 +68,9 @@ struct FnInst {
 
 struct AsyncFn { Type* frame; Type* poll; Value cx; List<str> slots; List<str> resumes; str result; str canceled; }
 
+/// A proven range of a local, keyed by the scope it was declared in.
+struct Fact { i64 lo; i64 hi; bool has_lo; bool has_hi; i64 scope; i64 gen; i64 blk; }
+
 struct Gen {
     Allocator a;
     bool safety;
@@ -75,6 +78,7 @@ struct Gen {
     bool fastmath;
     bool ovf;
     bool wrapping;
+    bool skip_ovf;
     bool needs_llvm;
     List<FnInst*> c_thunks;
     i64 rdepth;
@@ -121,6 +125,11 @@ struct Gen {
     Map<str> fmt_syms;
     Map<str> vtables;
     Map<Type*> rtypes;
+    Map<Fact> facts;
+    Map<bool> escaped;
+    i64 fact_gen;
+    i64 blk;
+    List<i64> blk_parents;
 
     List<u8> types_out;
     List<u8> globals_out;
@@ -667,6 +676,7 @@ struct Gen {
         const auto sc = &this->scopes.items[this->scopes.len - 1];
         if (sc.vars.has(name)) { this->err(line); eprintln("'{name}' is already declared in this scope"); return error.CompileFailed; }
         sc.vars.put(name, v)?;
+        this->fact_clear(name);
         if (this->dbg && v.ptr.len > 3 && v.ptr[1] == 'v' && v.ptr[2] == '.') {
             sprint(&this->allocas, "  ;@D {name} {v.ptr} {this->type_desc(v.ty)?}\n")?;
         }
@@ -955,6 +965,12 @@ struct Gen {
         this->loops = List<Loop>::init(this->a);
         this->moved = List<MoveRec>::init(this->a);
         this->colds = List<Cold>::init(this->a);
+        this->fact_gen += 1;
+        this->facts = Map<Fact>::init(this->a);
+        this->escaped = Map<bool>::init(this->a);
+        this->blk_parents = List<i64>::init(this->a);
+        this->blk = 0;
+        collect_addr_stmt(decl.body, &this->escaped);
         this->reinit = false;
         this->shared = false;
         this->nloop = 0;
@@ -1045,6 +1061,9 @@ struct Gen {
     g.fmt_syms = Map<str>::init(a);
     g.vtables = Map<str>::init(a);
     g.rtypes = Map<Type*>::init(a);
+    g.facts = Map<Fact>::init(a);
+    g.escaped = Map<bool>::init(a);
+    g.blk_parents = List<i64>::init(a);
     g.types_out = List<u8>::init(a);
     g.globals_out = List<u8>::init(a);
     g.decls_out = List<u8>::init(a);
@@ -1076,6 +1095,221 @@ struct Gen {
     g.t_ptr_u8 = g.mk_elem(.Ptr, g.t_u8)?;
     g.error_names.push("ok")?;
     return g;
+}
+
+// ------------------------------------------------------------------ facts
+
+void collect_addr_expr(Expr* e, Map<bool>* out) {
+    if (e == null) { return; }
+    match (e.k) {
+        .Unary => {
+            if (e.op == .amp && e.l != null && e.l.k == .Ident) { out.put(e.l.name, true) catch {}; }
+            collect_addr_expr(e.l, out);
+        }
+        .Binary => {
+            collect_addr_expr(e.l, out);
+            collect_addr_expr(e.r, out);
+        }
+        .Call => {
+            collect_addr_expr(e.l, out);
+            for (auto x : e.args) { collect_addr_expr(x, out); }
+        }
+        .Field => collect_addr_expr(e.l, out);
+        .Index => {
+            collect_addr_expr(e.l, out);
+            for (auto x : e.args) { collect_addr_expr(x, out); }
+        }
+        .Slice => {
+            collect_addr_expr(e.l, out);
+            collect_addr_expr(e.r, out);
+            collect_addr_expr(e.x, out);
+        }
+        .StructLit => {
+            for (auto f : e.fields) { collect_addr_expr(f.value, out); }
+        }
+        .ArrayLit => {
+            for (auto x : e.args) { collect_addr_expr(x, out); }
+        }
+        .Cast, .Try, .Await, .Is => collect_addr_expr(e.l, out);
+        .Catch => {
+            collect_addr_expr(e.l, out);
+            collect_addr_stmt(e.handler, out);
+        }
+        .Match => {
+            collect_addr_expr(e.l, out);
+            for (auto arm : e.arms) { collect_addr_stmt(arm.body, out); }
+        }
+        .Orelse => {
+            collect_addr_expr(e.l, out);
+            collect_addr_expr(e.r, out);
+        }
+        .Comptime => collect_addr_expr(e.l, out);
+        .Interp => {
+            for (auto part : e.parts) { collect_addr_expr(part.e, out); }
+        }
+        .Closure => {
+            if (e.func == null) { return; }
+            for (auto c : e.func.captures) { out.put(c, true) catch {}; }
+            collect_addr_stmt(e.func.body, out);
+        }
+        _ => {}
+    }
+}
+
+void collect_addr_stmt(Stmt* s, Map<bool>* out) {
+    if (s == null) { return; }
+    match (s.k) {
+        .Let, .ExprS, .Ret => collect_addr_expr(s.e, out);
+        .Assign => {
+            collect_addr_expr(s.e, out);
+            collect_addr_expr(s.e2, out);
+        }
+        .If => {
+            collect_addr_expr(s.e, out);
+            collect_addr_stmt(s.body, out);
+            collect_addr_stmt(s.els, out);
+        }
+        .While => {
+            collect_addr_expr(s.e, out);
+            collect_addr_stmt(s.body, out);
+        }
+        .ForRange => {
+            collect_addr_expr(s.e, out);
+            collect_addr_expr(s.e2, out);
+            collect_addr_stmt(s.body, out);
+        }
+        .ForEach => {
+            collect_addr_expr(s.e, out);
+            collect_addr_stmt(s.body, out);
+        }
+        .Block => {
+            for (auto x : s.stmts) { collect_addr_stmt(x, out); }
+        }
+        .Defer => collect_addr_stmt(s.body, out);
+        .Match => {
+            collect_addr_expr(s.e, out);
+            for (auto arm : s.arms) { collect_addr_stmt(arm.body, out); }
+        }
+        .Brk, .Cont => {}
+    }
+}
+
+i64 Gen::local_scope(str name) {
+    auto i = this->scopes.len;
+    while (i > 0) {
+        i -= 1;
+        if (this->scopes.items[i].vars.has(name)) { return i; }
+    }
+    return -1;
+}
+
+/// A fact is only valid inside the block that proved it: the block it was
+/// recorded in, or a block nested in it.
+bool Gen::blk_visible(i64 id) {
+    auto c = this->blk;
+    while (true) {
+        if (c == id) { return true; }
+        if (c == 0) { return false; }
+        c = this->blk_parents.get(c);
+    }
+}
+
+bool Gen::fact_ok(str name) {
+    if (this->local_scope(name) < 0) { return false; }
+    return !this->escaped.has(name);
+}
+
+Fact Gen::fact_get(str name) {
+    if (this->local_scope(name) < 0) { return Fact{}; }
+    const auto f = this->facts.get(name) catch return Fact{};
+    if (f.gen != this->fact_gen || f.scope != this->local_scope(name)) { return Fact{}; }
+    if (!this->blk_visible(f.blk)) { return Fact{}; }
+    return f;
+}
+
+void Gen::fact_clear(str name) {
+    const auto scope = this->local_scope(name);
+    if (scope < 0) { return; }
+    const auto f = this->facts.get(name) catch return;
+    if (f.gen != this->fact_gen || f.scope != scope) { return; }
+    this->facts.put(name, Fact{ .scope = scope, .gen = this->fact_gen }) catch {};
+}
+
+void Gen::fact_from_cond(Expr* c) {
+    if (c == null || c.k != .Binary) { return; }
+    auto op = c.op;
+    auto le = c.l;
+    auto re = c.r;
+    if (le == null || re == null) { return; }
+    if (re.k == .Ident && le.k == .IntLit) {
+        const auto tmp = le;
+        le = re;
+        re = tmp;
+        match (op) {
+            .lt => op = .gt;
+            .le => op = .ge;
+            .gt => op = .lt;
+            .ge => op = .le;
+            _ => {}
+        }
+    }
+    if (le.k != .Ident || re.k != .IntLit) { return; }
+    // Only straight-line code at the function body level gets a fact: an if
+    // inside a loop or a nested block must not leak its assumption outwards.
+    if (!this->fact_ok(le.name)) { return; }
+    if (re.ival > 9223372036854775807) { return; }
+    const auto k = re.ival as i64;
+    // Intersect with what was already proven on this path, so a second guard
+    // does not throw away the first one's bound.
+    const auto prev = this->fact_get(le.name);
+    auto f = Fact{ .scope = this->local_scope(le.name), .gen = this->fact_gen, .blk = this->blk };
+    match (op) {
+        .lt => { f.lo = k; f.has_lo = true; }
+        .le => {
+            if (k == 9223372036854775807) { return; }
+            f.lo = k + 1;
+            f.has_lo = true;
+        }
+        .gt => { f.hi = k; f.has_hi = true; }
+        .ge => {
+            if (k == -9223372036854775808) { return; }
+            f.hi = k - 1;
+            f.has_hi = true;
+        }
+        .neq => {
+            f.lo = k;
+            f.hi = k;
+            f.has_lo = true;
+            f.has_hi = true;
+        }
+        _ => return;
+    }
+    if (prev.has_lo && (!f.has_lo || prev.lo > f.lo)) { f.lo = prev.lo; f.has_lo = true; }
+    if (prev.has_hi && (!f.has_hi || prev.hi < f.hi)) { f.hi = prev.hi; f.has_hi = true; }
+    this->facts.put(le.name, f) catch {};
+}
+
+/// A `for i in lo..hi` loop knows its index range exactly: `i >= lo` and
+/// `i < hi`. Record the literal part so `i - 1` and friends stay unchecked.
+void Gen::range_fact(str name, Expr* lo, Expr* hi) {
+    if (lo == null || lo.k != .IntLit) { return; }
+    if (lo.ival > 9223372036854775807) { return; }
+    auto f = Fact{ .scope = this->local_scope(name), .gen = this->fact_gen, .blk = this->blk };
+    f.lo = lo.ival as i64;
+    f.has_lo = true;
+    if (hi != null && hi.k == .IntLit && hi.ival <= 9223372036854775807) {
+        f.hi = (hi.ival as i64) - 1;
+        f.has_hi = true;
+    }
+    this->facts.put(name, f) catch {};
+}
+
+bool Gen::proven_sub(Expr* le, Expr* re) {
+    if (le == null || re == null || le.k != .Ident || re.k != .IntLit) { return false; }
+    if (re.ival > 9223372036854775807) { return false; }
+    const auto f = this->fact_get(le.name);
+    if (!f.has_lo) { return false; }
+    return f.lo >= re.ival as i64;
 }
 
 // ------------------------------------------------------------------ control flow
