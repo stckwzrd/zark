@@ -56,6 +56,8 @@ Every problem ends in exactly one of three ways.
 
 Nothing in the list is undefined behavior in the safe mode. The same program gives the same result with the native backend, with `--llvm` and with `-O`, and a test in the repository keeps it that way.
 
+**A check that cannot fire is not emitted.** The compiler keeps a small range analysis while it generates a function: `if (n < 2) { return; }` proves `n >= 2` for the rest of the block, `if (n > 100) { return; }` proves `n <= 100`, and `for i in lo..hi` proves `lo <= i < hi`. So `n - 1`, `i - 1` and `n + 1` go out without an overflow check exactly when the operation cannot overflow, and with the check everywhere else. A proof dies the moment the value can change: on an assignment, on `&n`, when a closure captures it, and when the name is declared again in a nested scope. Narrow types keep their checks, because a proof about `i64` says nothing about an `i32` that wraps earlier. `tests/std/range_facts.zk` covers the values and `tests/panics/range_fact_*.zk` keep the panic where it still belongs.
+
 ## Ownership and borrowing without a borrow checker
 
 Zark does not have lifetimes or a borrow checker as Rust has. It has something smaller that you can learn in ten minutes, and that catches the mistakes that happen in practice. It follows **variables** inside **one function**:
