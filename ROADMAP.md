@@ -21,7 +21,7 @@ Expression typing, calls, generics and statements are still interleaved with IR 
 - Expected gain: 1.5–2x on call-heavy code (the current `bench/runtime.sh` gap to gcc -O0), with no measurable cost in compile time. `-O --release` already uses LLVM and is close to clang -O2; this item is about the default, dependency-free backend.
 
 ## 2. Drop the textual IR on the native path
-Today the frontend prints LLVM IR text and the native backend parses it back, which is about 40% of backend time. Switch to an in-memory IR (a list of structs) that is either printed as `.ll` (LLVM path) or lowered directly (native path). This is also the base for our own optimizer: constant folding, DCE, inlining small functions.
+Today the frontend prints LLVM IR text and the native backend parses it back. Measured on `selfhost/main.zk` (374k lines of IR; the machine was idling at 1.4 GHz, so compare the shares, not the absolute values): **824 ms parsing that text**, 288 ms building live intervals, 45 ms in the linear scan, 276 ms assigning slots, 536 ms selecting instructions. The text parse alone is 42% of the native backend, and the frontend pays again to print it (about 5% of the IR bytes are `;@L`/`;@D` comments). An in-memory IR (a list of structs) that is either printed as `.ll` (LLVM path) or lowered directly (native path) removes the parse, and is the base for our own passes: constant folding, DCE, inlining small functions.
 
 ## 3. Own linker and libc-free runtime → zero external tools for pure Zark
 - Write a static ELF executable directly (`.text/.data/.bss` + `_start`). Our object writer already has 90% of this; the remaining part is laying out segments and resolving relocations ourselves.
@@ -30,6 +30,7 @@ Today the frontend prints LLVM IR text and the native backend parses it back, wh
 
 ## 4. Release builds
 - Emit `noinline` for very large functions or long call chains (the inliner blow-up in the benchmark), or run our own pass pipeline (`opt -passes=...`) instead of `-O2`.
+- **A safe build can lose tail-recursion elimination.** `fib(n) = fib(n-1) + fib(n-2)` is turned into a loop by LLVM in `-O --release` (276 ms for fib(38)) but not in `-O` (470 ms), because the checked `+` is a branch after the recursive call, so the second call is no longer in tail position. `llvm.sadd.with.overflow` lowers to `add` + `jo` (one extra instruction, measured) and does not recover it. This is a property of the check, not of the backend: whenever a recursive result has to be checked before it is returned, the accumulator rewrite does not fire. It is the main reason `-O` and `-O --release` can differ by 1.7x on recursive code.
 - Once item 1 lands, LLVM receives SSA instead of allocas and spends less time in SROA/mem2reg.
 
 ## 5. Parallel and incremental compilation
