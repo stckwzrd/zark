@@ -1055,7 +1055,10 @@ struct Native {
                                 const auto y = blk.ins.get(k - 2);
                                 const auto x = blk.ins.get(k - 3);
                                 const auto s = blk.ins.get(k - 4);
-                                auto ok = (s.op == "add" || s.op == "sub") && s.ty != null && s.ty.k == .I;
+                                // Only 64-bit arithmetic runs in the 64-bit registers
+                                // the flag belongs to; narrower types are extended
+                                // and their overflow must stay with the sign trick.
+                                auto ok = (s.op == "add" || s.op == "sub") && s.ty != null && s.ty.k == .I && s.ty.bits == 64;
                                 ok = ok && x.op == "xor" && y.op == "xor" && z.op == "and";
                                 ok = ok && ins.a == z.dest && z.a == x.dest && z.b == y.dest;
                                 if (ok && s.op == "add") {
@@ -1112,7 +1115,10 @@ struct Native {
             // else and the whole function keeps the explicit check.
             if (this->ovf_skip.len > 0) {
                 auto cnt = Map<i64>::init(this->a);
-                for (auto e : this->ovf_skip.entries) { cnt.put(e.key, 0)?; }
+                for (auto e : this->ovf_skip.entries) {
+                    if (!e.used || e.key.len == 0) { continue; }
+                    cnt.put(e.key, 0)?;
+                }
                 for (auto blk : blocks) {
                     for (auto ins : blk.ins) {
                         this->bump(&cnt, ins.a);
@@ -1124,7 +1130,10 @@ struct Native {
                     }
                 }
                 auto bad = false;
-                for (auto e : cnt.entries) { if (e.value != 1) { bad = true; } }
+                for (auto e : cnt.entries) {
+                    if (!e.used || e.key.len == 0) { continue; }
+                    if (e.value != 1) { bad = true; }
+                }
                 if (bad) {
                     this->ovf_cc = Map<i64>::init(this->a);
                     this->ovf_skip = Map<i64>::init(this->a);
