@@ -128,7 +128,7 @@ struct Ins {
 
 struct Block { str label; List<Ins*> ins; }
 struct AggIn { LT* ty; i64 dst; i64 ptr; }
-struct Iv { str name; i64 start; i64 end; i64 w; i64 reg; bool alloca; bool bad; i64 alias; bool nocall; i64 pref; }
+struct Iv { str name; i64 start; i64 end; i64 w; i64 reg; bool alloca; bool bad; i64 alias; bool nocall; }
 struct LoopR { i64 s; i64 e; }
 struct Save { i64 reg; i64 off; }
 
@@ -575,7 +575,7 @@ struct Native {
         if (this->is_imm(ins.ty2, ins.b)) {
             const auto c = parse_num(ins.b);
             // `cmp $0, r` and `test r, r` set the same flags; test is shorter
-            // and does not need an immediate.
+            // and needs no immediate.
             if (c == 0) { asm.test(ra, ra)?; } else { asm.alu_imm(7, ra, c)?; }
         } else {
             const auto rb = this->src_reg(RCX, ins.ty2, ins.b, signed)?;
@@ -672,7 +672,7 @@ struct Native {
         for (auto p : params) {
             if (is_agg(p.ty) || p.ty.size != 8) { continue; }
             this->idx_put(p.v, ivs.len)?;
-            ivs.push(Iv{ .name = p.v, .start = -1, .end = -1, .w = 0, .reg = -1, .alloca = false, .bad = false, .alias = -1, .nocall = false, .pref = -1 })?;
+            ivs.push(Iv{ .name = p.v, .start = -1, .end = -1, .w = 0, .reg = -1, .alloca = false, .bad = false, .alias = -1, .nocall = false })?;
         }
         auto pos = 0;
         for (auto blk : blocks) {
@@ -681,11 +681,11 @@ struct Native {
                     if (ins.op == "alloca") {
                         ins.id1 = ivs.len + 1;
                         this->idx_put(ins.dest, ivs.len)?;
-                        ivs.push(Iv{ .name = ins.dest, .start = total + 1, .end = -2, .w = 0, .reg = -1, .alloca = true, .bad = this->debug, .alias = -1, .nocall = false, .pref = -1 })?;
+                        ivs.push(Iv{ .name = ins.dest, .start = total + 1, .end = -2, .w = 0, .reg = -1, .alloca = true, .bad = this->debug, .alias = -1, .nocall = false })?;
                     } else if (ins.op != "phi" && ins.op != "insertvalue") {
                         ins.id1 = ivs.len + 1;
                         this->idx_put(ins.dest, ivs.len)?;
-                        ivs.push(Iv{ .name = ins.dest, .start = pos, .end = pos, .w = 1, .reg = -1, .alloca = false, .bad = false, .alias = -1, .nocall = false, .pref = -1 })?;
+                        ivs.push(Iv{ .name = ins.dest, .start = pos, .end = pos, .w = 1, .reg = -1, .alloca = false, .bad = false, .alias = -1, .nocall = false })?;
                     }
                 }
                 pos += 1;
@@ -775,21 +775,6 @@ struct Native {
             const auto iv = &ivs.items[k];
             if (iv.start >= 0 && iv.start <= iv.end) { iv.nocall = cc.get(iv.end + 1) - cc.get(iv.start + 1) == 0; }
         }
-        // Two-address preference: if the left operand of `op a, b` is read for
-        // the last time there, the result can be computed in its register
-        // instead of being copied into a fresh one first.
-        pos = 0;
-        for (auto bi : 0..blocks.len) {
-            for (auto k : 0..blocks.items[bi].ins.len) {
-                const auto ins = blocks.items[bi].ins.get(k);
-                if (ins.id1 > 0 && ins.ia1 > 0 && this->two_addr(ins.op)) {
-                    const auto d = ins.id1 - 1;
-                    const auto a = ins.ia1 - 1;
-                    if (ivs.items[a].end == pos && ivs.items[d].start == pos) { ivs.items[d].pref = a; }
-                }
-                pos += 1;
-            }
-        }
         this->scan(&ivs, total)?;
 
         auto seen = 0;
@@ -807,15 +792,6 @@ struct Native {
             }
         }
         this->ivs = ivs;
-    }
-
-    /// Instructions the backend emits as `op dst, src`: the destination is the
-    /// left operand, so the result can be written into it when it is dead.
-    bool two_addr(str op) {
-        match op {
-            "add", "sub", "and", "or", "xor", "mul", "shl", "lshr", "ashr" => return true;
-            _ => return false;
-        }
     }
 
     !void scan(List<Iv>*ivs, i64 total) {
@@ -846,25 +822,6 @@ struct Native {
                         active.len -= 1;
                     } else {
                         j += 1;
-                    }
-                }
-                if (cur.pref >= 0) {
-                    const auto pa = cur.pref;
-                    const auto pv = ivs.items[pa].reg;
-                    const auto ok = pv >= 0 && ivs.items[pa].end == cur.start && !ivs.items[pa].alloca && ivs.items[pa].alias < 0 && (cur.nocall || (pv != R8 && pv != R9));
-                    if (ok) {
-                        auto j2 = 0;
-                        while (j2 < active.len) {
-                            if (active.get(j2) == pa) {
-                                active.items[j2] = active.get(active.len - 1);
-                                active.len -= 1;
-                                cur.reg = pv;
-                                active.push(k)?;
-                                break;
-                            }
-                            j2 += 1;
-                        }
-                        if (cur.reg >= 0) { k = nxt.get(k); continue; }
                     }
                 }
                 auto free = -1;
@@ -1016,7 +973,7 @@ struct Native {
             }
         }
 
-        this->promote_allocas(&blocks)?;
+        this->prune_blocks(&blocks)?;
         this->alloc_regs(&params, &blocks)?;
         for (auto p : params) {
             if (this->reg_of(p.v) < 0) { this->def_slot(p.v, p.ty)?; }
@@ -1436,8 +1393,8 @@ struct Native {
         } else if (t.k == .I && !sign && t.bits < 64 && t.bits > 0) {
             bits = bits & (((1 as i64) << t.bits) - 1);
         }
-        // xoring a register with itself is the shortest way to zero it and it
-        // breaks the dependency on the old value.
+        // `xor r, r` is the shortest way to zero a register and it does not
+        // depend on the old value.
         if (bits == 0 && (t.k == .I || t.k == .P)) {
             asm.xor_(reg, reg)?;
         } else {
@@ -1527,51 +1484,13 @@ struct Native {
         this->obj.text.st(reg, RBP, this->loc(ins.dest), max(ins.ty.size, 1))?;
     }
 
-    // ------------------------------------------------------------------ mem2reg
-    // The frontend keeps every local in an `alloca` and reaches it with loads
-    // and stores. A scalar alloca whose address never escapes, and whose only
-    // uses are those loads and stores, does not need memory at all: a load
-    // becomes the value last stored on that path, and a block that several
-    // paths reach with different values gets a phi. The alloca, its stores and
-    // its loads are dropped.
-    bool mentions(Ins* ins, str v) {
-        if (ins.a == v || ins.b == v || ins.c == v || ins.callee == v) { return true; }
-        for (auto ar : ins.args) { if (ar.v == v) { return true; } }
-        for (auto pi : ins.phis) { if (pi.v == v) { return true; } }
-        if (ins.op != "alloca" && ins.dest == v) { return true; }
-        return false;
-    }
-
-    str mem_sub(str v, Map<str>* repl) {
-        auto g = 0;
-        while (v.len > 0 && v[0] == '%' && g < 16) {
-            if (!repl.has(v)) { return v; }
-            v = repl.get(v) catch return v;
-            g += 1;
-        }
-        return v;
-    }
-
-    void mem_rewrite(Ins* ins, Map<str>* repl) {
-        ins.a = this->mem_sub(ins.a, repl);
-        ins.b = this->mem_sub(ins.b, repl);
-        ins.c = this->mem_sub(ins.c, repl);
-        ins.callee = this->mem_sub(ins.callee, repl);
-        for (auto ai : 0..ins.args.len) {
-            const auto ar = &ins.args.items[ai];
-            ar.v = this->mem_sub(ar.v, repl);
-        }
-        for (auto pi : 0..ins.phis.len) {
-            const auto ph = &ins.phis.items[pi];
-            ph.v = this->mem_sub(ph.v, repl);
-        }
-    }
-
-    /// Drop blocks that no branch can reach: the frontend keeps emitting into
-    /// a fresh block after a terminator, which leaves dead code behind. Dead
-    /// blocks are never executed, so removing them is safe, and mem2reg then
-    /// only sees paths that actually exist.
+    // ------------------------------------------------------------------ dead blocks
+    /// Drop blocks that no branch can reach. The frontend keeps emitting into a
+    /// fresh block after a terminator, which leaves dead code behind; removing
+    /// it shrinks the function and keeps later passes from looking at paths
+    /// that do not exist.
     !void prune_blocks(List<Block>* blocks) {
+        if (this->debug) { return; }
         const auto n = blocks.len;
         if (n < 2) { return; }
         auto index = Map<i64>::init(this->a);
@@ -1605,146 +1524,6 @@ struct Native {
             keep.push(blocks.items[bi])?;
         }
         if (dropped) { *blocks = keep; }
-    }
-
-    !void promote_allocas(List<Block>* blocks) {
-        if (this->debug) { return; }
-        this->prune_blocks(blocks)?;
-        const auto n = blocks.len;
-        if (n == 0) { return; }
-        auto index = Map<i64>::init(this->a);
-        for (auto [bi, blk] : *blocks) { index.put(blk.label, bi)?; }
-        if (index.len != n) { return; }
-        auto preds = List<List<i64>>::init(this->a);
-        auto succs = List<List<i64>>::init(this->a);
-        for (auto _b : 0..n) {
-            preds.push(List<i64>::init(this->a))?;
-            succs.push(List<i64>::init(this->a))?;
-        }
-        for (auto bi : 0..n) {
-            const auto blk = &blocks.items[bi];
-            if (blk.ins.len == 0) { continue; }
-            const auto t = blk.ins.get(blk.ins.len - 1);
-            if (t.op != "br") { continue; }
-            auto same = false;
-            if (index.has(t.l1) && index.has(t.l2)) { same = index.get(t.l1)? == index.get(t.l2)?; }
-            if (index.has(t.l1)) {
-                const auto ti = index.get(t.l1)?;
-                preds.items[ti].push(bi)?;
-                succs.items[bi].push(ti)?;
-            }
-            if (t.l2.len > 0 && !same && index.has(t.l2)) {
-                const auto ti = index.get(t.l2)?;
-                preds.items[ti].push(bi)?;
-                succs.items[bi].push(ti)?;
-            }
-        }
-        auto reach = List<i64>::init(this->a);
-        for (auto _b : 0..n) { reach.push(0)?; }
-        auto work = List<i64>::init(this->a);
-        reach.items[0] = 1;
-        work.push(0)?;
-        while (work.len > 0) {
-            const auto b = work.get(work.len - 1);
-            work.len -= 1;
-            for (auto x : succs.items[b]) {
-                if (reach.items[x] == 0) { reach.items[x] = 1; work.push(x)?; }
-            }
-        }
-        auto names = List<str>::init(this->a);
-        auto tys = List<LT*>::init(this->a);
-        for (auto bi : 0..n) {
-            for (auto ins : blocks.items[bi].ins) {
-                if (ins.op != "alloca") { continue; }
-                if (is_agg(ins.ty) || ins.ty.size > 8) { continue; }
-                names.push(ins.dest)?;
-                tys.push(ins.ty)?;
-            }
-        }
-        for (auto k : 0..names.len) {
-            this->promote_one(blocks, &preds, &reach, names.get(k), tys.get(k))?;
-        }
-    }
-
-    !void promote_one(List<Block>* blocks, List<List<i64>>* preds, List<i64>* reach, str name, LT* ty) {
-        const auto n = blocks.len;
-        for (auto bi : 0..n) {
-            for (auto ins : blocks.items[bi].ins) {
-                if (ins.op == "alloca" && ins.dest == name) { continue; }
-                const auto direct = (ins.op == "load" || ins.op == "store") && ins.a == name;
-                if (this->mentions(ins, name) && !direct) { return; }
-            }
-        }
-        auto inb = List<str>::init(this->a);
-        auto outb = List<str>::init(this->a);
-        for (auto _b : 0..n) { inb.push("")?; outb.push("")?; }
-        while (true) {
-            auto changed = true;
-            auto iter = 0;
-            while (changed) {
-                changed = false;
-                for (auto bi : 0..n) {
-                    const auto blk = &blocks.items[bi];
-                    auto first = true;
-                    auto val = "";
-                    auto conf = false;
-                    for (auto p : preds.items[bi]) {
-                        if (reach.items[p] == 0) { continue; }
-                        const auto o = outb.items[p];
-                        if (first) { val = o; first = false; }
-                        else if (o != val) { conf = true; }
-                    }
-                    auto ni = "";
-                    if (conf) { ni = "?"; } else { ni = val; }
-                    auto no = ni;
-                    for (auto ins : blk.ins) { if (ins.op == "store" && ins.a == name) { no = ins.b; } }
-                    if (ni != inb.items[bi] || no != outb.items[bi]) {
-                        changed = true;
-                        inb.items[bi] = ni;
-                        outb.items[bi] = no;
-                    }
-                }
-                iter += 1;
-                if (iter > n + 2) { return; }
-            }
-            // A join needs a phi. This backend keeps a phi result in a memory
-            // slot, which costs more than the alloca it would replace (that
-            // alloca is promoted to a register), so a variable that flows
-            // through a join is left alone until phis get registers too.
-            auto conflict = false;
-            for (auto bi : 0..n) {
-                if (reach.items[bi] == 1 && inb.items[bi] == "?") { conflict = true; }
-            }
-            if (conflict) { return; }
-            break;
-        }
-        for (auto bi : 0..n) {
-            if (reach.items[bi] == 0) { continue; }
-            auto cur = inb.items[bi];
-            for (auto ins : blocks.items[bi].ins) {
-                if (ins.op == "store" && ins.a == name) { cur = ins.b; }
-                else if (ins.op == "load" && ins.a == name) {
-                    if (cur.len == 0 || cur == "?") { return; }
-                }
-            }
-        }
-        auto repl = Map<str>::init(this->a);
-        for (auto bi : 0..n) {
-            auto blk = blocks.items[bi];
-            auto cur = inb.items[bi];
-            auto keep = List<Ins*>::init(this->a);
-            for (auto ins : blk.ins) {
-                if (ins.op == "store" && ins.a == name) { cur = ins.b; continue; }
-                if (ins.op == "load" && ins.a == name) { repl.put(ins.dest, cur)?; continue; }
-                if (ins.op == "alloca" && ins.dest == name) { continue; }
-                keep.push(ins)?;
-            }
-            blk.ins = keep;
-            blocks.items[bi] = blk;
-        }
-        for (auto bi : 0..n) {
-            for (auto ins : blocks.items[bi].ins) { this->mem_rewrite(ins, &repl); }
-        }
     }
 
     // ------------------------------------------------------------------ phis
