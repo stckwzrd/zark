@@ -835,3 +835,111 @@ test "cancelling an older read keeps a newer one armed" {
     _ = close(sv[0]);
     _ = close(sv[1]);
 }
+
+// ---------------------------------------------------------------- channels
+
+async i64 take_three(async::Channel<i64>* ch) {
+    auto sum = 0;
+    for (auto i : 0..3) {
+        const auto r = await ch.recv();
+        const auto v = r catch { return -1; };
+        sum += v;
+    }
+    return sum;
+}
+
+async i64 take_one(async::Channel<i64>* ch) {
+    const auto r = await ch.recv();
+    return r catch -1;
+}
+
+async bool closed(async::Channel<i64>* ch) {
+    const auto r = await ch.recv();
+    _ = r catch |e| { return e == error.Closed; };
+    return false;
+}
+
+async i64 pick(async::Channel<i64>* a, async::Channel<i64>* b) {
+    const auto r = await async::select_recv(a.recv(), b.recv());
+    match (r) {
+        .First(v) => return v catch -1,
+        .Second(v) => return v catch -1,
+    }
+}
+
+struct SendLater {
+    async::Channel<i64>* ch;
+    i64 v;
+    bool sent;
+
+    void cancel() {}
+    Poll<bool> poll(Context* cx) {
+        if (!this->sent) {
+            this->ch.send(this->v) catch { return .Ready(false); };
+            this->sent = true;
+        }
+        return .Ready(true);
+    }
+}
+
+test "channel delivers values in order" {
+    auto a = c_allocator();
+    auto ch = async::Channel<i64>::init(a)?;
+    defer ch.deinit();
+    ch.send(1)?;
+    ch.send(2)?;
+    ch.send(3)?;
+    auto ex = async::Executor::init(a)?;
+    defer ex.deinit();
+    auto f = take_three(&ch);
+    assert(ex.block_on(&f)? == 6);
+}
+
+test "a receiver waits for a send" {
+    auto a = c_allocator();
+    auto ch = async::Channel<i64>::init(a)?;
+    defer ch.deinit();
+    auto ex = async::Executor::init(a)?;
+    defer ex.deinit();
+    auto h = ex.spawn(SendLater{ .ch = &ch, .v = 42 })?;
+    auto f = take_one(&ch);
+    assert(ex.block_on(&f)? == 42);
+    _ = h.take();
+}
+
+test "select takes the ready channel" {
+    auto a = c_allocator();
+    auto ch1 = async::Channel<i64>::init(a)?;
+    defer ch1.deinit();
+    auto ch2 = async::Channel<i64>::init(a)?;
+    defer ch2.deinit();
+    ch2.send(2)?;
+    auto ex = async::Executor::init(a)?;
+    defer ex.deinit();
+    auto f = pick(&ch1, &ch2);
+    assert(ex.block_on(&f)? == 2);
+}
+
+test "a closed channel reports Closed" {
+    auto a = c_allocator();
+    auto ch = async::Channel<i64>::init(a)?;
+    defer ch.deinit();
+    ch.close();
+    auto ex = async::Executor::init(a)?;
+    defer ex.deinit();
+    auto f = closed(&ch);
+    assert(ex.block_on(&f)?);
+}
+
+test "cancelling a receiver unregisters it" {
+    auto a = c_allocator();
+    auto ch = async::Channel<i64>::init(a)?;
+    defer ch.deinit();
+    auto ex = async::Executor::init(a)?;
+    defer ex.deinit();
+    auto h = ex.spawn(take_one(&ch))?;
+    ex.run_batch();
+    assert(ch.waiters.len == 1);
+    h.cancel();
+    assert(ch.waiters.len == 0);
+}

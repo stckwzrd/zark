@@ -140,6 +140,51 @@ async !void worker() {
 проигравший handle; `join` отменяет обе стороны, кроме той, что уже отдала значение и
 была забрана.
 
+## Каналы
+
+`Channel<T>` — неограниченная FIFO-очередь между задачами одного исполнителя. `send` не
+ждёт: он только выделяет память и возвращает `error.Closed` после `close()`. `recv()` —
+фьючер, который даёт `!T`, а после закрытия и опустошения очереди — `error.Closed`.
+
+```zark run
+import "std/async" as async;
+
+async i64 first(async::Channel<i64>* ch) {
+    const auto r = await ch.recv();
+    return r catch -1;
+}
+
+!void main() {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto ch = async::Channel<i64>::init(c_allocator())?;
+    defer ch.deinit();
+    ch.send(21)?;
+    ch.send(22)?;
+    auto f = first(&ch);
+    println(ex.block_on(&f)?);
+}
+```
+
+`select_recv(a.recv(), b.recv())` ждёт первый готовый канал и снимает регистрацию со
+второго; результат — `.First(v)` или `.Second(v)`, где `v` имеет тип `!T`:
+
+```zark
+async !i64 pick(async::Channel<i64>* a, async::Channel<i64>* b) {
+    const auto r = await async::select_recv(a.recv(), b.recv());
+    match (r) {
+        .First(v) => return v?,
+        .Second(v) => return v?,
+    }
+}
+```
+
+Канал однопоточный: все его задачи должны работать на одном исполнителе. `close()`
+будит получателей; когда очередь опустеет, они получают `error.Closed`. Отмена
+приостановленного `recv` (через задачу или `select_recv`) снимает waker, поэтому
+последующий `send` не будит фрейм, который уже не ждёт.
+
 В `std/async` также есть `TcpListener`, `TcpStream`, `Readable`, `Writable` и `Sleep`.
-Исполнитель однопоточный: он опрашивает задачи по одной; каналов и многопоточного
-исполнителя пока нет.
+Исполнитель однопоточный: он опрашивает задачи по одной. Многопоточного исполнителя и
+канала, общего для потоков, пока нет; для этого в `std/thread` есть блокирующий
+`Channel<T>`.

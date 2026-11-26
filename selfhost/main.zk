@@ -16,9 +16,9 @@ void usage() {
     eprintln("zark 0.4 (self-hosted) — a compact systems language (LLVM backend)
 
 usage:
-  zark run   <file.zk> [extra.c|.cpp|.o ...] [-O] [-- program args]
+  zark run   <file.zk> [extra.c|.cpp|.o ...] [-O|--release|--fast] [-- program args]
   zark build <file.zk> [extra.c|.cpp|.o ...] [-o out] [-O] [--release]
-  zark test  <file.zk> [extra.c|.cpp|.o ...] [-O]   run the test blocks of a file
+  zark test  <file.zk> [extra.c|.cpp|.o ...] [-O|--release|--fast]   run the test blocks of a file
   zark fmt   [--check] <file.zk ...>  format source files in place
   zark lsp                          language server on stdin/stdout
   zark ir    <file.zk> [--arch x86_64|aarch64] [--os linux|macos]  print LLVM IR to stdout
