@@ -71,6 +71,21 @@ function runZark(page, line, code, mode, extra, withArgs) {
   const r = cp.spawnSync(ZARK, args, { cwd: dir, encoding: "utf8", timeout: 60000 })
   let out = (r.stdout || "") + (r.stderr || "")
   out = out.split(dir + "/").join("").split(dir).join(".").replace(/\n+$/, "")
+  // A crash backtrace prints addresses and the host libc path; neither is part of
+  // what the example teaches, and both differ between machines and runs.
+  out = out.replace(/[^\s()]*libc\.so\.6/g, "<libc>")
+  out = out.split("\n").map((l) => {
+    if (!/^fatal: segmentation fault|^\s*#\d+\s+0x|\(address 0x|^leak: block #|\.zark-cache\/main/.test(l)) return l
+    return l.replace(/0x[0-9a-f]+/g, "0x…")
+  }).join("\n")
+  // DebugAllocator walks a hash map, so the leak lines come out in a different
+  // order on every run; the page is about the leaks, not their order.
+  const lines = out.split("\n")
+  const leaks = lines.filter((l) => l.startsWith("leak: block #")).sort()
+  if (leaks.length > 0) {
+    let i = 0
+    out = lines.map((l) => (l.startsWith("leak: block #") ? leaks[i++] : l)).join("\n")
+  }
   const res = { out, code: r.status === null ? -1 : r.status }
   if (mode === "error" && res.code === 0) failures.push(`${page}:${line}: example marked 'error' compiled and ran`)
   cache[key] = res

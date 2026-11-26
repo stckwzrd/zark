@@ -193,7 +193,7 @@ To leave an outer loop, label it (`outer: for (...)`) and write `break outer;`. 
 
 ### A `match` statement on an integer, string or pointer does not have to be complete
 
-If no pattern fits, nothing happens. A `match` on an enum or union is exhaustive in a statement too, and a `match` expression needs `_` for the other types.
+If no pattern fits, nothing happens. A `match` on an enum, a union or `bool` is exhaustive in a statement too (both `true` and `false` for `bool`), and a `match` expression needs `_` for the other types.
 
 ### A function must return a value on every path
 
