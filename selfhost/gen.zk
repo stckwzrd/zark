@@ -1304,12 +1304,39 @@ void Gen::range_fact(str name, Expr* lo, Expr* hi) {
     this->facts.put(name, f) catch {};
 }
 
-bool Gen::proven_sub(Expr* le, Expr* re) {
+bool Gen::is_i64(Type* ty) {
+    return ty != null && ty.k == .Int && ty.bits == 64 && ty.signed;
+}
+
+/// `a - k`: with k > 0 only a downward overflow is possible, and `a >= k`
+/// rules it out in any width. With k < 0 only an upward one is possible.
+bool Gen::proven_sub(Expr* le, Expr* re, Type* ty) {
     if (le == null || re == null || le.k != .Ident || re.k != .IntLit) { return false; }
     if (re.ival > 9223372036854775807) { return false; }
+    const auto k = re.ival as i64;
+    if (k == 0) { return true; }
     const auto f = this->fact_get(le.name);
-    if (!f.has_lo) { return false; }
-    return f.lo >= re.ival as i64;
+    if (k > 0) { return f.has_lo && f.lo >= k; }
+    if (!this->is_i64(ty)) { return false; }
+    return f.has_hi && f.hi <= 9223372036854775807 + k;
+}
+
+/// `a + k`: the mirror image of `proven_sub`.
+bool Gen::proven_add(Expr* le, Expr* re, Type* ty) {
+    if (le == null || re == null) { return false; }
+    if (le.k == .IntLit && re.k == .Ident) {
+        const auto tmp = le;
+        le = re;
+        re = tmp;
+    }
+    if (le.k != .Ident || re.k != .IntLit) { return false; }
+    if (re.ival > 9223372036854775807) { return false; }
+    const auto k = re.ival as i64;
+    if (k == 0) { return true; }
+    if (!this->is_i64(ty)) { return false; }
+    const auto f = this->fact_get(le.name);
+    if (k > 0) { return f.has_hi && f.hi <= 9223372036854775807 - k; }
+    return f.has_lo && f.lo >= (-9223372036854775807 - 1) - k;
 }
 
 // ------------------------------------------------------------------ control flow

@@ -1,0 +1,6 @@
+// Only an upper bound is known at the top of i64, so `n + 1` must be checked.
+void main() {
+    auto n = 9223372036854775807;
+    if (n < 0) { return; }
+    println(n + 1);
+}

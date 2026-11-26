@@ -944,7 +944,7 @@ str operator_name(Tag t) {
         return w;
     }
     const auto saved_skip = this->skip_ovf;
-    this->skip_ovf = op == .minus && this->proven_sub(le, re);
+    this->skip_ovf = (op == .minus && this->proven_sub(le, re, l.ty)) || (op == .plus && this->proven_add(le, re, l.ty));
     const auto w = this->arith(op, l, r, line) catch |e| {
         this->skip_ovf = saved_skip;
         return e;
