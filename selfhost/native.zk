@@ -1020,7 +1020,15 @@ struct Native {
                 if (k + 1 >= blk.ins.len) { continue; }
                 if (ins.op == "icmp") {
                     const auto br = blk.ins.get(k + 1);
-                    if (br.op == "br" && br.c == ins.dest && !(phis_of.has(br.l1) && phis_of.has(br.l2))) { cmps.put(ins.dest, 0)?; }
+                    if (br.op == "br" && br.c == ins.dest) {
+                        const auto q1 = phis_of.has(br.l1);
+                        const auto q2 = phis_of.has(br.l2);
+                        // With phi targets only the cold guard blocks are worth
+                        // fusing; loops and merge blocks keep the old path.
+                        const auto cold1 = q1 && !q2 && str_starts_with(br.l1, "cold");
+                        const auto cold2 = q2 && !q1 && str_starts_with(br.l2, "cold");
+                        if ((!q1 && !q2) || cold1 || cold2) { cmps.put(ins.dest, 0)?; }
+                    }
                 } else if (ins.op == "load" && is_agg(ins.ty) && this->allocas.has(ins.a)) {
                     auto j = k + 1;
                     while (j < blk.ins.len && blk.ins.get(j).op == "extractvalue" && blk.ins.get(j).a == ins.dest) { j += 1; }
