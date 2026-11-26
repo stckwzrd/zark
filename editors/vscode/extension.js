@@ -142,12 +142,26 @@ async function start() {
 }
 
 async function stop() {
+  preludeCache.clear()
   if (!client) return
   const c = client
   client = null
   try {
     await c.stop()
   } catch {}
+}
+
+const preludeCache = new Map()
+
+async function providePrelude(uri) {
+  const key = uri.toString()
+  if (preludeCache.has(key)) return preludeCache.get(key)
+  if (!client) throw new Error("the Zark language server is not running")
+  const p = uri.path || ""
+  const path = p === "/std.zk" || p === "" ? "<std>" : "<std>" + p
+  const text = await client.sendRequest("zark/std", { path })
+  preludeCache.set(key, text)
+  return text
 }
 
 function quote(s) {
@@ -246,6 +260,12 @@ async function activate(ctx) {
 
   ctx.subscriptions.push(
     vscode.languages.registerCodeLensProvider({ language: "zark" }, { provideCodeLenses }),
+    vscode.workspace.registerTextDocumentContentProvider("zark-std", { provideTextDocumentContent: providePrelude }),
+    vscode.workspace.onDidOpenTextDocument(async (doc) => {
+      if (doc.uri.scheme === "zark-std" && doc.languageId !== "zark") {
+        try { await vscode.languages.setTextDocumentLanguage(doc, "zark") } catch {}
+      }
+    }),
     vscode.workspace.onDidChangeConfiguration(async (e) => {
       if (e.affectsConfiguration("zark.path")) {
         await stop()

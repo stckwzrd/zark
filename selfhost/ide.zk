@@ -259,7 +259,7 @@ str hover_markdown(Allocator a, Project* p, Symbol* s) {
     put(&b, "```zark\n");
     put(&b, sym_detail(a, s));
     put(&b, "\n```");
-    if (s.file != "<std>" && s.off >= 0 && p.by_path.has(s.file)) {
+    if (s.off >= 0 && p.by_path.has(s.file)) {
         const auto fi = p.by_path.get(s.file) catch null;
         if (fi != null) {
             const auto d = doc_above(a, fi.src, s.off);
@@ -309,14 +309,26 @@ Symbol* sym_for(Project* p, str path, str src, i64 off) {
 }
 
 !void location(Allocator a, JW* w, Project* p, str path, i64 off, i64 len) {
+    location_uri(a, w, p, path_to_uri(a, path)?, path, off, len)?;
+}
+
+!void location_uri(Allocator a, JW* w, Project* p, str uri, str path, i64 off, i64 len) {
     w.obj()?;
     w.key("uri")?;
-    w.str(path_to_uri(a, path)?)?;
+    w.str(uri)?;
     w.key("range")?;
     auto rw = new_jw(a);
     range_json(a, &rw, p, path, off, len)?;
     w.raw(rw.text())?;
     w.end()?;
+}
+
+/// `zark-std:/std.zk` for the prelude, `zark-std:/fs.zk` for "<std>/fs.zk".
+!str std_uri(Allocator a, str file) {
+    auto b = List<u8>::init(a);
+    b.append("zark-std:/")?;
+    if (file == "<std>") { b.append("std.zk")?; } else { b.append(file[6..])?; }
+    return b.slice();
 }
 
 !str hover(Allocator a, Project* p, str path, str src, i64 off) {
@@ -357,7 +369,10 @@ Symbol* sym_for(Project* p, str path, str src, i64 off) {
         }
     }
     const auto s = sym_for(p, path, src, off);
-    if (s != null && s.file != "<std>" && s.off >= 0 && p.by_path.has(s.file)) { location(a, &w, p, s.file, s.off, s.len)?; }
+    if (s != null && s.off >= 0 && p.by_path.has(s.file)) {
+        if (str_starts_with(s.file, "<std>")) { location_uri(a, &w, p, std_uri(a, s.file)?, s.file, s.off, s.len)?; }
+        else { location(a, &w, p, s.file, s.off, s.len)?; }
+    }
     w.end()?;
     return w.text();
 }
@@ -370,7 +385,8 @@ Symbol* sym_for(Project* p, str path, str src, i64 off) {
         for (auto o : p.occs) {
             if (o.sym != s || !p.by_path.has(o.file)) { continue; }
             if (!decl && o.off == s.off && o.file == s.file) { continue; }
-            location(a, &w, p, o.file, o.off, o.len)?;
+            if (str_starts_with(o.file, "<std>")) { location_uri(a, &w, p, std_uri(a, o.file)?, o.file, o.off, o.len)?; }
+            else { location(a, &w, p, o.file, o.off, o.len)?; }
         }
     }
     w.end()?;

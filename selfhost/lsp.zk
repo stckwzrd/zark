@@ -784,6 +784,15 @@ i64 cursor_of(Doc* d, Json* params) {
         s.reply(a, id, capabilities(a)?)?;
         return;
     }
+    if (method == "zark/std") {
+        const auto path = jstr(jget(params, "path"), "");
+        auto src = PRELUDE;
+        if (path != "<std>" && path.len > 0) { src = std_source(path) catch ""; }
+        auto w = new_jw(a);
+        w.str(src)?;
+        s.reply(a, id, w.text())?;
+        return;
+    }
     if (method == "shutdown") {
         s.down = true;
         s.reply(a, id, "null")?;
