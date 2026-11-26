@@ -18,6 +18,8 @@ const auto R14 = 14;
 const auto R15 = 15;
 
 // condition codes
+const auto CC_O = 0;
+const auto CC_NO = 1;
 const auto CC_B = 2;
 const auto CC_AE = 3;
 const auto CC_E = 4;

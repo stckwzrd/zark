@@ -168,6 +168,11 @@ struct Native {
     Ins* cur;
     Map<i64> fused;
     Map<i64> lazy;
+    Map<i64> ovf_cc;      // icmp dest -> condition code of the flags of the add
+    Map<i64> ovf_skip;    // sign-trick temps that the check no longer needs
+    Map<str> ovf_px;      // candidate: icmp dest -> the three sign-trick temps
+    Map<str> ovf_py;
+    Map<str> ovf_pz;
     str next;
     List<Save> saved;
 
@@ -585,8 +590,12 @@ struct Native {
 
     !void cmp_br(Ins* ins, Ins* br, str from, Map<List<Ins*>>* phis_of) {
         const auto asm = &this->obj.text;
-        this->cmp_ins(ins)?;
-        const auto cc = this->cc_of(ins.pred);
+        auto cc = this->cc_of(ins.pred);
+        if (this->ovf_cc.has(ins.dest)) {
+            cc = this->ovf_cc.get(ins.dest)?;
+        } else {
+            this->cmp_ins(ins)?;
+        }
         const auto p1 = phis_of.has(br.l1);
         const auto p2 = phis_of.has(br.l2);
         if (p1 && !p2) {
@@ -1016,6 +1025,11 @@ struct Native {
 
         this->fused = Map<i64>::init(this->a);
         this->lazy = Map<i64>::init(this->a);
+        this->ovf_cc = Map<i64>::init(this->a);
+        this->ovf_skip = Map<i64>::init(this->a);
+        this->ovf_px = Map<str>::init(this->a);
+        this->ovf_py = Map<str>::init(this->a);
+        this->ovf_pz = Map<str>::init(this->a);
         auto cmps = Map<i64>::init(this->a);
         auto runs = Map<i64>::init(this->a);
         auto lsrc = Map<i64>::init(this->a);
@@ -1031,7 +1045,31 @@ struct Native {
                         // fusing; loops and merge blocks keep the old path.
                         const auto cold1 = q1 && !q2 && str_starts_with(br.l1, "cold");
                         const auto cold2 = q2 && !q1 && str_starts_with(br.l2, "cold");
-                        if ((!q1 && !q2) || cold1 || cold2) { cmps.put(ins.dest, 0)?; }
+                        if ((!q1 && !q2) || cold1 || cold2) {
+                            cmps.put(ins.dest, 0)?;
+                            // `%t = add|sub %a, %b` then xor, xor, and, `icmp slt
+                            // ..., 0` is the sign trick: the arithmetic already
+                            // set OF, so one `jo` replaces the four instructions.
+                            if (k >= 4 && ins.pred == "slt" && ins.b == "0") {
+                                const auto z = blk.ins.get(k - 1);
+                                const auto y = blk.ins.get(k - 2);
+                                const auto x = blk.ins.get(k - 3);
+                                const auto s = blk.ins.get(k - 4);
+                                auto ok = (s.op == "add" || s.op == "sub") && s.ty != null && s.ty.k == .I;
+                                ok = ok && x.op == "xor" && y.op == "xor" && z.op == "and";
+                                ok = ok && ins.a == z.dest && z.a == x.dest && z.b == y.dest;
+                                if (ok && s.op == "add") {
+                                    ok = x.a == s.a && x.b == s.dest && y.a == s.b && y.b == s.dest;
+                                } else if (ok) {
+                                    ok = x.a == s.a && x.b == s.b && y.a == s.a && y.b == s.dest;
+                                }
+                                if (ok) {
+                                    this->ovf_px.put(ins.dest, x.dest)?;
+                                    this->ovf_py.put(ins.dest, y.dest)?;
+                                    this->ovf_pz.put(ins.dest, z.dest)?;
+                                }
+                            }
+                        }
                     }
                 } else if (ins.op == "load" && is_agg(ins.ty) && this->allocas.has(ins.a)) {
                     auto j = k + 1;
@@ -1061,6 +1099,35 @@ struct Native {
                     if (e.value == runs.get(e.key)?) { this->lazy.put(e.key, lsrc.get(e.key)?)?; }
                 } else if (e.value == 1) {
                     this->fused.put(e.key, 1)?;
+                    if (this->ovf_px.has(e.key)) {
+                        this->ovf_cc.put(e.key, CC_O)?;
+                        this->ovf_skip.put(this->ovf_px.get(e.key)?, 1)?;
+                        this->ovf_skip.put(this->ovf_py.get(e.key)?, 1)?;
+                        this->ovf_skip.put(this->ovf_pz.get(e.key)?, 1)?;
+                    }
+                }
+            }
+            // The three temps are dropped from the code, so each may be read
+            // exactly once (by the next instruction of the chain). Anything
+            // else and the whole function keeps the explicit check.
+            if (this->ovf_skip.len > 0) {
+                auto cnt = Map<i64>::init(this->a);
+                for (auto e : this->ovf_skip.entries) { cnt.put(e.key, 0)?; }
+                for (auto blk : blocks) {
+                    for (auto ins : blk.ins) {
+                        this->bump(&cnt, ins.a);
+                        this->bump(&cnt, ins.b);
+                        this->bump(&cnt, ins.c);
+                        this->bump(&cnt, ins.callee);
+                        for (auto ar : ins.args) { this->bump(&cnt, ar.v); }
+                        for (auto pi : ins.phis) { this->bump(&cnt, pi.v); }
+                    }
+                }
+                auto bad = false;
+                for (auto e : cnt.entries) { if (e.value != 1) { bad = true; } }
+                if (bad) {
+                    this->ovf_cc = Map<i64>::init(this->a);
+                    this->ovf_skip = Map<i64>::init(this->a);
                 }
             }
         }
@@ -1073,6 +1140,7 @@ struct Native {
             auto k = 0;
             while (k < blk.ins.len) {
                 const auto ins = blk.ins.get(k);
+                if (this->ovf_skip.has(ins.dest)) { k += 1; continue; }
                 this->cur = ins;
                 if (ins.line > 0 && ins.line != row_line) {
                     this->obj.add_row(asm.pos(), ins.line, this->fn_file)?;
