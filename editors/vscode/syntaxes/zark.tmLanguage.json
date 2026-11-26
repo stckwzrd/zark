@@ -307,7 +307,7 @@
       "patterns": [
         {
           "name": "variable.other.property.zk",
-          "match": "\\.[A-Za-z_][A-Za-z0-9_]*(?=\\s*=)"
+          "match": "\\.[A-Za-z_][A-Za-z0-9_]*(?=\\s*=(?!=|>))"
         },
         {
           "name": "variable.other.property.zk",
