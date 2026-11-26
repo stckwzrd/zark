@@ -145,15 +145,33 @@ void Gen::note_use(str ptr) {
         return error.CompileFailed;
     }
     const auto i = this->move_find(p);
-    if (i < 0) { return; }
-    const auto r = this->moved.get(i);
-    this->err(line);
-    if (r.kind == 3) {
-        eprintln("'{name}' points into '{r.cname}', and '{r.by}' on line {r.line} may have moved or freed that memory; take the pointer again after it");
-    } else {
-        eprintln("'{name}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+    if (i >= 0) {
+        const auto r = this->moved.get(i);
+        this->err(line);
+        if (r.kind == 3) {
+            eprintln("'{name}' points into '{r.cname}', and '{r.by}' on line {r.line} may have moved or freed that memory; take the pointer again after it");
+        } else {
+            eprintln("'{name}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+        }
+        return error.CompileFailed;
     }
-    return error.CompileFailed;
+    // consuming `h.inner` (or `arr[0]`) invalidates every path below it
+    for (auto r : this->moved) {
+        if (r.kind != 0 && r.kind != 3) { continue; }
+        if (r.ptr.len == 0 || r.ptr.len >= p.len) { continue; }
+        if (!str_starts_with(p, r.ptr)) { continue; }
+        if (p[r.ptr.len] != '.' && p[r.ptr.len] != '[') { continue; }
+        auto label = name;
+        if (r.kind == 3) { label = use_root(name); }
+        else if (r.cname.len > 0) { label = r.cname; }
+        this->err(line);
+        if (r.kind == 3) {
+            eprintln("'{label}' points into '{r.cname}', and '{r.by}' on line {r.line} may have moved or freed that memory; take the pointer again after it");
+        } else {
+            eprintln("'{label}' is used after '{r.by}' consumed it on line {r.line}; assign it a new value first");
+        }
+        return error.CompileFailed;
+    }
 }
 
 !str Gen::place_key(Expr* e) {
@@ -171,6 +189,16 @@ void Gen::note_use(str ptr) {
         sprint(&b, "{k}.{e.name}")?;
         return b.slice();
     }
+    if (e.k == .Index) {
+        // only a constant index has a stable path; a variable one is the
+        // documented #58 hole (List::get also returns through one)
+        if (e.args.len != 1 || e.args.get(0).k != .IntLit) { return ""; }
+        const auto k = this->place_key(e.l)?;
+        if (k.len == 0) { return ""; }
+        auto b = this->sb();
+        sprint(&b, "{k}[{e.args.get(0).ival}]")?;
+        return b.slice();
+    }
     return "";
 }
 
@@ -182,6 +210,11 @@ str Gen::place_name(Expr* e) {
         } else {
             sprint(&b, "{this->place_name(e.l)}.{e.name}") catch return e.name;
         }
+        return b.slice();
+    }
+    if (e.k == .Index && e.args.len == 1 && e.args.get(0).k == .IntLit) {
+        auto b = this->sb();
+        sprint(&b, "{this->place_name(e.l)}[{e.args.get(0).ival}]") catch return e.name;
         return b.slice();
     }
     return e.name;
@@ -216,7 +249,7 @@ str Gen::place_name(Expr* e) {
         const auto k = this->place_key(x)?;
         if (k.len == 0) { return; }
         this->invalidate(k, this->place_name(x), by, line)?;
-        if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0 })?; }
+        if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0, .cname = this->place_name(x) })?; }
         return;
     }
     if (x.k != .Ident) { return; }
@@ -224,7 +257,7 @@ str Gen::place_name(Expr* e) {
     if (p.len == 0) { return; }
     this->invalidate(p, x.name, by, line)?;
     if (this->move_find(p) >= 0) { return; }
-    this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 0 })?;
+    this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 0, .cname = x.name })?;
     const auto ty = this->local_type(x.name)?;
     if (ty != null && is_owned(ty)) { this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 4 })?; }
 }
@@ -591,10 +624,28 @@ bool Gen::is_resource(Type* t) {
     return this->resource_of(t, &seen);
 }
 
+/// The root of a source name: `h.l` -> `h`, `arr[0].x` -> `arr[0]`.
+str use_root(str name) {
+    auto i = 0;
+    while (i < name.len && name[i] != '.' && name[i] != '[') { i += 1; }
+    if (i == name.len) { return name; }
+    return name[0..i];
+}
+
+/// A place rooted in a dereference or an index has no name the move check can
+/// follow; a copy out of it would alias storage that the pointer or container
+/// still owns.
+bool store_untracked(Expr* e) {
+    auto x = e;
+    while (x.k == .Field) { x = x.l; }
+    if (x.k == .Index) { return true; }
+    return x.k == .Unary && x.op == .star;
+}
+
 /// `auto y = x;`, `y = x;`, `S{ .f = x }`, `f(x)` and `return x` copy the value
 /// of a resource type, so they move it: `x` is consumed unless it is the target.
-/// Field paths rooted at a local move that path; a copy through a pointer is a
-/// bitwise copy that would alias the object, so it is rejected.
+/// Field paths rooted at a local move that path; a copy through a pointer or an
+/// array element is a bitwise copy that would alias that storage, so it is rejected.
 !void Gen::copy_moves(Expr* e, Type* ty, str dest, str by, i64 line) {
     if (e == null || ty == null || !this->is_resource(ty)) { return; }
     if (e.k == .Unary && e.op == .star) {
@@ -602,12 +653,19 @@ bool Gen::is_resource(Type* t) {
         eprintln("'{this->type_name(ty)?}' is a resource; copying it out of a pointer would alias it, use clone() or take the pointer instead");
         return error.CompileFailed;
     }
-    if (e.k == .Field) {
+    if (e.k == .Field || e.k == .Index) {
         const auto k = this->place_key(e)?;
-        if (k.len == 0) { return; }
+        if (k.len == 0) {
+            if (e.k == .Field && store_untracked(e)) {
+                this->err(line);
+                eprintln("'{this->type_name(ty)?}' is a resource stored behind a pointer or an index; copying it out would alias that storage, use clone() or take a pointer instead");
+                return error.CompileFailed;
+            }
+            return;
+        }
         this->move_use_key(k, this->place_name(e), line)?;
         this->invalidate(k, this->place_name(e), by, line)?;
-        if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0 })?; }
+        if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0, .cname = this->place_name(e) })?; }
         return;
     }
     if (e.k != .Ident) { return; }

@@ -168,6 +168,62 @@ struct Never {
     Poll<bool> poll(Context* cx) { return .Pending; }
 }
 
+struct Quick {
+    void cancel() {}
+    Poll<i64> poll(Context* cx) { return .Ready(1); }
+}
+
+/// counts how many times cancel() was called; used to catch a double cancel
+struct Counted {
+    i64* n;
+    void cancel() { *this->n += 1; }
+    Poll<bool> poll(Context* cx) { return .Pending; }
+}
+
+async !void join_then_hang(async::Executor* ex, i64* n, bool* cleaned) {
+    defer *cleaned = true;
+    auto a = ex.spawn(Quick{})?;
+    auto b = ex.spawn(Counted{ .n = n })?;
+    auto j = async::join(a, b);
+    await j;
+}
+
+test "cancel runs once through a join" {
+    auto n = 0;
+    auto cleaned = false;
+    {
+        auto ex = async::Executor::init(c_allocator())?;
+        defer ex.deinit();
+        auto h = ex.spawn(join_then_hang(&ex, &n, &cleaned))?;
+        ex.run_batch();
+        ex.run_batch();
+        ex.run_batch();
+        assert(!cleaned);
+    }
+    assert(cleaned);
+    assert(n == 1);
+}
+
+test "a cancelled task is released" {
+    auto dbg = DebugAllocator::init();
+    const auto a = dbg.allocator();
+    {
+        auto ex = async::Executor::init(a)?;
+        defer ex.deinit();
+        auto w = ex.spawn(Quick{})?;
+        w.detach();
+        ex.run_batch();
+        const auto base = dbg.live;
+        for (auto i : 0..100) {
+            auto h = ex.spawn(Quick{})?;
+            h.cancel();
+            ex.run_batch();
+            assert(dbg.live == base);
+        }
+    }
+    dbg.deinit()?;
+}
+
 test "sleep waits in the poller" {
     auto ex = async::Executor::init(c_allocator())?;
     defer ex.deinit();

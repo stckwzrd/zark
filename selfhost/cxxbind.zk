@@ -4178,7 +4178,7 @@ bool cx_is_operator(str n) {
     lx.run()?;
     auto et = List<CTok>::init(a);
     et.push(CTok{ .k = .Eof, .text = "" })?;
-    auto p = CParser{ .a = a, .toks = et.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    auto p = CParser{ .a = a, .toks = et.slice(), .defs = share_list(&lx.out.defs), .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
     p.flush(lx.out.toks.len)?;
     p.macros()?;

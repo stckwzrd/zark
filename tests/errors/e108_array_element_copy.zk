@@ -1,0 +1,8 @@
+struct I { List<i64> xs; }
+!void main() {
+    I[2] arr;
+    arr[0] = I{ .xs = List<i64>::init(c_allocator()) };
+    auto x = arr[0];
+    auto y = arr[0];
+    println(x.xs.len + y.xs.len);
+}

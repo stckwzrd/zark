@@ -662,7 +662,7 @@ bool has_defaults(Type* t) {
             et.ei = this->enums.get(e.l.name)?;
             return this->spill(this->enum_value(et, e.name, e.line)?);
         }
-        if (!this->assign_target && this->moved.len > 0 && e.l.k == .Ident) {
+        if (!this->assign_target && this->moved.len > 0) {
             const auto pk = this->place_key(e)?;
             if (pk.len > 0) { this->move_use_key(pk, this->place_name(e), e.line)?; }
         }

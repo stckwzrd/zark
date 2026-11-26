@@ -646,10 +646,10 @@ struct Gen {
                 if (d.is_err && !is_err) { continue; }
                 const auto was = this->in_defer;
                 this->in_defer = true;
+                defer this->in_defer = was;
                 this->push_scope()?;
                 this->gen_stmt(d.stmt)?;
                 this->pop_scope()?;
-                this->in_defer = was;
             }
         }
         this->check_owned(hi, lo)?;
