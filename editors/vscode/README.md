@@ -5,6 +5,9 @@ language server, and commands to run, test, build and format a file.
 
 ## Install
 
+A prebuilt VSIX is in `dist/`; `install.sh` installs it without any npm step. To
+rebuild it after changing the extension, see [Development](#development).
+
 The extension talks to the `zark` compiler, so build it once (from the repository root):
 
 ```sh

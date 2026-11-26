@@ -8,10 +8,14 @@ if ! command -v code >/dev/null 2>&1 && ! command -v code-oss >/dev/null 2>&1; t
     exit 1
 fi
 
-if [ ! -d node_modules ]; then
-    npm ci --no-audit --no-fund
+# A prebuilt VSIX is committed; use it unless the sources are newer.
+vsix=$(ls dist/*.vsix 2>/dev/null | head -n 1 || true)
+if [ -z "$vsix" ]; then
+    if [ ! -d node_modules ]; then
+        npm ci --no-audit --no-fund
+    fi
+    vsix=$(python3 pack.py)
 fi
-vsix=$(python3 pack.py)
 if command -v code >/dev/null 2>&1; then
     code --install-extension "$vsix" --force
 else
