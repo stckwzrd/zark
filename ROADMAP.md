@@ -11,11 +11,11 @@ Expression typing, calls, generics and statements are still interleaved with IR 
 - Diagnostics, the LSP and new backends then read one checked tree, and a change to the type rules no longer touches the emitter.
 - Keep the fixed points and the compile-time budget (no more than +10% on `bench/w.zk` and `selfhost/main.zk`).
 
-## 1. Native backend: generated code quality (debug builds run 3x slower than gcc -O0)
+## 1. Native backend: generated code quality (safe builds are ~1.5–2x slower than gcc -O0)
 - **SSA without allocas.** Locals whose address is never taken can be kept as SSA values directly in the frontend (mem2reg on the AST: no `&x`, no capture by a method that takes `*Self`). This removes most load/store pairs, and LLVM `--release` gets faster too.
 - **Linear-scan register allocation** over the IR the native backend already parses: live ranges are trivial to compute because values are SSA, and there are about 9 free registers (rbx, r12–r15 callee-saved; r8–r11).
 - **Peephole optimizations.** Keep track of which value is in rax and skip the reload when the next instruction uses it. Turn `cmp + setcc + test + jcc` into a direct `jcc`. Encode small immediates as imm8.
-- Expected gain: 3–5x at run time, with no measurable cost in compile time.
+- Expected gain: 1.5–2x on call-heavy code (the current `bench/runtime.sh` gap to gcc -O0), with no measurable cost in compile time. `-O --release` already uses LLVM and is close to clang -O2; this item is about the default, dependency-free backend.
 
 ## 2. Drop the textual IR on the native path
 Today the frontend prints LLVM IR text and the native backend parses it back, which is about 40% of backend time. Switch to an in-memory IR (a list of structs) that is either printed as `.ll` (LLVM path) or lowered directly (native path). This is also the base for our own optimizer: constant folding, DCE, inlining small functions.

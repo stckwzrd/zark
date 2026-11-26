@@ -238,7 +238,8 @@ The full language description is in [SPEC.md](SPEC.md).
 
 ## Performance
 
-`examples/bench.zk` (recursive fib(38) + a sieve up to 50M), clang 18, on one machine:
+`examples/bench.zk` (recursive fib(38) + a sieve up to 50M), clang 18, on one machine
+(`bench/runtime.sh` also compares the own backend, `--native --release` and gcc/clang):
 
 | | fib(38) | sieve 50M |
 |---|---|---|
