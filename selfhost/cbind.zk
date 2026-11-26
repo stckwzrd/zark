@@ -2999,7 +2999,7 @@ struct CBind {
 /// asks for stubs-32.h, which 64-bit distributions do not ship. The binder only
 /// parses the header with the host headers; defining __x86_64__ selects stubs-64
 /// while the target triple still drives the layouts. Never used for codegen.
-bool cross_parse_x86() { return c_arch == 1 && vrt_arch() == 0; }
+bool cross_parse_x86() { return c_arch == 1 && vrt_arch() == 0 && vrt_os() == 1; }
 
 !CBind cbind_header(Allocator a, str header, str from_dir, str[] flags) {
     const auto dir = ".zark-cache/cbind";
@@ -3027,7 +3027,7 @@ bool cross_parse_x86() { return c_arch == 1 && vrt_arch() == 0; }
     }
     auto lx = CLexer{ .a = a, .src = r.out, .stub = stub, .name = header, .packs = List<i64>::init(a), .seen = Map<bool>::init(a), .out = CLex{ .toks = List<CTok>::init(a), .defs = List<CDef>::init(a), .deps = List<str>::init(a), .from = List<str>::init(a) } };
     lx.run()?;
-    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = lx.out.defs, .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
+    auto p = CParser{ .a = a, .toks = lx.out.toks.slice(), .defs = share_list(&lx.out.defs), .typedefs = Map<CType*>::init(a), .tags = Map<bool>::init(a), .vol_tds = Map<bool>::init(a), .enum_tys = Map<CType*>::init(a), .enums = Map<CVal>::init(a), .macs = Map<CMac*>::init(a), .decls = List<CDecl*>::init(a) };
     for (auto d : lx.out.defs.slice()) { if (d.name == "__CHAR_UNSIGNED__" && !d.undef) { p.uchar = true; } }
     for (auto f : flags) {
         if (f == "-fshort-enums") { p.short_enums = true; }

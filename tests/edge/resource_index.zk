@@ -1,0 +1,14 @@
+struct I { List<i64> xs; }
+
+!void main() {
+    I[2] arr;
+    arr[0] = I{ .xs = List<i64>::init(c_allocator()) };
+    arr[0].xs.push(7) catch {};
+    println(arr[0].xs.len);
+    auto h = I{ .xs = List<i64>::init(c_allocator()) };
+    auto p = &h;
+    (*p).xs.push(8) catch {};
+    println((*p).xs.len);
+    (*p).xs.deinit();
+    arr[0].xs.deinit();
+}

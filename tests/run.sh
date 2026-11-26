@@ -50,7 +50,7 @@ if [ "$(uname -m)" = aarch64 ] || [ "$(uname -m)" = arm64 ]; then
   if out=$(ZARK="$ZARK" python3 tests/abi/fuzz/fuzz.py --strict --backends llvm,O 2>&1); then pass=$((pass+1)); echo "ok   abi fuzz"
   else fail=$((fail+1)); echo "FAIL abi fuzz"; echo "$out" | grep -v "PASS     PASS" | tail -40; fi
 fi
-for n in ints memory nan move move_resource parse_types zero_init async_result async_join closure_capture borrow borrow_elem comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer async_cancel fwd_types; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
+for n in ints memory nan move move_resource parse_types zero_init async_result async_join closure_capture borrow borrow_elem comptime mulcheck iterate fn_struct threads flow flow2 alias_comptime narrow_div async_names async_basic async_try async_flow async_borrows async_infer async_cancel fwd_types resource_index; do check edge_$n $ZARK run tests/edge/$n.zk $FLAGS; done
 for f in tests/panics/*.zk; do
   n=panic_$(basename $f .zk)
   out=$($ZARK run "$f" $FLAGS 2>&1); rc=$?
@@ -72,6 +72,7 @@ for f in tests/errors/*.zk; do
   if [ $rc -eq 124 ]; then fail=$((fail+1)); echo "FAIL $f (timed out)"; continue; fi
   if [ $rc -ne 1 ]; then fail=$((fail+1)); echo "FAIL $f (exit $rc, expected a diagnostic)"; continue; fi
   case "$out" in *"error: error.Signaled"*) fail=$((fail+1)); echo "FAIL $f (the compiler crashed)"; continue ;; esac
+  case "$out" in *"<std>"*"error:"*) fail=$((fail+1)); echo "FAIL $f (an error inside the prelude)"; echo "$out" | head -10; continue ;; esac
   got=$(printf '%s\n' "$out" | awk 'NF{print; exit}' | sed -E 's/^[^:]+:[0-9]+: //')
   want=$(cat "${f%.zk}.err")
   if [ "$got" = "$want" ]; then pass=$((pass+1)); echo "ok   $f (rejected)"

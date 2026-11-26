@@ -96,14 +96,18 @@ struct JoinHandle<T> {
         this->ex.release(t);
     }
 
-    /// cancel the task: it runs its deferred code on the next executor turn
+    /// cancel the task now: it runs its deferred code inside this call, then
+    /// the executor frees the frame on its next turn (immediately if the task
+    /// had already finished)
     void cancel() {
         auto t = this->live();
         this->ex.gens.set(this->gi, this->gen + 1);
         this->ex.spare.push(this->gi) catch {};
-        t.cancel_thunk(t.frame);
+        t.released = true;
         t.canceled = true;
+        if (t.state != 3) { t.cancel_thunk(t.frame); }
         task_wake(t);
+        this->ex.release(t);
     }
 
     Poll<T> poll(Context* cx) {
@@ -131,12 +135,20 @@ struct Join2<A, B> {
     JoinHandle<B> b;
     bool adone;
     bool bdone;
+    bool canceled;
     A av;
     B bv;
 
-    void cancel() { this->a.cancel(); this->b.cancel(); }
+    /// a finished side was already taken; only the pending one is cancelled
+    void cancel() {
+        if (this->canceled) { return; }
+        this->canceled = true;
+        if (!this->adone) { this->a.cancel(); }
+        if (!this->bdone) { this->b.cancel(); }
+    }
 
     Poll<Pair<A, B>> poll(Context* cx) {
+        if (this->canceled) { return .Pending; }
         if (!this->adone) {
             match (this->a.poll(cx)) {
                 .Ready(v) => { this->av = v; this->adone = true; }
@@ -167,11 +179,17 @@ struct Select2<A, B> {
     JoinHandle<A> a;
     JoinHandle<B> b;
     bool done;
+    bool canceled;
 
-    void cancel() { this->a.cancel(); this->b.cancel(); }
+    void cancel() {
+        if (this->done || this->canceled) { return; }
+        this->canceled = true;
+        this->a.cancel();
+        this->b.cancel();
+    }
 
     Poll<Select2Result<A, B>> poll(Context* cx) {
-        if (this->done) { return .Pending; }
+        if (this->done || this->canceled) { return .Pending; }
         match (this->a.poll(cx)) {
             .Ready(v) => {
                 this->done = true;
@@ -192,7 +210,7 @@ struct Select2<A, B> {
     }
 }
 
-/// the value of whichever handle finishes first; the other task is detached
+/// the value of whichever handle finishes first; the other task is cancelled
 template<A, B> Select2<A, B> select(JoinHandle<A> a, JoinHandle<B> b) {
     return Select2<A, B>{ .a = a, .b = b };
 }
@@ -210,6 +228,7 @@ owned struct Executor {
     Task* current;
     i64 io;
     bool main_woken;
+    bool closing;
 
     static !Executor init(Allocator a) {
         const auto p = vrt_poller_new();
@@ -220,10 +239,11 @@ owned struct Executor {
     }
 
     void deinit() move {
+        this->closing = true;
         for (auto t : this->tasks.slice()) {
-            if (t.state != 3) {
-                t.cancel_thunk(t.frame);
+            if (t.state != 3 && !t.canceled) {
                 t.canceled = true;
+                t.cancel_thunk(t.frame);
             }
             this->drop_io(t);
         }
@@ -240,6 +260,7 @@ owned struct Executor {
     }
 
     template<F, T> !JoinHandle<T> spawn(move F fut) {
+        if (this->closing) { return error.SystemCall; }
         const auto n = this->tasks.len + 1;
         this->tasks.reserve(n)?;
         this->queue.reserve(n)?;
@@ -353,6 +374,7 @@ owned struct Executor {
     }
 
     void release(Task* t) {
+        if (this->closing) { return; }
         if (t.state != 3 || !t.released || t.timers > 0 || t.waits > 0) { return; }
         _ = this->tasks.swap_remove(t.index) catch t;
         if (t.index < this->tasks.len) { this->tasks.get(t.index).index = t.index; }
