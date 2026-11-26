@@ -1,0 +1,6 @@
+// A 32-bit bound is not an i64 bound: the addition still overflows.
+void main() {
+    i32 n = 2147483647;
+    if (n < 0) { return; }
+    println((n + 1) as i64);
+}
