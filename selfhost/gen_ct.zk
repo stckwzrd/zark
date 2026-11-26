@@ -44,6 +44,11 @@ bool Gen::ct_plain(Type* t) {
         this->colds = saved_colds;
     }
     this->scopes = List<Scope>::init(this->a);
+    this->fact_gen += 1;
+    this->facts = Map<Fact>::init(this->a);
+    this->escaped = Map<bool>::init(this->a);
+    this->blk_parents = List<i64>::init(this->a);
+    this->blk = 0;
     this->loops = List<Loop>::init(this->a);
     this->push_scope()?;
     this->env = this->new_env()?;

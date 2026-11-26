@@ -1,0 +1,11 @@
+// A guard inside a loop body does not leak past the loop.
+void main() {
+    auto n = 5;
+    auto k = 0;
+    while (k < 1) {
+        if (n < 2) { return; }
+        n = -9223372036854775807 - 1;
+        k += 1;
+    }
+    println(n - 1);
+}

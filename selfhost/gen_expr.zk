@@ -943,7 +943,14 @@ str operator_name(Tag t) {
         this->wrapping = false;
         return w;
     }
-    return this->arith(op, l, r, line);
+    const auto saved_skip = this->skip_ovf;
+    this->skip_ovf = op == .minus && this->proven_sub(le, re);
+    const auto w = this->arith(op, l, r, line) catch |e| {
+        this->skip_ovf = saved_skip;
+        return e;
+    };
+    this->skip_ovf = saved_skip;
+    return w;
 }
 
 !Value Gen::coerce(Value v, Type* to, i64 line) {
@@ -1030,7 +1037,9 @@ str operator_name(Tag t) {
         return Value{ .ty = l.ty, .v = t };
     }
     sprint(this->ins()?, "  {t} = {ins} {ty} {l.v}, {r.v}\n")?;
-    if (this->ovf && this->dbg && !this->wrapping && l.ty.k == .Int && (op == .plus || op == .minus || op == .star)) { this->check_overflow(op, l, r, t, line)?; }
+    if (this->ovf && this->dbg && !this->wrapping && l.ty.k == .Int && (op == .plus || op == .minus || op == .star)) {
+        if (!this->skip_ovf) { this->check_overflow(op, l, r, t, line)?; }
+    }
     return Value{ .ty = l.ty, .v = t };
 }
 

@@ -1,0 +1,65 @@
+// Range facts: guards such as `if (n < 2) { return; }` let the compiler drop
+// the overflow check on a later `n - 1`. The values must stay exact.
+
+i64 sub_one(i64 n) {
+    if (n < 2) { return n; }
+    return n - 1;
+}
+
+i64 two_guards(i64 n) {
+    if (n < 2) { return n; }
+    if (n > 100) { return n; }
+    return n - 1;
+}
+
+i64 compound(i64 n) {
+    if (n < 2) { return n; }
+    auto m = n;
+    m += 10;
+    m -= 3;
+    return m - 1;
+}
+
+i64 in_loop(i64 n) {
+    auto k = 0;
+    i64 s = 0;
+    while (k < 4) {
+        if (n < 2) { return s; }
+        s += n - 1;
+        k += 1;
+    }
+    return s;
+}
+
+i64 after_loop(i64 n) {
+    auto k = 0;
+    while (k < 2) {
+        if (n < 2) { return n; }
+        k += 1;
+    }
+    return n - 1;
+}
+
+test "guarded subtraction" {
+    assert(sub_one(2) == 1);
+    assert(sub_one(1000) == 999);
+    assert(sub_one(1) == 1);
+}
+
+test "two guards" {
+    assert(two_guards(50) == 49);
+    assert(two_guards(101) == 101);
+}
+
+test "compound assignment after a guard" {
+    assert(compound(5) == 11);
+}
+
+test "guard inside a loop" {
+    assert(in_loop(3) == 8);
+    assert(in_loop(1) == 0);
+}
+
+test "the bound matters after the loop" {
+    assert(after_loop(9) == 8);
+}

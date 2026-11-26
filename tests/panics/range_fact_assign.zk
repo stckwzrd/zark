@@ -1,0 +1,7 @@
+// A proven lower bound must be dropped once the local is assigned again.
+void main() {
+    auto n = 5;
+    if (n < 2) { return; }
+    n = -9223372036854775807 - 1;
+    println(n - 1);
+}

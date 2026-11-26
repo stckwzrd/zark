@@ -1,0 +1,8 @@
+// Taking the address of a local means it can change behind the compiler's back.
+void main() {
+    auto n = 5;
+    if (n < 2) { return; }
+    auto p = &n;
+    *p = -9223372036854775807 - 1;
+    println(n - 1);
+}

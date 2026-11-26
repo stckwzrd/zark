@@ -230,6 +230,12 @@ void Gen::set_await(Expr* e) {
     this->scopes = List<Scope>::init(this->a);
     this->loops = List<Loop>::init(this->a);
     this->moved = List<MoveRec>::init(this->a);
+    this->fact_gen += 1;
+    this->facts = Map<Fact>::init(this->a);
+    this->escaped = Map<bool>::init(this->a);
+    this->blk_parents = List<i64>::init(this->a);
+    this->blk = 0;
+    collect_addr_stmt(decl.body, &this->escaped);
     this->colds = List<Cold>::init(this->a);
     this->reinit = false;
     this->shared = false;
