@@ -1,0 +1,77 @@
+import "std/binary" as binary;
+import "std/file" as file;
+import "std/fs" as fs;
+import "std/path" as path;
+
+test "binary formats and boundaries" {
+    u8[8] data;
+    auto w = binary::Writer::init(data[..]);
+    w.write_uint(0x1234, 2, .Big)?;
+    w.write_uint(0x12345678, 4, .Little)?;
+    assert(data[0] == 0x12 && data[1] == 0x34 && data[2] == 0x78 && data[5] == 0x12);
+    auto r = binary::Reader::init(data[0..6]);
+    assert(r.read_uint(2, .Big)? == 0x1234 && r.read_uint(4, .Little)? == 0x12345678);
+    _ = r.read_uint(1, .Big) catch |e| { assert(e == error.EndOfStream && r.pos == 6); 0 };
+    w.write_uint(256, 1, .Big) catch |e| { assert(e == error.Overflow && w.pos == 6); };
+}
+
+test "stream text and binary data" {
+    const auto a = c_allocator();
+    const auto dir = fs::temp_dir(a, "zark-stream")?;
+    defer a.free(dir);
+    defer fs::remove_all(a, dir) catch |e| {};
+    const auto filename = path::join(a, [dir, "data"])?;
+    defer a.free(filename);
+    {
+        auto out = file::File::create(filename)?;
+        defer out.close() catch |e| {};
+        out.write_all("hello\n\nworld")?;
+        out.flush()?;
+    }
+    {
+        auto input = file::File::open_read(filename)?;
+        defer input.close() catch |e| {};
+        auto line = List<u8>::init(c_allocator());
+        defer line.deinit();
+        assert(input.read_line(&line)? && line.slice() == "hello");
+        line.clear();
+        assert(input.read_line(&line)? && line.len == 0);
+        assert(input.read_line(&line)? && line.slice() == "world");
+        assert(!input.read_line(&line)?);
+    }
+}
+
+test "binary widths, exact capacity and failed operations" {
+    u8[8] data;
+    auto w = binary::Writer::init(data[..]);
+    w.write_uint(0xffffffffffffffff, 8, .Big)?;
+    assert(w.remaining() == 0);
+    w.write_uint(0, 1, .Little) catch |e| { assert(e == error.NoSpace && w.pos == 8); };
+    auto r = binary::Reader::init(data[..]);
+    assert(r.read_uint(8, .Big)? == 0xffffffffffffffff);
+    _ = r.read_uint(0, .Little) catch |e| { assert(e == error.InvalidWidth && r.pos == 8); 0 };
+}
+
+test "file reads raw bytes in small chunks" {
+    const auto a = c_allocator();
+    const auto dir = fs::temp_dir(a, "zark-stream")?;
+    defer a.free(dir);
+    defer fs::remove_all(a, dir) catch |e| {};
+    const auto filename = path::join(a, [dir, "bytes"])?;
+    defer a.free(filename);
+    {
+        auto output = file::File::create(filename)?;
+        defer output.close() catch |e| {};
+        u8[4] bytes = [0, 1, 2, 255];
+        output.write_all(bytes[..])?;
+        output.flush()?;
+    }
+    {
+        auto input = file::File::open_read(filename)?;
+        defer input.close() catch |e| {};
+        u8[3] buf;
+        assert(input.read(buf[..])? == 3 && buf[0] == 0 && buf[2] == 2);
+        assert(input.read(buf[..])? == 1 && buf[0] == 255);
+        assert(input.read(buf[..])? == 0);
+    }
+}

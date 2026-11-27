@@ -1,0 +1,55 @@
+// Streaming files. libc buffers the underlying stream. Close each file explicitly.
+extern i32 ferror(void* stream);
+extern i32 fgetc(void* stream);
+
+owned struct File {
+    void* handle;
+
+    static !Self open_read(str path) {
+        u8[4096] buf;
+        const auto f = fopen(to_cstr(buf[..], path)?, "rb");
+        if (f == null) { return error.CannotOpen; }
+        return Self{ .handle = f };
+    }
+
+    static !Self create(str path) {
+        u8[4096] buf;
+        const auto f = fopen(to_cstr(buf[..], path)?, "wb");
+        if (f == null) { return error.CannotOpen; }
+        return Self{ .handle = f };
+    }
+
+    // Returns the number of bytes read; zero means EOF, unless the buffer is empty.
+    !i64 read(u8[] buf) {
+        const auto n = fread(buf.ptr, 1, buf.len as u64, this->handle);
+        if (ferror(this->handle) != 0) { return error.ReadFailed; }
+        return n as i64;
+    }
+
+    !void write_all(u8[] buf) {
+        auto off = 0;
+        while (off < buf.len) {
+            const auto n = fwrite(buf.ptr + off, 1, (buf.len - off) as u64, this->handle);
+            if (n == 0 || ferror(this->handle) != 0) { return error.WriteFailed; }
+            off += n as i64;
+        }
+    }
+
+    // Appends a line without the newline. Returns false only at EOF before any byte.
+    !bool read_line(List<u8>*out) {
+        auto any = false;
+        while (true) {
+            const auto ch = fgetc(this->handle);
+            if (ch < 0) {
+                if (ferror(this->handle) != 0) { return error.ReadFailed; }
+                return any;
+            }
+            if (ch == 10) { return true; }
+            out.push(ch as u8)?;
+            any = true;
+        }
+    }
+
+    !void flush() { if (fflush(this->handle) != 0) { return error.WriteFailed; } }
+    !void close() move { if (fclose(this->handle) != 0) { return error.CloseFailed; } }
+}
