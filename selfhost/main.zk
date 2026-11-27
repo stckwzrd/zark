@@ -12,8 +12,12 @@ import "project.zk";
 import "std/os" as osm;
 import "std/path" as pth;
 
+/// The language and compiler version. A `-pre` suffix means the checks and
+/// the standard library may still change between now and the release.
+const auto VERSION = "0.6.0-pre";
+
 void usage() {
-    eprintln("zark 0.4 (self-hosted) — a compact systems language (LLVM backend)
+    eprintln("zark {VERSION} (self-hosted) — a compact systems language (own x86-64 backend; LLVM for --release)
 
 usage:
   zark run   <file.zk> [extra.c|.cpp|.o ...] [-O|--release|--fast] [-- program args]
@@ -26,6 +30,7 @@ usage:
   zark cbind <header.h> [-I.. -D..] [--by-value=A,B] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
+  zark version                    print the version
 ");
 }
 
@@ -270,6 +275,10 @@ void restore_stack() {
             if (str_ends_with(arg(k), ".zk")) { named = true; }
         }
         in_project = !named;
+    }
+    if (arg_count() >= 2 && (arg(1) == "version" || arg(1) == "--version" || arg(1) == "-V")) {
+        println(VERSION);
+        return 0;
     }
     if (arg_count() < 3 && !in_project) {
         usage();

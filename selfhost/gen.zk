@@ -99,6 +99,7 @@ struct Gen {
     str self_path;
     i64 nct;
     bool reinit;
+    bool match_view;      // the match operand is a non-owning view of a container element
     Expr* bor_field;
     str bor_ptr;
     str bor_name;

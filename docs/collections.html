@@ -176,7 +176,7 @@ true false
 3: 40
 100</code></pre></div></div>
 <h3 id="changing-elements-in-place"><a class="anchor" href="#changing-elements-in-place">#</a>Changing elements in place</h3>
-<p><code>get</code> returns a <strong>copy</strong>. To change the elements of structs, take a pointer to the element:</p>
+<p><code>get</code> returns a <strong>copy</strong>. For an element that is a resource (<code>List</code>, <code>Map</code>, an <code>owned</code> struct) it does not compile, because the copy would alias the container; use <code>at(i)</code> for a pointer or <code>pop</code>/<code>remove_at</code> to move the element out. To change the elements of structs, take a pointer to the element:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Player</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> score; }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!void</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -280,7 +280,7 @@ true false 2</code></pre></div></div>
 </tbody></table></div>
 <blockquote class="callout gotcha"><p><strong>Gotcha:</strong> keys are <strong>not copied</strong>: the table stores the slice you gave it. If a key is built from a temporary buffer, copy it with <code>a.dup(key)</code>, otherwise it will be corrupted when the buffer is overwritten.</p>
 </blockquote>
-<p>You cannot delete keys (there is no <code>remove</code> method). <code>get</code> returns a copy of the value: to change a value in place you need to work with <code>m.entries</code>.</p>
+<p>You cannot delete keys (there is no <code>remove</code> method). <code>get</code> returns a copy of the value, so for a resource value it is rejected: use <code>get_ptr(key)</code> to borrow the stored value in place.</p>
 <h3 id="iterating"><a class="anchor" href="#iterating">#</a>Iterating</h3>
 <p>There is no special iterator, but the table is an array of records <code>entries</code>, and the occupied records are marked <code>used</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!void</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
