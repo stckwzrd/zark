@@ -1,0 +1,4 @@
+void main() {
+    i8 x = 127;
+    println((x + 1) as i64);
+}

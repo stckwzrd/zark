@@ -1,0 +1,4 @@
+void main() {
+    i16 x = 32767;
+    println((x + 1) as i64);
+}
