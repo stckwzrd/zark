@@ -52,6 +52,12 @@ The sequence is:
 7. Open a pull request. A maintainer merges it after the suite is green; the issue is
    closed by hand if the automatic close did not fire (it does not for non-default branches).
 
+`main` is review-only. Every change reaches it through a pull request that the maintainer
+approves and merges; direct pushes to `main` are blocked by the branch protection rule and
+by the local `.githooks/pre-push` hook (install it once per clone with
+`git config core.hooksPath .githooks`). A new commit on a pull request discards earlier
+approvals, so each revision is reviewed on its own.
+
 Do not "fix" a test by changing its expected output unless the old output was wrong. If a
 diagnostic really has to change, say why in the commit and update the `.err` file in the
 same commit.

@@ -664,7 +664,7 @@ struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
         toks.items[k].off = t.off;
     }
     auto sub = new_parser(this->a, toks.slice(), this->file);
-    sub.aliases = this->aliases;
+    sub.aliases = share_list(&this->aliases);
     const auto decls = sub.parse_file()?;
     for (auto d : decls) {
         if (d.k == .Struct && d.s.name == name) { d.s.is_iface = true; }

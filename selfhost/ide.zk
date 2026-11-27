@@ -92,15 +92,15 @@ void put_params(List<u8>*b, FnDecl* f, bool skip_self) {
     }
 }
 
-void put_generics(List<u8>*b, List<str> names, List<str> cons) {
+void put_generics(List<u8>*b, str[] names, str[] cons) {
     if (names.len == 0) { return; }
     put(b, "<");
     for (auto [i, n] : names) {
         if (i > 0) { put(b, ", "); }
         put(b, n);
-        if (i < cons.len && cons.get(i).len > 0) {
+        if (i < cons.len && cons[i].len > 0) {
             put(b, ": ");
-            put(b, cons.get(i));
+            put(b, cons[i]);
         }
     }
     put(b, ">");
@@ -110,7 +110,7 @@ str fn_signature(Allocator a, FnDecl* f, bool skip_self) {
     auto b = List<u8>::init(a);
     if (f.type_params.len > 0) {
         put(&b, "template");
-        put_generics(&b, f.type_params, f.constraints);
+        put_generics(&b, f.type_params.slice(), f.constraints.slice());
         put(&b, " ");
     }
     if (f.ret != null) { put_type(&b, f.ret); } else { put(&b, "void"); }
@@ -135,7 +135,7 @@ str sym_detail(Allocator a, Symbol* s) {
             const auto sd = s.sd;
             if (sd.is_union) { put(&b, "union "); } else { put(&b, "struct "); }
             put(&b, s.name);
-            put_generics(&b, sd.type_params, sd.constraints);
+            put_generics(&b, sd.type_params.slice(), sd.constraints.slice());
             put(&b, " ");
             b.push('{') catch return "";
             put(&b, " ");
@@ -814,7 +814,7 @@ Symbol* this_literal_fields(Project* p, str text, i64 off) {
     if (fd.ret != null) { put_type(&label, fd.ret); } else { put(&label, "void"); }
     put(&label, " ");
     put(&label, last_segment(fd.name));
-    put_generics(&label, fd.type_params, fd.constraints);
+    put_generics(&label, fd.type_params.slice(), fd.constraints.slice());
     put(&label, "(");
     auto ranges = List<i64>::init(a);
     auto first = true;

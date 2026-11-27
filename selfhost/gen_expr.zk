@@ -133,7 +133,7 @@ bool can_coerce(Type* from, Type* to) {
                 const auto fi = this->inst_fn(fd, this->new_env()?, this->no_types())?;
                 this->c_vecs(fi.params.slice(), fi.ret, e.line)?;
                 const auto t = this->mk(.Func)?;
-                t.params = fi.params;
+                t.params = share_list(&fi.params);
                 t.ret = fi.ret;
                 const auto sym = this->func_ptr(fi)?;
                 auto b = this->sb();
@@ -399,7 +399,7 @@ bool has_defaults(Type* t) {
     sprint(&kb, "{recv_name(t)}.init")?;
     if (this->methods.has(kb.slice())) {
         const auto addr = Addr{ .ty = t, .v = slot, .imm = false };
-        _ = this->call_method(this->methods.get(kb.slice())?, addr, e.args, this->no_types(), null, e.line)?;
+        _ = this->call_method(this->methods.get(kb.slice())?, addr, share_list(&e.args), this->no_types(), null, e.line)?;
     } else if (e.args.len > 0) {
         this->err(e.line); eprintln("'{e.l.name}' has no constructor taking {e.args.len} argument(s); declare '{e.l.name}(...) \{ ... }' inside the struct");
         return error.CompileFailed;
@@ -535,7 +535,7 @@ bool has_defaults(Type* t) {
     for (auto [i, v] : t.ei.decl.variants) {
         if (v == name) { return Value{ .ty = t, .v = this->num(i)? } }
     }
-    this->err(line); eprintln("enum '{t.ei.decl.name}' has no variant '{name}'{this->hint(name, t.ei.decl.variants)}");
+    this->err(line); eprintln("enum '{t.ei.decl.name}' has no variant '{name}'{this->hint(name, share_list(&t.ei.decl.variants))}");
     return error.CompileFailed;
 }
 
@@ -711,6 +711,10 @@ bool has_defaults(Type* t) {
     }
     if (e.k == .Index) {
         if (e.args.len != 1) { this->err(e.line); eprintln("index takes one argument"); return error.CompileFailed; }
+        if (!this->assign_target && this->moved.len > 0) {
+            const auto pk = this->place_key(e)?;
+            if (pk.len > 0) { this->move_use_key(pk, this->place_name(e), e.line)?; }
+        }
         auto base = this->gen_addr(e.l)?;
         Type* ptr_elem = null;
         if (base.ty.k == .Ptr) {

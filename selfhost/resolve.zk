@@ -67,7 +67,7 @@ struct Resolver {
             }
             .Match => {
                 this->rexpr(e.l)?;
-                this->rarms(e.arms)?;
+                this->rarms(e.arms.slice())?;
                 return;
             }
             .Closure => {
@@ -91,7 +91,7 @@ struct Resolver {
         for (auto f : e.fields) { this->rexpr(f.value)?; }
     }
 
-    !void rarms(List<MatchArm> arms) {
+    !void rarms(MatchArm[] arms) {
         for (auto arm : arms) {
             const auto mark = this->locals.len;
             for (auto pat : arm.pats) {
@@ -143,7 +143,7 @@ struct Resolver {
             .Defer => this->rstmt(s.body)?;
             .Match => {
                 this->rexpr(s.e)?;
-                this->rarms(s.arms)?;
+                this->rarms(s.arms.slice())?;
             }
             _ => {}
         }

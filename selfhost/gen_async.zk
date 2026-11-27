@@ -186,12 +186,12 @@ void Gen::set_await(Expr* e) {
         this->file = s.file;
         this->dbg = s.dbg;
         this->last_line = s.last_line;
-        this->body = s.body;
-        this->allocas = s.allocas;
-        this->scopes = s.scopes;
-        this->loops = s.loops;
-        this->moved = s.moved;
-        this->colds = s.colds;
+        copy_raw(&this->body, &s.body);
+        copy_raw(&this->allocas, &s.allocas);
+        copy_raw(&this->scopes, &s.scopes);
+        copy_raw(&this->loops, &s.loops);
+        copy_raw(&this->moved, &s.moved);
+        copy_raw(&this->colds, &s.colds);
         this->reinit = s.reinit;
         this->shared = s.shared;
         this->nloop = s.nloop;

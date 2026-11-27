@@ -266,7 +266,7 @@ struct MatchRes { Type* ty; str slot; }
             }
             const auto mv = this->match_view;
             this->match_own(s.e, v.ty, s.line)?;
-            this->gen_match(v, s.arms, null)?;
+            this->gen_match(v, s.arms.slice(), null)?;
             this->match_view = mv;
         }
     }
@@ -294,7 +294,7 @@ struct MatchRes { Type* ty; str slot; }
     this->copy_moves(e, ty, "", "match", line)?;
 }
 
-!void Gen::gen_match(Value v, List<MatchArm> arms, MatchRes* res) {
+!void Gen::gen_match(Value v, MatchArm[] arms, MatchRes* res) {
     if (is_union(v.ty)) {
         this->gen_union_match(v, arms, res)?;
         return;
@@ -328,7 +328,7 @@ struct MatchRes { Type* ty; str slot; }
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
-    this->join_finish(&jn, res == null && !this->match_covers(v, arms.slice()))?;
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
     this->end_match(lend, res)?;
     if (!jn.any) {
         sprint(this->ins()?, "  unreachable\n")?;
@@ -370,7 +370,7 @@ struct MatchRes { Type* ty; str slot; }
         this->check_exhaustive(v, s.arms.slice(), s.line)?;
         const auto mv = this->match_view;
         this->match_own(s.e, v.ty, s.line)?;
-        this->gen_match(v, s.arms, res)?;
+        this->gen_match(v, s.arms.slice(), res)?;
         this->match_view = mv;
         return;
     }
@@ -453,7 +453,7 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
         res.ty = expected;
         res.slot = this->alloca(expected, "m")?;
     }
-    this->gen_match(v, e.arms, &res)?;
+    this->gen_match(v, e.arms.slice(), &res)?;
     if (res.ty == null) { this->err(e.line); eprintln("no arm of this match produces a value"); return error.CompileFailed; }
     return this->load(res.ty, res.slot);
 }
@@ -481,7 +481,7 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
     return UPat{ .idx = idx, .bind = bind };
 }
 
-!void Gen::gen_union_match(Value v, List<MatchArm> arms, MatchRes* res) {
+!void Gen::gen_union_match(Value v, MatchArm[] arms, MatchRes* res) {
     const auto slot = this->spill(v)?.v;
     const auto tp = this->gep_field(v.ty, slot, 0)?;
     const auto tag = this->load(this->t_i32, tp)?;
@@ -530,7 +530,7 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
         if (!this->terminated) { this->br(lend)?; }
         this->label(lnext)?;
     }
-    this->join_finish(&jn, res == null && !this->match_covers(v, arms.slice()))?;
+    this->join_finish(&jn, res == null && !this->match_covers(v, arms))?;
     this->end_match(lend, res)?;
     if (!jn.any) {
         sprint(this->ins()?, "  unreachable\n")?;

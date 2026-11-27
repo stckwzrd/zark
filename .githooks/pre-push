@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Blocks direct pushes to main. Every change reaches main through a pull
+# request that the owner reviews and merges, so a local push can never skip
+# that review. Feature branches and tags are not restricted.
+#
+# Install once per clone:  git config core.hooksPath .githooks
+# Emergency override:      ZARK_ALLOW_MAIN_PUSH=1 git push ... main
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$remote_ref" = "refs/heads/main" ]; then
+        if [ "${ZARK_ALLOW_MAIN_PUSH:-0}" = "1" ]; then
+            echo "pre-push: ZARK_ALLOW_MAIN_PUSH=1, allowing a direct push to main" >&2
+            continue
+        fi
+        echo "pre-push: main is review-only." >&2
+        echo "Push a branch and open a pull request instead:" >&2
+        echo "  git push origin $(git rev-parse --abbrev-ref HEAD)" >&2
+        echo "Then review every commit and merge the PR on GitHub." >&2
+        exit 1
+    fi
+done
+exit 0
