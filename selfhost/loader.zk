@@ -18,9 +18,23 @@ const auto STD_NET = embed("../std/net.zk");
 const auto STD_HTTP = embed("../std/http.zk");
 const auto STD_THREAD = embed("../std/thread.zk");
 const auto STD_ASYNC = embed("../std/async.zk");
+const auto STD_COLLECTIONS = embed("../std/collections.zk");
+const auto STD_SMART = embed("../std/smart.zk");
 
 /// the embedded source of "<std>/name.zk"
-!str std_source(str path) {
+!str std_source(Allocator a, str path) {
+    if (path == "<std>/builtin.zk") {
+        auto b = List<u8>::init(a);
+        const auto os = cfg_os_name();
+        const auto arch = cfg_arch_name();
+        const auto abi = cfg_abi_name();
+        sprint(&b, "const auto os = \"{os}\"; const auto arch = \"{arch}\"; const auto abi = \"{abi}\"; const auto endian = \"little\"; const auto pointer_bits = 64; const auto compiler_version = \"{VERSION}\";\n")?;
+        for (auto name : ["is_linux", "is_macos", "is_windows", "is_x86_64", "is_aarch64", "is_freestanding", "is_test", "optimized", "safety", "overflow_checks", "fast"]) {
+            const auto value = cfg_flag(name)?;
+            sprint(&b, "const auto {name} = {value};\n")?;
+        }
+        return b.slice();
+    }
     match path {
         "<std>/fs.zk" => return STD_FS;
         "<std>/path.zk" => return STD_PATH;
@@ -32,6 +46,8 @@ const auto STD_ASYNC = embed("../std/async.zk");
         "<std>/http.zk" => return STD_HTTP;
         "<std>/thread.zk" => return STD_THREAD;
         "<std>/async.zk" => return STD_ASYNC;
+        "<std>/collections.zk" => return STD_COLLECTIONS;
+        "<std>/smart.zk" => return STD_SMART;
     }
     return error.NotFound;
 }
@@ -169,8 +185,8 @@ struct Loader {
             return prefix;
         }
         if (is_std_path(path)) {
-            const auto ssrc = std_source(path) catch {
-                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread, async)");
+            const auto ssrc = std_source(this->a, path) catch {
+                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread, async, collections, smart, builtin)");
                 return error.CompileFailed;
             };
             if (diag_files.a.alloc_fn == null) { diag_files = Map<str>::init(c_allocator()); }

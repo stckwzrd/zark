@@ -97,6 +97,7 @@ if ZARK=$ZARK tests/asm_encoding.sh; then pass=$((pass+1)); else fail=$((fail+1)
 if ZARK=$ZARK tests/overflow_asm.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/scale.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/determinism.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK bash tests/builtin.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/fmt_idem.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/docs.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"; [ $fail -eq 0 ]

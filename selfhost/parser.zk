@@ -3,6 +3,65 @@
 import "ast.zk";
 import "parser_new.zk";
 
+// Target selected by the driver, shared by builtin constants and comptime if.
+i64 cfg_arch = 0;
+bool cfg_macos = false;
+bool cfg_freestanding = false;
+bool cfg_safety = true;
+bool cfg_overflow = true;
+bool cfg_optimized = false;
+bool cfg_fast = false;
+bool cfg_test = false;
+
+str cfg_os_name() {
+    if (cfg_freestanding) { return "freestanding"; }
+    if (cfg_macos) { return "macos"; }
+    return "linux";
+}
+str cfg_arch_name() { if (cfg_arch == 1) { return "aarch64"; } return "x86_64"; }
+str cfg_abi_name() { if (cfg_arch == 1) { return "aapcs64"; } return "sysv"; }
+
+!bool cfg_flag(str n) {
+    match n {
+        "is_linux" => return !cfg_freestanding && !cfg_macos;
+        "is_macos" => return !cfg_freestanding && cfg_macos;
+        "is_windows" => return false;
+        "is_x86_64" => return cfg_arch == 0;
+        "is_aarch64" => return cfg_arch == 1;
+        "is_freestanding" => return cfg_freestanding;
+        "is_test" => return cfg_test;
+        "optimized" => return cfg_optimized;
+        "safety" => return cfg_safety;
+        "overflow_checks" => return cfg_overflow;
+        "fast" => return cfg_fast;
+        _ => return error.UnknownBuiltin;
+    }
+}
+
+i64 cfg_encode() {
+    auto n = 0;
+    if (cfg_arch == 1) { n |= 1; }
+    if (cfg_macos) { n |= 2; }
+    if (cfg_freestanding) { n |= 4; }
+    if (cfg_safety) { n |= 8; }
+    if (cfg_overflow) { n |= 16; }
+    if (cfg_optimized) { n |= 32; }
+    if (cfg_fast) { n |= 64; }
+    if (cfg_test) { n |= 128; }
+    return n;
+}
+
+void cfg_decode(i64 n) {
+    cfg_arch = n & 1;
+    cfg_macos = (n & 2) != 0;
+    cfg_freestanding = (n & 4) != 0;
+    cfg_safety = (n & 8) != 0;
+    cfg_overflow = (n & 16) != 0;
+    cfg_optimized = (n & 32) != 0;
+    cfg_fast = (n & 64) != 0;
+    cfg_test = (n & 128) != 0;
+}
+
 bool stmt_ends_with_block(Stmt* s) {
     match s.k {
         .If, .While, .ForRange, .ForEach, .Match, .Block => return true;
@@ -29,6 +88,7 @@ struct Parser {
     bool at_owned;
     i64 at_align;
     List<Expr*> cts;
+    List<str> builtin_aliases;
 
     Token peek() { return this->toks[this->pos] };
     Token peek_at(i64 n) {
@@ -130,6 +190,11 @@ struct Parser {
         auto decls = List<Decl>::init(this->a);
         this->skip_semis();
         while (!this->at(.eof)) {
+            if (this->at(.ident) && this->peek().text == "comptime" && this->peek_at(1).tag == .kw_if) {
+                this->parse_cfg_decls(&decls, true)?;
+                this->skip_semis();
+                continue;
+            }
             this->parse_decl(&decls)?;
             this->end_decl(&decls)?;
         }
@@ -218,6 +283,7 @@ struct Parser {
                     d.alias = at.text;
                     d.name_off = at.off;
                     this->aliases.push(d.alias)?;
+                    if (d.path == "std/builtin" || d.path == "std/builtin.zk") { this->builtin_aliases.push(d.alias)?; }
                 }
             }
             .kw_struct, .kw_union => {
@@ -387,6 +453,10 @@ struct Parser {
 
     !Stmt* parse_stmt() {
         const auto t = this->peek();
+        if (t.tag == .ident && t.text == "comptime" && this->peek_at(1).tag == .kw_if) {
+            _ = this->advance();
+            return this->parse_cfg_stmt(true);
+        }
         if (t.tag == .ident && this->peek_at(1).tag == .colon && (this->peek_at(2).tag == .kw_for || this->peek_at(2).tag == .kw_while)) {
             _ = this->advance();
             _ = this->advance();
@@ -506,6 +576,133 @@ struct Parser {
             if (this->at(.kw_if)) { s.els = this->parse_if()?; } else { s.els = this->parse_block()?; }
         }
         return s;
+    }
+
+    str cfg_field(Expr* e) {
+        if (e.k != .Ident) { return ""; }
+        for (auto alias : this->builtin_aliases) {
+            if (e.name.len > alias.len && str_starts_with(e.name, alias) && e.name[alias.len] == '.') {
+                return e.name[alias.len + 1..];
+            }
+        }
+        return "";
+    }
+
+    bool cfg_string_operand(Expr* e) {
+        const auto n = this->cfg_field(e);
+        return e.k == .StrLit || n == "os" || n == "arch" || n == "abi" || n == "endian";
+    }
+
+    !str cfg_string(Expr* e) {
+        if (e.k == .StrLit) { return e.name; }
+        const auto n = this->cfg_field(e);
+        if (n == "os") { return cfg_os_name(); }
+        if (n == "arch") { return cfg_arch_name(); }
+        if (n == "abi") { return cfg_abi_name(); }
+        if (n == "endian") { return "little"; }
+        eprintln("{this->file}:{e.line}: error: expected a string literal or std/builtin target string");
+        show_source(this->file, e.line, e.off);
+        return error.ParseFailed;
+    }
+
+    !bool cfg_value(Expr* e) {
+        if (e.k == .BoolLit) { return e.bval; }
+        if (e.k == .Unary && e.op == .bang) { return !this->cfg_value(e.l)?; }
+        if (e.k == .Binary) {
+            if ((e.op == .eqeq || e.op == .neq) && (this->cfg_string_operand(e.l) || this->cfg_string_operand(e.r))) {
+                const auto same = this->cfg_string(e.l)? == this->cfg_string(e.r)?;
+                if (e.op == .eqeq) { return same; }
+                return !same;
+            }
+            const auto l = this->cfg_value(e.l)?;
+            const auto r = this->cfg_value(e.r)?;
+            match e.op {
+                .andand => return l && r;
+                .oror => return l || r;
+                .eqeq => return l == r;
+                .neq => return l != r;
+                _ => {}
+            }
+        }
+        const auto n = this->cfg_field(e);
+        if (n.len > 0) { return cfg_flag(n) catch { this->cfg_error(e)?; return false; }; }
+        this->cfg_error(e)?;
+        return false;
+    }
+
+    !void cfg_error(Expr* e) {
+        eprintln("{this->file}:{e.line}: error: comptime if requires boolean literals or std/builtin flags");
+        show_source(this->file, e.line, e.off);
+        return error.ParseFailed;
+    }
+
+    !void skip_cfg_block() {
+        _ = this->expect(.lbrace)?;
+        auto depth = 1;
+        while (depth > 0) {
+            if (this->at(.eof)) { this->fail("unterminated comptime if block")?; }
+            const auto t = this->advance();
+            if (t.tag == .lbrace) { depth += 1; }
+            if (t.tag == .rbrace) { depth -= 1; }
+        }
+    }
+
+    !Stmt* parse_cfg_stmt(bool active) {
+        this->depth += 1;
+        defer this->depth -= 1;
+        if (this->depth > 300) { this->fail("code is nested too deeply (limit 300 levels)")?; }
+        const auto t = this->expect(.kw_if)?;
+        const auto expr = this->parse_paren_cond()?;
+        auto cond = false;
+        if (active) { cond = this->cfg_value(expr)?; }
+        auto selected = this->st(.Block, t)?;
+        if (active && cond) { selected = this->parse_block()?; } else { this->skip_cfg_block()?; }
+        if (this->eat(.kw_else)) {
+            if (this->at(.kw_if)) {
+                const auto other = this->parse_cfg_stmt(active && !cond)?;
+                if (active && !cond) { selected = other; }
+            } else if (active && !cond) {
+                selected = this->parse_block()?;
+            } else { this->skip_cfg_block()?; }
+        }
+        return selected;
+    }
+
+    !void cfg_decl_block(List<Decl>*out, bool active) {
+        if (!active) { return this->skip_cfg_block(); }
+        _ = this->expect(.lbrace)?;
+        this->skip_semis();
+        while (!this->at(.rbrace)) {
+            if (this->at(.eof)) { this->fail("unterminated comptime if block")?; }
+            if (this->at(.ident) && this->peek().text == "comptime" && this->peek_at(1).tag == .kw_if) {
+                this->parse_cfg_decls(out, true)?;
+                this->skip_semis();
+            } else {
+                this->parse_decl(out)?;
+                this->end_decl(out)?;
+            }
+        }
+        _ = this->expect(.rbrace)?;
+    }
+
+    !void cfg_decl_if(List<Decl>*out, bool active) {
+        this->depth += 1;
+        defer this->depth -= 1;
+        if (this->depth > 300) { this->fail("code is nested too deeply (limit 300 levels)")?; }
+        _ = this->expect(.kw_if)?;
+        const auto expr = this->parse_paren_cond()?;
+        auto cond = false;
+        if (active) { cond = this->cfg_value(expr)?; }
+        this->cfg_decl_block(out, active && cond)?;
+        if (this->eat(.kw_else)) {
+            if (this->at(.kw_if)) { this->cfg_decl_if(out, active && !cond)?; }
+            else { this->cfg_decl_block(out, active && !cond)?; }
+        }
+    }
+
+    !void parse_cfg_decls(List<Decl>*out, bool active) {
+        _ = this->advance(); // comptime
+        this->cfg_decl_if(out, active)?;
     }
 
     // ---------------------------------------------------------------- expressions
@@ -955,6 +1152,7 @@ struct Parser {
                 }
                 auto sub = new_parser(this->a, toks.slice(), this->file);
                 sub.aliases = share_list(&this->aliases);
+                sub.builtin_aliases = share_list(&this->builtin_aliases);
                 const auto x = sub.parse_expr()?;
                 if (!sub.at(.semi) && !sub.at(.eof)) {
                     eprintln("{this->file}:{t.line}: error: unexpected tokens in interpolation '{inner}'");
@@ -986,7 +1184,7 @@ struct Parser {
 }
 
 Parser new_parser(Allocator a, Token[] toks, str file) {
-    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .cast_ty = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a) };
+    return Parser{ .a = a, .toks = toks, .pos = 0, .file = file, .no_struct = false, .aliases = List<str>::init(a), .quiet = false, .no_post = false, .cast_ty = false, .arrow_only = false, .splits = List<i64>::init(a), .cts = List<Expr*>::init(a), .builtin_aliases = List<str>::init(a) };
 }
 
 i64 prec(Tag t) {

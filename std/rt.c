@@ -544,6 +544,12 @@ int vrt_mutex_unlock(vmutex *m)
     return pthread_mutex_unlock(&m->m);
 }
 
+int vrt_mutex_destroy(vmutex *m)
+{
+    if (atomic_load(&m->state) == 0) return 0;
+    return pthread_mutex_destroy(&m->m);
+}
+
 int vrt_cond_wait(vcond *c, vmutex *m)
 {
     lazy(&c->state, cond_init, c);
