@@ -1,0 +1,72 @@
+// Explicit smart pointers. Cleanup is called for resource values; null means no cleanup.
+
+owned struct Box<T> {
+    T* ptr;
+    Allocator a;
+    fn(T*) -> void cleanup;
+
+    static !Self init(Allocator a, T value, fn(T*) -> void cleanup) {
+        const auto p = a.create<T>() catch |e| {
+            if (cleanup != null) { cleanup(&value); }
+            return e;
+        };
+        *p = value;
+        return Self{ .ptr = p, .a = a, .cleanup = cleanup };
+    }
+
+    T* get() borrows { return this->ptr; }
+
+    T take() move {
+        const auto p = this->ptr;
+        const auto value = move_out(p);
+        this->a.destroy(p);
+        return value;
+    }
+
+    void deinit() move {
+        if (this->cleanup != null) { this->cleanup(this->ptr); }
+        this->a.destroy(this->ptr);
+    }
+}
+
+struct RcBlock<T> {
+    i64 refs;
+    Allocator a;
+    fn(T*) -> void cleanup;
+    T value;
+}
+
+/// Single-threaded shared ownership. Do not use an Rc from multiple threads.
+owned struct Rc<T> {
+    RcBlock<T>* block;
+
+    static !Self init(Allocator a, T value, fn(T*) -> void cleanup) {
+        const auto p = a.create<RcBlock<T>>() catch |e| {
+            if (cleanup != null) { cleanup(&value); }
+            return e;
+        };
+        p.refs = 1;
+        p.a = a;
+        p.cleanup = cleanup;
+        p.value = value;
+        return Self{ .block = p };
+    }
+
+    Self clone() {
+        assert(this->block.refs > 0 && this->block.refs < 9223372036854775807);
+        this->block.refs += 1;
+        return Self{ .block = this->block };
+    }
+
+    T* get() borrows { return &this->block.value; }
+
+    void deinit() move {
+        const auto p = this->block;
+        p.refs -= 1;
+        if (p.refs == 0) {
+            if (p.cleanup != null) { p.cleanup(&p.value); }
+            const auto a = p.a;
+            a.destroy(p);
+        }
+    }
+}
