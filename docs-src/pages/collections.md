@@ -115,7 +115,7 @@ So `xs.len` is the number of elements, and `xs.items.len` is the capacity. The b
 
 ### Changing elements in place
 
-`get` returns a **copy**. To change the elements of structs, take a pointer to the element:
+`get` returns a **copy**. For an element that is a resource (`List`, `Map`, an `owned` struct) it does not compile, because the copy would alias the container; use `at(i)` for a pointer or `pop`/`remove_at` to move the element out. To change the elements of structs, take a pointer to the element:
 
 ```zark run
 struct Player { str name; i64 score; }
@@ -210,7 +210,7 @@ The key is always a `str`, and the value is any type `V`.
 
 > **Gotcha:** keys are **not copied**: the table stores the slice you gave it. If a key is built from a temporary buffer, copy it with `a.dup(key)`, otherwise it will be corrupted when the buffer is overwritten.
 
-You cannot delete keys (there is no `remove` method). `get` returns a copy of the value: to change a value in place you need to work with `m.entries`.
+You cannot delete keys (there is no `remove` method). `get` returns a copy of the value, so for a resource value it is rejected: use `get_ptr(key)` to borrow the stored value in place.
 
 ### Iterating
 

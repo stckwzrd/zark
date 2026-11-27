@@ -167,6 +167,26 @@ void Gen::note_use(str ptr) {
     }
 }
 
+/// A closure captures a variable by storing a pointer to its slot. For a
+/// non-owning element copy that pointer lets the closure change the copy's
+/// resource fields while the container still owns the buffer, so reject it.
+!void Gen::check_view_capture(str p, str name, i64 line) {
+    if (p.len == 0) { return; }
+    for (auto r : this->moved) {
+        if (r.kind != 7) { continue; }
+        auto under = false;
+        if (r.ptr == p) {
+            under = true;
+        } else if (r.ptr.len < p.len && str_starts_with(p, r.ptr)) {
+            under = (p[r.ptr.len] == '.' || p[r.ptr.len] == '[');
+        }
+        if (!under) { continue; }
+        this->err(line);
+        eprintln("'{name}' is a non-owning copy of an element of the iterated container; a closure capturing it could change the copy's resource fields, which the container still owns. Take the element out with pop/remove_at first");
+        return error.CompileFailed;
+    }
+}
+
 !void Gen::move_use(str name, i64 line) {
     this->move_use_key(this->local_ptr(name), name, line)?;
 }

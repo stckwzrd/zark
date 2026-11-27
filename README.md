@@ -1,5 +1,7 @@
 # Zark
 
+> **Pre-release 0.6.0-pre.** The ownership rules for resource elements changed (a runtime index and a `for` no longer produce a second owner); see [CHANGELOG.md](CHANGELOG.md). The checks and the standard library may still change before 0.6.0.
+
 **Self-hosted, with its own x86-64 backend.** The compiler is written in Zark (`selfhost/`) and builds itself (see [BOOTSTRAP.md](BOOTSTRAP.md)). Debug builds use our own machine-code generator and ELF writer, with no LLVM involved; `--release` uses LLVM -O2.
 
 | 10k-line program → executable | time |
@@ -316,8 +318,9 @@ point or a failed test stops the build before `build/zark` is installed.
 
 - [x] v0.2: no hidden allocations, `Allocator`, `*void`, function pointers, tagged unions, `..` in literals, `alignof`, errdefer on runtime errors
 - [x] v0.3: files, processes, `sprint`, format specs, `type` aliases, `Arena`; self-hosted lexer
-- [x] **v0.5: own x86-64 backend + ELF writer** (default); the native-built compiler reaches its own fixed point. Next steps: [ROADMAP.md](ROADMAP.md)
 - [x] **v0.4: self-hosted.** The compiler is written in Zark and reaches a fixed point (stage2 == stage3); adds `is`, `eprint`, `embed`
+- [x] **v0.5: own x86-64 backend + ELF writer** (default); the native-built compiler reaches its own fixed point. Next steps: [ROADMAP.md](ROADMAP.md)
+- [ ] **v0.6.0-pre: soundness release.** A resource element cannot be copied by a runtime index (#78) or moved/mutated out of a `for` (#58); `List.pop/remove_at/swap_remove/take/clear` are `invalidates`; `move_out` is the explicit escape; errors inside a generic name it. Both fixed points and the seed reproduce byte for byte.
 - [ ] `comptime` blocks, `inline for`
 - [x] passing structs by value across the C ABI (`extern`)
 - [ ] `@cImport` via libclang

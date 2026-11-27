@@ -108,6 +108,22 @@
 <td>compile error</td>
 </tr>
 <tr>
+<td>Copying a resource element by a runtime index (<code>l[i]</code>, <code>List.get(i)</code>)</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Moving or mutating an element out of a <code>for</code> over a container of resources</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Matching a resource union and using the matched value afterwards</td>
+<td>compile error</td>
+</tr>
+<tr>
+<td>Unwrapping a resource optional or error union and using the value afterwards</td>
+<td>compile error</td>
+</tr>
+<tr>
 <td>A <code>Thread</code> that is not joined on every path, dropped, or returned together with a local it captured</td>
 <td>compile error</td>
 </tr>
@@ -160,7 +176,11 @@
 <li>A parameter or method marked <code>move</code> takes the value over. The standard library marks <code>free</code>, <code>destroy</code>, every <code>deinit</code>, <code>join</code>, and the <code>close</code> of sockets and streams. After the call, the variable is dead until you assign it again.</li>
 <li>A method marked <code>borrows</code> returns a pointer or slice into the object (<code>List.at</code>, <code>List.slice</code>, <code>Map.get_ptr</code>). A method marked <code>invalidates</code> may move the memory (<code>push</code>, <code>put</code>, <code>insert</code>). If you call an <code>invalidates</code> method, every pointer or slice you took from that object earlier is dead.</li>
 <li>A pointer or slice to a local array or struct cannot leave the function: not by <code>return</code> and not by being stored through a pointer parameter or into a global.</li>
-<li>A loop that iterates over a container (<code>for (auto x : list)</code>, <code>list.slice()</code>, <code>this-&gt;items</code>) cannot call an <code>invalidates</code> method on it and then go on to the next round. Leave with <code>break</code> or <code>return</code> right after the change, or iterate over a copy.</li>
+<li>A loop that iterates over a container (<code>for (auto x : list)</code>, <code>list.slice()</code>, <code>this-&gt;items</code>) cannot call an <code>invalidates</code> method on it and then go on to the next round. Leave with <code>break</code> or <code>return</code> right after the change, or iterate over a copy. A non-resource element is copied by value; a resource element is a non-owning copy (below).</li>
+<li>A resource element read by a runtime index (<code>l[i]</code>, <code>List.get(i)</code>) is rejected: the checker follows names and constant paths, so a runtime index cannot be tracked and the copy would alias the container. A constant index rooted in a local moves that path. Inside the container&#39;s own methods (<code>this-&gt;items[i]</code> in <code>pop</code>, <code>remove_at</code>, ...) the read is trusted, because only the container knows whether the slot is still live.</li>
+<li>A <code>for</code> over a container of resources gives a non-owning copy of each element: read it and call its <code>borrows</code> methods, but do not move it out (a <code>move</code> parameter, <code>deinit</code>, a resource field) and do not call an <code>invalidates</code> method on it or on a field (<code>x.inner.push</code>), because the copy&#39;s header would change while the container still points at the old buffer. Take an element out with <code>pop</code>/<code>remove_at</code>/<code>swap_remove</code>, or use <code>move_out(&amp;c[i])</code>. A closure cannot capture it either, because the capture is a pointer to the copy.</li>
+<li><code>match (u)</code> on a resource union takes <code>u</code> over: the arm binding owns the payload and using <code>u</code> afterwards is a compile error. Inside a <code>for</code> over resources the binding is a non-owning view with the same rules as the loop variable.</li>
+<li><code>x orelse d</code> and <code>x catch d</code> copy the payload out, so a resource optional or error union in a place is consumed by the unwrap; using <code>x</code> afterwards is a compile error.</li>
 <li>A struct declared <code>owned</code> (in the standard library, <code>Thread</code>) must be consumed in every scope it lives in: joined, detached, passed on, or returned. This includes the exits taken by <code>?</code>, so write <code>defer t.join();</code> or <code>errdefer t.join();</code> right after creating it. Dropping such a value on the spot is refused.</li>
 </ul>
 <p>The state is followed through <code>if</code>, <code>match</code>, <code>catch</code>, loops, <code>defer</code> and <code>errdefer</code>. The checker is deliberately conservative where it would otherwise reject valid programs, so it says nothing about what it cannot see. Four things it does not see:</p>

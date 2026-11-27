@@ -1,0 +1,8 @@
+!List<i64> make() { return List<i64>::init(c_allocator()); }
+!void main() {
+    auto r = make();
+    const auto v = r catch List<i64>::init(c_allocator());
+    const auto w = r catch List<i64>::init(c_allocator());
+    v.deinit();
+    w.deinit();
+}

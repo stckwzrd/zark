@@ -176,7 +176,7 @@ true false
 3: 40
 100</code></pre></div></div>
 <h3 id="изменение-элементов-на-месте"><a class="anchor" href="#изменение-элементов-на-месте">#</a>Изменение элементов на месте</h3>
-<p><code>get</code> возвращает <strong>копию</strong>. Чтобы менять элементы структур, берите указатель на элемент:</p>
+<p><code>get</code> возвращает <strong>копию</strong>. Для ресурсного элемента (<code>List</code>, <code>Map</code>, <code>owned</code>-структура) он не компилируется, потому что копия стала бы вторым владельцем; берите <code>at(i)</code> для указателя или <code>pop</code>/<code>remove_at</code>, чтобы забрать элемент. Чтобы менять элементы структур, берите указатель на элемент:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">struct</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> Player</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> { </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">str</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> name; </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">i64</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> score; }</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!void</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>
@@ -280,7 +280,7 @@ true false 2</code></pre></div></div>
 </tbody></table></div>
 <blockquote class="callout gotcha"><p><strong>Ловушка.</strong> Ключи <strong>не копируются</strong>: таблица хранит срез, который вы дали. Если ключ собирается из временного буфера, скопируйте его через <code>a.dup(key)</code>, иначе он испортится, когда буфер перезапишут.</p>
 </blockquote>
-<p>Удалять ключи нельзя (метода <code>remove</code> нет). <code>get</code> возвращает копию значения: чтобы изменить значение на месте, нужно работать с <code>m.entries</code>.</p>
+<p>Удалять ключи нельзя (метода <code>remove</code> нет). <code>get</code> возвращает копию значения, поэтому для ресурсного значения он отвергается: используйте <code>get_ptr(key)</code>, чтобы заимствовать значение на месте.</p>
 <h3 id="перебор"><a class="anchor" href="#перебор">#</a>Перебор</h3>
 <p>Специального итератора нет, но таблица — это массив записей <code>entries</code>, и занятые записи помечены <code>used</code>:</p>
 <div class="example"><div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">!void</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> main</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">() {</span></span>

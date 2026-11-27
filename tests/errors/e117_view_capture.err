@@ -1,0 +1,1 @@
+error: 's' is a non-owning copy of an element of the iterated container; a closure capturing it could change the copy's resource fields, which the container still owns. Take the element out with pop/remove_at first

@@ -113,7 +113,7 @@ test "List of resources: at borrows, pop moves the element out" {
 
 struct Shared { i64 n; List<i64> xs; }
 
-test "for over a resource element is a read-only view" {
+test "for over a resource element is a non-owning copy" {
     auto l = List<Shared>::init(c_allocator());
     l.push(Shared{ .n = 3, .xs = List<i64>::init(c_allocator()) })?;
     l.items[0].xs.push(5)?;
@@ -124,4 +124,53 @@ test "for over a resource element is a read-only view" {
     const auto s = move_out(&l.items[0]);
     s.xs.deinit();
     l.deinit();
+}
+
+union MaybeList { List<i64> xs; i64 n; }
+
+test "match on a resource union takes it over" {
+    const MaybeList m = .xs(List<i64>::init(c_allocator()));
+    auto got = 0;
+    match (m) {
+        .xs(v) => { v.push(5)?; got = v.len; v.deinit(); },
+        .n => {},
+    }
+    assert(got == 1);
+}
+
+test "match on a for element is a non-owning view" {
+    const auto a = c_allocator();
+    auto inner = List<i64>::init(a);
+    inner.push(3)?;
+    const MaybeList m = .xs(inner);
+    auto l = List<MaybeList>::init(a);
+    l.push(m)?;
+    auto total = 0;
+    for (auto x : l) {
+        match (x) {
+            .xs(v) => { total += v.len; },
+            .n => {},
+        }
+    }
+    assert(total == 1);
+    const auto e = move_out(&l.items[0]);
+    match (e) {
+        .xs(v) => { v.deinit(); },
+        .n => {},
+    }
+    l.deinit();
+}
+
+!List<i64> make_list() { return List<i64>::init(c_allocator()); }
+
+test "orelse and catch take a resource over" {
+    const auto a = c_allocator();
+    auto l = List<i64>::init(a);
+    l.push(1)?;
+    const ?List<i64> m = l;
+    const auto v = m orelse List<i64>::init(a);
+    v.deinit();
+    auto r = make_list();
+    const auto w = r catch List<i64>::init(a);
+    w.deinit();
 }

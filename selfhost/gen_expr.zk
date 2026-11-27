@@ -466,6 +466,7 @@ bool has_defaults(Type* t) {
         for (auto [i, cn] : fd.captures) {
             if (!this->has_var(cn)) { this->err(e.line); eprintln("captured variable '{cn}' is not defined{this->hint(cn, this->var_names())}"); return error.CompileFailed; }
             const auto v = this->lookup_var(cn)?;
+            if (this->is_resource(v.ty)) { this->check_view_capture(v.ptr, cn, e.line)?; }
             this->move_use(cn, e.line)?;
             caps.push(CapInfo{ .name = cn, .ty = v.ty, .mutable = v.mutable })?;
             const auto slot = this->tmp()?;
@@ -549,6 +550,16 @@ bool has_defaults(Type* t) {
     } else {
         if (v.ty.k != .Errun) { this->err(e.line); eprintln("'catch' needs an error union, got '{this->type_name(v.ty)?}'"); return error.CompileFailed };
         vt = v.ty.elem;
+    }
+    if (this->is_resource(vt)) {
+        // Unwrapping copies the payload out of the optional or error union, so
+        // a place operand is consumed; otherwise the value and the original
+        // place would own the same bytes.
+        if (e.k == .Orelse) {
+            this->copy_moves(e.l, v.ty, "", "orelse", e.line)?;
+        } else {
+            this->copy_moves(e.l, v.ty, "", "catch", e.line)?;
+        }
     }
     const auto tag = this->extract(v, 0, this->t_i32)?;
     const auto c = this->tmp()?;

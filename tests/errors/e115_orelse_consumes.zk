@@ -1,0 +1,10 @@
+!void main() {
+    auto a = c_allocator();
+    auto l = List<i64>::init(a);
+    l.push(1)?;
+    const ?List<i64> m = l;
+    const auto v = m orelse List<i64>::init(a);
+    const auto w = m orelse List<i64>::init(a);
+    v.deinit();
+    w.deinit();
+}

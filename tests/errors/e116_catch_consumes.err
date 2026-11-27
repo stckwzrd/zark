@@ -1,0 +1,1 @@
+error: 'r' is used after 'catch' consumed it on line 4; assign it a new value first

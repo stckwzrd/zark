@@ -42,6 +42,10 @@ Every problem ends in exactly one of three ways.
 | Returning or storing a pointer or slice into a local | compile error |
 | Using a pointer or slice into a `List` or `Map` after it changed | compile error |
 | Changing a `List` or `Map` inside a loop that iterates over it (and goes on to the next round) | compile error |
+| Copying a resource element by a runtime index (`l[i]`, `List.get(i)`) | compile error |
+| Moving or mutating an element out of a `for` over a container of resources | compile error |
+| Matching a resource union and using the matched value afterwards | compile error |
+| Unwrapping a resource optional or error union and using the value afterwards | compile error |
 | A `Thread` that is not joined on every path, dropped, or returned together with a local it captured | compile error |
 | `comptime` assertion that is false | compile error |
 | Index or slice out of bounds | panic |
@@ -65,7 +69,11 @@ Zark does not have lifetimes or a borrow checker as Rust has. It has something s
 - A parameter or method marked `move` takes the value over. The standard library marks `free`, `destroy`, every `deinit`, `join`, and the `close` of sockets and streams. After the call, the variable is dead until you assign it again.
 - A method marked `borrows` returns a pointer or slice into the object (`List.at`, `List.slice`, `Map.get_ptr`). A method marked `invalidates` may move the memory (`push`, `put`, `insert`). If you call an `invalidates` method, every pointer or slice you took from that object earlier is dead.
 - A pointer or slice to a local array or struct cannot leave the function: not by `return` and not by being stored through a pointer parameter or into a global.
-- A loop that iterates over a container (`for (auto x : list)`, `list.slice()`, `this->items`) cannot call an `invalidates` method on it and then go on to the next round. Leave with `break` or `return` right after the change, or iterate over a copy.
+- A loop that iterates over a container (`for (auto x : list)`, `list.slice()`, `this->items`) cannot call an `invalidates` method on it and then go on to the next round. Leave with `break` or `return` right after the change, or iterate over a copy. A non-resource element is copied by value; a resource element is a non-owning copy (below).
+- A resource element read by a runtime index (`l[i]`, `List.get(i)`) is rejected: the checker follows names and constant paths, so a runtime index cannot be tracked and the copy would alias the container. A constant index rooted in a local moves that path. Inside the container's own methods (`this->items[i]` in `pop`, `remove_at`, ...) the read is trusted, because only the container knows whether the slot is still live.
+- A `for` over a container of resources gives a non-owning copy of each element: read it and call its `borrows` methods, but do not move it out (a `move` parameter, `deinit`, a resource field) and do not call an `invalidates` method on it or on a field (`x.inner.push`), because the copy's header would change while the container still points at the old buffer. Take an element out with `pop`/`remove_at`/`swap_remove`, or use `move_out(&c[i])`. A closure cannot capture it either, because the capture is a pointer to the copy.
+- `match (u)` on a resource union takes `u` over: the arm binding owns the payload and using `u` afterwards is a compile error. Inside a `for` over resources the binding is a non-owning view with the same rules as the loop variable.
+- `x orelse d` and `x catch d` copy the payload out, so a resource optional or error union in a place is consumed by the unwrap; using `x` afterwards is a compile error.
 - A struct declared `owned` (in the standard library, `Thread`) must be consumed in every scope it lives in: joined, detached, passed on, or returned. This includes the exits taken by `?`, so write `defer t.join();` or `errdefer t.join();` right after creating it. Dropping such a value on the spot is refused.
 
 The state is followed through `if`, `match`, `catch`, loops, `defer` and `errdefer`. The checker is deliberately conservative where it would otherwise reject valid programs, so it says nothing about what it cannot see. Four things it does not see:

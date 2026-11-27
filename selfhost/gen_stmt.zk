@@ -264,9 +264,34 @@ struct MatchRes { Type* ty; str slot; }
             if (v.ty.k == .Enm || v.ty.k == .Bool || is_union(v.ty)) {
                 this->check_exhaustive(v, s.arms.slice(), s.line)?;
             }
+            const auto mv = this->match_view;
+            this->match_own(s.e, v.ty, s.line)?;
             this->gen_match(v, s.arms, null)?;
+            this->match_view = mv;
         }
     }
+}
+
+/// `match (x)` copies the matched value into a spill slot so the arms can read
+/// the payload. For a resource that copy is a second owner, so the match either
+/// takes the place over or the payload binding stays non-owning (a view inside
+/// a `for`, where the container still owns the bytes).
+!void Gen::match_own(Expr* e, Type* ty, i64 line) {
+    this->match_view = false;
+    if (!this->is_resource(ty)) { return; }
+    const auto k = this->place_key(e)?;
+    if (k.len == 0) { return; }
+    for (auto r : this->moved) {
+        if (r.kind != 7) { continue; }
+        auto under = false;
+        if (r.ptr == k) {
+            under = true;
+        } else if (r.ptr.len < k.len && str_starts_with(k, r.ptr)) {
+            under = (k[r.ptr.len] == '.' || k[r.ptr.len] == '[');
+        }
+        if (under) { this->match_view = true; return; }
+    }
+    this->copy_moves(e, ty, "", "match", line)?;
 }
 
 !void Gen::gen_match(Value v, List<MatchArm> arms, MatchRes* res) {
@@ -343,7 +368,10 @@ struct MatchRes { Type* ty; str slot; }
     if (s.k == .Match) {
         const auto v = this->gen_expr(s.e, null)?;
         this->check_exhaustive(v, s.arms.slice(), s.line)?;
+        const auto mv = this->match_view;
+        this->match_own(s.e, v.ty, s.line)?;
         this->gen_match(v, s.arms, res)?;
+        this->match_view = mv;
         return;
     }
     this->gen_stmt(s)?;
@@ -492,6 +520,9 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
             auto bp = pp;
             if (this->af != null) { bp = this->spill(this->load(bty, pp)?)?.v; }
             this->declare_var(bind.bind, Var{ .ptr = bp, .ty = bty, .mutable = false }, arm.body.line)?;
+            if (this->match_view && this->is_resource(bty)) {
+                this->add_rec(MoveRec{ .ptr = bp, .by = "match", .line = arm.body.line, .kind = 7, .cname = bind.bind })?;
+            }
         }
         this->gen_arm(arm.body, res)?;
         this->pop_scope()?;
