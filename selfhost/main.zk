@@ -256,6 +256,8 @@ void restore_stack() {
     grow_stack();
     c_arch = vrt_arch() as i64;
     c_apple = vrt_os() == 2;
+    cfg_arch = c_arch;
+    cfg_macos = c_apple;
     if (arg_count() == 2 && arg(1) == "lsp") { return lsp_main(); }
     if (arg_count() >= 2 && arg(1) == "cbind") { return cbind_main(a); }
     if (arg_count() >= 2 && arg(1) == "new") {
@@ -388,6 +390,7 @@ void restore_stack() {
     auto ovf = false;
     auto debug = false;
     auto ct_opts = List<str>::init(a);
+    auto ct_cfg = -1;
     auto i = 0;
     while (i < argv.len) {
         const auto x = argv.get(i);
@@ -426,6 +429,11 @@ void restore_stack() {
             safety = false;
         } else if (x == "--time") {
             timing = true;
+        } else if (x == "--ct-cfg") {
+            i += 1;
+            if (i >= argv.len) { eprintln("error: --ct-cfg needs a value"); return 1; }
+            ct_cfg = parse_int(argv.get(i)) catch { eprintln("error: invalid --ct-cfg"); return 1; };
+            if (ct_cfg < 0 || ct_cfg > 255) { eprintln("error: invalid --ct-cfg"); return 1; }
         } else if (x == "--ct-key" || x == "--ct-mode" || x == "--ct-out" || x == "--ct-chain") {
             i += 1;
             if (i < argv.len) { ct_opts.push(x)?; ct_opts.push(argv.get(i))?; }
@@ -460,6 +468,15 @@ void restore_stack() {
     if (src_file.len == 0) { return build_sources(a, &sp, out_path, is_run, opt, prog_args); }
 
     if (safety) { ovf = true; }
+    cfg_arch = c_arch;
+    cfg_macos = c_apple;
+    cfg_freestanding = freestanding;
+    cfg_safety = safety;
+    cfg_overflow = ovf;
+    cfg_optimized = opt;
+    cfg_fast = fast;
+    cfg_test = is_test;
+    if (ct_cfg >= 0) { cfg_decode(ct_cfg); }
     const auto t0 = now_ns();
     const auto g = new_gen(a, safety)?;
     const auto can_native = vrt_native() != 0;

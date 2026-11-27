@@ -76,7 +76,7 @@ struct Project {
         if (this->overrides.has(path)) {
             src = this->overrides.get(path)?;
         } else if (is_std_path(path)) {
-            src = std_source(path) catch return;
+            src = std_source(this->a, path) catch return;
         } else {
             src = read_file(this->a, path) catch return;
         }
