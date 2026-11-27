@@ -18,6 +18,8 @@ const auto STD_NET = embed("../std/net.zk");
 const auto STD_HTTP = embed("../std/http.zk");
 const auto STD_THREAD = embed("../std/thread.zk");
 const auto STD_ASYNC = embed("../std/async.zk");
+const auto STD_COLLECTIONS = embed("../std/collections.zk");
+const auto STD_SMART = embed("../std/smart.zk");
 
 /// the embedded source of "<std>/name.zk"
 !str std_source(str path) {
@@ -32,6 +34,8 @@ const auto STD_ASYNC = embed("../std/async.zk");
         "<std>/http.zk" => return STD_HTTP;
         "<std>/thread.zk" => return STD_THREAD;
         "<std>/async.zk" => return STD_ASYNC;
+        "<std>/collections.zk" => return STD_COLLECTIONS;
+        "<std>/smart.zk" => return STD_SMART;
     }
     return error.NotFound;
 }
