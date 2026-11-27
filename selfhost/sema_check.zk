@@ -99,7 +99,8 @@ i64 BodyCheck::operand(Expr* e) {
     this->check_stmt(c, s.body)?;
     this->check_stmt(c, s.els)?;
     for (auto x : s.stmts) { this->check_stmt(c, x)?; }
-    for (auto arm : s.arms) {
+    for (auto ai : 0..s.arms.len) {
+        const auto arm = &s.arms.items[ai];
         for (auto p : arm.pats) { this->check_expr(c, p)?; }
         this->check_stmt(c, arm.body)?;
     }

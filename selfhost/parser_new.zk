@@ -637,13 +637,15 @@ struct IfaceMethod { str ret; str name; List<str> ptypes; List<str> pnames; }
     _ = this->expect(.rbrace)?;
     auto b = List<u8>::init(this->a);
     sprint(&b, "struct {name}Vtable {{ ")?;
-    for (auto m : methods) {
+    for (auto mi : 0..methods.len) {
+        const auto m = &methods.items[mi];
         sprint(&b, "fn(void*")?;
         for (auto pt : m.ptypes) { sprint(&b, ", {pt}")?; }
         sprint(&b, ") -> {m.ret} {m.name}; ")?;
     }
     sprint(&b, "}\nstruct {name} {{ void* data; {name}Vtable* vt; ")?;
-    for (auto m : methods) {
+    for (auto mi : 0..methods.len) {
+        const auto m = &methods.items[mi];
         sprint(&b, "{m.ret} {m.name}(")?;
         for (auto [i, pt] : m.ptypes) {
             if (i > 0) { b.append(", ")?; }

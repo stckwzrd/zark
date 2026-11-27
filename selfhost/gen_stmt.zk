@@ -579,6 +579,13 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
     const auto slot = this->alloca(elem, s.name)?;
     this->store(ev, slot)?;
     this->declare_var(s.name, Var{ .ptr = slot, .ty = elem, .mutable = false }, s.line)?;
+    if (this->is_resource(elem)) {
+        // The element is a shallow copy of storage the container still owns,
+        // so the loop variable is non-owning: reading it and calling borrows
+        // methods is fine, moving it (or a resource field of it) out would
+        // alias the container.
+        this->add_rec(MoveRec{ .ptr = slot, .by = "for", .line = s.line, .kind = 7, .cname = s.name })?;
+    }
     if (s.has_idx) {
         const auto islot = this->alloca(this->t_i64, s.idx)?;
         this->store(cur, islot)?;

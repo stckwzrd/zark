@@ -269,6 +269,14 @@ struct Gen {
         if (!this->has_pend) { return; }
         this->has_pend = false;
         show_source(this->pend_file, this->pend_line, this->pend_off);
+        if (this->cur == null) { return; }
+        const auto generic = this->cur.decl.type_params.len > 0 || (this->cur.decl.file.len > 0 && this->cur.decl.file[0] == '<');
+        if (!generic) { return; }
+        if (this->cur.decl.receiver.len > 0) {
+            eprintln("note: this is inside '{this->cur.decl.receiver}.{this->cur.decl.name}', a generic or prelude function; the error is reported at its definition, and the element types come from the call site");
+        } else {
+            eprintln("note: this is inside '{this->cur.decl.name}', a generic or prelude function; the error is reported at its definition, and the element types come from the call site");
+        }
     }
 
     // ------------------------------------------------------------------ registration
@@ -1137,7 +1145,7 @@ void collect_addr_expr(Expr* e, Map<bool>* out) {
         }
         .Match => {
             collect_addr_expr(e.l, out);
-            for (auto arm : e.arms) { collect_addr_stmt(arm.body, out); }
+            for (auto ai : 0..e.arms.len) { collect_addr_stmt(e.arms.items[ai].body, out); }
         }
         .Orelse => {
             collect_addr_expr(e.l, out);
@@ -1188,7 +1196,7 @@ void collect_addr_stmt(Stmt* s, Map<bool>* out) {
         .Defer => collect_addr_stmt(s.body, out);
         .Match => {
             collect_addr_expr(s.e, out);
-            for (auto arm : s.arms) { collect_addr_stmt(arm.body, out); }
+            for (auto ai : 0..s.arms.len) { collect_addr_stmt(s.arms.items[ai].body, out); }
         }
         .Brk, .Cont => {}
     }
@@ -1355,9 +1363,9 @@ bool always_returns(Stmt* s) {
         .Match => {
             if (s.arms.len == 0) { return false; }
             auto wild = false;
-            for (auto arm : s.arms) {
-                if (arm.pats.len == 0) { wild = true; }
-                if (!always_returns(arm.body)) { return false; }
+            for (auto ai : 0..s.arms.len) {
+                if (s.arms.items[ai].pats.len == 0) { wild = true; }
+                if (!always_returns(s.arms.items[ai].body)) { return false; }
             }
             return wild;
         }
@@ -1379,7 +1387,7 @@ bool breaks_out(Stmt* s, str lbl, i64 depth) {
         .If => return breaks_out(s.body, lbl, depth) || breaks_out(s.els, lbl, depth);
         .While, .ForRange, .ForEach => return breaks_out(s.body, lbl, depth + 1);
         .Match => {
-            for (auto arm : s.arms) { if (breaks_out(arm.body, lbl, depth)) { return true; } }
+            for (auto ai : 0..s.arms.len) { if (breaks_out(s.arms.items[ai].body, lbl, depth)) { return true; } }
             return false;
         }
         _ => {}

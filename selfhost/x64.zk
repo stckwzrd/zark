@@ -379,7 +379,8 @@ struct ObjFile {
             if (file > 0) { file = this->file_index(o.files.get(file - 1))?; }
             this->rows.push(LineRow{ .off = w.off + base, .line = w.line, .file = file })?;
         }
-        for (auto f : o.funcs) {
+        for (auto fi : 0..o.funcs.len) {
+            auto f = move_out(&o.funcs.items[fi]);
             this->funcs.push(DbgFunc{ .name = f.name, .start = f.start + base, .end = f.end + base, .vars = f.vars })?;
         }
         for (auto s : o.syms) {
@@ -508,10 +509,12 @@ struct ObjFile {
         put_u64(info, 0)?;
         put_u64(info, this->text.code.len)?;
         auto type_at = Map<i64>::init(this->a);
-        for (auto f : this->funcs) {
+        for (auto fi : 0..this->funcs.len) {
+            const auto f = &this->funcs.items[fi];
             for (auto v : f.vars) { _ = this->emit_desc(info, &type_at, v.ty)?; }
         }
-        for (auto f : this->funcs) {
+        for (auto fi : 0..this->funcs.len) {
+            const auto f = &this->funcs.items[fi];
             put_uleb(info, 3)?;
             info.append(f.name)?;
             info.push(0)?;

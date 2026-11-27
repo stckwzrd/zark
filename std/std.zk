@@ -341,7 +341,7 @@ struct List<T> {
         this->len += n;
     }
 
-    !T pop() {
+    !T pop() invalidates {
         if (this->len == 0) { return error.Empty; }
         this->len -= 1;
         return this->items[this->len];
@@ -356,7 +356,7 @@ struct List<T> {
     void set(i64 i, T v) { this->slice()[i] = v; }
     T[] slice() borrows { return this->items[0..this->len]; }
     bool is_empty() { return this->len == 0; }
-    void clear() { this->len = 0; }
+    void clear() invalidates { this->len = 0; }
 
     bool contains(T v) {
         for (auto x : this->slice()) { if (x == v) { return true; } }
@@ -398,7 +398,7 @@ struct List<T> {
     }
 
     /// removes element i keeping the order of the rest
-    !T remove_at(i64 i) {
+    !T remove_at(i64 i) invalidates {
         if (i < 0 || i >= this->len) { return error.OutOfRange; }
         const auto v = this->items[i];
         for (auto j : i..this->len - 1) { this->items[j] = this->items[j + 1]; }
@@ -407,7 +407,7 @@ struct List<T> {
     }
 
     /// removes element i in O(1) by moving the last element into its place
-    !T swap_remove(i64 i) {
+    !T swap_remove(i64 i) invalidates {
         if (i < 0 || i >= this->len) { return error.OutOfRange; }
         const auto v = this->items[i];
         this->items[i] = this->items[this->len - 1];
@@ -417,7 +417,7 @@ struct List<T> {
 
     /// hands the elements over as an exactly sized slice (free it with the same allocator)
     /// and leaves the list empty
-    !T[] take() {
+    !T[] take() invalidates {
         auto r = this->a.alloc<T>(this->len)?;
         for (auto i : 0..this->len) { r[i] = this->items[i]; }
         this->deinit();
@@ -488,8 +488,9 @@ struct Map<V> {
         if (nc < 16) { nc = 16; }
         this->entries = this->a.alloc<MapEntry<V>>(nc)?;
         this->len = 0;
-        for (auto e : old) {
-            if (e.used) { this->__insert(e.key, e.value); }
+        for (auto ei : 0..old.len) {
+            const auto e = &old[ei];
+            if (e.used) { this->__insert(e.key, move_out(&e.value)); }
         }
         this->a.free(old);
     }

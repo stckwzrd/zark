@@ -110,3 +110,18 @@ test "List of resources: at borrows, pop moves the element out" {
     a.deinit();
     l.deinit();
 }
+
+struct Shared { i64 n; List<i64> xs; }
+
+test "for over a resource element is a read-only view" {
+    auto l = List<Shared>::init(c_allocator());
+    l.push(Shared{ .n = 3, .xs = List<i64>::init(c_allocator()) })?;
+    l.items[0].xs.push(5)?;
+    l.items[0].xs.push(7)?;
+    auto total = 0;
+    for (auto s : l) { total += s.n + s.xs.len; }
+    assert(total == 5);
+    const auto s = move_out(&l.items[0]);
+    s.xs.deinit();
+    l.deinit();
+}
