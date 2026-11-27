@@ -155,6 +155,20 @@ match dir {
 
 **Comptime (lite):** `const auto N = 4 * 2;` is evaluated at compile time. It works in array sizes `i32[N]` and with `sizeof(T)`. Generics are monomorphized, and only reachable code gets compiled (lazy analysis, like Zig).
 
+`import "std/builtin" as builtin;` exposes the target OS, architecture, C ABI, endianness and build flags. Use `comptime if` at file scope or inside a function to select platform-specific code before it is checked:
+
+```zark
+import "std/builtin" as builtin;
+
+comptime if (builtin::os == "linux" && builtin::arch == "x86_64") {
+    i64 platform_code() { return 1; }
+} else {
+    i64 platform_code() { return 0; }
+}
+```
+
+Conditions support builtin target strings and boolean flags, boolean literals, `!`, `&&`, `||`, `==` and `!=`; they do not yet support arbitrary `comptime` expressions. See [SPEC.md](SPEC.md#7a-compile-time-evaluation) for the available constants and branch rules.
+
 **Safety:** bounds checks on arrays and slices (`panic: index 3 out of bounds (len 3) at file:line`), plus `assert(cond)` and `panic("msg {x}")`.
 
 **Pointers:** `&x`, `*p`, `p[i]` (pointer arithmetic), `p + n`, auto-deref for fields (`p.x`), slicing `p[a..b]` and `s[a..]`. `void*` converts to and from any pointer.
@@ -213,6 +227,35 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 ### Standard modules (`import "std/fs" as fs;`)
 
 `std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`), `std/async` (a single-threaded executor with timers and TCP on epoll or kqueue). See the guide page "Standard modules".
+
+`std/thread` also provides `AtomicU64` and `AtomicBool` (sequentially consistent, like `AtomicI64`), `Arc<T>` for shared ownership, and `Locked<T>` for a value protected by a mutex. Share atomics by pointer and use their methods for every access.
+
+`Arc<T>::init(a, value, cleanup)` takes ownership of `value` and uses the explicit allocator `a`. Each `clone()` creates an owner that must call `deinit()` once; the last owner calls `cleanup(T*)` if non-null and frees the allocation. On allocation failure, `init` calls `cleanup` before returning the error. Pass a cleanup function for a resource-owning value. The allocator and cleanup function must work on whichever thread releases the last owner. A pointer from `get()` is valid only while an owner remains alive; do not race `get()` or `clone()` against `deinit()` on the same owner. `Arc` does not synchronize access to the value.
+
+`Locked<T>::lock()` locks and returns a pointer to the value; call `unlock()` when done and do not use the pointer afterwards. Do not copy or move a `Locked` after its first use. Call its `deinit()` once all users have stopped and it is unlocked. For `Arc<Locked<T>>`, provide a cleanup function that calls `Locked.deinit()` and also cleans up the contained value if necessary.
+
+`std/collections` provides a doubly linked `LinkedList<T>`, and `std/smart` provides `Box<T>` (one owner) and `Rc<T>` (shared ownership on one thread). They use explicit allocators and an optional `fn(T*) -> void` cleanup function, as does `Arc`. Pass a cleanup function for values that own resources; a failed allocation calls it on the value passed in. All owners must be consumed with `deinit()`, or, for `Box`, `take()` transfers the value to the caller without cleaning it up. `Rc` is not thread-safe and reference cycles are not collected.
+
+```zark
+import "std/collections" as collections;
+import "std/smart" as smart;
+
+!void main() {
+    const auto a = c_allocator();
+    auto values = collections::LinkedList<i64>::init(a, null);
+    defer values.deinit();
+    values.push_back(2)?;
+    values.push_front(1)?;
+    auto it = values.iter();
+    while (it.next()) { println(*it.value()); }
+
+    auto boxed = smart::Box<i64>::init(a, 42, null)?;
+    defer boxed.deinit();
+    println(*boxed.get());
+}
+```
+
+`LinkedList` has `push_front`, `push_back`, `pop_front`, `pop_back`, `front`, `back`, `clear`, `is_empty`, `len` and `iter`. Popping transfers the element to the caller without running cleanup; `clear` and `deinit` clean up remaining elements. Do not use an iterator or a pointer into the list after it is modified or freed: the compiler does not track pointers inside iterator structs. Pointers returned by `Box.get()` and `Rc.get()` are valid only while their owner remains alive. `Rc.clone()` creates another owner; each owner must be released once.
 
 A file that starts with `#!/usr/bin/env -S zark run` can be run directly as a script; the arguments after it go to the program.
 

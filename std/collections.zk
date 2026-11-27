@@ -1,0 +1,99 @@
+// Doubly linked list with explicit allocation and optional element cleanup.
+
+struct LinkedNode<T> {
+    LinkedNode<T>* prev;
+    LinkedNode<T>* next;
+    T value;
+}
+
+struct LinkedIter<T> {
+    LinkedNode<T>* next_node;
+    LinkedNode<T>* current;
+
+    bool next() {
+        this->current = this->next_node;
+        if (this->current == null) { return false; }
+        this->next_node = this->current.next;
+        return true;
+    }
+
+    T* value() borrows { return &this->current.value; }
+}
+
+owned struct LinkedList<T> {
+    LinkedNode<T>* first;
+    LinkedNode<T>* last;
+    i64 len;
+    Allocator a;
+    fn(T*) -> void cleanup;
+
+    static Self init(Allocator a, fn(T*) -> void cleanup) {
+        return Self{ .a = a, .cleanup = cleanup };
+    }
+
+    !void push_back(T value) invalidates {
+        const auto n = this->a.create<LinkedNode<T>>() catch |e| {
+            if (this->cleanup != null) { this->cleanup(&value); }
+            return e;
+        };
+        n.value = value;
+        n.prev = this->last;
+        if (this->last == null) { this->first = n; } else { this->last.next = n; }
+        this->last = n;
+        this->len += 1;
+    }
+
+    !void push_front(T value) invalidates {
+        const auto n = this->a.create<LinkedNode<T>>() catch |e| {
+            if (this->cleanup != null) { this->cleanup(&value); }
+            return e;
+        };
+        n.value = value;
+        n.next = this->first;
+        if (this->first == null) { this->last = n; } else { this->first.prev = n; }
+        this->first = n;
+        this->len += 1;
+    }
+
+    !T pop_front() invalidates {
+        const auto n = this->first;
+        if (n == null) { return error.Empty; }
+        this->first = n.next;
+        if (this->first == null) { this->last = null; } else { this->first.prev = null; }
+        this->len -= 1;
+        const auto value = move_out(&n.value);
+        this->a.destroy(n);
+        return value;
+    }
+
+    !T pop_back() invalidates {
+        const auto n = this->last;
+        if (n == null) { return error.Empty; }
+        this->last = n.prev;
+        if (this->last == null) { this->first = null; } else { this->last.next = null; }
+        this->len -= 1;
+        const auto value = move_out(&n.value);
+        this->a.destroy(n);
+        return value;
+    }
+
+    T* front() borrows { if (this->first == null) { return null; } return &this->first.value; }
+    T* back() borrows { if (this->last == null) { return null; } return &this->last.value; }
+    bool is_empty() { return this->len == 0; }
+    LinkedIter<T> iter() borrows { return LinkedIter<T>{ .next_node = this->first }; }
+
+    void clear() invalidates {
+        auto n = this->first;
+        while (n != null) {
+            const auto next = n.next;
+            if (this->cleanup != null) { this->cleanup(&n.value); }
+            this->a.destroy(n);
+            n = next;
+        }
+        this->first = null;
+        this->last = null;
+        this->len = 0;
+    }
+
+    void deinit() move { this->clear(); }
+}

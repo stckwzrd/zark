@@ -1,5 +1,86 @@
 import "std/thread" as thread;
 
+void cleanup_locked(thread::Locked<i64>* value) { value.deinit(); }
+struct Tracked { thread::AtomicI64* destroyed; }
+void cleanup_tracked(Tracked* value) { value.destroyed.add(1); }
+void cleanup_list(List<i64>* value) { value.deinit(); }
+
+test "arc owns a resource value" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto values = List<i64>::init(dbg.allocator());
+        values.push(42)?;
+        auto shared = thread::Arc<List<i64>>::init(dbg.allocator(), values, cleanup_list)?;
+        assert(shared.get().get(0) == 42);
+        shared.deinit();
+    }
+    dbg.deinit()?;
+}
+
+test "arc releases once after the last clone" {
+    auto dbg = DebugAllocator::init();
+    auto destroyed = thread::AtomicI64{};
+    {
+        auto first = thread::Arc<Tracked>::init(dbg.allocator(), Tracked{ .destroyed = &destroyed }, cleanup_tracked)?;
+        auto second = first.clone();
+        first.deinit();
+        assert(destroyed.load() == 0);
+        second.deinit();
+        assert(destroyed.load() == 1);
+    }
+    dbg.deinit()?;
+}
+
+test "arc cleans up when allocation fails" {
+    auto dbg = DebugAllocator::init();
+    auto destroyed = thread::AtomicI64{};
+    dbg.fail_after_n(0);
+    auto unexpected = thread::Arc<Tracked>::init(dbg.allocator(), Tracked{ .destroyed = &destroyed }, cleanup_tracked) catch |e| {
+        assert(e == error.OutOfMemory);
+        assert(destroyed.load() == 1);
+        dbg.deinit()?;
+        return;
+    };
+    unexpected.deinit();
+    panic("allocation should fail");
+}
+
+test "shared values and atomics" {
+    auto flag = thread::AtomicBool{};
+    assert(!flag.load());
+    assert(flag.compare_swap(false, true));
+    assert(flag.load() && !flag.compare_swap(false, true));
+    flag.store(false);
+    assert(!flag.load());
+    auto count = thread::AtomicU64{};
+    assert(count.add(7) == 0 && count.load() == 7);
+    assert(count.compare_swap(7, 9) && count.load() == 9);
+
+    auto shared = thread::Arc<thread::Locked<i64>>::init(c_allocator(), thread::Locked<i64>{}, cleanup_locked)?;
+    defer shared.deinit();
+    auto copy = shared.clone();
+    defer copy.deinit();
+    auto t = thread::spawn([&copy]() -> void {
+        const auto s = copy.get();
+        for (auto i : 0..10000) {
+            const auto v = s.lock();
+            *v += 1;
+            s.unlock();
+        }
+    })?;
+    for (auto i : 0..10000) {
+        const auto s = shared.get();
+        const auto v = s.lock();
+        *v += 1;
+        s.unlock();
+    }
+    t.join();
+    const auto s = shared.get();
+    const auto v = s.lock();
+    assert(*v == 20000);
+    s.unlock();
+}
+
 test "threads, atomics and a mutex" {
     auto counter = thread::AtomicI64{};
     auto plain = 0;
