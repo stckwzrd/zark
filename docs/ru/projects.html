@@ -45,10 +45,21 @@
 <li>Зависимость со своим <code>zark.toml</code> приносит с собой свои зависимости, исходники C и библиотеки. Без манифеста её lib-файл — <code>src/lib.zk</code> или <code>lib.zk</code>.</li>
 <li>Импорты, начинающиеся с <code>./</code> или <code>../</code>, всегда относительные, поэтому имя зависимости их не заслоняет.</li>
 </ul>
+<h3 id="блокировка-и-обновление"><a class="anchor" href="#блокировка-и-обновление">#</a>Блокировка и обновление</h3>
+<p>Зависимость <code>git</code> записывается в <code>zark.lock</code> рядом с <code>zark.toml</code>: URL, запрошенный <code>rev</code> и точный коммит, в который он разрешился. <code>zark build</code>, <code>run</code>, <code>test</code> и языковой сервер используют этот коммит, поэтому сдвинувшаяся ветка или тег не меняет сборку.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> update</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">              # заново разрешить все git-зависимости и переписать zark.lock</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fetch</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">               # поставить залоченные коммиты в .zark/deps (без резолва; для CI и офлайна)</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> add</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> URL</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [--rev </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">R]</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">   # добавить git-зависимость в zark.toml и залочить</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> remove</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> NAME</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">         # убрать зависимость из zark.toml и zark.lock</span></span></code></pre></div><ul>
+<li><code>zark update</code> — единственная команда, которая двигает зависимость на новый коммит; она же заменяет запись, когда вы меняете <code>rev</code> в <code>zark.toml</code>.</li>
+<li>Если <code>zark.toml</code> просит <code>rev</code>, которого нет в <code>zark.lock</code>, или скачанное дерево не на залоченном коммите, сборка останавливается и просит <code>zark update</code>.</li>
+<li>Одно имя — один коммит: одна и та же зависимость по двум путям с разными <code>rev</code> — ошибка (<code>pin one rev</code>).</li>
+<li>Зависимости <code>path</code> не блокируются: их правят на месте.</li>
+</ul>
 <p>Языковой сервер читает тот же манифест, так что импорты зависимостей находятся и в редакторе.</p>
 
 <div class="pager"><a class="prev" href="tooling.html"><small>Назад</small>Инструменты: fmt, lsp, флаги</a><a class="next" href="stdlib.html"><small>Дальше</small>Справочник стандартной библиотеки</a></div>
-</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#zark-toml">zark.toml</a><a class="l2" href="#зависимости">Зависимости</a></aside></main>
+</article><aside class="toc"><div class="toc-title">На этой странице</div><a class="l2" href="#zark-toml">zark.toml</a><a class="l2" href="#зависимости">Зависимости</a><a class="l3" href="#блокировка-и-обновление">Блокировка и обновление</a></aside></main>
 </div>
 <script src="../assets/site.js"></script>
 </body>

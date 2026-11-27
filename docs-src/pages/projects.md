@@ -55,4 +55,20 @@ import "utils/strings" as us;   // a file next to it (.zk may be left out)
 - A dependency with its own `zark.toml` brings its own dependencies, C sources and libraries along. Without a manifest, its lib file is `src/lib.zk` or `lib.zk`.
 - Imports that start with `./` or `../` are always relative files, so a dependency name never hides them.
 
+### Locking and updating
+
+A `git` dependency is recorded in `zark.lock` next to `zark.toml`: the URL, the requested `rev`, and the exact commit it resolved to. `zark build`, `run`, `test` and the language server use that commit, so a branch or a tag that moves does not change what you build.
+
+```sh
+zark update              # resolve every git dependency again and rewrite zark.lock
+zark fetch               # put the locked commits into .zark/deps (no resolution; for CI and offline)
+zark add URL [--rev R]   # add a git dependency to zark.toml and lock it
+zark remove NAME         # drop a dependency from zark.toml and zark.lock
+```
+
+- `zark update` is the only command that moves a dependency to a new commit; it also replaces the entry when you change `rev` in `zark.toml`.
+- If `zark.toml` asks for a `rev` that `zark.lock` does not have, or the fetched tree is not at the locked commit, the build stops and asks for `zark update`.
+- One name resolves to one commit: reaching the same dependency through two paths with two different `rev` values is an error (`pin one rev`).
+- `path` dependencies are not locked; they are edited in place.
+
 The language server reads the same manifest, so imports of dependencies are found in the editor too.

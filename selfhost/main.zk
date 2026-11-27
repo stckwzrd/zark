@@ -27,6 +27,10 @@ usage:
   zark lsp                          language server on stdin/stdout
   zark ir    <file.zk> [--arch x86_64|aarch64] [--os linux|macos]  print LLVM IR to stdout
   zark new   NAME                   create a project (zark.toml, src/main.zk)
+  zark add   <git-url> [--rev R]    add a dependency and lock it
+  zark remove <name>                drop a dependency
+  zark fetch                        fetch every locked dependency
+  zark update                       re-resolve dependency revisions and rewrite zark.lock
   zark cbind <header.h> [-I.. -D..] [--by-value=A,B] [-o out.zk] [--inline-c out.c] [--arch x86_64|aarch64] [--os linux|macos]  print Zark bindings for a C header
   in a project, run/build/test work without a file: they read zark.toml
   zark tokens <file.zk ...>       dump tokens
@@ -282,6 +286,22 @@ void restore_stack() {
         println(VERSION);
         return 0;
     }
+    if (arg_count() >= 2 && arg(1) == "fetch") { return pkg_fetch(a); }
+    if (arg_count() >= 2 && arg(1) == "update") { return pkg_update(a); }
+    if (arg_count() >= 2 && (arg(1) == "add" || arg(1) == "remove" || arg(1) == "rm")) {
+        auto rest = List<str>::init(a);
+        for (auto k : 2..arg_count()) { rest.push(arg(k))?; }
+        if (arg(1) == "add") {
+            if (rest.len < 1) { eprintln("usage: zark add <git-url> [--rev REV]"); return 1; }
+            auto rev = "main";
+            for (auto k : 0..rest.len) {
+                if (rest.get(k) == "--rev" && k + 1 < rest.len) { rev = rest.get(k + 1); }
+            }
+            return pkg_add(a, rest.get(0), rev);
+        }
+        if (rest.len < 1) { eprintln("usage: zark remove <name>"); return 1; }
+        return pkg_remove(a, rest.get(0));
+    }
     if (arg_count() < 3 && !in_project) {
         usage();
         return 1;
@@ -297,7 +317,8 @@ void restore_stack() {
             eprintln("error: no .zk file given and no zark.toml in this directory or above (create a project with `zark new NAME`)");
             return 1;
         }
-        const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
+        auto st = load_state(a, pdir) catch { return 1; };
+        const auto proj = load_project(a, pdir, true, 0, &st) catch { return 1; };
         if (cmd == "test") {
             i32 worst = 0;
             const auto self = osm::exe_path(a)?;
@@ -323,7 +344,8 @@ void restore_stack() {
             if (str_ends_with(x, ".zk")) {
                 const auto pdir = find_project(a, pth::dir(x)) catch "";
                 if (pdir.len > 0) {
-                    const auto proj = load_project(a, pdir, true, 0) catch { return 1; };
+                    auto st = load_state(a, pdir) catch { return 1; };
+                    const auto proj = load_project(a, pdir, true, 0, &st) catch { return 1; };
                     const auto more = project_c_args(a, proj) catch { return 1; };
                     auto at = argv.index_of("--");
                     if (at < 0) { at = argv.len; }

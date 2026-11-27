@@ -90,6 +90,7 @@ done
 if [ $tok_bad -eq 0 ]; then pass=$((pass+1)); echo "ok   tokens match tests/tokens ($(ls tests/tokens | wc -l) files)"; else fail=$((fail+1)); echo "FAIL tokens"; fi
 if ZARK=$ZARK tests/baremetal.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/project.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
+if ZARK=$ZARK tests/pkg.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/cbuild.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/cbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi
 if ZARK=$ZARK tests/cxxbind.sh; then pass=$((pass+1)); else fail=$((fail+1)); fi

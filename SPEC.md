@@ -303,6 +303,21 @@ The `[build]` table of `zark.toml` (paths are relative to the manifest):
 
 A project whose `package.main` file does not exist but that lists `sources` is built from those sources alone.
 
+### Dependencies and `zark.lock`
+
+The `[dependencies]` table of `zark.toml` maps an import name to a package:
+
+```text
+[dependencies]
+utils = "../utils"                                   # a path
+json = { path = "../json" }                          # also a path
+http = { git = "https://.../http.zk", rev = "v1.2" } # rev is a tag, a branch or a commit
+```
+
+A dependency is imported by its name: `import "utils"` loads its lib file, `import "utils/x"` a file next to it. A dependency with its own `zark.toml` brings its dependencies, C sources and libraries along.
+
+`git` dependencies are pinned in `zark.lock`, next to `zark.toml`: for each one it stores the URL, the requested `rev` and the exact commit `rev` resolved to. `build`, `run`, `test` and the language server use the locked commit, so a branch or a tag that moves does not change what is compiled, and a fetched tree that is not at the locked commit is an error. `zark update` is the only command that moves a dependency to a new commit (it also replaces the entry when `rev` changes); `zark fetch` puts the locked commits into `.zark/deps` without resolving; `zark add <url> [--rev R]` and `zark remove <name>` edit the manifest and the lock. One name resolves to one commit: reaching the same dependency through two paths with different `rev` values is an error. `path` dependencies are not locked.
+
 ### Object cache
 
 Each C/C++ source is compiled to `.zark-cache/obj/NAME-HASH.o`, at most 8 at a time (`ZARK_JOBS` overrides). The hash covers the compiler (`clang` or `clang++`), the optimization level, the path, the flags and the source text. The headers the source includes (from clang's `-MD` output) are checked as well, so changing a header rebuilds what uses it. Cache entries are written atomically, so parallel builds share them safely.
