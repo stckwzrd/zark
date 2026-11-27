@@ -46,8 +46,12 @@ struct Command {
     if (c.argv.len == 0) { return error.NoProgram; }
     auto cargs = a.alloc<u8*>(c.argv.len + 1)?;
     defer a.free(cargs);
-    for (auto [i, s] : c.argv) { cargs[i] = a.dupz(s)?; }
-    defer { for (auto i : 0..c.argv.len) { a.free_fn(a.ctx, cargs[i], (c.argv[i].len + 1) as u64); } }
+    auto copied = 0;
+    defer { for (auto i : 0..copied) { a.free_fn(a.ctx, cargs[i], (c.argv[i].len + 1) as u64); } }
+    for (auto [i, s] : c.argv) {
+        cargs[i] = a.dupz(s)?;
+        copied += 1;
+    }
     u8[4096] cwdb;
     u8* cwdp = null;
     if (c.cwd.len > 0) { cwdp = to_cstr(cwdb[..], c.cwd)?; }

@@ -709,8 +709,12 @@ extern i32 fflush(void* f);
     if (argv.len == 0) { return error.NoProgram; }
     const auto cargs = a.alloc<u8*>(argv.len + 1)?;
     defer a.free(cargs);
-    for (auto [i, s] : argv) { cargs[i] = a.dupz(s)?; }
-    defer { for (auto i : 0..argv.len) { a.free_fn(a.ctx, cargs[i], (argv[i].len + 1) as u64); } }
+    auto copied = 0;
+    defer { for (auto i : 0..copied) { a.free_fn(a.ctx, cargs[i], (argv[i].len + 1) as u64); } }
+    for (auto [i, s] : argv) {
+        cargs[i] = a.dupz(s)?;
+        copied += 1;
+    }
     _ = fflush(null);
     const auto pid = fork();
     if (pid < 0) { return error.ForkFailed; }
