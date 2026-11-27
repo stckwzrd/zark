@@ -513,7 +513,7 @@ struct Walker {
         return this->member_type(owner, ms);
     }
 
-    void warms(List<MatchArm> arms, TypeExpr* scrut) {
+    void warms(MatchArm[] arms, TypeExpr* scrut) {
         for (auto arm : arms) {
             const auto mark = this->locals.len;
             for (auto pat : arm.pats) {
@@ -581,7 +581,7 @@ struct Walker {
             }
             .Match => {
                 this->wexpr(e.l);
-                this->warms(e.arms, this->infer(e.l));
+                this->warms(e.arms.slice(), this->infer(e.l));
                 return;
             }
             .Closure => {
@@ -666,7 +666,7 @@ struct Walker {
             .Defer => this->wstmt(s.body);
             .Match => {
                 this->wexpr(s.e);
-                this->warms(s.arms, this->infer(s.e));
+                this->warms(s.arms.slice(), this->infer(s.e));
             }
             _ => {}
         }

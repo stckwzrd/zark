@@ -49,7 +49,7 @@ str base_of(str path) {
     return path;
 }
 
-!i32 run_tests(Allocator a, str exe, List<FnDecl*> tests) {
+!i32 run_tests(Allocator a, str exe, FnDecl*[] tests) {
     auto passed = 0;
     auto failed = 0;
     const auto out_path = ".zark-cache/test.out";
@@ -198,7 +198,7 @@ void restore_stack() {
     return ob.slice();
 }
 
-!i32 link_program(Allocator a, bool cxx, bool freestanding, str ll_path, bool use_native, str olevel, List<str> objs, List<str> extra, str exe) {
+!i32 link_program(Allocator a, bool cxx, bool freestanding, str ll_path, bool use_native, str olevel, str[] objs, str[] extra, str exe) {
     auto link = List<str>::init(a);
     if (cxx) { link.push("clang++")?; } else { link.push("clang")?; }
     if (freestanding) { link.append(["-nostdlib", "-static", "-ffreestanding"])?; }
@@ -209,8 +209,8 @@ void restore_stack() {
             link.append([olevel, "-Wno-override-module", ll_path])?;
         }
     }
-    link.append(objs.slice())?;
-    link.append(extra.slice())?;
+    link.append(objs)?;
+    link.append(extra)?;
     link.append(["-o", exe])?;
     if (!freestanding) { link.append(["-lm", "-lpthread", "-ldl"])?; }
     return run(a, link.slice());
@@ -242,7 +242,7 @@ void restore_stack() {
     }
     auto needs_cxx = false;
     const auto objs = compile_sources(a, cache, sp, olevel, &needs_cxx) catch { return 1; };
-    const auto lc = link_program(a, needs_cxx, false, "", false, olevel, objs, sp.link, exe)?;
+    const auto lc = link_program(a, needs_cxx, false, "", false, olevel, objs.slice(), sp.link.slice(), exe)?;
     if (lc != 0) {
         eprintln("error: link failed");
         return lc;
@@ -556,7 +556,7 @@ void restore_stack() {
 
     objs.push(rt_object(a, cache, freestanding)?)?;
 
-    const auto lc = link_program(a, needs_cxx, freestanding, ll_path, use_native, olevel, objs, sp.link, exe)?;
+    const auto lc = link_program(a, needs_cxx, freestanding, ll_path, use_native, olevel, objs.slice(), sp.link.slice(), exe)?;
     if (lc != 0) {
         eprintln("error: link failed (input kept at {ll_path})");
         return lc;
@@ -569,7 +569,7 @@ void restore_stack() {
     }
 
     restore_stack();
-    if (is_test) { return run_tests(a, exe, g.tests); }
+    if (is_test) { return run_tests(a, exe, g.tests.slice()); }
 
     if (is_run) { return run_exe(a, exe, prog_args); }
     return 0;

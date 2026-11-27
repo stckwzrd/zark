@@ -296,7 +296,7 @@ struct Gen {
                         }
                         continue;
                     }
-                    this->check_constraint_names(f.name, f.constraints, f.line)?;
+                    this->check_constraint_names(f.name, f.constraints.slice(), f.line)?;
                     this->check_generic_body(f)?;
                     if (f.receiver.len > 0) {
                         auto kb = this->sb();
@@ -320,7 +320,7 @@ struct Gen {
                     }
                 }
                 .Struct => {
-                    this->check_constraint_names(d.s.name, d.s.constraints, d.s.line)?;
+                    this->check_constraint_names(d.s.name, d.s.constraints.slice(), d.s.line)?;
                     if (this->structs.has(d.s.name)) { this->err(d.s.line); eprintln("duplicate struct '{d.s.name}'"); return error.CompileFailed; }
                     this->structs.put(d.s.name, d.s)?;
                 }
