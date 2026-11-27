@@ -1,0 +1,10 @@
+!void main() {
+    auto l = List<List<i64>>::init(c_allocator());
+    auto a = List<i64>::init(c_allocator());
+    a.push(42)?;
+    l.push(a)?;
+    const auto y = l.items[0];
+    y.deinit();
+    l.items[0].deinit();
+    l.deinit();
+}

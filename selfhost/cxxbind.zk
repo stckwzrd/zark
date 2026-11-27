@@ -766,14 +766,20 @@ struct CxWalk {
                 return q;
             }
         }
-        for (auto b : this->bases.get_or(s, List<str>{}).slice()) {
-            if (b == "?") { return q; }
-            const auto r = this->find(b, n)?;
-            if (r.len > 0) { return r; }
+        const auto bp = this->bases.get_ptr(s);
+        if (bp != null) {
+            for (auto b : bp.slice()) {
+                if (b == "?") { return q; }
+                const auto r = this->find(b, n)?;
+                if (r.len > 0) { return r; }
+            }
         }
-        for (auto ch : this->inls.get_or(s, List<str>{}).slice()) {
-            const auto r = this->find(ch, n)?;
-            if (r.len > 0) { return r; }
+        const auto ip = this->inls.get_ptr(s);
+        if (ip != null) {
+            for (auto ch : ip.slice()) {
+                const auto r = this->find(ch, n)?;
+                if (r.len > 0) { return r; }
+            }
         }
         return "";
     }
@@ -1028,9 +1034,14 @@ struct CxWalk {
                 return this->walk(x, scope, cx_zname(this->a, zs, s)?, c, false, true);
             }
             if (jbool(jget(x, "isInline"), false)) {
-                auto l = this->inls.get_or(scope, List<str>::init(this->a));
-                if (l.index_of(qn) < 0) { l.push(qn)?; }
-                this->inls.put(scope, l)?;
+                const auto lp = this->inls.get_ptr(scope);
+                if (lp == null) {
+                    auto nl = List<str>::init(this->a);
+                    nl.push(qn)?;
+                    this->inls.put(scope, nl)?;
+                } else if (lp.index_of(qn) < 0) {
+                    lp.push(qn)?;
+                }
                 this->inl.push(qn)?;
                 return this->walk(x, qn, zs, c, false, true);
             }
@@ -1876,11 +1887,14 @@ struct CxWalk {
         if (r == null) {
             auto n = 0;
             Json* one = null;
-            for (auto c : this->pend.get_or(q, List<Json*>{}).slice()) {
-                _ = this->spec(c, q, "")?;
-                if (this->skey == key) {
-                    n += 1;
-                    one = c;
+            const auto pp = this->pend.get_ptr(q);
+            if (pp != null) {
+                for (auto c : pp.slice()) {
+                    _ = this->spec(c, q, "")?;
+                    if (this->skey == key) {
+                        n += 1;
+                        one = c;
+                    }
                 }
             }
             if (n > 1) { return this->badt("ambiguous template arguments"); }
@@ -1936,8 +1950,8 @@ struct CxWalk {
                 auto v = jstr(jget(x, "value"), "");
                 if (v.len == 0) { v = cb_num(this->a, CVal{ .v = jint(jget(x, "value"), 0) })?; }
                 auto cvs = v;
-                const auto tp = this->tparms.get_or(q, List<str>{});
-                if (ks.len < tp.len) {
+                const auto tp = this->tparms.get_ptr(q);
+                if (tp != null && ks.len < tp.len) {
                     const auto pt = tp.get(ks.len);
                     if (pt == "auto" || str_starts_with(pt, "decltype(auto")) {
                         if (want.len == 0) { this->skip(q, "non-type template parameter of a deduced type is not supported")?; }
@@ -4040,7 +4054,7 @@ bool cx_is_operator(str n) {
 }
 
 !CEmit cx_emit(Allocator a, CxWalk* w, str hid) {
-    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .cxn = Map<str>::init(a), .bad = w.bad, .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = w.typedefs, .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
+    auto e = CEmit{ .a = a, .macs = Map<CMac*>::init(a), .cxn = Map<str>::init(a), .bad = share_map(&w.bad), .relabeled = Map<bool>::init(a), .defined = Map<bool>::init(a), .typedefs = share_map(&w.typedefs), .records = Map<CDecl*>::init(a), .consts = Map<str>::init(a), .fwd = Map<CDecl*>::init(a), .seen_td = Map<bool>::init(a), .hid = hid };
     for (auto d : w.decls.slice()) { if (d.k != .Func && d.cxx.len > 0) { e.cxn.put(d.name, d.cxx)?; } }
     auto order = List<CDecl*>::init(a);
     for (auto d : w.decls.slice()) { if (d.k != .Func && d.k != .Var) { order.push(d)?; } }
@@ -4257,7 +4271,8 @@ bool cx_is_operator(str n) {
     cx_macros(a, &w, header, from_dir, cflags.slice())?;
     for (auto q : w.tmpl.slice()) {
         auto used = false;
-        for (auto c : w.pend.get(q)?.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } }
+        const auto pp = w.pend.get_ptr(q);
+        if (pp != null) { for (auto c : pp.slice()) { if (w.byid.has(jstr(jget(c, "id"), ""))) { used = true; } } }
         if (w.tused.get_or(q, false)) { used = true; }
         if (!used) { w.skip(q, str_concat(w.a, ["template without an instantiation; add 'template struct ", cx_last(q), "<...>;' to a wrapper header"])?)?; }
     }

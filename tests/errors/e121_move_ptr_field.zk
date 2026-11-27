@@ -1,0 +1,9 @@
+struct Holder { List<i64> l; }
+void take(move List<i64> l) { l.deinit(); }
+struct H2 { List<i64> l; void steal() { take(this->l); } }
+!void main() {
+    auto h = H2{ .l = List<i64>::init(c_allocator()) };
+    h.l.push(1)?;
+    h.steal();
+    h.l.deinit();
+}

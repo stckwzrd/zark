@@ -304,7 +304,7 @@ struct Native {
         const auto n = wa.create<Native>()?;
         n.a = wa;
         n.debug = this->debug;
-        n.named = this->named;
+        n.named = share_map(&this->named);
         n.t_i1 = this->t_i1;
         n.t_i8 = this->t_i8;
         n.t_i32 = this->t_i32;
@@ -1611,8 +1611,8 @@ struct Native {
 
     !void phi_moves_to(str from, str to, Map<List<Ins*>> *phis_of) {
         if (!phis_of.has(to)) { return; }
-        const auto list = phis_of.get(to)?;
-        for (auto p : list) {
+        const auto list = phis_of.get_ptr(to);
+        for (auto p : list.slice()) {
             for (auto inc : p.phis) {
                 if (inc.pred == from) { this->put(p.ty, inc.v, RBP, this->loc(p.dest))?; }
             }
@@ -2275,7 +2275,7 @@ void native_worker(Pool* p) {
         if (i >= p.defs.len) { break; }
         n.obj = new_obj(alloc);
         n.function(p.defs[i].hdr, p.defs[i].body) catch { p.errors.add(1); return; };
-        p.objs.items[i] = n.obj;
+        p.objs.items[i] = move_out(&n.obj);
     }
 }
 

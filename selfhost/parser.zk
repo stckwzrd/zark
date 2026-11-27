@@ -1151,8 +1151,8 @@ struct Parser {
                     toks.items[k].off += base;
                 }
                 auto sub = new_parser(this->a, toks.slice(), this->file);
-                sub.aliases = this->aliases;
-                sub.builtin_aliases = this->builtin_aliases;
+                sub.aliases = share_list(&this->aliases);
+                sub.builtin_aliases = share_list(&this->builtin_aliases);
                 const auto x = sub.parse_expr()?;
                 if (!sub.at(.semi) && !sub.at(.eof)) {
                     eprintln("{this->file}:{t.line}: error: unexpected tokens in interpolation '{inner}'");

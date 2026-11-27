@@ -20,9 +20,9 @@ bool Gen::ct_plain(Type* t) {
     const auto saved_label = this->cur_label;
     const auto saved_term = this->terminated;
     const auto saved_moved = this->snap();
-    const auto saved_scopes = this->scopes;
+    const auto saved_scopes = share_list(&this->scopes);
     const auto saved_env = this->env;
-    const auto saved_loops = this->loops;
+    const auto saved_loops = share_list(&this->loops);
     const auto saved_colds = this->colds_copy()?;
     auto saved_slots = 0;
     if (this->af != null) { saved_slots = this->af.slots.len; }

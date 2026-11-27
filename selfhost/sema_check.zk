@@ -111,7 +111,7 @@ i64 BodyCheck::operand(Expr* e) {
     auto any = false;
     for (auto c : f.constraints) { if (c.len > 0) { any = true; } }
     if (!any) { return; }
-    auto bc = BodyCheck{ .names = f.type_params, .cons = f.constraints, .vars = Map<i64>::init(this->a), .what = f.name };
+    auto bc = BodyCheck{ .names = share_list(&f.type_params), .cons = share_list(&f.constraints), .vars = Map<i64>::init(this->a), .what = f.name };
     for (auto p : f.params) {
         const auto k = bc.tparam_of(p.ty);
         if (k >= 0) { bc.vars.put(p.name, k)?; }
