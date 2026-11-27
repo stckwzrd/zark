@@ -1,0 +1,1 @@
+error: 's.xs' is part of an element of the iterated container; moving it out would alias the container. Take the element out with pop/remove_at first

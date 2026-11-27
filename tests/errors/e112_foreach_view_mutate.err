@@ -1,0 +1,1 @@
+error: 's.xs' belongs to a copy of an element of the iterated container; 'push' may free or move its storage, which the container still owns. Take the element out with pop/remove_at first

@@ -1186,7 +1186,8 @@ bool is_vec(Type* t) { return t.k == .Array && t.vec; }
 !void Gen::emit_colds(List<u8>* w) {
     if (this->colds.len == 0) { return; }
     const auto fname = this->str_global(this->file)?;
-    for (auto c : this->colds) {
+    for (auto ci : 0..this->colds.len) {
+        const auto c = &this->colds.items[ci];
         sprint(w, "{c.label}:\n")?;
         for (auto k : 0..c.nlead + 1) {
             sprint(w, "  %{c.label}.a{k} = phi i64 ")?;

@@ -123,6 +123,50 @@ void Gen::note_use(str ptr) {
     }
 }
 
+/// A loop variable bound to a resource element is a non-owning copy of the
+/// container's storage. Reading and borrowing it is fine; moving it out would
+/// give the value and the container the same bytes, so it is rejected here.
+!void Gen::check_view(str p, str name, i64 line) {
+    if (p.len == 0) { return; }
+    for (auto r : this->moved) {
+        if (r.kind != 7) { continue; }
+        auto under = false;
+        if (r.ptr == p) {
+            under = true;
+        } else if (r.ptr.len < p.len && str_starts_with(p, r.ptr)) {
+            under = (p[r.ptr.len] == '.' || p[r.ptr.len] == '[');
+        }
+        if (!under) { continue; }
+        this->err(line);
+        if (r.ptr == p) {
+            eprintln("'{name}' is a view of an element of the iterated container; moving it out would alias the container. Take one out with pop/remove_at, or index and use move_out(&container[i])");
+        } else {
+            eprintln("'{name}' is part of an element of the iterated container; moving it out would alias the container. Take the element out with pop/remove_at first");
+        }
+        return error.CompileFailed;
+    }
+}
+
+/// Same, but for an `invalidates` method: mutating the storage through the
+/// copy's header (push/reserve/pop) may free or move bytes the container still
+/// points at, even though nothing is "moved out" syntactically.
+!void Gen::check_view_mut(str p, str name, str method, i64 line) {
+    if (p.len == 0) { return; }
+    for (auto r : this->moved) {
+        if (r.kind != 7) { continue; }
+        auto under = false;
+        if (r.ptr == p) {
+            under = true;
+        } else if (r.ptr.len < p.len && str_starts_with(p, r.ptr)) {
+            under = (p[r.ptr.len] == '.' || p[r.ptr.len] == '[');
+        }
+        if (!under) { continue; }
+        this->err(line);
+        eprintln("'{name}' belongs to a copy of an element of the iterated container; '{method}' may free or move its storage, which the container still owns. Take the element out with pop/remove_at first");
+        return error.CompileFailed;
+    }
+}
+
 !void Gen::move_use(str name, i64 line) {
     this->move_use_key(this->local_ptr(name), name, line)?;
 }
@@ -190,8 +234,9 @@ void Gen::note_use(str ptr) {
         return b.slice();
     }
     if (e.k == .Index) {
-        // only a constant index has a stable path; a variable one is the
-        // documented #58 hole (List::get also returns through one)
+        // only a constant index has a stable path; a variable one is
+        // rejected for a resource in copy_moves (a view, the receiver of a
+        // container method, or move_out are the only ways through)
         if (e.args.len != 1 || e.args.get(0).k != .IntLit) { return ""; }
         const auto k = this->place_key(e.l)?;
         if (k.len == 0) { return ""; }
@@ -248,6 +293,7 @@ str Gen::place_name(Expr* e) {
     if (x != null && x.k == .Field) {
         const auto k = this->place_key(x)?;
         if (k.len == 0) { return; }
+        this->check_view(k, this->place_name(x), line)?;
         this->invalidate(k, this->place_name(x), by, line)?;
         if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0, .cname = this->place_name(x) })?; }
         return;
@@ -255,6 +301,7 @@ str Gen::place_name(Expr* e) {
     if (x.k != .Ident) { return; }
     const auto p = this->local_ptr(x.name);
     if (p.len == 0) { return; }
+    this->check_view(p, x.name, line)?;
     this->invalidate(p, x.name, by, line)?;
     if (this->move_find(p) >= 0) { return; }
     this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 0, .cname = x.name })?;
@@ -686,6 +733,7 @@ bool store_untracked(Expr* e) {
             }
             return;
         }
+        this->check_view(k, this->place_name(e), line)?;
         this->move_use_key(k, this->place_name(e), line)?;
         this->invalidate(k, this->place_name(e), by, line)?;
         if (this->move_find(k) < 0) { this->add_rec(MoveRec{ .ptr = k, .by = by, .line = line, .kind = 0, .cname = this->place_name(e) })?; }
@@ -793,7 +841,7 @@ str Gen::consumer_of(str tname) {
     auto out = List<Cold>::init(this->a);
     for (auto c : this->colds) {
         auto ins = List<ColdIn>::init(this->a);
-        for (auto x : c.ins) { ins.push(x)?; }
+        for (auto xi : 0..c.ins.len) { ins.push(move_out(&c.ins.items[xi]))?; }
         out.push(Cold{ .helper = c.helper, .label = c.label, .nlead = c.nlead, .ins = ins })?;
     }
     return out;

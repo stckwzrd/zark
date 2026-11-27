@@ -174,7 +174,10 @@ bool Gen::names_type(Expr* e) {
             const auto rp = this->place_key(f.l)?;
             if (rp.len > 0) {
                 const auto rn = this->place_name(f.l);
-                if (md.invalidates) { this->invalidate(rp, rn, md.name, line)?; }
+                if (md.invalidates) {
+                    this->check_view_mut(rp, rn, md.name, line)?;
+                    this->invalidate(rp, rn, md.name, line)?;
+                }
                 if (md.borrows) {
                     this->bor_field = f;
                     this->bor_ptr = rp;

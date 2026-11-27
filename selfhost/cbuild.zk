@@ -231,7 +231,8 @@ void run_job(CJob* j) {
     k = min(k, jobs.len);
     thread::parallel_for(jobs.len, k, [&jobs](i64 i) -> void { run_job(&jobs.items[i]); })?;
     auto failed = 0;
-    for (auto j : jobs) {
+    for (auto ji : 0..jobs.len) {
+        const auto j = &jobs.items[ji];
         print(j.out);
         eprint(j.err);
         if (j.code != 0 && failed == 0) { failed = j.code; }

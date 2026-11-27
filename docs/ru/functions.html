@@ -211,7 +211,8 @@
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">    println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">add</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">(</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"a"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">, </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">"b"</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">));</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre></div><div class="out error"><div class="out-head"><span>Вывод компилятора</span></div><pre><code>main.zk:2: error: arithmetic on 'str' is not supported
     2 |     return a + b;
-      |              ^</code></pre></div></div>
+      |              ^
+note: this is inside 'add', a generic or prelude function; the error is reported at its definition, and the element types come from the call site</code></pre></div></div>
 <h3 id="ограничения"><a class="anchor" href="#ограничения">#</a>Ограничения</h3>
 <p>Чтобы ошибка была понятной и появлялась уже при объявлении, а не при инстанцировании, пишите ограничение: <code>T: Ord</code>.</p>
 <div class="table-wrap"><table><thead><tr>

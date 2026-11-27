@@ -1,0 +1,8 @@
+struct S { List<i64> xs; }
+void take(S s) { s.xs.deinit(); }
+!void main() {
+    auto arr = List<S>::init(c_allocator());
+    arr.push(S{ .xs = List<i64>::init(c_allocator()) })?;
+    for (auto s : arr) { take(s); }
+    arr.deinit();
+}

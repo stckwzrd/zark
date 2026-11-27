@@ -1,0 +1,7 @@
+struct S { List<i64> xs; }
+!void main() {
+    auto arr = List<S>::init(c_allocator());
+    arr.push(S{ .xs = List<i64>::init(c_allocator()) })?;
+    for (auto s : arr) { const auto y = s.xs; y.deinit(); }
+    arr.deinit();
+}
