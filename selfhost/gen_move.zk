@@ -117,7 +117,7 @@ void Gen::note_use(str ptr) {
 
 !void Gen::note_reinit(str ptr) {
     for (auto k : 0..this->loops.len) {
-        const auto lp = this->loops.get(k);
+        const auto lp = this->loops.at(k);
         if (!this->declared_before(ptr, lp.md) || this->has_reinit(ptr, lp.id)) { continue; }
         this->add_rec(MoveRec{ .ptr = ptr, .kind = 5, .cont = lp.id })?;
     }
@@ -632,6 +632,13 @@ str use_root(str name) {
     return name[0..i];
 }
 
+/// The expression is rooted at the receiver of the method being compiled.
+bool this_rooted(Expr* e) {
+    auto x = e;
+    while (x.k == .Field || x.k == .Index || x.k == .Slice) { x = x.l; }
+    return x.k == .Ident && x.name == "this";
+}
+
 /// A place rooted in a dereference or an index has no name the move check can
 /// follow; a copy out of it would alias storage that the pointer or container
 /// still owns.
@@ -652,6 +659,22 @@ bool store_untracked(Expr* e) {
         this->err(line);
         eprintln("'{this->type_name(ty)?}' is a resource; copying it out of a pointer would alias it, use clone() or take the pointer instead");
         return error.CompileFailed;
+    }
+    if (e.k == .Index) {
+        const auto k = this->place_key(e)?;
+        if (k.len == 0 && !this_rooted(e)) {
+            // A runtime index has no stable path, so the move check cannot
+            // follow the element: reading it by value would copy bits out of
+            // storage the container still owns. Inside the container's own
+            // method (`this->items[i]` in pop/remove_at/...) the read is
+            // trusted to hand the element over; everywhere else it is an
+            // alias, so reject it. `List.get`/`last` go through `at()` and
+            // are rejected for a resource by the pointer rule below.
+            this->err(line);
+            eprintln("'{this->type_name(ty)?}' is a resource; copying it out of an index by a runtime value would alias the container, use a constant index, at(i), or clone()");
+            return error.CompileFailed;
+        }
+        if (k.len == 0) { return; }
     }
     if (e.k == .Field || e.k == .Index) {
         const auto k = this->place_key(e)?;

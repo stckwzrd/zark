@@ -975,7 +975,7 @@ struct Native {
             ins.line = cur_line;
             blocks.items[blocks.len - 1].ins.push(ins)?;
             if (ins.op == "phi") {
-                const auto bl = blocks.get(blocks.len - 1).label;
+                const auto bl = blocks.at(blocks.len - 1).label;
                 if (!phis_of.has(bl)) { phis_of.put(bl, List<Ins*>::init(this->a))?; }
                 const auto e = &phis_of.entries[phis_of.__find(bl)];
                 e.value.push(ins)?;
@@ -1145,7 +1145,7 @@ struct Native {
         for (auto [bi, blk] : blocks) {
             asm.bind(blk.label)?;
             this->next = "";
-            if (bi + 1 < blocks.len) { this->next = blocks.get(bi + 1).label; }
+            if (bi + 1 < blocks.len) { this->next = blocks.at(bi + 1).label; }
             auto k = 0;
             while (k < blk.ins.len) {
                 const auto ins = blk.ins.get(k);
@@ -1598,7 +1598,7 @@ struct Native {
         auto dropped = false;
         for (auto bi : 0..n) {
             if (reach.items[bi] == 0) { dropped = true; continue; }
-            keep.push(blocks.items[bi])?;
+            keep.push(move_out(&blocks.items[bi]))?;
         }
         if (dropped) { *blocks = keep; }
     }

@@ -180,6 +180,19 @@ template<T> T max(T a, T b) { if (a > b) { return a; } return b; }
 template<T> T abs(T a) { if (a < 0) { return -a; } return a; }
 template<T> void swap(T* a, T* b) { const auto t = *a; *a = *b; *b = t; }
 
+/// Byte-wise move out of `*p`: the returned value owns the bits and the caller
+/// must treat `*p` as dead. This is the explicit escape for a container that
+/// takes an element out of its storage without going through `pop`/`remove_at`;
+/// an implicit copy of a resource by a runtime index is rejected. Never free
+/// both the result and whatever still frees `*p`.
+template<T> T move_out(T* p) {
+    T out;
+    const auto d = &out as u8*;
+    const auto s = p as u8*;
+    for (auto i : 0..(sizeof(T) as i64)) { d[i] = s[i]; }
+    return out;
+}
+
 /// in-place sort of any slice whose elements support < and >
 template<T> void sort(T[] s) { if (s.len > 1) { __qsort(s.ptr, 0, s.len - 1); } }
 
@@ -336,7 +349,7 @@ struct List<T> {
 
     !T last() {
         if (this->len == 0) { return error.Empty; }
-        return this->items[this->len - 1];
+        return *this->at(this->len - 1);
     }
 
     T get(i64 i) { return this->slice()[i]; }

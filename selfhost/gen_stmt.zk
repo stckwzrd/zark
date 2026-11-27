@@ -170,8 +170,8 @@ struct MatchRes { Type* ty; str slot; }
             this->terminated = true;
             this->label(lb)?;
             this->gen_stmt(s.body)?;
-            const auto lp2 = this->loops.get(this->loops.len - 1);
-            this->loop_end(&lp2, s0)?;
+            const auto lp2 = this->loops.at(this->loops.len - 1);
+            this->loop_end(lp2, s0)?;
             this->loops.len -= 1;
             if (!this->terminated) { this->br(lc)?; }
             this->label(le)?;
@@ -246,10 +246,10 @@ struct MatchRes { Type* ty; str slot; }
             if (this->loops.len == 0) { this->err(s.line); eprintln("break/continue outside of a loop"); return error.CompileFailed; }
             auto li = this->loops.len - 1;
             if (s.label.len > 0) {
-                while (li >= 0 && this->loops.get(li).label != s.label) { li -= 1; }
+                while (li >= 0 && this->loops.at(li).label != s.label) { li -= 1; }
                 if (li < 0) { this->err(s.line); eprintln("no loop labeled '{s.label}'"); return error.CompileFailed; }
             }
-            const auto lp = this->loops.get(li);
+            const auto lp = this->loops.at(li);
             if (this->scopes.len > lp.depth) { this->run_defers(this->scopes.len - 1, lp.depth, false, true)?; }
             this->loop_edge(li, s.k == .Brk)?;
             if (s.k == .Brk) { this->br(lp.brk)? } else { this->br(lp.cont)?; }

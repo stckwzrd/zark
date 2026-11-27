@@ -1,0 +1,1 @@
+error: 'S' is a resource; copying it out of an index by a runtime value would alias the container, use a constant index, at(i), or clone()

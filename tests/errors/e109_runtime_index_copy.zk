@@ -1,0 +1,12 @@
+struct S { List<i64> l; }
+void take(S s) { s.l.deinit(); }
+!void main() {
+    S[2] arr;
+    arr[0] = S{ .l = List<i64>::init(c_allocator()) };
+    arr[1] = S{ .l = List<i64>::init(c_allocator()) };
+    const auto i = 1;
+    auto x = arr[i];
+    take(x);
+    take(arr[0]);
+    take(arr[1]);
+}
