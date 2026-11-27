@@ -100,12 +100,12 @@ bool Gen::names_type(Expr* e) {
     const auto callee = e.l;
     if (callee.k == .Ident && !this->has_var(callee.name)) {
         const auto name = callee.name;
-        if (this->is_builtin(name) && !this->fns.has(name)) { return this->gen_builtin(name, e.args, e.line); }
-        if (this->fns.has(name)) { return this->call_decl(this->fns.get(name)?, this->new_env()?, null, e.args, this->no_types(), expected, e.line); }
+        if (this->is_builtin(name) && !this->fns.has(name)) { return this->gen_builtin(name, share_list(&e.args), e.line); }
+        if (this->fns.has(name)) { return this->call_decl(this->fns.get(name)?, this->new_env()?, null, share_list(&e.args), this->no_types(), expected, e.line); }
         if (this->structs.has(name) && !this->consts.has(name)) { return this->gen_construct(e); }
         if (!this->consts.has(name)) {
             const auto mf = this->member_method(callee)?;
-            if (mf != null) { return this->gen_field_call(mf, e.args, this->no_types(), expected, e.line); }
+            if (mf != null) { return this->gen_field_call(mf, share_list(&e.args), this->no_types(), expected, e.line); }
             const auto vt = this->vec_type(name)?;
             if (vt != null) { return this->gen_vec_ctor(vt, e); }
         }
@@ -113,17 +113,17 @@ bool Gen::names_type(Expr* e) {
     }
     if (callee.k == .Index && (callee.l.k == .Ident || callee.l.k == .Field)) {
         if (callee.op != .lt) { this->err(e.line); eprintln("type arguments are written with '<...>', as in 'max<i64>(a, b)'"); return error.CompileFailed; }
-        if (callee.l.k == .Ident && callee.l.name == "asm" && !this->fns.has("asm")) { return this->gen_asm(this->type_args(callee.args, e.line)?, e.args, e.line); }
+        if (callee.l.k == .Ident && callee.l.name == "asm" && !this->fns.has("asm")) { return this->gen_asm(this->type_args(share_list(&callee.args), e.line)?, share_list(&e.args), e.line); }
         if (callee.l.k == .Field) {
-            const auto targs = this->type_args(callee.args, e.line)?;
-            return this->gen_field_call(callee.l, e.args, targs, expected, e.line);
+            const auto targs = this->type_args(share_list(&callee.args), e.line)?;
+            return this->gen_field_call(callee.l, share_list(&e.args), targs, expected, e.line);
         }
         if (this->fns.has(callee.l.name)) {
-            const auto targs = this->type_args(callee.args, e.line)?;
-            return this->call_decl(this->fns.get(callee.l.name)?, this->new_env()?, null, e.args, targs, expected, e.line);
+            const auto targs = this->type_args(share_list(&callee.args), e.line)?;
+            return this->call_decl(this->fns.get(callee.l.name)?, this->new_env()?, null, share_list(&e.args), targs, expected, e.line);
         }
     }
-    if (callee.k == .Field) { return this->gen_field_call(callee, e.args, this->no_types(), expected, e.line) };
+    if (callee.k == .Field) { return this->gen_field_call(callee, share_list(&e.args), this->no_types(), expected, e.line) };
     if (callee.k == .EnumLit) {
         const auto t = variant_target(lit_target(expected), callee.name);
         if (t == null) { this->err(e.line); eprintln("cannot infer union type for '.{callee.name}(...)'"); return error.CompileFailed; }
@@ -132,7 +132,7 @@ bool Gen::names_type(Expr* e) {
         return this->make_union(t, callee.name, e.args.get(0), e.line);
     }
     const auto fv = this->gen_expr(callee, null)?;
-    return this->call_indirect(fv, e.args, e.line);
+    return this->call_indirect(fv, share_list(&e.args), e.line);
 }
 
 !Value Gen::gen_field_call(Expr* f, List<Expr*> args, List<Type*> explicit, Type* expected, i64 line) {
@@ -306,9 +306,9 @@ bool Gen::names_type(Expr* e) {
     const auto env = this->new_env()?;
     env.put("Self", t)?;
     if (t.k == .Strct) {
-        const auto args = t.si.args;
+        const auto args = t.si.args.slice();
         if (md.receiver_params.len != args.len) { this->err(md.line); eprintln("out-of-class method of '{t.si.decl.name}' must list {args.len} type parameter(s)"); return error.CompileFailed; }
-        for (auto [i, tp] : md.receiver_params) { env.put(tp, args.get(i))?; }
+        for (auto [i, tp] : md.receiver_params) { env.put(tp, args[i])?; }
     }
     return env;
 }
@@ -376,7 +376,7 @@ bool Gen::names_type(Expr* e) {
     if (decl.variadic && args.len + off < decl.params.len) { this->err(line); eprintln("'{decl.name}' expects at least {decl.params.len - off} argument(s)"); return error.CompileFailed; }
 
     const auto env = this->copy_env(base_env)?;
-    const auto tps = decl.type_params;
+    const auto tps = decl.type_params.slice();
     if (explicit.len > 0) {
         if (explicit.len != tps.len) { this->err(line); eprintln("'{decl.name}' expects {tps.len} type argument(s)"); return error.CompileFailed; }
         for (auto [i, tp] : tps) { env.put(tp, explicit.get(i))?; }
@@ -393,14 +393,14 @@ bool Gen::names_type(Expr* e) {
         const auto pi = i + off;
         if (pi >= decl.params.len) { continue; }
         const auto pte = decl.params.get(pi).ty;
-        const auto generic = te_mentions(pte, tps.slice());
-        if (generic && !all_bound(tps.slice(), env) && is_literal(x)) { continue; }
+        const auto generic = te_mentions(pte, tps);
+        if (generic && !all_bound(tps, env) && is_literal(x)) { continue; }
         Type* exp = null;
-        if (!generic || all_bound(tps.slice(), env)) { exp = this->resolve_type(pte, env)?; }
+        if (!generic || all_bound(tps, env)) { exp = this->resolve_type(pte, env)?; }
         const auto v = this->gen_expr(x, exp)?;
         vals.set(i, v);
         have.set(i, true);
-        if (generic) { this->unify(pte, v.ty, tps.slice(), env)?; }
+        if (generic) { this->unify(pte, v.ty, tps, env)?; }
     }
     // pass 2: literals, now with known types
     for (auto [i, x] : args) {
@@ -409,28 +409,28 @@ bool Gen::names_type(Expr* e) {
         if (pi >= decl.params.len) { continue; }
         const auto pte = decl.params.get(pi).ty;
         Type* exp = null;
-        if (all_bound(tps.slice(), env)) { exp = this->resolve_type(pte, env)?; }
+        if (all_bound(tps, env)) { exp = this->resolve_type(pte, env)?; }
         const auto v = this->gen_expr(x, exp)?;
         vals.set(i, v);
         have.set(i, true);
-        this->unify(pte, v.ty, tps.slice(), env)?;
+        this->unify(pte, v.ty, tps, env)?;
     }
     if (recv != null) {
         const auto pte = decl.params.get(0).ty;
-        if (pte.k == .Ptr) { this->unify(pte.elem, recv.ty, tps.slice(), env)? } else { this->unify(pte, recv.ty, tps.slice(), env)?; }
+        if (pte.k == .Ptr) { this->unify(pte.elem, recv.ty, tps, env)? } else { this->unify(pte, recv.ty, tps, env)?; }
     }
     // a type parameter that is a future is inferred from its poll output first:
     // the expected type of the whole call (which `?` narrows by one level) must
     // not turn a future of `!i64` into a future of `i64`
-    if (!all_bound(tps.slice(), env)) { this->infer_from_poll(tps.slice(), env)?; }
-    if (!all_bound(tps.slice(), env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps.slice(), env)?; }
-    if (!all_bound(tps.slice(), env)) { this->err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed; }
+    if (!all_bound(tps, env)) { this->infer_from_poll(tps, env)?; }
+    if (!all_bound(tps, env) && decl.ret != null && expected != null) { this->unify(decl.ret, expected, tps, env)?; }
+    if (!all_bound(tps, env)) { this->err(line); eprintln("cannot infer type parameters of '{decl.name}'"); return error.CompileFailed; }
 
     auto targs = List<Type*>::init(this->a);
     for (auto tp : tps) { targs.push(env.get(tp)?)?; }
-    this->check_constraints(decl.name, tps.slice(), decl.constraints.slice(), targs.slice(), line)?;
+    this->check_constraints(decl.name, tps, decl.constraints.slice(), targs.slice(), line)?;
     const auto fi = this->inst_fn(decl, env, targs)?;
-    this->move_args(decl, args.slice(), off, line)?;
+    this->move_args(decl, fi.params.slice(), args.slice(), off, line)?;
     this->copy_args(fi.decl, fi.params.slice(), args.slice(), off, line)?;
 
     auto argtxt = this->sb();
@@ -1001,8 +1001,8 @@ bool Gen::sig_needs_c(Type*[] params, Type* ret) {
 }
 
 !void Gen::gen_c_thunk(FnInst* fi) {
-    const auto sv_body = this->body;
-    const auto sv_allocas = this->allocas;
+    const auto sv_body = share_list(&this->body);
+    const auto sv_allocas = share_list(&this->allocas);
     const auto sv_ntmp = this->ntmp;
     const auto sv_nlbl = this->nlbl;
     const auto sv_dbg = this->dbg;
@@ -1027,8 +1027,8 @@ bool Gen::sig_needs_c(Type*[] params, Type* ret) {
     defer this->af = sv_af;
 
     const auto ret = fi.ret;
-    const auto params = fi.params;
-    const auto modes = this->c_modes(params.slice(), ret)?;
+    const auto params = fi.params.slice();
+    const auto modes = this->c_modes(params, ret)?;
     const auto sret = is_c_agg(ret) && this->classify_c(ret)?.memory;
     auto hdr = this->sb();
     auto linkage = "internal ";

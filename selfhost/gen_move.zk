@@ -310,7 +310,7 @@ str Gen::place_name(Expr* e) {
 }
 
 !void Gen::move_mark(Expr* x, str by, i64 line) {
-    if (x != null && x.k == .Field) {
+    if (x != null && (x.k == .Field || x.k == .Index)) {
         const auto k = this->place_key(x)?;
         if (k.len == 0) { return; }
         this->check_view(k, this->place_name(x), line)?;
@@ -329,10 +329,16 @@ str Gen::place_name(Expr* e) {
     if (ty != null && is_owned(ty)) { this->add_rec(MoveRec{ .ptr = p, .by = by, .line = line, .kind = 4 })?; }
 }
 
-!void Gen::move_args(FnDecl* decl, Expr*[] args, i64 off, i64 line) {
+!void Gen::move_args(FnDecl* decl, Type*[] ptypes, Expr*[] args, i64 off, i64 line) {
     for (auto [i, x] : args) {
         const auto pi = i + off;
-        if (pi < decl.params.len && decl.params.get(pi).move) { this->move_mark(x, decl.name, line)?; }
+        if (pi >= decl.params.len || !decl.params.get(pi).move) { continue; }
+        if (pi < ptypes.len && this->is_resource(ptypes[pi]) && (x.k == .Field || x.k == .Index) && this->place_borrowed(x) && !(this_rooted(x) && x.k == .Index)) {
+            this->err(line);
+            eprintln("'{this->place_name(x)}' is a resource behind a pointer or slice; moving it out would alias it, use clone() or take the element out of the container");
+            return error.CompileFailed;
+        }
+        this->move_mark(x, decl.name, line)?;
     }
 }
 
@@ -364,6 +370,22 @@ bool Gen::heap_place(Expr* e) {
         return t != null && (t.k == .Ptr || t.k == .Slice);
     }
     return false;
+}
+
+/// A place whose root is a pointer or a slice (or a dereference): this function
+/// does not own the storage, so copying a resource out of it would alias what
+/// the pointer or container still owns. A field or index of a local value
+/// (`l.items[0]`, `h.l`) is owned and is not borrowed, even though the value may
+/// hold a slice field internally.
+bool Gen::place_borrowed(Expr* e) {
+    auto x = e;
+    while (x.k == .Field || x.k == .Index || x.k == .Slice) { x = x.l; }
+    if (x.k == .Unary && x.op == .star) { return true; }
+    if (x.k == .Ident) {
+        const auto t = this->local_type(x.name) catch null;
+        return t == null || t.k == .Ptr || t.k == .Slice;
+    }
+    return true;
 }
 
 !Origin Gen::origin_of(Expr* e) {
@@ -481,7 +503,7 @@ str Gen::escaped_local(Expr* e) {
 }
 
 !void Gen::join_arm(Join* j) {
-    this->restore_state(j.s0);
+    this->restore_state(share_list(&j.s0));
 }
 
 !void Gen::join_end(Join* j) {
@@ -493,7 +515,7 @@ str Gen::escaped_local(Expr* e) {
 
 bool is_must(i64 kind) { return kind == 4 || kind == 5; }
 
-bool state_has(List<MoveRec> st, str ptr, i64 kind) {
+bool state_has(MoveRec[] st, str ptr, i64 kind) {
     for (auto r : st) { if (r.ptr == ptr && r.kind == kind) { return true; } }
     return false;
 }
@@ -529,7 +551,7 @@ bool rec_in(MoveRec[] st, MoveRec r) {
         j.any = true;
     }
     if (!j.any) {
-        this->restore_state(j.s0);
+        this->restore_state(share_list(&j.s0));
         return;
     }
     auto out = List<MoveRec>::init(this->a);
@@ -539,7 +561,7 @@ bool rec_in(MoveRec[] st, MoveRec r) {
         if (is_must(r.kind)) { for (auto arm : j.arms) { if (!rec_in(arm.slice(), r)) { keep = false; } } }
         if (keep) { out.push(r)?; } else { changed = true; }
     }
-    if (changed) { this->restore_state(out); } else { this->restore_state(j.acc); }
+    if (changed) { this->restore_state(out); } else { this->restore_state(share_list(&j.acc)); }
 }
 
 bool Gen::declared_before(str ptr, i64 depth) {
@@ -593,8 +615,8 @@ bool Gen::declared_before(str ptr, i64 depth) {
 }
 
 !void Gen::loop_end(Loop* lp, List<MoveRec> s0) {
-    auto back = lp.conts;
-    auto back_must = lp.cmust;
+    auto back = share_list(&lp.conts);
+    auto back_must = share_list(&lp.cmust);
     auto nback = lp.ncont;
     if (!this->terminated) {
         back = this->move_join(back.slice(), this->moved.slice())?;
@@ -649,6 +671,12 @@ bool is_owned(Type* t) { return t.k == .Strct && !t.si.decl.is_union && t.si.dec
 template<T> List<T> share_list(List<T>* l) {
     auto out = List<T>::init(l.a);
     copy_raw(&out, l);
+    return out;
+}
+
+template<V> Map<V> share_map(Map<V>* m) {
+    auto out = Map<V>::init(m.a);
+    copy_raw(&out, m);
     return out;
 }
 
@@ -753,6 +781,11 @@ bool store_untracked(Expr* e) {
             }
             return;
         }
+        if (this->place_borrowed(e) && !(this_rooted(e) && e.k == .Index)) {
+            this->err(line);
+            eprintln("'{this->type_name(ty)?}' is a resource behind a pointer or slice; copying it out would alias it, use clone(), take a pointer, or take the element out of the container");
+            return error.CompileFailed;
+        }
         this->check_view(k, this->place_name(e), line)?;
         this->move_use_key(k, this->place_name(e), line)?;
         this->invalidate(k, this->place_name(e), by, line)?;
@@ -803,7 +836,7 @@ bool store_untracked(Expr* e) {
     const auto p = this->local_ptr(name);
     auto registered = false;
     for (auto sc : this->scopes) { for (auto ov : sc.owned) { if (ov.ptr == p) { registered = true; } } }
-    if (!registered || state_has(this->moved, p, 4)) { return; }
+    if (!registered || state_has(this->moved.slice(), p, 4)) { return; }
     this->err(line);
     eprintln("'{name}' still holds a '{ty.si.decl.name}' that has not been consumed, and this assignment would lose it; consume it first");
     return error.CompileFailed;
@@ -826,7 +859,7 @@ str Gen::consumer_of(str tname) {
     auto i = lo;
     while (i <= hi) {
         for (auto ov : this->scopes.items[i].owned) {
-            if (!state_has(this->moved, ov.ptr, 4)) {
+            if (!state_has(this->moved.slice(), ov.ptr, 4)) {
                 this->err(ov.line);
                 const auto cons = this->consumer_of(ov.tname);
                 if (cons.len > 0) {

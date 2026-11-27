@@ -21,6 +21,17 @@ generic it came from.
   variable is now a non-owning copy: it can be read and borrowed, but not moved
   out and not mutated through an `invalidates` method (the copy's header would
   change while the container still points at the old buffer).
+- `match (u)` on a resource union, `x orelse d` and `x catch d` on a resource
+  optional or error union, and a closure that captures a `for` loop variable
+  all copied the payload out while the container still owned it (the same class
+  as #58). `match` and the unwrap now consume the operand, and a closure cannot
+  capture the non-owning loop copy.
+- Copying or moving a resource out of a place reached through a pointer or a
+  slice (`this->l`, `hp->l`, `s[0]`, `(*p).l`) was a bitwise alias the checker
+  wrongly treated as a move. It is rejected now, like `*p`; a field or constant
+  index of a local value (`h.l`, `l.items[0]`) still moves. `Map.get` and
+  `Map.get_or` are rejected for a resource value (as `List.get` is); borrow with
+  `get_ptr(key)`.
 - An error inside a generic or prelude function now prints a note naming it
   (`List.get`), because the source location alone points at `<std>`.
 

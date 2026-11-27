@@ -174,3 +174,25 @@ test "orelse and catch take a resource over" {
     const auto w = r catch List<i64>::init(a);
     w.deinit();
 }
+
+struct Owned { List<i64> l; void deinit() move { this->l.deinit(); } }
+
+test "a move method may consume a resource field of the receiver" {
+    auto o = Owned{ .l = List<i64>::init(c_allocator()) };
+    o.l.push(7)?;
+    o.deinit();
+}
+
+test "a local value field or constant index may still be moved out" {
+    auto h = Owned{ .l = List<i64>::init(c_allocator()) };
+    h.l.push(1)?;
+    const auto y = h.l;
+    y.deinit();
+    auto l = List<List<i64>>::init(c_allocator());
+    auto a = List<i64>::init(c_allocator());
+    a.push(42)?;
+    l.push(a)?;
+    const auto z = l.items[0];
+    z.deinit();
+    l.deinit();
+}

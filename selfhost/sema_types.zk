@@ -24,7 +24,7 @@ bool Gen::satisfies(Type* t, str name) {
     }
 }
 
-!void Gen::check_constraint_names(str what, List<str> cons, i64 line) {
+!void Gen::check_constraint_names(str what, str[] cons, i64 line) {
     for (auto c : cons) {
         if (c.len > 0 && !this->satisfies(this->t_i64, c) && !this->satisfies(this->t_f64, c) && c != "Eq") {
             auto known = List<str>::init(this->a);

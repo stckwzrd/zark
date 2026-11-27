@@ -455,8 +455,8 @@ owned struct Executor {
     }
 
     void run_batch() {
-        const auto tmp = this->batch;
-        this->batch = this->queue;
+        const auto tmp = move_out(&this->batch);
+        this->batch = move_out(&this->queue);
         this->queue = tmp;
         auto i = 0;
         while (i < this->batch.len) {
