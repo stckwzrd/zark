@@ -1323,6 +1323,7 @@ struct Spinlock {
         28 => return error.NoSpaceLeft;
         32 => return error.BrokenPipe;
         39 => return error.DirectoryNotEmpty;
+        98 => return error.AddressInUse;
         104 => return error.ConnectionReset;
         110 => return error.TimedOut;
         111 => return error.ConnectionRefused;

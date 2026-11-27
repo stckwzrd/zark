@@ -10,6 +10,7 @@ extern void vrt_poller_free(i64 p);
 extern i32 pipe(i32* fds);
 extern i64 write(i32 fd, void* buf, u64 n);
 extern i64 read(i32 fd, void* buf, u64 n);
+extern i32 shutdown(i32 fd, i32 how);
 
 void bump(void* data) {
     auto n = data as *i64;
@@ -377,6 +378,7 @@ test "a reader and a writer share one fd" {
     defer ex.deinit();
     i32[2] sv;
     assert(socketpair(1, 1, 0, &sv[0]) == 0);
+    defer _ = close(sv[1]);
     assert(vrt_set_nonblocking(sv[0]) == 0);
     const auto big = c_allocator().alloc<u8>(1 << 22)?;
     defer c_allocator().free<u8>(big);
@@ -399,12 +401,11 @@ test "a reader and a writer share one fd" {
         }
     })?;
     defer t.join();
+    defer { _ = shutdown(sv[0], 2); _ = close(sv[0]); }
     auto g = Guarded{ .h = &hr, .s = async::Sleep::after(&ex, 200) };
     assert(ex.block_on<Guarded, i64>(&g)? == 1);
     assert(buf[0] == 'x');
     assert(ex.block_on<async::JoinHandle<Count>, Count>(&hw)?? == 1 << 22);
-    _ = close(sv[0]);
-    _ = close(sv[1]);
 }
 
 struct EchoServer {
