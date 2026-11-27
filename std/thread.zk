@@ -14,6 +14,7 @@ extern u64 pthread_self();
 extern i32 vrt_mutex_lock(Mutex* m);
 extern i32 vrt_mutex_trylock(Mutex* m);
 extern i32 vrt_mutex_unlock(Mutex* m);
+extern i32 vrt_mutex_destroy(Mutex* m);
 extern i32 vrt_cond_wait(Cond* c, Mutex* m);
 extern i32 vrt_cond_timedwait(Cond* c, Mutex* m, Timespec* abstime);
 extern i32 vrt_cond_signal(Cond* c);
@@ -111,6 +112,81 @@ struct AtomicI64 {
     /// sets the value to `desired` if it is `expected`; true when it did
     bool compare_swap(i64 expected, i64 desired) {
         return vrt_cas64(&this->v as *u64, expected as u64, desired as u64) == expected as u64;
+    }
+}
+
+/// An unsigned integer shared between threads. Operations are sequentially consistent.
+struct AtomicU64 {
+    u64 v;
+    u64 add(u64 d) { return vrt_fetch_add64(&this->v, d); }
+    u64 load() { return vrt_fetch_add64(&this->v, 0); }
+    void store(u64 x) { _ = vrt_swap64(&this->v, x); }
+    bool compare_swap(u64 expected, u64 desired) {
+        return vrt_cas64(&this->v, expected, desired) == expected;
+    }
+}
+
+/// A boolean shared between threads. Use the methods rather than accessing `v`.
+struct AtomicBool {
+    AtomicU64 v;
+    bool load() { return this->v.load() != 0; }
+    void store(bool x) { if (x) { this->v.store(1); } else { this->v.store(0); } }
+    bool compare_swap(bool expected, bool desired) {
+        u64 e = 0;
+        u64 d = 0;
+        if (expected) { e = 1; }
+        if (desired) { d = 1; }
+        return this->v.compare_swap(e, d);
+    }
+}
+
+/// Keeps a value and its lock together. Do not move or copy it after first use.
+struct Locked<T> {
+    Mutex mutex;
+    T value;
+
+    T* lock() { this->mutex.lock(); return &this->value; }
+    void unlock() { this->mutex.unlock(); }
+    /// Call only after all users have stopped and the mutex is unlocked.
+    void deinit() { _ = vrt_mutex_destroy(&this->mutex); }
+}
+
+struct ArcBlock<T> {
+    AtomicI64 refs;
+    Allocator a;
+    fn(T*) -> void cleanup;
+    T value;
+}
+
+/// Shared ownership with explicit clone and release. Access to value needs synchronization.
+owned struct Arc<T> {
+    ArcBlock<T>* block;
+
+    static !Self init(Allocator a, T value, fn(T*) -> void cleanup) {
+        const auto p = a.create<ArcBlock<T>>() catch |e| {
+            if (cleanup != null) { cleanup(&value); }
+            return e;
+        };
+        p.refs.store(1);
+        p.a = a;
+        p.cleanup = cleanup;
+        p.value = value;
+        return Self{ .block = p };
+    }
+
+    Self clone() {
+        const auto old = this->block.refs.add(1);
+        assert(old > 0 && old < 9223372036854775807);
+        return Self{ .block = this->block };
+    }
+    T* get() borrows { return &this->block.value; }
+    void deinit() move {
+        const auto p = this->block;
+        if (p.refs.add(-1) == 1) {
+            if (p.cleanup != null) { p.cleanup(&p.value); }
+            const auto a = p.a;
+            a.destroy(p);
+        }
     }
 }
 

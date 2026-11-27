@@ -135,6 +135,9 @@ bool Gen::ct_in_chain(str key) {
         auto args = List<str>::init(this->a);
         args.append([this->self_path, "run", this->test_root])?;
         args.append(this->ct_extras.slice())?;
+        auto cfg = this->sb();
+        sprint(&cfg, "{cfg_encode()}")?;
+        args.append(["--ct-cfg", cfg.slice()])?;
         args.append(["-o", xb.slice(), "--ct-key", key, "--ct-mode", mode_name, "--ct-out", ob.slice(), "--ct-chain", this->ct_child_chain()?])?;
         const auto code = run(this->a, args.slice())?;
         ct_remove(xb.slice());

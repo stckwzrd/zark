@@ -790,7 +790,7 @@ i64 cursor_of(Doc* d, Json* params) {
     if (method == "zark/std") {
         const auto path = jstr(jget(params, "path"), "");
         auto src = PRELUDE;
-        if (path != "<std>" && path.len > 0) { src = std_source(path) catch ""; }
+        if (path != "<std>" && path.len > 0) { src = std_source(a, path) catch ""; }
         auto w = new_jw(a);
         w.str(src)?;
         s.reply(a, id, w.text())?;
