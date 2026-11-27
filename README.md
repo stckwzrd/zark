@@ -155,6 +155,20 @@ match dir {
 
 **Comptime (lite):** `const auto N = 4 * 2;` is evaluated at compile time. It works in array sizes `i32[N]` and with `sizeof(T)`. Generics are monomorphized, and only reachable code gets compiled (lazy analysis, like Zig).
 
+`import "std/builtin" as builtin;` exposes the target OS, architecture, C ABI, endianness and build flags. Use `comptime if` at file scope or inside a function to select platform-specific code before it is checked:
+
+```zark
+import "std/builtin" as builtin;
+
+comptime if (builtin::os == "linux" && builtin::arch == "x86_64") {
+    i64 platform_code() { return 1; }
+} else {
+    i64 platform_code() { return 0; }
+}
+```
+
+Conditions support builtin target strings and boolean flags, boolean literals, `!`, `&&`, `||`, `==` and `!=`; they do not yet support arbitrary `comptime` expressions. See [SPEC.md](SPEC.md#7a-compile-time-evaluation) for the available constants and branch rules.
+
 **Safety:** bounds checks on arrays and slices (`panic: index 3 out of bounds (len 3) at file:line`), plus `assert(cond)` and `panic("msg {x}")`.
 
 **Pointers:** `&x`, `*p`, `p[i]` (pointer arithmetic), `p + n`, auto-deref for fields (`p.x`), slicing `p[a..b]` and `s[a..]`. `void*` converts to and from any pointer.

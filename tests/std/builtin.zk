@@ -1,0 +1,27 @@
+import "std/builtin" as target;
+
+comptime if (target::is_test) {
+    i64 builtin_test_value() { return 42; }
+} else if (target::not_checked) {
+    i64 builtin_test_value() { return unselected_test_function(); }
+}
+
+i64 builtin_test_comptime() {
+    comptime if (target::is_test) { return 99; }
+    else { return -1; }
+}
+
+test "builtin flags select only the active branch" {
+    assert(target::is_test);
+    assert(builtin_test_value() == 42);
+    assert(comptime builtin_test_comptime() == 99);
+    assert(target::pointer_bits == 64);
+    assert(target::compiler_version.len > 0);
+    assert((target::os == "linux") == target::is_linux);
+    assert((target::arch == "x86_64") == target::is_x86_64);
+    comptime if (target::is_test && (target::is_linux || target::is_macos)) {
+        assert(target::is_x86_64 || target::is_aarch64);
+    } else {
+        unselected_test_statement();
+    }
+}
