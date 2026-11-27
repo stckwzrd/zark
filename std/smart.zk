@@ -31,6 +31,7 @@ owned struct Box<T> {
 
 struct RcBlock<T> {
     i64 refs;
+    i64 weak;
     Allocator a;
     fn(T*) -> void cleanup;
     T value;
@@ -46,6 +47,7 @@ owned struct Rc<T> {
             return e;
         };
         p.refs = 1;
+        p.weak = 1; // the strong owners keep the control block alive
         p.a = a;
         p.cleanup = cleanup;
         p.value = value;
@@ -60,13 +62,44 @@ owned struct Rc<T> {
 
     T* get() borrows { return &this->block.value; }
 
+    Weak<T> downgrade() {
+        assert(this->block.weak > 0 && this->block.weak < 9223372036854775807);
+        this->block.weak += 1;
+        return Weak<T>{ .block = this->block };
+    }
+
     void deinit() move {
         const auto p = this->block;
         p.refs -= 1;
         if (p.refs == 0) {
             if (p.cleanup != null) { p.cleanup(&p.value); }
-            const auto a = p.a;
-            a.destroy(p);
+            p.weak -= 1;
+            if (p.weak == 0) { const auto a = p.a; a.destroy(p); }
         }
+    }
+}
+
+/// A non-owning, single-threaded reference to an Rc value.
+owned struct Weak<T> {
+    RcBlock<T>* block;
+
+    Self clone() {
+        assert(this->block.weak > 0 && this->block.weak < 9223372036854775807);
+        this->block.weak += 1;
+        return Self{ .block = this->block };
+    }
+
+    ?Rc<T> upgrade() {
+        const auto p = this->block;
+        if (p.refs == 0) { return null; }
+        assert(p.refs > 0 && p.refs < 9223372036854775807);
+        p.refs += 1;
+        return Rc<T>{ .block = p };
+    }
+
+    void deinit() move {
+        const auto p = this->block;
+        p.weak -= 1;
+        if (p.weak == 0) { const auto a = p.a; a.destroy(p); }
     }
 }

@@ -153,6 +153,7 @@ struct Locked<T> {
 
 struct ArcBlock<T> {
     AtomicI64 refs;
+    AtomicI64 weak;
     Allocator a;
     fn(T*) -> void cleanup;
     T value;
@@ -168,6 +169,7 @@ owned struct Arc<T> {
             return e;
         };
         p.refs.store(1);
+        p.weak.store(1); // the strong owners keep the control block alive
         p.a = a;
         p.cleanup = cleanup;
         p.value = value;
@@ -180,13 +182,44 @@ owned struct Arc<T> {
         return Self{ .block = this->block };
     }
     T* get() borrows { return &this->block.value; }
+    Weak<T> downgrade() {
+        const auto old = this->block.weak.add(1);
+        assert(old > 0 && old < 9223372036854775807);
+        return Weak<T>{ .block = this->block };
+    }
     void deinit() move {
         const auto p = this->block;
         if (p.refs.add(-1) == 1) {
             if (p.cleanup != null) { p.cleanup(&p.value); }
-            const auto a = p.a;
-            a.destroy(p);
+            if (p.weak.add(-1) == 1) { const auto a = p.a; a.destroy(p); }
         }
+    }
+}
+
+/// A non-owning reference to an Arc value, safe to upgrade from another thread.
+owned struct Weak<T> {
+    ArcBlock<T>* block;
+
+    Self clone() {
+        const auto old = this->block.weak.add(1);
+        assert(old > 0 && old < 9223372036854775807);
+        return Self{ .block = this->block };
+    }
+
+    ?Arc<T> upgrade() {
+        const auto p = this->block;
+        auto n = p.refs.load();
+        while (n > 0) {
+            assert(n < 9223372036854775807);
+            if (p.refs.compare_swap(n, n + 1)) { return Arc<T>{ .block = p }; }
+            n = p.refs.load();
+        }
+        return null;
+    }
+
+    void deinit() move {
+        const auto p = this->block;
+        if (p.weak.add(-1) == 1) { const auto a = p.a; a.destroy(p); }
     }
 }
 

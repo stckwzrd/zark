@@ -1,5 +1,6 @@
 import "std/collections" as collections;
 import "std/smart" as smart;
+import "std/thread" as thread;
 
 struct Item { i64* cleanups; i64 number; }
 void cleanup_item(Item* value) { *value.cleanups += 1; }
@@ -128,4 +129,45 @@ test "rc cleans up if allocation fails" {
     };
     unexpected.deinit();
     panic("allocation should fail");
+}
+
+test "weak rc expires after the last strong owner" {
+    auto dbg = DebugAllocator::init();
+    auto cleaned = 0;
+    {
+        auto owner = smart::Rc<Item>::init(dbg.allocator(), Item{ .cleanups = &cleaned, .number = 23 }, cleanup_item)?;
+        errdefer owner.deinit();
+        auto weak = owner.downgrade();
+        errdefer weak.deinit();
+        auto another = weak.clone();
+        errdefer another.deinit();
+        auto upgraded = weak.upgrade() orelse return error.Unexpected;
+        assert(upgraded.get().number == 23);
+        owner.deinit();
+        assert(cleaned == 0);
+        upgraded.deinit();
+        assert(cleaned == 1 && dbg.live == 1);
+        assert(weak.upgrade() is .None);
+        weak.deinit();
+        assert(dbg.live == 1 && another.upgrade() is .None);
+        auto expired_clone = another.clone();
+        another.deinit();
+        assert(dbg.live == 1 && expired_clone.upgrade() is .None);
+        expired_clone.deinit();
+        assert(dbg.live == 0);
+    }
+    dbg.deinit()?;
+}
+
+test "rc and arc weak types coexist" {
+    auto rc = smart::Rc<i64>::init(c_allocator(), 7, null)?;
+    errdefer rc.deinit();
+    auto arc = thread::Arc<i64>::init(c_allocator(), 9, null)?;
+    auto single = rc.downgrade();
+    auto atomic = arc.downgrade();
+    rc.deinit();
+    arc.deinit();
+    assert(single.upgrade() is .None && atomic.upgrade() is .None);
+    single.deinit();
+    atomic.deinit();
 }
