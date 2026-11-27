@@ -1,0 +1,132 @@
+import "std/collections" as collections;
+import "std/async" as async;
+
+struct Counter {
+    i64 next_value;
+    i64 limit;
+    bool next() { this->next_value += 1; return this->next_value <= this->limit; }
+    i64 value() { return this->next_value; }
+}
+
+owned struct OwnedCounter {
+    i64 count;
+    static Self init() { return Self{}; }
+    bool next() { this->count += 1; return this->count <= 2; }
+    i64 value() { return this->count; }
+    void deinit() move { }
+}
+
+!i64[] source(i64* calls, i64 id, i64[] items) { *calls = *calls * 10 + id; return items; }
+
+struct YieldOnce {
+    bool done;
+    Poll<bool> poll(Context* cx) {
+        if (this->done) { return .Ready(true); }
+        this->done = true;
+        cx.waker.wake();
+        return .Pending;
+    }
+}
+
+async i64 zip_with_await() {
+    i64[3] values = [10, 20, 30];
+    auto total = 0;
+    for (auto x : values, auto n : Counter{ .limit = 2 }) {
+        await YieldOnce{};
+        total += x + n;
+    }
+    return total;
+}
+
+test "paired iterator state survives await" {
+    auto ex = async::Executor::init(c_allocator())?;
+    defer ex.deinit();
+    auto future = zip_with_await();
+    assert(ex.block_on(&future)? == 33);
+}
+
+test "iterators work directly and preserve map keys" {
+    auto m = HashMap<str, i64>::init(c_allocator());
+    defer m.deinit();
+    m.put("one", 1)?;
+    m.put("two", 2)?;
+    auto total = 0;
+    for (auto [key, value] : m.iter()) {
+        assert((key == "one" && value == 1) || (key == "two" && value == 2));
+        total += value;
+    }
+    assert(total == 3);
+    auto direct = 0;
+    for (auto [key, value] : m) { direct += value; }
+    assert(direct == 3);
+    auto list = collections::LinkedList<i64>::init(c_allocator(), null);
+    defer list.deinit();
+    list.push_back(4)?;
+    list.push_back(5)?;
+    for (auto [i, p] : list) { total += *p + i; }
+    assert(total == 13);
+    for (auto x : Counter{ .limit = 3 }) { total += x; }
+    assert(total == 19);
+}
+
+test "paired loops run defer on continue and break" {
+    auto total = 0;
+    i64[4] values = [10, 20, 30, 40];
+    for (auto [i, x] : values, auto n : 0..8) {
+        defer total += 1;
+        assert(i == n);
+        if (n == 1) { continue; }
+        if (n == 2) { break; }
+        total += x;
+    }
+    assert(total == 13);
+}
+
+test "paired iteration stops at shortest source and evaluates sources once" {
+    i64[3] a = [1, 2, 3];
+    i64[2] b = [10, 20];
+    auto calls = 0;
+    auto total = 0;
+    for (auto x : source(&calls, 1, a[..])?, auto y : source(&calls, 2, b[..])?, auto n : 0..9) {
+        total += x + y + n;
+    }
+    assert(calls == 12 && total == 34);
+    for (auto i : 5..5, auto x : b) { total += i + x; }
+    assert(total == 34);
+}
+
+test "paired iterator advancement stops left to right" {
+    auto first = Counter{ .limit = 10 };
+    i64[1] values = [5];
+    auto total = 0;
+    for (auto n : first, auto value : values) { total += n + value; }
+    assert(total == 6 && first.next_value == 2);
+}
+
+test "resource iterators are explicitly released" {
+    auto it = OwnedCounter::init();
+    defer it.deinit();
+    auto total = 0;
+    for (auto x : it, auto y : [10, 20, 30]) { total += x + y; }
+    assert(total == 33);
+}
+
+test "paired loops support break continue and iterators" {
+    auto m = HashMap<i64, i64>::init(c_allocator());
+    defer m.deinit();
+    m.put(1, 10)?;
+    m.put(2, 20)?;
+    auto count = 0;
+    auto total = 0;
+    for (auto [key, value] : m.iter(), auto i : 0..10) {
+        total += key + value + i;
+        count += 1;
+    }
+    assert(count == 2 && total == 34);
+    for (auto x : 0..6, auto y : [10, 20, 30, 40, 50]) {
+        if (x == 1) { continue; }
+        if (x == 3) { break; }
+        total += x + y;
+    }
+    assert(total == 76);
+}

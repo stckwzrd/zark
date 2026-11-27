@@ -51,7 +51,7 @@ struct Expr {
     i64 name_off;           // Catch |e| position
 }
 
-enum SK { Let, Assign, ExprS, If, While, ForRange, ForEach, Ret, Brk, Cont, Block, Defer, Match }
+enum SK { Let, Assign, ExprS, If, While, ForRange, ForEach, ForZip, Ret, Brk, Cont, Block, Defer, Match }
 
 struct MatchArm { List<Expr*> pats; Stmt* body; }
 

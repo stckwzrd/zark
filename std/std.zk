@@ -543,7 +543,7 @@ struct Map<V> {
         return true;
     }
 
-    void clear() {
+    void clear() invalidates {
         for (auto i : 0..this->entries.len) { this->entries[i] = MapEntry<V>{}; }
         this->len = 0;
     }
@@ -1998,7 +1998,7 @@ struct HashMap<K, V> {
         return true;
     }
 
-    void clear() {
+    void clear() invalidates {
         for (auto i : 0..this->entries.len) { this->entries[i] = HashEntry<K, V>{}; }
         this->len = 0;
     }
@@ -2036,15 +2036,15 @@ struct HashSet<T> {
     static Self init(Allocator a) { return Self{ .m = HashMap<T, bool>::init(a) }; }
     void deinit() move { this->m.deinit(); }
     /// true when the value was new
-    !bool add(T v) {
+    !bool add(T v) invalidates {
         if (this->m.has(v)) { return false; }
         this->m.put(v, true)?;
         return true;
     }
     bool has(T v) { return this->m.has(v); }
-    bool remove(T v) { return this->m.remove(v); }
+    bool remove(T v) invalidates { return this->m.remove(v); }
     i64 len() { return this->m.len; }
-    void clear() { this->m.clear(); }
+    void clear() invalidates { this->m.clear(); }
     HashIter<T, bool> iter() borrows { return this->m.iter(); }
     !List<T> items(Allocator a) { return this->m.keys(a); }
 }

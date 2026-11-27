@@ -5,6 +5,20 @@ import "gen_move.zk";
 
 struct UPat { i64 idx; str bind; }
 struct MatchRes { Type* ty; str slot; }
+struct ZipState {
+    Stmt* clause;
+    i64 kind;              // 0: range, 1: array/slice, 2: iterator
+    Type* elem;
+    Type* collection;
+    str index;
+    str bound;
+    str base;
+    Addr iterator;
+    FnDecl* next;
+    FnDecl* value;
+    FnDecl* key;
+    str borrow;
+}
 
 !void Gen::gen_stmt(Stmt* s) {
     const auto saved_line = this->at_line;
@@ -234,6 +248,7 @@ struct MatchRes { Type* ty; str slot; }
             this->pop_scope()?;
         }
         .ForEach => this->gen_for_each(s)?;
+        .ForZip => this->gen_for_zip(s)?;
         .Ret => this->gen_return(s.line, s.e)?;
         .Brk, .Cont => {
             if (this->in_defer) {
@@ -551,10 +566,10 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
         a = Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
     }
     if (a.ty.k == .Strct) {
-        via_slice = true;
         auto kb = this->sb();
         sprint(&kb, "{a.ty.si.decl.name}.slice")?;
-        if (!this->methods.has(kb.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}' (no slice() method)"); return error.CompileFailed; }
+        if (!this->methods.has(kb.slice())) { return this->gen_for_iterator(s, a, s0, md); }
+        via_slice = true;
         const auto md = this->methods.get(kb.slice())?;
         if (md.borrows) { slice_by = "slice"; }
         const auto sv = this->call_method(md, a, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
@@ -634,6 +649,279 @@ bool Gen::match_covers(Value v, MatchArm[] arms) {
     const auto nx = this->tmp()?;
     sprint(this->ins()?, "  {nx} = add i64 {cur2.v}, 1\n")?;
     this->store(Value{ .ty = this->t_i64, .v = nx }, it)?;
+    this->br(lc)?;
+    this->label(le)?;
+    this->pop_scope()?;
+}
+
+/// An iterator exposes next() -> bool and value(); key() supplies [key, value].
+!void Gen::gen_for_iterator(Stmt* s, Addr a, List<MoveRec> s0, i64 md) {
+    auto it = a;
+    auto next_name = this->sb();
+    sprint(&next_name, "{it.ty.si.decl.name}.next")?;
+    auto via_iter = false;
+    auto iter_by = "";
+    if (!this->methods.has(next_name.slice())) {
+        auto name = this->sb();
+        sprint(&name, "{it.ty.si.decl.name}.iter")?;
+        if (!this->methods.has(name.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(it.ty)?}' (no slice(), iter() or next() method)"); return error.CompileFailed; }
+        const auto method = this->methods.get(name.slice())?;
+        if (method.borrows) { iter_by = "iter"; }
+        via_iter = true;
+        const auto v = this->call_method(method, it, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
+        it = this->spill(v)?;
+        if (it.ty.k != .Strct) { this->err(s.line); eprintln("iter() must return an iterator struct"); return error.CompileFailed; }
+        next_name = this->sb();
+        sprint(&next_name, "{it.ty.si.decl.name}.next")?;
+    }
+    auto value_name = this->sb();
+    sprint(&value_name, "{it.ty.si.decl.name}.value")?;
+    if (!this->methods.has(next_name.slice()) || !this->methods.has(value_name.slice())) {
+        this->err(s.line); eprintln("iterator requires next() and value() methods"); return error.CompileFailed;
+    }
+    if (this->is_resource(it.ty) && (via_iter || this->place_key(s.e)?.len == 0)) {
+        this->err(s.line); eprintln("a resource iterator must be stored in a variable and released explicitly"); return error.CompileFailed;
+    }
+    const auto iter_borrow = this->iter_borrow(s.e, via_iter, iter_by)?;
+    const auto next = this->methods.get(next_name.slice())?;
+    const auto value = this->methods.get(value_name.slice())?;
+    const auto lc = this->new_label("icnd")?;
+    const auto lb = this->new_label("ibody")?;
+    const auto le = this->new_label("iend")?;
+    auto index = "";
+    auto key_name = this->sb();
+    sprint(&key_name, "{it.ty.si.decl.name}.key")?;
+    const auto has_key = s.has_idx && this->methods.has(key_name.slice());
+    if (s.has_idx && !has_key) {
+        index = this->alloca(this->t_i64, "iter_index")?;
+        this->store(Value{ .ty = this->t_i64, .v = "0" }, index)?;
+    }
+    const auto step = this->new_label("istep")?;
+    this->label(lc)?;
+    const auto cond = this->call_method(next, it, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
+    if (cond.ty.k != .Bool) { this->err(s.line); eprintln("iterator next() must return bool"); return error.CompileFailed; }
+    sprint(this->ins()?, "  br i1 {cond.v}, label %{lb}, label %{le}\n")?;
+    this->terminated = true;
+    this->label(lb)?;
+    this->push_scope()?;
+    if (s.has_idx) {
+        auto k = Value{ .ty = null, .v = "" };
+        if (has_key) { k = this->call_method(this->methods.get(key_name.slice())?, it, List<Expr*>::init(this->a), this->no_types(), null, s.line)?; }
+        else { k = this->load(this->t_i64, index)?; }
+        if (k.ty.k == .Void) { this->err(s.line); eprintln("iterator key() must return a value"); return error.CompileFailed; }
+        const auto slot = this->alloca(k.ty, s.idx)?;
+        this->store(k, slot)?;
+        this->declare_var(s.idx, Var{ .ptr = slot, .ty = k.ty, .mutable = false }, s.line)?;
+        if (this->is_resource(k.ty)) { this->add_rec(MoveRec{ .ptr = slot, .by = "for", .line = s.line, .kind = 7, .cname = s.idx })?; }
+    }
+    const auto v = this->call_method(value, it, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
+    if (v.ty.k == .Void) { this->err(s.line); eprintln("iterator value() must return a value"); return error.CompileFailed; }
+    const auto slot = this->alloca(v.ty, s.name)?;
+    this->store(v, slot)?;
+    this->declare_var(s.name, Var{ .ptr = slot, .ty = v.ty, .mutable = false }, s.line)?;
+    if (this->is_resource(v.ty)) { this->add_rec(MoveRec{ .ptr = slot, .by = "for", .line = s.line, .kind = 7, .cname = s.name })?; }
+    auto lp = this->loop_new(le, step, this->scopes.len, s.label, md, false)?;
+    lp.iter = iter_borrow;
+    this->loops.push(lp)?;
+    this->gen_stmt(s.body)?;
+    this->loop_end(&this->loops.items[this->loops.len - 1], s0)?;
+    this->loops.len -= 1;
+    this->pop_scope()?;
+    this->label(step)?;
+    if (index.len > 0) {
+        const auto cur = this->load(this->t_i64, index)?;
+        const auto nx = this->tmp()?;
+        sprint(this->ins()?, "  {nx} = add i64 {cur.v}, 1\n")?;
+        this->store(Value{ .ty = this->t_i64, .v = nx }, index)?;
+    }
+    this->br(lc)?;
+    this->label(le)?;
+    this->pop_scope()?;
+}
+
+!ZipState Gen::zip_source(Stmt* s) {
+    auto z = ZipState{ .clause = s };
+    if (s.k == .ForRange) {
+        auto lo = Value{ .ty = null, .v = "" };
+        auto hi = Value{ .ty = null, .v = "" };
+        if (is_literal(s.e) && !is_literal(s.e2)) {
+            hi = this->gen_expr(s.e2, null)?;
+            lo = this->coerce(this->gen_expr(s.e, hi.ty)?, hi.ty, s.line)?;
+        } else {
+            lo = this->gen_expr(s.e, null)?;
+            hi = this->coerce(this->gen_expr(s.e2, lo.ty)?, lo.ty, s.line)?;
+        }
+        if (lo.ty.k != .Int) { this->err(s.line); eprintln("range bounds must be integers"); return error.CompileFailed; }
+        z.kind = 0;
+        z.elem = lo.ty;
+        z.index = this->alloca(lo.ty, "zip_range")?;
+        this->store(lo, z.index)?;
+        z.bound = this->alloca(hi.ty, "zip_end")?;
+        this->store(hi, z.bound)?;
+        return z;
+    }
+    this->bor_field = null;
+    auto a = this->gen_addr(s.e)?;
+    if (a.ty.k == .Ptr && (a.ty.elem.k == .Array || a.ty.elem.k == .Slice || a.ty.elem.k == .Strct)) {
+        const auto p = this->load(a.ty, a.v)?;
+        a = Addr{ .ty = a.ty.elem, .v = p.v, .imm = false };
+    }
+    auto via = false;
+    auto via_name = "";
+    if (a.ty.k == .Strct) {
+        auto name = this->sb();
+        sprint(&name, "{a.ty.si.decl.name}.slice")?;
+        if (this->methods.has(name.slice())) {
+            const auto method = this->methods.get(name.slice())?;
+            if (method.borrows) { via_name = "slice"; }
+            via = true;
+            const auto v = this->call_method(method, a, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
+            a = this->spill(v)?;
+        }
+    }
+    if (a.ty.k == .Array || a.ty.k == .Slice) {
+        z.kind = 1;
+        z.elem = a.ty.elem;
+        z.collection = a.ty;
+        auto base = a.v;
+        auto len = this->num(a.ty.len as i64)?;
+        if (a.ty.k == .Slice) {
+            const auto v = this->load(a.ty, a.v)?;
+            base = this->extract(v, 0, this->t_ptr_u8)?.v;
+            len = this->extract(v, 1, this->t_i64)?.v;
+        }
+        z.base = this->alloca(this->t_ptr_u8, "zip_base")?;
+        this->store(Value{ .ty = this->t_ptr_u8, .v = base }, z.base)?;
+        z.bound = this->alloca(this->t_i64, "zip_len")?;
+        this->store(Value{ .ty = this->t_i64, .v = len }, z.bound)?;
+        z.index = this->alloca(this->t_i64, "zip_index")?;
+        this->store(Value{ .ty = this->t_i64, .v = "0" }, z.index)?;
+        z.borrow = this->iter_borrow(s.e, via, via_name)?;
+        return z;
+    }
+    if (a.ty.k != .Strct) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}'"); return error.CompileFailed; }
+    auto next_name = this->sb();
+    sprint(&next_name, "{a.ty.si.decl.name}.next")?;
+    if (!this->methods.has(next_name.slice())) {
+        auto name = this->sb();
+        sprint(&name, "{a.ty.si.decl.name}.iter")?;
+        if (!this->methods.has(name.slice())) { this->err(s.line); eprintln("cannot iterate over '{this->type_name(a.ty)?}' (no slice(), iter() or next() method)"); return error.CompileFailed; }
+        const auto method = this->methods.get(name.slice())?;
+        if (method.borrows) { via_name = "iter"; }
+        via = true;
+        const auto v = this->call_method(method, a, List<Expr*>::init(this->a), this->no_types(), null, s.line)?;
+        a = this->spill(v)?;
+        if (a.ty.k != .Strct) { this->err(s.line); eprintln("iter() must return an iterator struct"); return error.CompileFailed; }
+        next_name = this->sb();
+        sprint(&next_name, "{a.ty.si.decl.name}.next")?;
+    }
+    auto value_name = this->sb();
+    sprint(&value_name, "{a.ty.si.decl.name}.value")?;
+    if (!this->methods.has(next_name.slice()) || !this->methods.has(value_name.slice())) {
+        this->err(s.line); eprintln("iterator requires next() and value() methods"); return error.CompileFailed;
+    }
+    if (this->is_resource(a.ty) && (via || this->place_key(s.e)?.len == 0)) {
+        this->err(s.line); eprintln("a resource iterator must be stored in a variable and released explicitly"); return error.CompileFailed;
+    }
+    z.kind = 2;
+    z.iterator = a;
+    z.next = this->methods.get(next_name.slice())?;
+    z.value = this->methods.get(value_name.slice())?;
+    auto key_name = this->sb();
+    sprint(&key_name, "{a.ty.si.decl.name}.key")?;
+    if (s.has_idx && this->methods.has(key_name.slice())) { z.key = this->methods.get(key_name.slice())?; }
+    if (s.has_idx && z.key == null) {
+        z.index = this->alloca(this->t_i64, "zip_iter_index")?;
+        this->store(Value{ .ty = this->t_i64, .v = "0" }, z.index)?;
+    }
+    z.borrow = this->iter_borrow(s.e, via, via_name)?;
+    return z;
+}
+
+!void Gen::zip_binding(str name, Value v, i64 line) {
+    if (v.ty.k == .Void) { this->err(line); eprintln("iterator key() and value() must return a value"); return error.CompileFailed; }
+    const auto slot = this->alloca(v.ty, name)?;
+    this->store(v, slot)?;
+    this->declare_var(name, Var{ .ptr = slot, .ty = v.ty, .mutable = false }, line)?;
+    if (this->is_resource(v.ty)) { this->add_rec(MoveRec{ .ptr = slot, .by = "for", .line = line, .kind = 7, .cname = name })?; }
+}
+
+!void Gen::gen_for_zip(Stmt* s) {
+    const auto md = this->scopes.len;
+    const auto s0 = this->snap();
+    this->push_scope()?;
+    auto sources = List<ZipState>::init(this->a);
+    for (auto clause : s.stmts) { sources.push(this->zip_source(clause)?)?; }
+    // A later source may invalidate a borrow obtained while preparing an earlier one.
+    for (auto z : sources) { this->move_use_key(z.borrow, this->place_name(z.clause.e), z.clause.line)?; }
+    const auto lc = this->new_label("zip_cond")?;
+    const auto lb = this->new_label("zip_body")?;
+    const auto step = this->new_label("zip_step")?;
+    const auto le = this->new_label("zip_end")?;
+    this->label(lc)?;
+    for (auto [i, z] : sources) {
+        auto c = "";
+        if (z.kind == 2) {
+            const auto v = this->call_method(z.next, z.iterator, List<Expr*>::init(this->a), this->no_types(), null, z.clause.line)?;
+            if (v.ty.k != .Bool) { this->err(z.clause.line); eprintln("iterator next() must return bool"); return error.CompileFailed; }
+            c = v.v;
+        } else {
+            auto ty = this->t_i64;
+            if (z.kind == 0) { ty = z.elem; }
+            const auto cur = this->load(ty, z.index)?;
+            const auto end = this->load(ty, z.bound)?;
+            c = this->tmp()?;
+            auto pred = "slt";
+            if (z.kind == 0 && !z.elem.signed) { pred = "ult"; }
+            sprint(this->ins()?, "  {c} = icmp {pred} {this->llty(ty)?} {cur.v}, {end.v}\n")?;
+        }
+        auto next = lb;
+        if (i + 1 < sources.len) { next = this->new_label("zip_next")?; }
+        sprint(this->ins()?, "  br i1 {c}, label %{next}, label %{le}\n")?;
+        this->terminated = true;
+        if (i + 1 < sources.len) { this->label(next)?; }
+    }
+    this->label(lb)?;
+    this->push_scope()?;
+    for (auto z : sources) {
+        const auto clause = z.clause;
+        if (clause.has_idx) {
+            auto k = Value{ .ty = null, .v = "" };
+            if (z.key != null) { k = this->call_method(z.key, z.iterator, List<Expr*>::init(this->a), this->no_types(), null, clause.line)?; }
+            else { k = this->load(this->t_i64, z.index)?; }
+            this->zip_binding(clause.idx, k, clause.line)?;
+        }
+        auto v = Value{ .ty = null, .v = "" };
+        if (z.kind == 0) { v = this->load(z.elem, z.index)?; }
+        else if (z.kind == 2) { v = this->call_method(z.value, z.iterator, List<Expr*>::init(this->a), this->no_types(), null, clause.line)?; }
+        else {
+            const auto base = this->load(this->t_ptr_u8, z.base)?;
+            const auto cur = this->load(this->t_i64, z.index)?;
+            const auto ep = this->tmp()?;
+            if (z.collection.k == .Array) { sprint(this->ins()?, "  {ep} = getelementptr {this->llty(z.collection)?}, ptr {base.v}, i64 0, i64 {cur.v}\n")?; }
+            else { sprint(this->ins()?, "  {ep} = getelementptr {this->llty(z.elem)?}, ptr {base.v}, i64 {cur.v}\n")?; }
+            v = this->load(z.elem, ep)?;
+        }
+        this->zip_binding(clause.name, v, clause.line)?;
+        if (z.kind == 0) { this->range_fact(clause.name, clause.e, clause.e2); }
+    }
+    auto lp = this->loop_new(le, step, this->scopes.len, s.label, md, false)?;
+    for (auto z : sources) { if (z.borrow.len > 0) { lp.iters.push(z.borrow)?; } }
+    this->loops.push(lp)?;
+    this->gen_stmt(s.body)?;
+    this->loop_end(&this->loops.items[this->loops.len - 1], s0)?;
+    this->loops.len -= 1;
+    this->pop_scope()?;
+    this->label(step)?;
+    for (auto z : sources) {
+        if (z.index.len == 0) { continue; }
+        auto ty = this->t_i64;
+        if (z.kind == 0) { ty = z.elem; }
+        const auto cur = this->load(ty, z.index)?;
+        const auto nx = this->tmp()?;
+        sprint(this->ins()?, "  {nx} = add {this->llty(ty)?} {cur.v}, 1\n")?;
+        this->store(Value{ .ty = ty, .v = nx }, z.index)?;
+    }
     this->br(lc)?;
     this->label(le)?;
     this->pop_scope()?;

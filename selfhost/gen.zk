@@ -45,7 +45,7 @@ struct OwnedVar { str ptr; str name; str tname; i64 line; }
 struct Scope { Map<Var> vars; List<Defer> defers; List<OwnedVar> owned; }
 struct MoveRec { str ptr; str by; i64 line; i64 kind; str cont; str cname; }
 struct LoopEv { str ptr; }
-struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; str id; bool infinite; i64 nbrk; i64 ncont; List<MoveRec> brks; List<MoveRec> conts; List<MoveRec> bmust; List<MoveRec> cmust; List<LoopEv> evs; }
+struct Loop { str brk; str cont; i64 depth; str label; i64 md; str iter; List<str> iters; str id; bool infinite; i64 nbrk; i64 ncont; List<MoveRec> brks; List<MoveRec> conts; List<MoveRec> bmust; List<MoveRec> cmust; List<LoopEv> evs; }
 
 type Env = Map<Type*>*;
 
@@ -1191,6 +1191,10 @@ void collect_addr_stmt(Stmt* s, Map<bool>* out) {
             collect_addr_expr(s.e, out);
             collect_addr_stmt(s.body, out);
         }
+        .ForZip => {
+            for (auto clause : s.stmts) { collect_addr_expr(clause.e, out); collect_addr_expr(clause.e2, out); }
+            collect_addr_stmt(s.body, out);
+        }
         .Block => {
             for (auto x : s.stmts) { collect_addr_stmt(x, out); }
         }
@@ -1386,7 +1390,7 @@ bool breaks_out(Stmt* s, str lbl, i64 depth) {
             return false;
         }
         .If => return breaks_out(s.body, lbl, depth) || breaks_out(s.els, lbl, depth);
-        .While, .ForRange, .ForEach => return breaks_out(s.body, lbl, depth + 1);
+        .While, .ForRange, .ForEach, .ForZip => return breaks_out(s.body, lbl, depth + 1);
         .Match => {
             for (auto ai : 0..s.arms.len) { if (breaks_out(s.arms.items[ai].body, lbl, depth)) { return true; } }
             return false;

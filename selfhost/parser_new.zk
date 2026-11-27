@@ -483,6 +483,54 @@ bool Parser::new_member(bool is_union) {
 }
 
 /// for (auto x : seq) / for (T i : a..b) / for (T i = a; i < b; i++)
+!Stmt* Parser::parse_zip_clause(Token t) {
+    const auto s = this->st(.ForEach, t)?;
+    if (this->at(.ident) && this->peek().text == "auto" && this->peek_at(1).tag == .lbracket) {
+        _ = this->advance();
+        _ = this->advance();
+        const auto index = this->expect(.ident)?;
+        _ = this->expect(.comma)?;
+        const auto value = this->expect(.ident)?;
+        _ = this->expect(.rbracket)?;
+        s.has_idx = true;
+        s.idx = index.text;
+        s.idx_off = index.off;
+        s.name = value.text;
+        s.name_off = value.off;
+    } else {
+        const auto ty = this->try_type();
+        if (ty == null) { this->fail("expected a declaration in a paired for loop")?; }
+        const auto value = this->expect(.ident)?;
+        s.name = value.text;
+        s.name_off = value.off;
+    }
+    _ = this->expect(.colon)?;
+    s.e = this->parse_expr()?;
+    if (this->eat(.dotdot)) {
+        if (s.has_idx) { this->fail("a range cannot use an indexed binding")?; }
+        s.k = .ForRange;
+        s.e2 = this->parse_expr()?;
+    }
+    return s;
+}
+
+!Stmt* Parser::finish_for_clause(Token t, Stmt* first) {
+    if (!this->eat(.comma)) {
+        _ = this->expect(.rparen)?;
+        first.body = this->parse_block()?;
+        return first;
+    }
+    const auto zip = this->st(.ForZip, t)?;
+    zip.stmts.push(first)?;
+    while (true) {
+        zip.stmts.push(this->parse_zip_clause(t)?)?;
+        if (!this->eat(.comma)) { break; }
+    }
+    _ = this->expect(.rparen)?;
+    zip.body = this->parse_block()?;
+    return zip;
+}
+
 !Stmt* Parser::parse_for_new(Token t) {
     _ = this->expect(.lparen)?;
     const auto save = this->pos;
@@ -496,14 +544,12 @@ bool Parser::new_member(bool is_union) {
         _ = this->expect(.colon)?;
         const auto s = this->st(.ForEach, t)?;
         s.e = this->parse_expr()?;
-        _ = this->expect(.rparen)?;
         s.idx = it.text;
         s.idx_off = it.off;
         s.has_idx = true;
         s.name = xt.text;
         s.name_off = xt.off;
-        s.body = this->parse_block()?;
-        return s;
+        return this->finish_for_clause(t, s);
     }
     const auto ty = this->try_type();
     if (ty == null || !this->at(.ident)) {
@@ -519,17 +565,13 @@ bool Parser::new_member(bool is_union) {
             s.name_off = nt.off;
             s.e = e;
             s.e2 = this->parse_expr()?;
-            _ = this->expect(.rparen)?;
-            s.body = this->parse_block()?;
-            return s;
+            return this->finish_for_clause(t, s);
         }
-        _ = this->expect(.rparen)?;
         const auto s = this->st(.ForEach, t)?;
         s.e = e;
         s.name = nt.text;
         s.name_off = nt.off;
-        s.body = this->parse_block()?;
-        return s;
+        return this->finish_for_clause(t, s);
     }
     _ = this->expect(.eq)?;
     const auto lo = this->parse_expr()?;
