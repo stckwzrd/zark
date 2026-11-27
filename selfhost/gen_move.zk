@@ -49,7 +49,7 @@ void Gen::prune_scope(i64 idx) {
 bool Gen::live_ptr(str ptr, str except) {
     if (this->declared_before(ptr, this->scopes.len)) { return true; }
     if (ptr == except) { return false; }
-    for (auto lp : this->loops) { if (lp.iter.len > 0 && lp.iter == ptr) { return true; } }
+    for (auto lp : this->loops) { if (loop_iter_has(&lp, ptr)) { return true; } }
     return false;
 }
 
@@ -598,7 +598,14 @@ bool Gen::declared_before(str ptr, i64 depth) {
     this->nloop += 1;
     auto ib = this->sb();
     sprint(&ib, "L{this->nloop}")?;
-    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .id = ib.slice(), .infinite = infinite, .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a), .bmust = List<MoveRec>::init(this->a), .cmust = List<MoveRec>::init(this->a), .evs = List<LoopEv>::init(this->a) };
+    return Loop{ .brk = brk, .cont = cont, .depth = depth, .label = label, .md = md, .id = ib.slice(), .infinite = infinite, .iters = List<str>::init(this->a), .brks = List<MoveRec>::init(this->a), .conts = List<MoveRec>::init(this->a), .bmust = List<MoveRec>::init(this->a), .cmust = List<MoveRec>::init(this->a), .evs = List<LoopEv>::init(this->a) };
+}
+
+bool loop_iter_has(Loop* lp, str ptr) {
+    if (ptr.len == 0) { return false; }
+    if (lp.iter == ptr) { return true; }
+    for (auto p : lp.iters) { if (p == ptr) { return true; } }
+    return false;
 }
 
 !void Gen::loop_edge(i64 li, bool is_break) {
@@ -624,7 +631,7 @@ bool Gen::declared_before(str ptr, i64 depth) {
         nback += 1;
     }
     for (auto r : back) {
-        if (r.kind == 3 && lp.iter.len > 0 && r.ptr == lp.iter) {
+        if (r.kind == 3 && loop_iter_has(lp, r.ptr)) {
             this->err(r.line);
             eprintln("'{r.cname}' is changed by '{r.by}' while this loop is still iterating over it; leave the loop right after the change (break or return) or iterate over a copy");
             return error.CompileFailed;
@@ -645,7 +652,10 @@ bool Gen::declared_before(str ptr, i64 depth) {
     auto may = this->move_join(lp.brks.slice(), back.slice())?;
     if (!lp.infinite) { may = this->move_join(s0.slice(), may.slice())?; }
     auto post = List<MoveRec>::init(this->a);
-    for (auto r : may) { if (!is_must(r.kind) && this->live_ptr(r.ptr, lp.iter)) { post.push(r)?; } }
+    for (auto r : may) {
+        if (loop_iter_has(lp, r.ptr) && !this->declared_before(r.ptr, this->scopes.len)) { continue; }
+        if (!is_must(r.kind) && this->live_ptr(r.ptr, lp.iter)) { post.push(r)?; }
+    }
     auto cand = s0.slice();
     if (lp.infinite) { cand = lp.bmust.slice(); }
     for (auto r : cand) {

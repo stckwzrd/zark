@@ -89,6 +89,10 @@ Only reachable functions are compiled. The body of a generic is checked at its d
 
 `const` forbids reassigning the variable and changing it through fields or array elements. Data reached through a pointer or slice can still be changed. Variables and parameters are mutable by default; a parameter is a copy.
 
+`for (auto x : source)` also accepts an iterator with `next() -> bool` and `value()`, or a container with an `iter()` method returning such an iterator. `value()` determines the loop variable's type; for example `LinkedList.iter().value()` returns a pointer. In `for (auto [a, b] : source)`, an iterator with `key()` binds its key to `a` and value to `b`; otherwise `a` is an `i64` iteration index. The existing indexed array and slice form keeps its meaning. An iterator that owns resources must be stored in a variable and explicitly released; a temporary resource iterator is rejected.
+
+Several clauses can be combined: `for (auto x : xs, auto y : ys, auto n : 0..limit) { ... }`. Each source is evaluated once, from left to right; the loop stops when the first source is exhausted. Iterator `next()` calls are made from left to right at the beginning of each iteration, so an earlier iterator can advance once more when a later source ends. `break`, `continue`, labels and cleanup follow the ordinary loop rules. Container mutation during iteration is checked where the existing borrow analysis can track it; raw pointers and aliases remain the caller's responsibility.
+
 ## 5. Expressions
 
 Precedence, lowest to highest:

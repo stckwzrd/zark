@@ -149,6 +149,15 @@ match dir {
 
 `match` works on integers, enums and strings.
 
+Iterators with `next()` and `value()` also work in `for`. Hash map iterators expose keys through `key()`:
+
+```zark
+for (auto [key, value] : map.iter()) { println("{key}: {value}"); }
+for (auto x : xs, auto y : ys) { println("{x}, {y}"); }
+```
+
+Paired loops evaluate each source once, from left to right, and stop at the shortest. Iterator `next()` is also called from left to right, so an earlier iterator can advance one extra time when a later source ends.
+
 **Errors:** a function returns `!T` and uses `return error.Name`. Callers use `expr?` to propagate or `expr catch default` / `catch |e| { ... }` to handle. When `main` returns `!void`, an unhandled error prints `error: Name` and exits with code 1.
 
 **defer / errdefer:** these run at scope exit, including on `return`, `break` and `continue`. `errdefer` runs only on error paths.
@@ -230,7 +239,9 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 `std/thread` also provides `AtomicU64` and `AtomicBool` (sequentially consistent, like `AtomicI64`), `Arc<T>` for shared ownership, and `Locked<T>` for a value protected by a mutex. Share atomics by pointer and use their methods for every access.
 
-`Arc<T>::init(a, value, cleanup)` takes ownership of `value` and uses the explicit allocator `a`. Each `clone()` creates an owner that must call `deinit()` once; the last owner calls `cleanup(T*)` if non-null and frees the allocation. On allocation failure, `init` calls `cleanup` before returning the error. Pass a cleanup function for a resource-owning value. The allocator and cleanup function must work on whichever thread releases the last owner. A pointer from `get()` is valid only while an owner remains alive; do not race `get()` or `clone()` against `deinit()` on the same owner. `Arc` does not synchronize access to the value.
+`Arc<T>::init(a, value, cleanup)` takes ownership of `value` and uses the explicit allocator `a`. Each `clone()` creates an owner that must call `deinit()` once; the last owner calls `cleanup(T*)` if non-null. On allocation failure, `init` calls `cleanup` before returning the error. Pass a cleanup function for a resource-owning value. A pointer from `get()` is valid only while an owner remains alive; do not race `get()` or `clone()` against `deinit()` on the same owner. `Arc` does not synchronize access to the value.
+
+`Rc.downgrade()` and `Arc.downgrade()` create a `smart::Weak<T>` or `thread::Weak<T>` without keeping the value alive. Each weak handle also needs `deinit()`; `clone()` makes another handle. `upgrade()` returns `?Rc<T>` or `?Arc<T>` and succeeds only while a strong owner remains. Do not race `upgrade()` or `clone()` against `deinit()` on the same weak handle; use separate clones. The last strong owner cleans up the value, and the last weak handle releases the control block. The allocator must remain valid until every strong and weak handle is released; for `Arc`, the allocator and cleanup must work on whichever thread releases them. `Rc` and its weak handles are single-threaded. Neither weak references nor reference counting collect cycles made entirely of strong references.
 
 `Locked<T>::lock()` locks and returns a pointer to the value; call `unlock()` when done and do not use the pointer afterwards. Do not copy or move a `Locked` after its first use. Call its `deinit()` once all users have stopped and it is unlocked. For `Arc<Locked<T>>`, provide a cleanup function that calls `Locked.deinit()` and also cleans up the contained value if necessary.
 
