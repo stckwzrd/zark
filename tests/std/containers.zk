@@ -94,3 +94,19 @@ test "List: insert, remove_at, swap_remove, clone, take" {
     xs.deinit();
     dbg.deinit()?;
 }
+
+struct Res { i64 n; void deinit() move {} }
+
+test "List of resources: at borrows, pop moves the element out" {
+    auto l = List<Res>::init(c_allocator());
+    l.push(Res{ .n = 1 })?;
+    l.push(Res{ .n = 2 })?;
+    const auto p = l.at(1);
+    assert(p.n == 2);
+    const auto b = l.pop()?;
+    b.deinit();
+    assert(l.len == 1);
+    const auto a = l.pop()?;
+    a.deinit();
+    l.deinit();
+}
