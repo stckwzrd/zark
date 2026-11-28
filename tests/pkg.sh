@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ZARK=${ZARK:-./build/zark}
+ZARK=$(realpath "${ZARK:-./build/zark}")
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
