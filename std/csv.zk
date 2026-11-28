@@ -1,0 +1,111 @@
+// Streaming CSV records with explicit allocation and caller-owned input buffer.
+import "std/io" as io;
+
+struct Span { i64 start; i64 end; }
+
+owned struct Reader {
+    io::BufferedReader input;
+    List<u8> data;
+    List<Span> fields;
+    bool failed;
+    i64 max_bytes;  // zero means unlimited
+    i64 max_fields; // zero means unlimited
+
+    static !Self init(Allocator a, io::Reader source, u8[] buffer) {
+        const auto input = io::BufferedReader::init(source, buffer)?;
+        return Self{ .input = input, .data = List<u8>::init(a), .fields = List<Span>::init(a) };
+    }
+    void deinit() move { this->data.deinit(); this->fields.deinit(); }
+    !void add_byte(u8 c) {
+        if (this->max_bytes > 0 && this->data.len >= this->max_bytes) { return error.RecordTooLarge; }
+        this->data.push(c)?;
+    }
+    !void end_field(i64 start) {
+        if (this->max_fields > 0 && this->fields.len >= this->max_fields) { return error.TooManyFields; }
+        this->fields.push(Span{ .start = start, .end = this->data.len })?;
+    }
+    i64 len() { return this->fields.len; }
+    /// Borrowed until the next call to next() or deinit().
+    !str field(i64 index) borrows {
+        if (index < 0 || index >= this->fields.len) { return error.OutOfRange; }
+        const auto span = this->fields.get(index);
+        return this->data.items[span.start..span.end];
+    }
+    /// Reads a record. False means EOF. After an error this reader cannot resume.
+    !bool next() invalidates {
+        if (this->failed) { return error.InvalidState; }
+        return this->next_record() catch |e| { this->failed = true; return e; };
+    }
+    !bool next_record() {
+        this->data.clear();
+        this->fields.clear();
+        auto start = 0;
+        auto in_quotes = false;
+        auto closed_quote = false;
+        auto at_start = true;
+        auto saw_any = false;
+        while (true) {
+            const auto n = this->input.read_byte()?;
+            if (n < 0) {
+                if (in_quotes) { return error.InvalidCsv; }
+                if (!saw_any) { return false; }
+                this->end_field(start)?;
+                return true;
+            }
+            saw_any = true;
+            const auto c = n as u8;
+            if (in_quotes) {
+                if (c == '"') {
+                    if (this->input.peek()? == '"') {
+                        _ = this->input.read_byte()?;
+                        this->add_byte('"')?;
+                    } else { in_quotes = false; closed_quote = true; }
+                } else { this->add_byte(c)?; }
+                continue;
+            }
+            if (c == ',') {
+                this->end_field(start)?;
+                start = this->data.len;
+                at_start = true;
+                closed_quote = false;
+                continue;
+            }
+            if (c == '\n' || c == '\r') {
+                if (c == '\r') {
+                    if (this->input.read_byte()? != '\n') { return error.InvalidCsv; }
+                }
+                this->end_field(start)?;
+                return true;
+            }
+            if (closed_quote) { return error.InvalidCsv; }
+            if (c == '"') {
+                if (!at_start) { return error.InvalidCsv; }
+                in_quotes = true;
+            } else { this->add_byte(c)?; }
+            at_start = false;
+        }
+    }
+}
+
+/// Writes a record with CRLF. On failure the destination may contain a partial record.
+!void write_record(Writer* out, str[] fields) {
+    if (fields.len == 0) { return error.InvalidArgument; }
+    for (auto [i, field] : fields) {
+        if (i > 0) { out.write(",")?; }
+        auto quoted = false;
+        for (auto c : field) { if (c == ',' || c == '"' || c == '\n' || c == '\r') { quoted = true; } }
+        if (!quoted) { out.write(field)?; continue; }
+        out.write("\"")?;
+        auto start = 0;
+        for (auto [j, c] : field) {
+            if (c == '"') {
+                out.write(field[start..j])?;
+                out.write("\"\"")?;
+                start = j + 1;
+            }
+        }
+        out.write(field[start..])?;
+        out.write("\"")?;
+    }
+    out.write("\r\n")?;
+}
