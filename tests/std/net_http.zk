@@ -122,3 +122,21 @@ test "https with a local certificate (skipped without openssl)" {
     auto kill = os::shell(a, bprint(b[..], "pkill -f 's_server -accept {port}' || true")?)?;
     kill.deinit();
 }
+
+// Reproduce a syscall failure without opening a socket or depending on a free port.
+i32 fail_socket_attempt(net::AddrInfo* addr) {
+    _ = fopen("/definitely-no-such-zark-file/entry", "rb");
+    return -1;
+}
+
+test "address resolution preserves the underlying socket error" {
+    auto missing = false;
+    _ = net::resolve_and("127.0.0.1", 80, true, fail_socket_attempt) catch |e| {
+        missing = e == error.NotFound;
+        -1
+    };
+    assert(missing);
+    auto in_use = false;
+    _ = __sys_result(-98) catch |e| { in_use = e == error.AddressInUse; 0 };
+    assert(in_use);
+}

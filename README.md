@@ -237,6 +237,24 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 `std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`), `std/async` (a single-threaded executor with timers and TCP on epoll or kqueue). See the guide page "Standard modules".
 
+`std/file` provides buffered streaming file I/O through `File::open_read` and `File::create`. Call `close()` once per file; use `flush()` to detect write errors before closing. `read(buf)` returns the number of bytes read (zero at EOF for a nonempty buffer). `read_line(&out)` appends to a `List<u8>`, excludes the newline, and returns false only at EOF before a line starts. Clear the list between lines; a final line without a newline is returned normally. On an allocation error, the list may contain a partial line and the input has advanced.
+
+`std/binary` provides `Reader` and `Writer` over caller-owned byte slices. `read_uint(bytes, order)` and `write_uint(value, bytes, order)` support widths from 1 to 8 and `.Little` or `.Big` byte order. Bounds and value width are checked, and errors leave the cursor unchanged.
+
+```zark
+import "std/file" as file;
+import "std/binary" as binary;
+
+!void main() {
+    auto f = file::File::open_read("data.bin")?;
+    defer f.close() catch |e| {};
+    u8[4] bytes;
+    if (f.read(bytes[..])? != 4) { return error.UnexpectedEnd; }
+    auto reader = binary::Reader::init(bytes[..]);
+    println("value = {reader.read_uint(4, .Big)?}");
+}
+```
+
 `std/thread` also provides `AtomicU64` and `AtomicBool` (sequentially consistent, like `AtomicI64`), `Arc<T>` for shared ownership, and `Locked<T>` for a value protected by a mutex. Share atomics by pointer and use their methods for every access.
 
 `Arc<T>::init(a, value, cleanup)` takes ownership of `value` and uses the explicit allocator `a`. Each `clone()` creates an owner that must call `deinit()` once; the last owner calls `cleanup(T*)` if non-null. On allocation failure, `init` calls `cleanup` before returning the error. Pass a cleanup function for a resource-owning value. A pointer from `get()` is valid only while an owner remains alive; do not race `get()` or `clone()` against `deinit()` on the same owner. `Arc` does not synchronize access to the value.

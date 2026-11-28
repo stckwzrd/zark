@@ -146,6 +146,16 @@ static long do_stat(const char *path, int follow, long *out)
     return 0;
 }
 
+// Check open descriptors before truncating, so aliases of the source stay intact.
+long vrt_copy_prepare(long src, long dst)
+{
+    struct stat a, b;
+    if (fstat((int)src, &a) < 0 || fstat((int)dst, &b) < 0) return err(-1);
+    if (a.st_dev == b.st_dev && a.st_ino == b.st_ino) return 1;
+    if (ftruncate((int)dst, 0) < 0) return err(-1);
+    return 0;
+}
+
 long vrt_syscall(long nr, long a, long b, long c, long d, long e, long f)
 {
     switch (nr) {

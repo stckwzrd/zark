@@ -156,10 +156,7 @@ struct Conn {
 
 /// opens a TCP connection
 !Conn connect_to(str host, i64 port) {
-    const auto fd = resolve_and(host, port, false, try_connect) catch |e| {
-        if (e == error.HostNotFound) { return e; }
-        return error.ConnectionRefused;
-    };
+    const auto fd = resolve_and(host, port, false, try_connect)?;
     return Conn{ .fd = fd };
 }
 
@@ -200,10 +197,7 @@ struct Listener {
 
 /// listens on host:port ("" or "0.0.0.0" for every interface, port 0 for any free port)
 !Listener listen(str host, i64 port) {
-    const auto fd = resolve_and(host, port, true, try_bind) catch |e| {
-        if (e == error.HostNotFound) { return e; }
-        return error.AddressInUse;
-    };
+    const auto fd = resolve_and(host, port, true, try_bind)?;
     return Listener{ .fd = fd };
 }
 

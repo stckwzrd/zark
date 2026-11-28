@@ -1,0 +1,43 @@
+// Binary integers in caller-owned buffers. Failed operations leave the cursor unchanged.
+enum Endian { Little, Big }
+
+struct Reader {
+    u8[] data;
+    i64 pos;
+
+    static Self init(u8[] data) { return Self{ .data = data }; }
+    i64 remaining() { return this->data.len - this->pos; }
+
+    !u64 read_uint(i64 bytes, Endian order) {
+        if (bytes < 1 || bytes > 8) { return error.InvalidWidth; }
+        if (bytes > this->remaining()) { return error.EndOfStream; }
+        u64 value = 0;
+        for (auto i : 0..bytes) {
+            auto index = i;
+            if (order is .Big) { index = bytes - i - 1; }
+            value |= (this->data[this->pos + index] as u64) << ((i * 8) as u64);
+        }
+        this->pos += bytes;
+        return value;
+    }
+}
+
+struct Writer {
+    u8[] data;
+    i64 pos;
+
+    static Self init(u8[] data) { return Self{ .data = data }; }
+    i64 remaining() { return this->data.len - this->pos; }
+
+    !void write_uint(u64 value, i64 bytes, Endian order) {
+        if (bytes < 1 || bytes > 8) { return error.InvalidWidth; }
+        if (bytes > this->remaining()) { return error.NoSpace; }
+        if (bytes < 8 && (value >> ((bytes * 8) as u64)) != 0) { return error.Overflow; }
+        for (auto i : 0..bytes) {
+            auto index = i;
+            if (order is .Big) { index = bytes - i - 1; }
+            this->data[this->pos + index] = (value >> ((i * 8) as u64)) as u8;
+        }
+        this->pos += bytes;
+    }
+}

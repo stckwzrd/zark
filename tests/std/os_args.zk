@@ -50,3 +50,30 @@ test "argument parser" {
     q.parse_from(["--bogus"]) catch |e| { unknown = e == error.UnknownOption; };
     assert(unknown);
 }
+
+test "exec frees argument copies when allocation fails" {
+    for (auto fail : 0..5) {
+        auto dbg = DebugAllocator::init();
+        dbg.fail_after_n(fail);
+        auto result = os::exec(dbg.allocator(), ["sh", "-c", "true"]) catch |e| {
+            assert(e == error.OutOfMemory);
+            dbg.deinit()?;
+            continue;
+        };
+        result.deinit();
+        dbg.deinit()?;
+    }
+}
+
+test "run frees argument copies when allocation fails" {
+    for (auto fail : 0..4) {
+        auto dbg = DebugAllocator::init();
+        dbg.fail_after_n(fail);
+        _ = run(dbg.allocator(), ["sh", "-c", "true"]) catch |e| {
+            assert(e == error.OutOfMemory);
+            dbg.deinit()?;
+            continue;
+        };
+        panic("expected allocation failure");
+    }
+}

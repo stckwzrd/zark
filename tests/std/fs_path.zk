@@ -41,7 +41,11 @@ test "directories, files, walking, removing" {
     assert(txt == "hi there");
     const auto g = path::join(a, [tmp, "copy.txt"])?;
     defer a.free(g);
+    write_file(g, "this old content is longer")?;
     fs::copy_file(f, g)?;
+    const auto copied = read_file(a, g)?;
+    defer a.free(copied);
+    assert(copied == "hi there");
     const auto inf = fs::info(g)?;
     assert(inf.size == 8 && inf.kind is .File && fs::is_file(g) && !fs::is_dir(g));
     auto all = fs::walk(a, tmp)?;
@@ -63,4 +67,33 @@ test "directories, files, walking, removing" {
     auto missing = false;
     _ = fs::info("/definitely/missing") catch |e| { missing = e == error.NotFound; fs::Info{} };
     assert(missing);
+}
+
+extern i32 symlink(u8* target, u8* linkpath);
+extern i32 link(u8* target, u8* linkpath);
+
+test "copy rejects aliases of the source without truncation" {
+    const auto a = c_allocator();
+    const auto dir = fs::temp_dir(a, "zark-same-file")?;
+    defer a.free(dir);
+    defer fs::remove_all(a, dir) catch |e| {};
+    const auto src = path::join(a, [dir, "source"])?;
+    defer a.free(src);
+    const auto sym = path::join(a, [dir, "symlink"])?;
+    defer a.free(sym);
+    const auto hard = path::join(a, [dir, "hardlink"])?;
+    defer a.free(hard);
+    write_file(src, "do not erase")?;
+    u8[4096] sb;
+    u8[4096] lb;
+    assert(symlink(to_cstr(sb[..], src)?, to_cstr(lb[..], sym)?) == 0);
+    assert(link(to_cstr(sb[..], src)?, to_cstr(lb[..], hard)?) == 0);
+    for (auto target : [src, sym, hard]) {
+        auto rejected = false;
+        fs::copy_file(src, target) catch |e| { rejected = e == error.SameFile; };
+        assert(rejected);
+        const auto contents = read_file(a, src)?;
+        defer a.free(contents);
+        assert(contents == "do not erase");
+    }
 }
