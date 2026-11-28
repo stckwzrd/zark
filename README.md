@@ -241,7 +241,7 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 `std/binary` provides `Reader` and `Writer` over caller-owned byte slices. `read_uint(bytes, order)` and `write_uint(value, bytes, order)` support widths from 1 to 8 and `.Little` or `.Big` byte order. Bounds and value width are checked, and errors leave the cursor unchanged.
 
-`std/encoding` provides `hex_encode(input, out)` and `hex_decode(input, out)`, writing to caller-owned, non-overlapping buffers. Encoding emits lowercase hex; decoding accepts either case and checks the input and output capacity before writing. Both return the written slice or an error.
+`std/encoding` provides `hex_encode(input, out)` and `hex_decode(input, out)`, writing to caller-owned, non-overlapping buffers. Encoding emits lowercase hex; decoding accepts either case and checks the input and output capacity before writing. Both return the written slice or an error. It also provides `base64_encode(input, out)` and `base64_decode(input, out)` for standard padded Base64. The decoder rejects invalid characters, padding and nonzero trailing bits; errors leave the output untouched.
 
 ```zark
 import "std/file" as file;

@@ -1,4 +1,4 @@
-// Hex encoding into caller-owned, non-overlapping buffers.
+// Encodings using caller-owned, non-overlapping buffers.
 
 /// Encodes bytes as lowercase hex and returns the written portion of `out`.
 !str hex_encode(u8[] input, u8[] out) {
@@ -26,6 +26,81 @@
     for (auto c : input) { _ = hex_nibble(c)?; }
     for (auto i : 0..n) {
         out[i] = ((hex_nibble(input[i * 2])? as u64) << 4 | (hex_nibble(input[i * 2 + 1])? as u64)) as u8;
+    }
+    return out[0..n];
+}
+
+/// Standard padded Base64. Input and output buffers must not overlap.
+!str base64_encode(u8[] input, u8[] out) {
+    const auto groups = input.len / 3 + (input.len % 3 != 0) as i64;
+    if (groups > out.len / 4) { return error.NoSpace; }
+    const auto alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for (auto group : 0..groups) {
+        const auto start = group * 3;
+        const auto a = input[start] as u64;
+        u64 b = 0;
+        u64 c = 0;
+        if (start + 1 < input.len) { b = input[start + 1] as u64; }
+        if (start + 2 < input.len) { c = input[start + 2] as u64; }
+        const auto at = group * 4;
+        out[at] = alphabet[(a >> 2) as i64];
+        out[at + 1] = alphabet[(((a & 3) << 4) | (b >> 4)) as i64];
+        out[at + 2] = '=';
+        out[at + 3] = '=';
+        if (start + 1 < input.len) { out[at + 2] = alphabet[(((b & 15) << 2) | (c >> 6)) as i64]; }
+        if (start + 2 < input.len) { out[at + 3] = alphabet[(c & 63) as i64]; }
+    }
+    return out[0..groups * 4];
+}
+
+!u8 base64_digit(u8 c) {
+    if (c >= 'A' && c <= 'Z') { return c - 'A'; }
+    if (c >= 'a' && c <= 'z') { return c - 'a' + 26; }
+    if (c >= '0' && c <= '9') { return c - '0' + 52; }
+    if (c == '+') { return 62; }
+    if (c == '/') { return 63; }
+    return error.InvalidBase64;
+}
+
+/// Decodes canonical padded Base64; errors leave the output untouched.
+/// Input and output buffers must not overlap.
+!u8[] base64_decode(str input, u8[] out) {
+    if (input.len % 4 != 0) { return error.InvalidBase64; }
+    const auto groups = input.len / 4;
+    auto padding = 0;
+    if (groups > 0 && input[input.len - 1] == '=') {
+        padding = 1;
+        if (input[input.len - 2] == '=') { padding = 2; }
+    }
+    for (auto group : 0..groups) {
+        const auto i = group * 4;
+        _ = base64_digit(input[i])?;
+        const auto b = base64_digit(input[i + 1])?;
+        if (group == groups - 1 && padding == 2) {
+            if ((b & 15) != 0) { return error.InvalidBase64; }
+        } else {
+            const auto c = base64_digit(input[i + 2])?;
+            if (group == groups - 1 && padding == 1) {
+                if ((c & 3) != 0) { return error.InvalidBase64; }
+            } else { _ = base64_digit(input[i + 3])?; }
+        }
+    }
+    const auto n = groups * 3 - padding;
+    if (n > out.len) { return error.NoSpace; }
+    for (auto group : 0..groups) {
+        const auto i = group * 4;
+        const auto at = group * 3;
+        const auto a = base64_digit(input[i])? as u64;
+        const auto b = base64_digit(input[i + 1])? as u64;
+        out[at] = ((a << 2) | (b >> 4)) as u8;
+        if (at + 1 < n) {
+            const auto c = base64_digit(input[i + 2])? as u64;
+            out[at + 1] = ((b << 4) | (c >> 2)) as u8;
+            if (at + 2 < n) {
+                const auto d = base64_digit(input[i + 3])? as u64;
+                out[at + 2] = ((c << 6) | d) as u8;
+            }
+        }
     }
     return out[0..n];
 }
