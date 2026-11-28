@@ -266,7 +266,7 @@ struct Manifest {
     return "";
 }
 
-!Manifest* load_project(Allocator a, str dir, bool fetch, i64 depth) {
+!Manifest* load_project(Allocator a, str dir, bool fetch, i64 depth, PkgState* st) {
     if (depth > 16) {
         eprintln("error: dependencies nest more than 16 levels (a cycle?)");
         return error.CompileFailed;
@@ -340,7 +340,53 @@ struct Manifest {
                 ddir = path::join(a, [dir, local])?;
             } else if (git.len > 0) {
                 ddir = path::join(a, [dir, ".zark/deps", name])?;
-                if (!fs::is_dir(ddir) && fetch) { fetch_git(a, name, git, rev, ddir)?; }
+                if (st != null && st.updating) {
+                    if (fetch) {
+                        if (st.resolved.has(name)) {
+                            const auto prior = st.resolved.get(name) catch "";
+                            if (prior != rev) {
+                                eprintln("{manifest}: error: dependency '{name}' requests two revisions ('{prior}' and '{rev}'); pin one rev");
+                                return error.CompileFailed;
+                            }
+                            const auto li = lock_index(st.lock.slice(), name);
+                            if (li >= 0 && st.lock.items[li].url != git) {
+                                eprintln("{manifest}: error: dependency '{name}' is reached from two git sources ('{st.lock.items[li].url}' and '{git}'); keep one source");
+                                return error.CompileFailed;
+                            }
+                            if (li >= 0) { _ = ensure_dep(a, name, git, rev, st.lock.items[li].commit, ddir)?; }
+                        } else {
+                            const auto commit = resolve_dep(a, name, git, rev, ddir)?;
+                            st.resolved.put(name, rev)?;
+                            auto li = lock_index(st.lock.slice(), name);
+                            if (li < 0) {
+                                st.lock.push(LockPkg{ .name = name, .url = git, .rev = rev, .commit = commit })?;
+                            } else {
+                                const auto lp = &st.lock.items[li];
+                                lp.url = git;
+                                lp.rev = rev;
+                                lp.commit = commit;
+                            }
+                        }
+                    }
+                } else if (st != null && st.locked) {
+                    const auto li = lock_index(st.lock.slice(), name);
+                    if (li < 0) {
+                        eprintln("{manifest}: error: dependency '{name}' is not in zark.lock; run `zark update`");
+                        return error.CompileFailed;
+                    }
+                    const auto lp = &st.lock.items[li];
+                    if (lp.rev != rev) {
+                        eprintln("{manifest}: error: dependency '{name}' requests '{rev}', zark.lock pins '{lp.rev}'; run `zark update`");
+                        return error.CompileFailed;
+                    }
+                    if (lp.commit.len == 0) {
+                        eprintln("{manifest}: error: zark.lock has no commit for '{name}'; run `zark update`");
+                        return error.CompileFailed;
+                    }
+                    if (fetch) { _ = ensure_dep(a, name, git, rev, lp.commit, ddir)?; }
+                } else if (!fs::is_dir(ddir) && fetch) {
+                    fetch_git(a, name, git, rev, ddir)?;
+                }
             } else {
                 eprintln("{manifest}: error: dependency '{name}' needs `path` or `git`");
                 return error.CompileFailed;
@@ -355,7 +401,7 @@ struct Manifest {
             return error.CompileFailed;
         }
         if (fs::is_file(path::join(a, [ddir, "zark.toml"])?)) {
-            const auto sub = load_project(a, ddir, fetch, depth + 1)?;
+            const auto sub = load_project(a, ddir, fetch, depth + 1, st)?;
             register_dep(name, path::dir(sub.lib), sub.lib)?;
             for (auto s : sub.sources) { p.sources.push(s)?; }
             for (auto l : sub.libs) { p.libs.push(l)?; }
@@ -384,6 +430,272 @@ struct Manifest {
         eprintln("error: could not clone {url}");
         return error.CompileFailed;
     }
+}
+
+struct LockPkg { str name; str url; str rev; str commit; }
+
+i64 lock_index(LockPkg[] l, str name) {
+    for (auto [i, p] : l) { if (p.name == name) { return i; } }
+    return -1;
+}
+
+/// reads `zark.lock`; empty when there is none
+!List<LockPkg> read_lock(Allocator a, str dir) {
+    auto out = List<LockPkg>::init(a);
+    const auto lp = path::join(a, [dir, "zark.lock"])?;
+    if (!fs::is_file(lp)) { return out; }
+    const auto src = read_file(a, lp) catch |e| {
+        eprintln("error: cannot read '{lp}': {e}");
+        return error.CompileFailed;
+    };
+    auto tp = TomlParser{ .src = src, .line = 1, .file = lp, .a = a };
+    const auto doc = tp.document()?;
+    for (auto e : doc.entries) {
+        if (!str_starts_with(e.key, "package.")) { continue; }
+        if (!(e.value.kind is .Str)) { continue; }
+        const auto rest = e.key[8..];
+        const auto dot = str_rfind(rest, ".");
+        if (dot <= 0) { continue; }
+        const auto name = rest[0..dot];
+        const auto field = rest[dot + 1..];
+        auto i = lock_index(out.slice(), name);
+        if (i < 0) {
+            out.push(LockPkg{ .name = name, .url = "", .rev = "", .commit = "" })?;
+            i = out.len - 1;
+        }
+        const auto p = &out.items[i];
+        if (field == "url") { p.url = e.value.s; }
+        else if (field == "rev") { p.rev = e.value.s; }
+        else if (field == "commit") { p.commit = e.value.s; }
+    }
+    return out;
+}
+
+!void write_lock(Allocator a, str dir, LockPkg[] pkgs) {
+    auto b = List<u8>::init(a);
+    b.append("# zark.lock: generated by `zark update`, do not edit\n")?;
+    for (auto p : pkgs) {
+        if (p.url.len == 0) { continue; }
+        sprint(&b, "\n[package.{p.name}]\nurl = \"{p.url}\"\nrev = \"{p.rev}\"\ncommit = \"{p.commit}\"\n")?;
+    }
+    write_file(path::join(a, [dir, "zark.lock"])?, b.slice())?;
+}
+
+/// the trimmed stdout of a command, or "" when it failed
+!str git_out(Allocator a, str[] argv) {
+    auto r = os::exec(a, argv)?;
+    defer r.deinit();
+    if (r.code != 0) { return ""; }
+    return a.dup(str_trim(r.out))?;
+}
+
+str clip12(str s) {
+    if (s.len > 12) { return s[0..12]; }
+    return s;
+}
+
+/// checks out `commit` (when given) or `rev` in `dir`, fetching as needed; returns HEAD
+!str ensure_dep(Allocator a, str name, str url, str rev, str commit, str dir) {
+    const auto dotgit = path::join(a, [dir, ".git"])?;
+    if (!fs::is_dir(dotgit) && !fs::is_file(dotgit)) {
+        if (fs::is_dir(dir)) { return ""; }
+        fs::make_dirs(dir)?;
+        if (run(a, ["git", "-C", dir, "init", "--quiet"])? != 0) {
+            eprintln("error: dependency '{name}': git init failed");
+            return error.CompileFailed;
+        }
+        if (run(a, ["git", "-C", dir, "remote", "add", "origin", url])? != 0) {
+            eprintln("error: dependency '{name}': git remote add failed");
+            return error.CompileFailed;
+        }
+    }
+    auto target = commit;
+    if (target.len == 0) { target = rev; }
+    if (target.len > 0) {
+        if (run(a, ["git", "-C", dir, "fetch", "--quiet", "--depth", "1", "origin", target])? != 0) {
+            _ = run(a, ["git", "-C", dir, "fetch", "--quiet", "origin"])?;
+        }
+    } else {
+        _ = run(a, ["git", "-C", dir, "fetch", "--quiet", "--depth", "1", "origin"])?;
+    }
+    if (target.len > 0) {
+        if (run(a, ["git", "-C", dir, "checkout", "--quiet", "--force", "--detach", target])? != 0) {
+            if (run(a, ["git", "-C", dir, "checkout", "--quiet", "--force", "--detach", "FETCH_HEAD"])? != 0) {
+                eprintln("error: dependency '{name}': cannot check out {target}");
+                return error.CompileFailed;
+            }
+        }
+    } else {
+        if (run(a, ["git", "-C", dir, "checkout", "--quiet", "--force", "--detach", "FETCH_HEAD"])? != 0) {
+            eprintln("error: dependency '{name}': cannot check out the default branch");
+            return error.CompileFailed;
+        }
+    }
+    const auto head = git_out(a, ["git", "-C", dir, "rev-parse", "HEAD"])?;
+    if (commit.len > 0 && head != commit) {
+        eprintln("error: dependency '{name}' is at {clip12(head)}, the lock pins {clip12(commit)}; run `zark update`");
+        return error.CompileFailed;
+    }
+    return head;
+}
+
+/// clones the requested `rev` and returns the commit it points at now (for `zark update`)
+!str resolve_dep(Allocator a, str name, str url, str rev, str dir) {
+    if (fs::is_dir(dir)) {
+        if (run(a, ["rm", "-rf", dir])? != 0) {
+            eprintln("error: dependency '{name}': cannot remove {dir}");
+            return error.CompileFailed;
+        }
+    }
+    fetch_git(a, name, url, rev, dir)?;
+    return git_out(a, ["git", "-C", dir, "rev-parse", "HEAD"])?;
+}
+
+struct PkgState { List<LockPkg> lock; Map<str> resolved; bool locked; bool updating; }
+
+!PkgState load_state(Allocator a, str dir) {
+    const auto lock = read_lock(a, dir)?;
+    return PkgState{ .lock = lock, .resolved = Map<str>::init(a), .locked = fs::is_file(path::join(a, [dir, "zark.lock"])?), .updating = false };
+}
+
+!i32 pkg_update_core(Allocator a, str pdir) {
+    auto st = load_state(a, pdir)?;
+    st.updating = true;
+    const auto proj = load_project(a, pdir, true, 0, &st) catch { return 1; };
+    _ = proj;
+    auto kept = List<LockPkg>::init(a);
+    for (auto p : st.lock) { if (st.resolved.has(p.name)) { kept.push(p)?; } }
+    write_lock(a, pdir, kept.slice())?;
+    println("updated {kept.len} dependencies");
+    return 0;
+}
+
+/// `zark fetch`: put every locked git dependency at its commit
+!i32 pkg_fetch(Allocator a) {
+    const auto pdir = find_project(a, ".") catch "";
+    if (pdir.len == 0) { eprintln("error: no zark.toml here or above"); return 1; }
+    const auto lock = read_lock(a, pdir)?;
+    if (lock.len == 0) {
+        eprintln("error: no zark.lock; run `zark update` first");
+        return 1;
+    }
+    auto n = 0;
+    for (auto p : lock) {
+        if (p.url.len == 0) { continue; }
+        const auto ddir = path::join(a, [pdir, ".zark/deps", p.name])?;
+        _ = ensure_dep(a, p.name, p.url, p.rev, p.commit, ddir) catch { eprintln("error: could not fetch {p.name}"); return 1; };
+        n += 1;
+    }
+    println("fetched {n} dependencies");
+    return 0;
+}
+
+/// `zark update`: resolve the manifests' revisions and rewrite the lock
+!i32 pkg_update(Allocator a) {
+    const auto pdir = find_project(a, ".") catch "";
+    if (pdir.len == 0) { eprintln("error: no zark.toml here or above"); return 1; }
+    return pkg_update_core(a, pdir);
+}
+
+/// appends a git dependency; false when the name is already there
+!bool toml_add_dep(Allocator a, str path, str name, str url, str rev) {
+    const auto src = read_file(a, path)?;
+    auto b = List<u8>::init(a);
+    auto section = "";
+    auto added = false;
+    auto start = 0;
+    auto i = 0;
+    while (i <= src.len) {
+        if (i == src.len || src[i] == '\n') {
+            const auto line = src[start..i];
+            if (i == src.len && line.len == 0) { break; }
+            const auto t = str_trim(line);
+            if (t.len >= 2 && t[0] == '[' && t[t.len - 1] == ']') { section = t; }
+            if (section == "[dependencies]" && t.len > name.len && str_starts_with(t, name)) {
+                const auto c = t[name.len];
+                if (c == ' ' || c == '=') { return false; }
+            }
+            b.append(line)?;
+            b.push('\n')?;
+            if (!added && t == "[dependencies]") {
+                sprint(&b, "{name} = {{ git = \"{url}\", rev = \"{rev}\" }}\n")?;
+                added = true;
+            }
+            start = i + 1;
+        }
+        i += 1;
+    }
+    if (!added) {
+        if (src.len > 0) { b.push('\n')?; }
+        b.append("[dependencies]\n")?;
+        sprint(&b, "{name} = {{ git = \"{url}\", rev = \"{rev}\" }}\n")?;
+    }
+    write_file(path, b.slice())?;
+    return true;
+}
+
+!void toml_remove_dep(Allocator a, str path, str name) {
+    const auto src = read_file(a, path)?;
+    auto b = List<u8>::init(a);
+    auto section = "";
+    auto start = 0;
+    auto i = 0;
+    while (i <= src.len) {
+        if (i == src.len || src[i] == '\n') {
+            const auto line = src[start..i];
+            if (i == src.len && line.len == 0) { break; }
+            const auto t = str_trim(line);
+            if (t.len >= 2 && t[0] == '[' && t[t.len - 1] == ']') { section = t; }
+            auto drop = false;
+            if (section == "[dependencies]" && t.len > name.len && str_starts_with(t, name)) {
+                const auto c = t[name.len];
+                if (c == ' ' || c == '=') { drop = true; }
+            }
+            if (!drop) {
+                b.append(line)?;
+                b.push('\n')?;
+            }
+            start = i + 1;
+        }
+        i += 1;
+    }
+    write_file(path, b.slice())?;
+}
+
+/// `zark add <git-url> [--rev REV]`: append the dependency and lock it
+!i32 pkg_add(Allocator a, str url, str rev) {
+    if (url.len == 0) { eprintln("usage: zark add <git-url> [--rev REV]"); return 1; }
+    const auto pdir = find_project(a, ".") catch "";
+    if (pdir.len == 0) { eprintln("error: no zark.toml here or above"); return 1; }
+    auto base = url;
+    if (str_ends_with(base, ".git")) { base = base[0..base.len - 4]; }
+    auto name = base;
+    const auto slash = str_rfind_byte(base, '/');
+    if (slash >= 0) { name = base[slash + 1..]; }
+    if (name.len == 0) { eprintln("error: cannot derive a package name from '{url}'"); return 1; }
+    const auto manifest = path::join(a, [pdir, "zark.toml"])?;
+    if (!toml_add_dep(a, manifest, name, url, rev)?) {
+        eprintln("error: dependency '{name}' is already in zark.toml; remove it first");
+        return 1;
+    }
+    println("added {name}");
+    return pkg_update_core(a, pdir);
+}
+
+/// `zark remove <name>`: drop the dependency from the manifest and the lock
+!i32 pkg_remove(Allocator a, str name) {
+    if (name.len == 0) { eprintln("usage: zark remove <name>"); return 1; }
+    const auto pdir = find_project(a, ".") catch "";
+    if (pdir.len == 0) { eprintln("error: no zark.toml here or above"); return 1; }
+    const auto manifest = path::join(a, [pdir, "zark.toml"])?;
+    toml_remove_dep(a, manifest, name)?;
+    if (!fs::is_file(path::join(a, [pdir, "zark.lock"])?)) { println("removed {name}"); return 0; }
+    const auto lock = read_lock(a, pdir)?;
+    auto out = List<LockPkg>::init(a);
+    for (auto p : lock) { if (p.name != name) { out.push(p)?; } }
+    write_lock(a, pdir, out.slice())?;
+    println("removed {name}");
+    return 0;
 }
 
 !void pkg_flags(Allocator a, str pkg, List<str>* out) {
@@ -493,7 +805,7 @@ void project_setup_for(Allocator a, str file) {
     c_flags = List<str>{};
     const auto dir = find_project(a, path::dir(file)) catch "";
     if (dir.len == 0) { return; }
-    const auto p = load_project(a, dir, false, 0) catch { return; };
+    const auto p = load_project(a, dir, false, 0, null) catch { return; };
     const auto args = project_c_args(a, p) catch { return; };
     const auto sp = split_extras(a, args.slice()) catch { return; };
     c_flags = sp.flags;

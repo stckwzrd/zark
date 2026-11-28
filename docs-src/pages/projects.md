@@ -51,8 +51,25 @@ import "utils/strings" as us;   // a file next to it (.zk may be left out)
 ```
 
 - `path` dependencies point to a directory on disk.
-- `git` dependencies are cloned into `.zark/deps/NAME` the first time a command needs them (`rev` is a tag or branch). Delete the directory to fetch again.
+- `git` dependencies are cloned into `.zark/deps/NAME` the first time a command needs them (`rev` is a tag, a branch or a commit); when `zark.lock` lists the dependency, its tree is checked out at the locked commit.
 - A dependency with its own `zark.toml` brings its own dependencies, C sources and libraries along. Without a manifest, its lib file is `src/lib.zk` or `lib.zk`.
 - Imports that start with `./` or `../` are always relative files, so a dependency name never hides them.
+
+### Locking and updating
+
+A `git` dependency is recorded in `zark.lock` next to `zark.toml`: the URL, the requested `rev`, and the exact commit it resolved to. `zark build`, `run`, `test` and the language server use that commit, so a branch or a tag that moves does not change what you build.
+
+```sh
+zark update              # resolve every git dependency again and rewrite zark.lock
+zark fetch               # put the locked commits into .zark/deps (no resolution; for CI and offline)
+zark add URL [--rev R]   # add a git dependency to zark.toml and lock it
+zark remove NAME         # drop a dependency from zark.toml and zark.lock
+```
+
+- `zark update` is the only command that moves a dependency to a new commit; it also replaces the entry when you change `rev` in `zark.toml`.
+- If `zark.toml` asks for a `rev` that `zark.lock` does not have, or the fetched tree is not at the locked commit, the build stops and asks for `zark update`.
+- One name is one source and one commit: reaching it with two different `rev` values, or from two different git URLs, is an error.
+- `path` dependencies are not locked; they are edited in place.
+- Commit `zark.lock`: it is what teammates and CI build.
 
 The language server reads the same manifest, so imports of dependencies are found in the editor too.

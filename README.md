@@ -306,7 +306,7 @@ async i64 chain() {
 
 ### Projects
 
-`zark new hello` creates a project with a `zark.toml`; inside it `zark run`, `zark build` and `zark test` need no file name. The manifest lists C sources, libraries, default flags, and dependencies by path or git (`utils = { path = "../utils" }`, then `import "utils" as u;`).
+`zark new hello` creates a project with a `zark.toml`; inside it `zark run`, `zark build` and `zark test` need no file name. The manifest lists C sources, libraries, default flags, and dependencies by path or git (`utils = { path = "../utils" }`, then `import "utils" as u;`). Git dependencies are pinned in `zark.lock`: `zark update` resolves them, `zark fetch` restores the locked commits (CI, offline), `zark add URL [--rev R]` and `zark remove NAME` edit both files, and a moved branch or tag no longer changes a build until you run `zark update`.
 
 The full language description is in [SPEC.md](SPEC.md).
 

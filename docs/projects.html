@@ -42,14 +42,26 @@
 <div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "utils"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> u;            </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// the dependency's lib file</span></span>
 <span class="line"><span style="--shiki-light:#D73A49;--shiki-dark:#F97583">import</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> "utils/strings"</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> as</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> us;   </span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">// a file next to it (.zk may be left out)</span></span></code></pre></div><ul>
 <li><code>path</code> dependencies point to a directory on disk.</li>
-<li><code>git</code> dependencies are cloned into <code>.zark/deps/NAME</code> the first time a command needs them (<code>rev</code> is a tag or branch). Delete the directory to fetch again.</li>
+<li><code>git</code> dependencies are cloned into <code>.zark/deps/NAME</code> the first time a command needs them (<code>rev</code> is a tag, a branch or a commit); when <code>zark.lock</code> lists the dependency, its tree is checked out at the locked commit.</li>
 <li>A dependency with its own <code>zark.toml</code> brings its own dependencies, C sources and libraries along. Without a manifest, its lib file is <code>src/lib.zk</code> or <code>lib.zk</code>.</li>
 <li>Imports that start with <code>./</code> or <code>../</code> are always relative files, so a dependency name never hides them.</li>
+</ul>
+<h3 id="locking-and-updating"><a class="anchor" href="#locking-and-updating">#</a>Locking and updating</h3>
+<p>A <code>git</code> dependency is recorded in <code>zark.lock</code> next to <code>zark.toml</code>: the URL, the requested <code>rev</code>, and the exact commit it resolved to. <code>zark build</code>, <code>run</code>, <code>test</code> and the language server use that commit, so a branch or a tag that moves does not change what you build.</p>
+<div class="code"><pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e" tabindex="0"><code><span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> update</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">              # resolve every git dependency again and rewrite zark.lock</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> fetch</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">               # put the locked commits into .zark/deps (no resolution; for CI and offline)</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> add</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> URL</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8"> [--rev </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">R]</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">   # add a git dependency to zark.toml and lock it</span></span>
+<span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">zark</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> remove</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> NAME</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">         # drop a dependency from zark.toml and zark.lock</span></span></code></pre></div><ul>
+<li><code>zark update</code> is the only command that moves a dependency to a new commit; it also replaces the entry when you change <code>rev</code> in <code>zark.toml</code>.</li>
+<li>If <code>zark.toml</code> asks for a <code>rev</code> that <code>zark.lock</code> does not have, or the fetched tree is not at the locked commit, the build stops and asks for <code>zark update</code>.</li>
+<li>One name is one source and one commit: reaching it with two different <code>rev</code> values, or from two different git URLs, is an error.</li>
+<li><code>path</code> dependencies are not locked; they are edited in place.</li>
+<li>Commit <code>zark.lock</code>: it is what teammates and CI build.</li>
 </ul>
 <p>The language server reads the same manifest, so imports of dependencies are found in the editor too.</p>
 
 <div class="pager"><a class="prev" href="tooling.html"><small>Previous</small>Tools: fmt, lsp, flags</a><a class="next" href="stdlib.html"><small>Next</small>Standard library reference</a></div>
-</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#zark-toml">zark.toml</a><a class="l2" href="#dependencies">Dependencies</a></aside></main>
+</article><aside class="toc"><div class="toc-title">On this page</div><a class="l2" href="#zark-toml">zark.toml</a><a class="l2" href="#dependencies">Dependencies</a><a class="l3" href="#locking-and-updating">Locking and updating</a></aside></main>
 </div>
 <script src="assets/site.js"></script>
 </body>
