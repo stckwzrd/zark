@@ -103,3 +103,20 @@ struct BufferedReader {
         total += n;
     }
 }
+
+/// Appends at most limit bytes; on StreamTooLong consumes one additional byte.
+/// On any error, bytes already read remain in out.
+!i64 read_to_end(Reader* source, List<u8>* out, i64 limit) {
+    if (limit < 0) { return error.InvalidArgument; }
+    u8[4096] buf;
+    i64 total = 0;
+    while (true) {
+        auto want = min(limit - total, 4096);
+        if (want == 0) { want = 1; }
+        const auto n = source.read(buf[0..want])?;
+        if (n == 0) { return total; }
+        if (total == limit) { return error.StreamTooLong; }
+        out.append(buf[0..n])?;
+        total += n;
+    }
+}

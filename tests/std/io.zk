@@ -61,3 +61,31 @@ test "buffered reader composes with limited copy into a file" {
     input.read_exact(contents[..])?;
     assert(contents[..] == "abcde");
 }
+
+test "read_to_end limits output and reports overflow" {
+    auto mem = io::MemoryReader::init("abcdef");
+    auto reader = mem.reader();
+    auto out = List<u8>::init(c_allocator());
+    defer out.deinit();
+    auto too_long = false;
+    _ = io::read_to_end(&reader, &out, 4) catch |e| { too_long = e == error.StreamTooLong; 0 };
+    assert(too_long && out.slice() == "abcd" && mem.pos == 5);
+    auto rest = mem.reader();
+    assert(io::read_to_end(&rest, &out, 1)? == 1 && out.slice() == "abcdf");
+    assert(io::read_to_end(&rest, &out, 0)? == 0);
+}
+
+test "read_to_end preserves partial output on allocation failure" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto mem = io::MemoryReader::init("abcd");
+        auto reader = mem.reader();
+        auto out = List<u8>::init(dbg.allocator());
+        defer out.deinit();
+        dbg.fail_after_n(0);
+        auto failed = false;
+        _ = io::read_to_end(&reader, &out, 10) catch |e| { failed = e == error.OutOfMemory; 0 };
+        assert(failed && out.len == 0 && mem.pos == 4);
+    }
+    dbg.deinit()?;
+}
