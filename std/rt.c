@@ -585,6 +585,12 @@ int vrt_cond_broadcast(vcond *c)
     return pthread_cond_broadcast(&c->c);
 }
 
+int vrt_cond_destroy(vcond *c)
+{
+    if (atomic_load(&c->state) == 0) return 0;
+    return pthread_cond_destroy(&c->c);
+}
+
 uint64_t vrt_fetch_add64(_Atomic uint64_t *p, uint64_t v) { return atomic_fetch_add(p, v); }
 uint64_t vrt_swap64(_Atomic uint64_t *p, uint64_t v) { return atomic_exchange(p, v); }
 uint64_t vrt_cas64(_Atomic uint64_t *p, uint64_t expected, uint64_t desired)
