@@ -1,0 +1,31 @@
+import "std/encoding" as encoding;
+
+test "hex encodes arbitrary bytes and decodes either case" {
+    u8[5] bytes = [0, 1, 127, 128, 255];
+    u8[10] text;
+    assert(encoding::hex_encode(bytes[..], text[..])? == "00017f80ff");
+    u8[5] decoded;
+    assert(encoding::hex_decode("00017F80fF", decoded[..])? == bytes[..]);
+    assert(encoding::hex_encode("", text[..])? == "");
+    assert(encoding::hex_decode("", decoded[..])?.len == 0);
+}
+
+test "hex rejects invalid input without writing" {
+    u8[2] out = [42, 43];
+    _ = encoding::hex_decode("0x", out[..]) catch |e| { assert(e == error.InvalidHex); out[0..0] };
+    assert(out[0] == 42 && out[1] == 43);
+    _ = encoding::hex_decode("f", out[..]) catch |e| { assert(e == error.InvalidHex); out[0..0] };
+    _ = encoding::hex_decode("000102", out[..]) catch |e| { assert(e == error.NoSpace); out[0..0] };
+    _ = encoding::hex_encode("ab", out[..]) catch |e| { assert(e == error.NoSpace); out[0..0] };
+    assert(out[0] == 42 && out[1] == 43);
+}
+
+test "hex round-trips every byte" {
+    u8[256] values;
+    u8[512] text;
+    u8[256] decoded;
+    for (auto i : 0..256) { values[i] = i as u8; }
+    const auto hex = encoding::hex_encode(values[..], text[..])?;
+    const auto result = encoding::hex_decode(hex, decoded[..])?;
+    for (auto i : 0..256) { assert(result[i] == values[i]); }
+}

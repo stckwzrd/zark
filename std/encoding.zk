@@ -1,0 +1,31 @@
+// Hex encoding into caller-owned, non-overlapping buffers.
+
+/// Encodes bytes as lowercase hex and returns the written portion of `out`.
+!str hex_encode(u8[] input, u8[] out) {
+    if (input.len > out.len / 2) { return error.NoSpace; }
+    const auto digits = "0123456789abcdef";
+    for (auto [i, b] : input) {
+        out[2 * i] = digits[(b >> 4) as i64];
+        out[2 * i + 1] = digits[(b & 15) as i64];
+    }
+    return out[0..input.len * 2];
+}
+
+!u8 hex_nibble(u8 c) {
+    if (c >= '0' && c <= '9') { return c - '0'; }
+    if (c >= 'a' && c <= 'f') { return c - 'a' + 10; }
+    if (c >= 'A' && c <= 'F') { return c - 'A' + 10; }
+    return error.InvalidHex;
+}
+
+/// Decodes either case. Invalid input or insufficient space leaves `out` untouched.
+!u8[] hex_decode(str input, u8[] out) {
+    if (input.len % 2 != 0) { return error.InvalidHex; }
+    const auto n = input.len / 2;
+    if (n > out.len) { return error.NoSpace; }
+    for (auto c : input) { _ = hex_nibble(c)?; }
+    for (auto i : 0..n) {
+        out[i] = ((hex_nibble(input[i * 2])? as u64) << 4 | (hex_nibble(input[i * 2 + 1])? as u64)) as u8;
+    }
+    return out[0..n];
+}
