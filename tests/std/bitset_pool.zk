@@ -1,0 +1,114 @@
+import "std/collections" as collections;
+
+struct Item { i64* cleaned; i64 value; }
+void cleanup_item(Item* value) { *value.cleaned += 1; }
+void cleanup_list(List<i64>* value) { value.deinit(); }
+
+test "bitsets handle boundaries and set operations" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto a = collections::BitSet::init(dbg.allocator(), 130)?;
+        defer a.deinit();
+        auto b = collections::BitSet::init(dbg.allocator(), 130)?;
+        defer b.deinit();
+        a.set(0, true)?;
+        a.set(63, true)?;
+        a.set(64, true)?;
+        a.set(129, true)?;
+        b.set(64, true)?;
+        b.set(70, true)?;
+        assert(a.count() == 4 && a.contains(129)? && !a.contains(70)?);
+        a.union_with(&b)?;
+        assert(a.count() == 5 && a.contains(70)?);
+        a.intersect_with(&b)?;
+        assert(a.count() == 2 && a.contains(64)?);
+        a.set(64, false)?;
+        assert(a.count() == 1);
+        a.clear();
+        assert(a.count() == 0);
+        auto bad = false;
+        a.set(130, true) catch |e| { bad = e == error.OutOfRange; };
+        assert(bad);
+        auto empty = collections::BitSet::init(dbg.allocator(), 0)?;
+        defer empty.deinit();
+        auto mismatch = false;
+        a.union_with(&empty) catch |e| { mismatch = e == error.SizeMismatch; };
+        assert(mismatch);
+    }
+    dbg.deinit()?;
+}
+
+test "pool keeps pointers stable and cleans live values" {
+    auto dbg = DebugAllocator::init();
+    auto cleaned = 0;
+    {
+        auto p = collections::Pool<Item>::init(dbg.allocator(), 2, cleanup_item)?;
+        defer p.deinit();
+        const auto a = p.acquire(Item{ .cleaned = &cleaned, .value = 1 })?;
+        const auto b = p.acquire(Item{ .cleaned = &cleaned, .value = 2 })?;
+        const auto c = p.acquire(Item{ .cleaned = &cleaned, .value = 3 })?;
+        assert(a.value == 1 && b.value == 2 && c.value == 3 && p.len == 3);
+        p.release(b)?;
+        assert(cleaned == 1 && p.len == 2);
+        auto twice = false;
+        p.release(b) catch |e| { twice = e == error.AlreadyReleased; };
+        assert(twice);
+        auto outsider = Item{ .cleaned = &cleaned };
+        auto invalid = false;
+        p.release(&outsider) catch |e| { invalid = e == error.InvalidPointer; };
+        assert(invalid);
+        const auto d = p.acquire(Item{ .cleaned = &cleaned, .value = 4 })?;
+        assert(d == b && d.value == 4 && a.value == 1);
+    }
+    assert(cleaned == 4);
+    dbg.deinit()?;
+}
+
+test "pool transfers and releases resource values on failure" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto p = collections::Pool<List<i64>>::init(dbg.allocator(), 1, cleanup_list)?;
+        defer p.deinit();
+        auto a = List<i64>::init(dbg.allocator());
+        a.push(42)?;
+        const auto first = p.acquire(a)?;
+        assert(first.get(0) == 42);
+        auto b = List<i64>::init(dbg.allocator());
+        b.push(7)?;
+        dbg.fail_after_n(0);
+        _ = p.acquire(b) catch |e| { assert(e == error.OutOfMemory); null };
+        assert(p.len == 1 && first.get(0) == 42);
+        p.release(first)?;
+    }
+    dbg.deinit()?;
+}
+
+test "pool cleans up a partially allocated block" {
+    auto dbg = DebugAllocator::init();
+    auto cleaned = 0;
+    {
+        auto p = collections::Pool<Item>::init(dbg.allocator(), 4, cleanup_item)?;
+        defer p.deinit();
+        dbg.fail_after_n(1);
+        auto failed = false;
+        _ = p.acquire(Item{ .cleaned = &cleaned, .value = 1 }) catch |e| { failed = e == error.OutOfMemory; null };
+        assert(failed && cleaned == 1 && p.len == 0);
+    }
+    dbg.deinit()?;
+}
+
+test "pool works with a fixed buffer and reuses released slots" {
+    u8[4096] bytes;
+    auto fixed = FixedBuf::init(bytes[..]);
+    {
+        auto p = collections::Pool<i64>::init(fixed.allocator(), 2, null)?;
+        defer p.deinit();
+        const auto a = p.acquire(10)?;
+        const auto b = p.acquire(20)?;
+        assert(*a == 10 && *b == 20);
+        p.release(a)?;
+        const auto c = p.acquire(30)?;
+        assert(c == a && *c == 30 && *b == 20);
+    }
+    assert(fixed.used == 0);
+}
