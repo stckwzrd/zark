@@ -97,3 +97,93 @@ owned struct LinkedList<T> {
 
     void deinit() move { this->clear(); }
 }
+
+// A double-ended queue backed by a circular allocation.
+struct DequeIter<T> {
+    T[] items;
+    i64 head;
+    i64 len;
+    i64 index;
+
+    bool next() { this->index += 1; return this->index < this->len; }
+    T* value() borrows { return &this->items[(this->head + this->index) % this->items.len]; }
+}
+
+owned struct Deque<T> {
+    T[] items;
+    i64 head;
+    i64 len;
+    Allocator a;
+    fn(T*) -> void cleanup;
+
+    static Self init(Allocator a, fn(T*) -> void cleanup) {
+        return Self{ .a = a, .cleanup = cleanup };
+    }
+
+    !void grow() {
+        auto cap = 8;
+        if (this->items.len > 0) {
+            if (this->items.len > 0x1fffffffffffffff) { return error.OutOfMemory; }
+            cap = this->items.len * 2;
+        }
+        const auto fresh = this->a.alloc<T>(cap)?;
+        for (auto i : 0..this->len) {
+            fresh[i] = move_out(&this->items[(this->head + i) % this->items.len]);
+        }
+        this->a.free(this->items);
+        this->items = fresh;
+        this->head = 0;
+    }
+
+    !void push_back(T value) invalidates {
+        if (this->len == this->items.len) {
+            this->grow() catch |e| {
+                if (this->cleanup != null) { this->cleanup(&value); }
+                return e;
+            };
+        }
+        this->items[(this->head + this->len) % this->items.len] = value;
+        this->len += 1;
+    }
+
+    !void push_front(T value) invalidates {
+        if (this->len == this->items.len) {
+            this->grow() catch |e| {
+                if (this->cleanup != null) { this->cleanup(&value); }
+                return e;
+            };
+        }
+        this->head = (this->head + this->items.len - 1) % this->items.len;
+        this->items[this->head] = value;
+        this->len += 1;
+    }
+
+    !T pop_front() invalidates {
+        if (this->len == 0) { return error.Empty; }
+        const auto result = move_out(&this->items[this->head]);
+        this->head = (this->head + 1) % this->items.len;
+        this->len -= 1;
+        return result;
+    }
+
+    !T pop_back() invalidates {
+        if (this->len == 0) { return error.Empty; }
+        this->len -= 1;
+        return move_out(&this->items[(this->head + this->len) % this->items.len]);
+    }
+
+    T* front() borrows { if (this->len == 0) { return null; } return &this->items[this->head]; }
+    T* back() borrows { if (this->len == 0) { return null; } return &this->items[(this->head + this->len - 1) % this->items.len]; }
+    bool is_empty() { return this->len == 0; }
+    DequeIter<T> iter() borrows { return DequeIter<T>{ .items = this->items, .head = this->head, .len = this->len, .index = -1 }; }
+
+    void clear() invalidates {
+        if (this->cleanup != null) {
+            for (auto i : 0..this->len) { this->cleanup(&this->items[(this->head + i) % this->items.len]); }
+        }
+        this->head = 0;
+        this->len = 0;
+    }
+
+    void deinit() move { this->clear(); this->a.free(this->items); }
+}

@@ -284,6 +284,8 @@ import "std/smart" as smart;
 }
 ```
 
+`Deque<T>` in `std/collections` is a circular, growable queue. Initialize it with `Deque<T>::init(allocator, cleanup)`, then use `push_front`, `push_back`, `pop_front`, `pop_back`, `front`, `back`, `len`, `is_empty`, `clear`, and `iter`. As with `LinkedList`, a cleanup function releases resource elements left in the deque and the value passed to a failed push; popping transfers ownership to the caller. Pointers from `front`, `back`, and `iter` are invalid after any mutation or deinitialization. Iterators are structs and the compiler does not track their embedded pointers.
+
 `LinkedList` has `push_front`, `push_back`, `pop_front`, `pop_back`, `front`, `back`, `clear`, `is_empty`, `len` and `iter`. Popping transfers the element to the caller without running cleanup; `clear` and `deinit` clean up remaining elements. Do not use an iterator or a pointer into the list after it is modified or freed: the compiler does not track pointers inside iterator structs. Pointers returned by `Box.get()` and `Rc.get()` are valid only while their owner remains alive. `Rc.clone()` creates another owner; each owner must be released once.
 
 A file that starts with `#!/usr/bin/env -S zark run` can be run directly as a script; the arguments after it go to the program.
