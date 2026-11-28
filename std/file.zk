@@ -1,3 +1,5 @@
+import "std/io" as io;
+
 // Streaming files. libc buffers the underlying stream. Close each file explicitly.
 extern i32 ferror(void* stream);
 extern i32 fgetc(void* stream);
@@ -50,6 +52,12 @@ owned struct File {
         }
     }
 
+    io::Reader reader() { return io::Reader{ .ctx = this as *void, .read_fn = file_reader_read }; }
+    Writer writer() { return Writer{ .ctx = this as *void, .write_fn = file_writer_write }; }
+
     !void flush() { if (fflush(this->handle) != 0) { return error.WriteFailed; } }
     !void close() move { if (fclose(this->handle) != 0) { return error.CloseFailed; } }
 }
+
+!i64 file_reader_read(void* ctx, u8[] out) { return (ctx as *File).read(out); }
+!void file_writer_write(void* ctx, str data) { return (ctx as *File).write_all(data); }

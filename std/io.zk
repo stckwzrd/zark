@@ -1,0 +1,105 @@
+// Composable byte readers. Adapters borrow their input and backing storage.
+struct Reader {
+    void* ctx;
+    fn(void*, u8[]) -> !i64 read_fn;
+
+    /// Zero for EOF (or an empty buffer), otherwise the number of bytes read.
+    !i64 read(u8[] out) {
+        if (out.len == 0) { return 0; }
+        if (this->read_fn == null) { return error.InvalidReader; }
+        const auto n = this->read_fn(this->ctx, out)?;
+        if (n < 0 || n > out.len) { return error.InvalidRead; }
+        return n;
+    }
+    /// Read exactly out.len bytes, or return EndOfStream after a short read.
+    !void read_exact(u8[] out) {
+        auto pos = 0;
+        while (pos < out.len) {
+            const auto n = this->read(out[pos..])?;
+            if (n == 0) { return error.EndOfStream; }
+            pos += n;
+        }
+    }
+}
+
+struct MemoryReader {
+    str data;
+    i64 pos;
+    static Self init(str data) { return Self{ .data = data }; }
+    Reader reader() { return Reader{ .ctx = this as *void, .read_fn = memory_read }; }
+}
+!i64 memory_read(void* ctx, u8[] out) {
+    const auto m = ctx as *MemoryReader;
+    const auto n = min(out.len, m.data.len - m.pos);
+    if (n > 0) { memmove(out.ptr, m.data.ptr + m.pos, n as u64); }
+    m.pos += n;
+    return n;
+}
+
+struct LimitedReader {
+    Reader source;
+    i64 remaining;
+    static !Self init(Reader source, i64 limit) {
+        if (limit < 0) { return error.InvalidArgument; }
+        return Self{ .source = source, .remaining = limit };
+    }
+    Reader reader() { return Reader{ .ctx = this as *void, .read_fn = limited_read }; }
+}
+!i64 limited_read(void* ctx, u8[] out) {
+    auto l = ctx as *LimitedReader;
+    const auto n = l.source.read(out[0..min(out.len, l.remaining)])?;
+    l.remaining -= n;
+    return n;
+}
+
+struct BufferedReader {
+    Reader source;
+    u8[] buffer;
+    i64 start;
+    i64 end;
+    static !Self init(Reader source, u8[] buffer) {
+        if (buffer.len == 0) { return error.InvalidArgument; }
+        return Self{ .source = source, .buffer = buffer };
+    }
+    Reader reader() { return Reader{ .ctx = this as *void, .read_fn = buffered_read }; }
+    !i64 read(u8[] out) {
+        if (out.len == 0) { return 0; }
+        if (this->start == this->end) {
+            this->start = 0;
+            this->end = this->source.read(this->buffer)?;
+            if (this->end == 0) { return 0; }
+        }
+        const auto n = min(out.len, this->end - this->start);
+        memmove(out.ptr, this->buffer.ptr + this->start, n as u64);
+        this->start += n;
+        return n;
+    }
+    /// The next byte, or -1 at EOF, without consuming it.
+    !i64 peek() {
+        if (this->start == this->end) {
+            this->start = 0;
+            this->end = this->source.read(this->buffer)?;
+            if (this->end == 0) { return -1; }
+        }
+        return this->buffer[this->start] as i64;
+    }
+    !i64 read_byte() {
+        const auto b = this->peek()?;
+        if (b >= 0) { this->start += 1; }
+        return b;
+    }
+}
+!i64 buffered_read(void* ctx, u8[] out) { return (ctx as *BufferedReader).read(out); }
+
+/// Copies to a Writer using caller-owned nonempty scratch storage.
+!i64 copy(Reader* source, Writer* dest, u8[] scratch) {
+    if (scratch.len == 0) { return error.InvalidArgument; }
+    i64 total = 0;
+    while (true) {
+        const auto n = source.read(scratch)?;
+        if (n == 0) { return total; }
+        if (total > 9223372036854775807 - n) { return error.Overflow; }
+        dest.write(scratch[0..n])?;
+        total += n;
+    }
+}

@@ -1,3 +1,5 @@
+import "std/io" as io;
+
 // TCP networking.
 //   import "std/net" as net;
 //   auto l = net::listen("127.0.0.1", 8080)?;      // port 0 picks a free one: l.port()
@@ -110,6 +112,8 @@ struct Conn {
         auto w = this->writer();
         return w.put(f);
     }
+
+    io::Reader reader() { return io::Reader{ .ctx = this as *void, .read_fn = conn_reader_read }; }
 
     Writer writer() { return Writer{ .ctx = this as *void, .write_fn = conn_write }; }
 
@@ -270,3 +274,5 @@ struct Reader {
         }
     }
 }
+
+!i64 conn_reader_read(void* ctx, u8[] out) { return (ctx as *Conn).read(out); }
