@@ -36,6 +36,14 @@ Like everything in Zark, nothing here allocates on its own: functions that retur
 
 `csv::Reader` reads records incrementally, including quoted fields, commas, and embedded newlines. `field(i)` returns a slice valid until the next `next()` or `deinit()`. Set `max_bytes` and `max_fields` to positive values to bound a record's decoded data and field count; zero means unlimited. The reader cannot resume after an error. `csv::write_record` writes a record to a `Writer`; a failed write may leave a partial record. See `examples/csv_summary.zk` for file input.
 
+### Processes, collections, and binary streams
+
+`os::Child::spawn(a, argv)` starts a process with inherited standard streams. `wait()` reaps it, and `signal(sig)` sends a signal. Call `deinit()` once: it kills and reaps the direct child if it has not been reaped. An exec failure exits with code 127; do not call `waitpid` for the same PID elsewhere. On a failure after spawning, `exec_with` terminates and reaps the direct child.
+
+`collections::BitSet::init(a, n)` makes a set of `n` bits. `set`, `contains`, `count`, `clear`, `union_with`, and `intersect_with` check indices and sizes. `collections::Pool<T>::init(a, block_size, cleanup)` gives stable object pointers from blocks; `release` scans the pool and calls `cleanup`, as does `deinit` for remaining objects. A pointer becomes invalid on release: after a slot is reused, an old pointer cannot be distinguished from a new one. The pool is not thread-safe; `FixedBuf` can provide caller-owned storage.
+
+`io::read_to_end` appends up to a given limit; on overflow it consumes one additional byte and returns `error.StreamTooLong`. Already appended data remains on error. `std/binary_io` reads and writes 1–8 byte integers in an explicit byte order over `io::Reader` and `Writer`.
+
 ## `std/fs`
 
 ```zark run

@@ -74,6 +74,10 @@ What the compiler does not see: threads kept in a list or an array (join them in
 | `WaitGroup` | `add(n)`, `done()`, `wait()` |
 | `Channel<T>` | a bounded queue: `Channel<T>::create(a, capacity)`, `send(v)`, `recv()`, `try_recv()`, `close()`, `destroy()` |
 
+`Semaphore` starts with no permits in its zero value; use `wait`, `try_wait`, `post`, and `deinit`. `RwLock<T>` has `read_lock`/`read_unlock` and `write_lock`/`write_unlock`; do not modify the value through a read pointer. Waiting writers have priority, so readers may be delayed. Do not copy or move these locks after first use; call `deinit` only after all users stop.
+
+`Channel.try_send(&value)` does not wait for queue capacity. On success it moves the value into the channel; do not use the original afterwards. On `error.Full` or `error.Closed`, the caller retains ownership. Drain resource values before `destroy`.
+
 `parallel_for(n, threads, body)` calls `body(i)` for every `i` in `0..n`, split over `threads` threads (0 means one per CPU), and returns when all are done. Locks, channels and wait groups must not be copied once used: share them through a pointer (a channel is created on the heap for that reason).
 
 ```zark run

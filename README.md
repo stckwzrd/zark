@@ -239,6 +239,8 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 `std/io` offers composable readers for memory, files and connections. `MemoryReader`, `LimitedReader`, and `BufferedReader` use caller-owned state and buffers; `copy` transfers bytes to an existing `Writer`. The adapter, its source, and its buffer must stay alive and in place while used.
 
+`io::read_to_end(reader, out, limit)` appends at most `limit` bytes to a caller-owned list. If the input is longer, it returns `error.StreamTooLong` after consuming one additional byte; an error leaves already appended data in the list. `std/binary_io` reads and writes 1–8 byte integers over `io::Reader` and `Writer`, with an explicit byte order.
+
 `std/csv` reads records incrementally from an `io::Reader` and writes them to a `Writer`. Quoted fields can contain commas, quotes, and newlines. Field slices remain valid until the next `next()` call or `deinit()`. Set `max_bytes` and `max_fields` to bound record storage (zero means unlimited). An invalid record or I/O error leaves the CSV reader in a failed state. Run `build/zark run examples/csv_summary.zk -- examples/sample.csv` to try it with the included sample.
 
 `std/file` provides buffered streaming file I/O through `File::open_read` and `File::create`. Call `close()` once per file; use `flush()` to detect write errors before closing. `read(buf)` returns the number of bytes read (zero at EOF for a nonempty buffer). `read_line(&out)` appends to a `List<u8>`, excludes the newline, and returns false only at EOF before a line starts. Clear the list between lines; a final line without a newline is returned normally. On an allocation error, the list may contain a partial line and the input has advanced.
@@ -261,7 +263,13 @@ import "std/binary" as binary;
 }
 ```
 
+`os::Child::spawn(a, argv)` starts a process with inherited standard streams. Call `wait()` once to reap it, or `signal(sig)` to send a signal; call `deinit()` once in either case. If still owned and not reaped, `deinit()` sends SIGKILL and waits for the direct child. A failure to execute the program results in exit code 127; do not reap the same PID elsewhere. `os::exec_with` captures output and, on errors after spawning, terminates and reaps the direct child.
+
 `std/thread` also provides `AtomicU64` and `AtomicBool` (sequentially consistent, like `AtomicI64`), `Arc<T>` for shared ownership, and `Locked<T>` for a value protected by a mutex. Share atomics by pointer and use their methods for every access.
+
+`Semaphore` provides `wait()`, `try_wait()`, `post()` and `deinit()`; its zero value has no permits. `RwLock<T>` provides `read_lock`/`read_unlock` and `write_lock`/`write_unlock`; do not mutate the pointer from a read lock. Waiting writers have priority, so sustained writers may delay readers. Do not copy or move these locks after first use; deinitialize only after all users have stopped and clean up any contained resources separately.
+
+`Channel<T>.try_send(&value)` does not wait for queue capacity. On success it moves `value` to the channel; do not use the original afterwards. On `error.Full` or `error.Closed`, the caller still owns the value. Drain queued resource values before destroying a channel.
 
 `Arc<T>::init(a, value, cleanup)` takes ownership of `value` and uses the explicit allocator `a`. Each `clone()` creates an owner that must call `deinit()` once; the last owner calls `cleanup(T*)` if non-null. On allocation failure, `init` calls `cleanup` before returning the error. Pass a cleanup function for a resource-owning value. A pointer from `get()` is valid only while an owner remains alive; do not race `get()` or `clone()` against `deinit()` on the same owner. `Arc` does not synchronize access to the value.
 
@@ -289,6 +297,10 @@ import "std/smart" as smart;
     println(*boxed.get());
 }
 ```
+
+`BitSet::init(a, n)` owns `n` bits; `set`, `contains`, `count`, `clear`, `union_with` and `intersect_with` operate on them. Binary operations require equal lengths.
+
+`Pool<T>::init(a, block_size, cleanup)` allocates fixed-size blocks on demand. `acquire(value)` moves a value into a slot and returns a pointer that stays valid until `release` or pool deinitialization. `release` scans the pool and calls `cleanup` if provided; a failed `acquire` also calls it. A stale pointer cannot be distinguished from a new object reusing the same slot. The pool is single-threaded. A `FixedBuf` allocator allows using caller-provided storage.
 
 `Deque<T>` in `std/collections` is a circular, growable queue. Initialize it with `Deque<T>::init(allocator, cleanup)`, then use `push_front`, `push_back`, `pop_front`, `pop_back`, `front`, `back`, `len`, `is_empty`, `clear`, and `iter`. As with `LinkedList`, a cleanup function releases resource elements left in the deque and the value passed to a failed push; popping transfers ownership to the caller. Pointers from `front`, `back`, and `iter` are invalid after any mutation or deinitialization. Iterators are structs and the compiler does not track their embedded pointers.
 
