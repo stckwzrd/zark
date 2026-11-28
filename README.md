@@ -237,6 +237,10 @@ const auto s = bprint(line[..], "n = {xs.len}")?;   // formatting into your own 
 
 `std/fs` (directories, walking, copying), `std/path`, `std/time` (`DateTime`, ISO 8601, `Stopwatch`), `std/os` (run programs and capture output, environment), `std/args` (command-line options), `std/json` (parse with error positions, build, print), `std/net` (TCP), `std/http` (client and server), `std/thread` (threads, `Mutex`, `Channel<T>`), `std/async` (a single-threaded executor with timers and TCP on epoll or kqueue). See the guide page "Standard modules".
 
+`std/io` offers composable readers for memory, files and connections. `MemoryReader`, `LimitedReader`, and `BufferedReader` use caller-owned state and buffers; `copy` transfers bytes to an existing `Writer`. The adapter, its source, and its buffer must stay alive and in place while used.
+
+`std/csv` reads records incrementally from an `io::Reader` and writes them to a `Writer`. Quoted fields can contain commas, quotes, and newlines. Field slices remain valid until the next `next()` call or `deinit()`. Set `max_bytes` and `max_fields` to bound record storage (zero means unlimited). An invalid record or I/O error leaves the CSV reader in a failed state. The `examples/csv_summary.zk` program demonstrates reading a file.
+
 `std/file` provides buffered streaming file I/O through `File::open_read` and `File::create`. Call `close()` once per file; use `flush()` to detect write errors before closing. `read(buf)` returns the number of bytes read (zero at EOF for a nonempty buffer). `read_line(&out)` appends to a `List<u8>`, excludes the newline, and returns false only at EOF before a line starts. Clear the list between lines; a final line without a newline is returned normally. On an allocation error, the list may contain a partial line and the input has advanced.
 
 `std/binary` provides `Reader` and `Writer` over caller-owned byte slices. `read_uint(bytes, order)` and `write_uint(value, bytes, order)` support widths from 1 to 8 and `.Little` or `.Big` byte order. Bounds and value width are checked, and errors leave the cursor unchanged.

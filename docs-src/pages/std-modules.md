@@ -16,6 +16,8 @@ Always give a module a name with `as`: its functions are then written `fs::list_
 
 | Module | What is in it |
 |---|---|
+| `std/io` | readers for memory, files and connections; buffering and bounded input |
+| `std/csv` | streaming CSV records |
 | `std/fs` | file metadata, directories, walking a tree, copying, moving, removing, temporary directories |
 | `std/path` | path strings: `join`, `base`, `dir`, `ext`, `stem`, `normalize`, `relative`, `absolute` |
 | `std/time` | wall clock, `DateTime` with time zones, parsing and printing ISO 8601, `Stopwatch`, `sleep_ms` |
@@ -27,6 +29,12 @@ Always give a module a name with `as`: its functions are then written `fs::list_
 | `std/thread` | threads, `Mutex`, `Cond`, `WaitGroup`, `Channel<T>` |
 
 Like everything in Zark, nothing here allocates on its own: functions that return new strings or lists take an `Allocator`, and the results have a `deinit()` or are freed with that allocator.
+
+## `std/io` and `std/csv`
+
+`io::Reader` reads bytes from memory, files, or network connections. `File` and `Conn` have a `reader()` method; `File` also has `writer()`. `MemoryReader`, `LimitedReader`, and `BufferedReader` borrow their sources and buffers: keep them alive and in place while reading. `io::copy` copies to a `Writer` using caller-owned scratch storage.
+
+`csv::Reader` reads records incrementally, including quoted fields, commas, and embedded newlines. `field(i)` returns a slice valid until the next `next()` or `deinit()`. Set `max_bytes` and `max_fields` to positive values to bound a record's decoded data and field count; zero means unlimited. The reader cannot resume after an error. `csv::write_record` writes a record to a `Writer`; a failed write may leave a partial record. See `examples/csv_summary.zk` for file input.
 
 ## `std/fs`
 

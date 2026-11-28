@@ -66,12 +66,9 @@ backtrace:
   #0 0x… in .zark-cache/main
   #1 0x… in .zark-cache/main
   #2 0x… in &lt;libc&gt;
-  #3 0x… in &lt;libc&gt;
-  #4 0x… in .zark-cache/main
 where (addr2line):
 main at main.zk:3
 main at ??:?
-_start at ??:?
 error: error.Signaled</code></pre></div></div>
 <p>Writing into a literal crashes the program. Copy into a buffer.</p>
 <h3 id="str-is-bytes-not-characters"><a class="anchor" href="#str-is-bytes-not-characters">#</a><code>str</code> is bytes, not characters</h3>
