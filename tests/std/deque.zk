@@ -1,0 +1,61 @@
+import "std/collections" as collections;
+
+struct Item { i64* cleaned; i64 value; }
+void cleanup_item(Item* item) { *item.cleaned += 1; }
+void cleanup_list(List<i64>*item) { item.deinit(); }
+
+test "deque wraps grows and iterates in order" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto q = collections::Deque<i64>::init(dbg.allocator(), null);
+        defer q.deinit();
+        assert(q.is_empty() && q.front() == null && q.back() == null);
+        _ = q.pop_front() catch |e| { assert(e == error.Empty); 0 };
+        for (auto i : 0..8) { q.push_back(i)?; }
+        for (auto i : 0..5) { assert(q.pop_front()? == i); }
+        for (auto i : 8..13) { q.push_back(i)?; }
+        q.push_front(4)?;
+        assert(q.len == 9 && *q.front() == 4 && *q.back() == 12);
+        auto expected = 4;
+        for (auto value : q.iter()) { assert(*value == expected); expected += 1; }
+        assert(expected == 13);
+        for (auto i : 4..13) { assert(q.pop_front()? == i); }
+        q.push_front(7)?;
+        assert(q.pop_back()? == 7 && q.is_empty());
+    }
+    dbg.deinit()?;
+}
+
+test "deque cleans up failures and remaining values" {
+    auto dbg = DebugAllocator::init();
+    auto cleaned = 0;
+    {
+        auto q = collections::Deque<Item>::init(dbg.allocator(), cleanup_item);
+        defer q.deinit();
+        for (auto i : 0..8) { q.push_back(Item{ .cleaned = &cleaned, .value = i })?; }
+        dbg.fail_after_n(0);
+        q.push_front(Item{ .cleaned = &cleaned }) catch |e| { assert(e == error.OutOfMemory); };
+        assert(q.len == 8 && cleaned == 1);
+        const auto removed = q.pop_back()?;
+        assert(removed.value == 7 && cleaned == 1);
+    }
+    assert(cleaned == 8);
+    dbg.deinit()?;
+}
+
+test "deque moves resource elements during growth" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto q = collections::Deque<List<i64>>::init(dbg.allocator(), cleanup_list);
+        defer q.deinit();
+        for (auto i : 0..10) {
+            auto item = List<i64>::init(dbg.allocator());
+            item.push(i)?;
+            q.push_back(item)?;
+        }
+        auto last = q.pop_back()?;
+        assert(last.get(0) == 9);
+        last.deinit();
+    }
+    dbg.deinit()?;
+}

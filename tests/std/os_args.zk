@@ -77,3 +77,85 @@ test "run frees argument copies when allocation fails" {
         panic("expected allocation failure");
     }
 }
+
+extern i32 fcntl(i32 fd, i32 cmd, ...);
+
+i64 count_open_fds() {
+    auto count = 0;
+    for (auto i : 0..1024) { if (fcntl(i as i32, 1) >= 0) { count += 1; } }
+    return count;
+}
+
+test "exec cleans up descriptors on output allocation failure" {
+    const auto before = count_open_fds();
+    auto dbg = DebugAllocator::init();
+    dbg.fail_after_n(4);
+    auto failed = false;
+    auto result = os::exec(dbg.allocator(), ["sh", "-c", "printf x"]) catch |e| {
+        failed = e == error.OutOfMemory;
+        os::Output{}
+    };
+    if (!failed) { result.deinit(); }
+    assert(failed);
+    assert(count_open_fds() == before);
+    dbg.deinit()?;
+}
+
+test "exec cleans up failed output transfers and reaps the child" {
+    for (auto fail : 4..8) {
+        const auto before = count_open_fds();
+        auto dbg = DebugAllocator::init();
+        dbg.fail_after_n(fail);
+        auto failed = false;
+        auto result = os::exec(dbg.allocator(), ["sh", "-c", "printf x; printf y >&2"]) catch |e| {
+            failed = e == error.OutOfMemory;
+            os::Output{}
+        };
+        if (!failed) { result.deinit(); }
+        assert(failed);
+        assert(count_open_fds() == before);
+        i32 child_status = 0;
+        assert(waitpid(-1, &child_status, 1) < 0);
+        dbg.deinit()?;
+    }
+}
+
+test "exec tolerates child closing stdin early" {
+    const auto a = c_allocator();
+    const auto input = str_repeat(a, "x", 300000)?;
+    defer a.free(input);
+    auto r = os::exec_with(a, os::Command{ .argv = ["sh", "-c", "exit 0"], .input = input })?;
+    defer r.deinit();
+    assert(r.code == 0);
+}
+
+test "exec drains output while sending large input" {
+    const auto a = c_allocator();
+    const auto input = str_repeat(a, "x", 300000)?;
+    defer a.free(input);
+    auto r = os::exec_with(a, os::Command{ .argv = ["sh", "-c", "head -c 300000 /dev/zero; cat >/dev/null"], .input = input })?;
+    defer r.deinit();
+    assert(r.code == 0 && r.out.len == 300000);
+}
+
+test "owned child waits and can be explicitly signalled" {
+    auto first = os::Child::spawn(c_allocator(), ["sh", "-c", "exit 7"])?;
+    defer first.deinit();
+    assert(first.wait()? == 7);
+    auto twice = false;
+    _ = first.wait() catch |e| { twice = e == error.AlreadyWaited; 0 };
+    assert(twice);
+    auto second = os::Child::spawn(c_allocator(), ["sh", "-c", "exec sleep 30"])?;
+    defer second.deinit();
+    second.signal(15)?;
+    assert(second.wait()? == 143);
+}
+
+test "owned child is reaped when released" {
+    {
+        auto child = os::Child::spawn(c_allocator(), ["sh", "-c", "exec sleep 30"])?;
+        child.deinit();
+    }
+    i32 status = 0;
+    assert(waitpid(-1, &status, 1) < 0);
+}

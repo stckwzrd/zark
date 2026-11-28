@@ -1,0 +1,6 @@
+name,city,note
+Alice,Berlin,Reads Zark
+Bob,"New York, NY","Likes CSV, parsers and streams"
+Clara,Munich,"Says ""hello"""
+Dani,Hamburg,"A note spanning
+two lines"

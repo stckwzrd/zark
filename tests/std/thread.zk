@@ -193,3 +193,116 @@ test "parallel_for and timed waits" {
     assert(!c.wait_ms(&m, 20));
     m.unlock();
 }
+
+test "channel try_send preserves caller value on full and closed" {
+    auto dbg = DebugAllocator::init();
+    {
+        const auto ch = thread::Channel<List<i64>>::create(dbg.allocator(), 1)?;
+        defer ch.destroy();
+        auto first = List<i64>::init(dbg.allocator());
+        first.push(7)?;
+        ch.try_send(&first)?;
+        auto second = List<i64>::init(dbg.allocator());
+        second.push(9)?;
+        auto full = false;
+        ch.try_send(&second) catch |e| { full = e == error.Full; };
+        assert(full && second.get(0) == 9);
+        auto got = ch.recv()?;
+        assert(got.get(0) == 7);
+        got.deinit();
+        ch.close();
+        auto closed = false;
+        ch.try_send(&second) catch |e| { closed = e == error.Closed; };
+        assert(closed && second.get(0) == 9);
+        second.deinit();
+    }
+    dbg.deinit()?;
+}
+
+test "semaphore controls parallel access" {
+    auto sem = thread::Semaphore{};
+    defer sem.deinit();
+    assert(!sem.try_wait());
+    sem.post()?;
+    sem.post()?;
+    assert(sem.try_wait() && sem.try_wait() && !sem.try_wait());
+    sem.post()?;
+    sem.post()?;
+    auto active = thread::AtomicI64{};
+    auto done = thread::AtomicI64{};
+    thread::Thread[6] threads;
+    for (auto i : 0..6) {
+        threads[i] = thread::spawn([&sem, &active, &done]() -> void {
+            for (auto n : 0..500) {
+                sem.wait();
+                const auto before = active.add(1);
+                assert(before >= 0 && before < 2);
+                thread::yield();
+                active.add(-1);
+                done.add(1);
+                sem.post() catch panic("semaphore overflow");
+            }
+        })?;
+    }
+    for (auto i : 0..6) { threads[i].join(); }
+    assert(done.load() == 3000 && active.load() == 0);
+    assert(sem.try_wait() && sem.try_wait() && !sem.try_wait());
+}
+
+test "reader writer lock allows shared reads and exclusive writes" {
+    auto rw = thread::RwLock<i64>{ .value = 5 };
+    defer rw.deinit();
+    const auto first = rw.read_lock();
+    const auto second = rw.read_lock();
+    assert(*first == 5 && *second == 5);
+    rw.read_unlock();
+    rw.read_unlock();
+    const auto write = rw.write_lock();
+    *write = 10;
+    rw.write_unlock();
+    auto started = thread::AtomicBool{};
+    auto entered = thread::AtomicBool{};
+    const auto held = rw.read_lock();
+    auto t = thread::spawn([&rw, &started, &entered]() -> void {
+        started.store(true);
+        const auto p = rw.write_lock();
+        entered.store(true);
+        *p += 1;
+        rw.write_unlock();
+    })?;
+    while (!started.load()) { thread::yield(); }
+    assert(!entered.load() && *held == 10);
+    rw.read_unlock();
+    t.join();
+    assert(entered.load());
+    const auto result = rw.read_lock();
+    assert(*result == 11);
+    rw.read_unlock();
+}
+
+test "semaphore reports permit overflow" {
+    auto sem = thread::Semaphore{ .permits = 9223372036854775807 };
+    defer sem.deinit();
+    auto overflow = false;
+    sem.post() catch |e| { overflow = e == error.Overflow; };
+    assert(overflow && sem.try_wait());
+}
+
+test "reader writer lock protects concurrent increments" {
+    auto rw = thread::RwLock<i64>{};
+    defer rw.deinit();
+    thread::Thread[4] workers;
+    for (auto i : 0..4) {
+        workers[i] = thread::spawn([&rw]() -> void {
+            for (auto n : 0..1000) {
+                const auto v = rw.write_lock();
+                *v += 1;
+                rw.write_unlock();
+            }
+        })?;
+    }
+    for (auto i : 0..4) { workers[i].join(); }
+    const auto v = rw.read_lock();
+    assert(*v == 4000);
+    rw.read_unlock();
+}

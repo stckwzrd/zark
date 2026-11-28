@@ -19,6 +19,7 @@ extern i32 vrt_cond_wait(Cond* c, Mutex* m);
 extern i32 vrt_cond_timedwait(Cond* c, Mutex* m, Timespec* abstime);
 extern i32 vrt_cond_signal(Cond* c);
 extern i32 vrt_cond_broadcast(Cond* c);
+extern i32 vrt_cond_destroy(Cond* c);
 extern u64 vrt_fetch_add64(u64* p, u64 v);
 extern u64 vrt_swap64(u64* p, u64 v);
 extern u64 vrt_cas64(u64* p, u64 expected, u64 desired);
@@ -151,6 +152,55 @@ struct Locked<T> {
     void deinit() { _ = vrt_mutex_destroy(&this->mutex); }
 }
 
+/// Reader/writer lock for a value. Readers must not modify the returned pointer.
+/// Do not copy or move after first use. Writers have priority over new readers.
+struct RwLock<T> {
+    Mutex m;
+    Cond c;
+    i64 readers;
+    i64 waiting_writers;
+    bool writer;
+    T value;
+
+    T* read_lock() {
+        this->m.lock();
+        while (this->writer || this->waiting_writers > 0) { this->c.wait(&this->m); }
+        assert(this->readers < 9223372036854775807);
+        this->readers += 1;
+        this->m.unlock();
+        return &this->value;
+    }
+    void read_unlock() {
+        this->m.lock();
+        assert(this->readers > 0);
+        this->readers -= 1;
+        if (this->readers == 0) { this->c.broadcast(); }
+        this->m.unlock();
+    }
+    T* write_lock() {
+        this->m.lock();
+        assert(this->waiting_writers < 9223372036854775807);
+        this->waiting_writers += 1;
+        while (this->writer || this->readers > 0) { this->c.wait(&this->m); }
+        this->waiting_writers -= 1;
+        this->writer = true;
+        this->m.unlock();
+        return &this->value;
+    }
+    void write_unlock() {
+        this->m.lock();
+        assert(this->writer);
+        this->writer = false;
+        this->c.broadcast();
+        this->m.unlock();
+    }
+    /// Call only after all users have stopped and the lock is unlocked.
+    void deinit() {
+        _ = vrt_cond_destroy(&this->c);
+        _ = vrt_mutex_destroy(&this->m);
+    }
+}
+
 struct ArcBlock<T> {
     AtomicI64 refs;
     AtomicI64 weak;
@@ -249,6 +299,45 @@ struct WaitGroup {
     }
 }
 
+/// A counting semaphore. The zero value starts with no permits. Do not copy or move
+/// after first use; deinit only after all users and waiters have stopped.
+struct Semaphore {
+    Mutex m;
+    Cond c;
+    i64 permits;
+
+    void wait() {
+        this->m.lock();
+        while (this->permits == 0) { this->c.wait(&this->m); }
+        this->permits -= 1;
+        this->m.unlock();
+    }
+
+    bool try_wait() {
+        this->m.lock();
+        if (this->permits == 0) { this->m.unlock(); return false; }
+        this->permits -= 1;
+        this->m.unlock();
+        return true;
+    }
+
+    !void post() {
+        this->m.lock();
+        if (this->permits == 9223372036854775807) {
+            this->m.unlock();
+            return error.Overflow;
+        }
+        this->permits += 1;
+        this->c.signal();
+        this->m.unlock();
+    }
+
+    void deinit() {
+        _ = vrt_cond_destroy(&this->c);
+        _ = vrt_mutex_destroy(&this->m);
+    }
+}
+
 // ---------------------------------------------------------------- channels
 
 /// A bounded queue between threads. Create it with `Channel<T>::create(a, capacity)` and share
@@ -287,6 +376,19 @@ struct Channel<T> {
             return error.Closed;
         }
         this->buf[(this->head + this->len) % this->buf.len] = v;
+        this->len += 1;
+        this->not_empty.signal();
+        this->m.unlock();
+    }
+
+    /// Nonblocking send. On success, moves *value into the channel. On Full or
+    /// Closed, leaves *value owned by the caller. Do not use it after success.
+    !void try_send(T* value) {
+        if (value == null) { return error.InvalidArgument; }
+        this->m.lock();
+        if (this->closed) { this->m.unlock(); return error.Closed; }
+        if (this->len == this->buf.len) { this->m.unlock(); return error.Full; }
+        this->buf[(this->head + this->len) % this->buf.len] = move_out(value);
         this->len += 1;
         this->not_empty.signal();
         this->m.unlock();

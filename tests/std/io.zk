@@ -1,0 +1,91 @@
+import "std/io" as io;
+import "std/file" as file;
+import "std/fs" as fs;
+import "std/path" as path;
+
+!i64 invalid_reader(void* ctx, u8[] out) { return out.len + 1; }
+
+test "memory and limited readers preserve remaining input" {
+    auto mem = io::MemoryReader::init("abcdef");
+    auto limited = io::LimitedReader::init(mem.reader(), 3)?;
+    auto r = limited.reader();
+    u8[4] out;
+    assert(r.read(out[..])? == 3 && out[0..3] == "abc");
+    assert(r.read(out[..])? == 0);
+    auto rest = mem.reader();
+    rest.read_exact(out[0..3])?;
+    assert(out[0..3] == "def");
+    auto ended = false;
+    rest.read_exact(out[0..1]) catch |e| { ended = e == error.EndOfStream; };
+    assert(ended);
+    auto bad = io::Reader{ .ctx = null, .read_fn = invalid_reader };
+    auto invalid = false;
+    _ = bad.read(out[..]) catch |e| { invalid = e == error.InvalidRead; 0 };
+    assert(invalid);
+}
+
+test "buffered reader peeks across buffer boundaries" {
+    auto mem = io::MemoryReader::init("abcd");
+    u8[2] buf;
+    auto r = io::BufferedReader::init(mem.reader(), buf[..])?;
+    assert(r.peek()? == 'a' && r.peek()? == 'a');
+    for (auto b : "abcd") { assert(r.read_byte()? == b as i64); }
+    assert(r.read_byte()? == -1 && r.peek()? == -1);
+}
+
+test "buffered reader composes with limited copy into a file" {
+    const auto a = c_allocator();
+    const auto dir = fs::temp_dir(a, "zark-io-copy")?;
+    defer a.free(dir);
+    defer fs::remove_all(a, dir) catch |e| {};
+    const auto name = path::join(a, [dir, "data"])?;
+    defer a.free(name);
+    {
+        auto fileout = file::File::create(name)?;
+        defer fileout.close() catch |e| {};
+        auto output = fileout.writer();
+        auto mem = io::MemoryReader::init("abcdefgh");
+        auto limited = io::LimitedReader::init(mem.reader(), 5)?;
+        u8[2] buffer;
+        auto buffered = io::BufferedReader::init(limited.reader(), buffer[..])?;
+        auto input = buffered.reader();
+        u8[3] scratch;
+        assert(io::copy(&input, &output, scratch[..])? == 5);
+        assert(mem.pos == 5);
+        fileout.flush()?;
+    }
+    auto filein = file::File::open_read(name)?;
+    defer filein.close() catch |e| {};
+    auto input = filein.reader();
+    u8[5] contents;
+    input.read_exact(contents[..])?;
+    assert(contents[..] == "abcde");
+}
+
+test "read_to_end limits output and reports overflow" {
+    auto mem = io::MemoryReader::init("abcdef");
+    auto reader = mem.reader();
+    auto out = List<u8>::init(c_allocator());
+    defer out.deinit();
+    auto too_long = false;
+    _ = io::read_to_end(&reader, &out, 4) catch |e| { too_long = e == error.StreamTooLong; 0 };
+    assert(too_long && out.slice() == "abcd" && mem.pos == 5);
+    auto rest = mem.reader();
+    assert(io::read_to_end(&rest, &out, 1)? == 1 && out.slice() == "abcdf");
+    assert(io::read_to_end(&rest, &out, 0)? == 0);
+}
+
+test "read_to_end preserves partial output on allocation failure" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto mem = io::MemoryReader::init("abcd");
+        auto reader = mem.reader();
+        auto out = List<u8>::init(dbg.allocator());
+        defer out.deinit();
+        dbg.fail_after_n(0);
+        auto failed = false;
+        _ = io::read_to_end(&reader, &out, 10) catch |e| { failed = e == error.OutOfMemory; 0 };
+        assert(failed && out.len == 0 && mem.pos == 4);
+    }
+    dbg.deinit()?;
+}

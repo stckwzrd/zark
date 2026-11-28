@@ -1,0 +1,26 @@
+import "std/io" as io;
+import "std/binary_io" as binary_io;
+
+!void append_bytes(void* ctx, str bytes) { return (ctx as *List<u8>).append(bytes); }
+
+test "binary stream handles widths, endian, and bounds" {
+    auto data = List<u8>::init(c_allocator());
+    defer data.deinit();
+    auto w = Writer{ .ctx = &data as *void, .write_fn = append_bytes };
+    binary_io::write_uint(&w, 0x1234, 2, .Big)?;
+    binary_io::write_uint(&w, 0x12345678, 4, .Little)?;
+    assert(data.slice() == "\x12\x34\x78\x56\x34\x12");
+    auto overflow = false;
+    binary_io::write_uint(&w, 256, 1, .Big) catch |e| { overflow = e == error.Overflow; };
+    assert(overflow && data.len == 6);
+    auto mem = io::MemoryReader::init(data.slice());
+    auto r = mem.reader();
+    assert(binary_io::read_uint(&r, 2, .Big)? == 0x1234);
+    assert(binary_io::read_uint(&r, 4, .Little)? == 0x12345678);
+    auto ended = false;
+    _ = binary_io::read_uint(&r, 1, .Big) catch |e| { ended = e == error.EndOfStream; 0 };
+    assert(ended);
+    auto invalid = false;
+    _ = binary_io::read_uint(&r, 9, .Big) catch |e| { invalid = e == error.InvalidWidth; 0 };
+    assert(invalid && mem.pos == 6);
+}

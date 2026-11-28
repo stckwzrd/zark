@@ -22,6 +22,10 @@ const auto STD_COLLECTIONS = embed("../std/collections.zk");
 const auto STD_SMART = embed("../std/smart.zk");
 const auto STD_FILE = embed("../std/file.zk");
 const auto STD_BINARY = embed("../std/binary.zk");
+const auto STD_ENCODING = embed("../std/encoding.zk");
+const auto STD_IO = embed("../std/io.zk");
+const auto STD_CSV = embed("../std/csv.zk");
+const auto STD_BINARY_IO = embed("../std/binary_io.zk");
 
 /// the embedded source of "<std>/name.zk"
 !str std_source(Allocator a, str path) {
@@ -52,6 +56,10 @@ const auto STD_BINARY = embed("../std/binary.zk");
         "<std>/smart.zk" => return STD_SMART;
         "<std>/file.zk" => return STD_FILE;
         "<std>/binary.zk" => return STD_BINARY;
+        "<std>/encoding.zk" => return STD_ENCODING;
+        "<std>/io.zk" => return STD_IO;
+        "<std>/csv.zk" => return STD_CSV;
+        "<std>/binary_io.zk" => return STD_BINARY_IO;
     }
     return error.NotFound;
 }
@@ -190,7 +198,7 @@ struct Loader {
         }
         if (is_std_path(path)) {
             const auto ssrc = std_source(this->a, path) catch {
-                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread, async, collections, smart, file, binary, builtin)");
+                eprintln("error: there is no standard module '{path[6..path.len - 5]}' (available: fs, path, time, json, args, os, net, http, thread, async, collections, smart, file, binary, binary_io, encoding, io, csv, builtin)");
                 return error.CompileFailed;
             };
             if (diag_files.a.alloc_fn == null) { diag_files = Map<str>::init(c_allocator()); }

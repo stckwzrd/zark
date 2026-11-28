@@ -1,0 +1,65 @@
+import "std/encoding" as encoding;
+
+test "hex encodes arbitrary bytes and decodes either case" {
+    u8[5] bytes = [0, 1, 127, 128, 255];
+    u8[10] text;
+    assert(encoding::hex_encode(bytes[..], text[..])? == "00017f80ff");
+    u8[5] decoded;
+    assert(encoding::hex_decode("00017F80fF", decoded[..])? == bytes[..]);
+    assert(encoding::hex_encode("", text[..])? == "");
+    assert(encoding::hex_decode("", decoded[..])?.len == 0);
+}
+
+test "hex rejects invalid input without writing" {
+    u8[2] out = [42, 43];
+    _ = encoding::hex_decode("0x", out[..]) catch |e| { assert(e == error.InvalidHex); out[0..0] };
+    assert(out[0] == 42 && out[1] == 43);
+    _ = encoding::hex_decode("f", out[..]) catch |e| { assert(e == error.InvalidHex); out[0..0] };
+    _ = encoding::hex_decode("000102", out[..]) catch |e| { assert(e == error.NoSpace); out[0..0] };
+    _ = encoding::hex_encode("ab", out[..]) catch |e| { assert(e == error.NoSpace); out[0..0] };
+    assert(out[0] == 42 && out[1] == 43);
+}
+
+test "hex round-trips every byte" {
+    u8[256] values;
+    u8[512] text;
+    u8[256] decoded;
+    for (auto i : 0..256) { values[i] = i as u8; }
+    const auto hex = encoding::hex_encode(values[..], text[..])?;
+    const auto result = encoding::hex_decode(hex, decoded[..])?;
+    for (auto i : 0..256) { assert(result[i] == values[i]); }
+}
+
+test "base64 standard vectors" {
+    u8[20] output;
+    u8[20] decoded;
+    str[7] plain = ["", "f", "fo", "foo", "foob", "fooba", "foobar"];
+    str[7] encoded = ["", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy"];
+    for (auto source : plain, auto expected : encoded) {
+        assert(encoding::base64_encode(source, output[..])? == expected);
+        assert(encoding::base64_decode(expected, decoded[..])? == source);
+    }
+}
+
+test "base64 rejects malformed or noncanonical input without writing" {
+    u8[8] output = [42, 42, 42, 42, 42, 42, 42, 42];
+    for (auto invalid : ["Z", "Zg=", "Z===", "=m9v", "Zg=A", "Zg==Zm9v", "Zh==", "Zm9=", "Zm-v", "Zm v"]) {
+        auto failed = false;
+        _ = encoding::base64_decode(invalid, output[..]) catch |e| { failed = e == error.InvalidBase64; output[0..0] };
+        assert(failed);
+        for (auto b : output) { assert(b == 42); }
+    }
+    _ = encoding::base64_decode("Zm9v", output[0..2]) catch |e| { assert(e == error.NoSpace); output[0..0] };
+    _ = encoding::base64_encode("foo", output[0..3]) catch |e| { assert(e == error.NoSpace); output[0..0] };
+    for (auto b : output) { assert(b == 42); }
+}
+
+test "base64 round-trips every byte" {
+    u8[256] input;
+    u8[344] text;
+    u8[256] decoded;
+    for (auto i : 0..256) { input[i] = i as u8; }
+    const auto encoded = encoding::base64_encode(input[..], text[..])?;
+    const auto result = encoding::base64_decode(encoded, decoded[..])?;
+    for (auto i : 0..256) { assert(result[i] == input[i]); }
+}

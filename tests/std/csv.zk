@@ -1,0 +1,125 @@
+import "std/io" as io;
+import "std/csv" as csv;
+
+!void output_list(void* ctx, str data) { return (ctx as *List<u8>).append(data); }
+!i64 broken_input(void* ctx, u8[] out) { return error.IoError; }
+
+test "CSV reads records across tiny buffers" {
+    auto mem = io::MemoryReader::init("name,note,empty\r\nAlice,\"one,\"\"two\"\"\nthree\",\r\nBob,plain,last");
+    u8[1] buf;
+    auto reader = csv::Reader::init(c_allocator(), mem.reader(), buf[..])?;
+    defer reader.deinit();
+    assert(reader.next()? && reader.len() == 3);
+    assert(reader.field(0)? == "name" && reader.field(2)? == "empty");
+    assert(reader.next()? && reader.len() == 3);
+    assert(reader.field(0)? == "Alice" && reader.field(1)? == "one,\"two\"\nthree" && reader.field(2)? == "");
+    assert(reader.next()? && reader.field(0)? == "Bob" && reader.field(2)? == "last");
+    assert(!reader.next()? && !reader.next()?);
+}
+
+test "CSV writes and reads special fields" {
+    auto dbg = DebugAllocator::init();
+    {
+        auto data = List<u8>::init(dbg.allocator());
+        defer data.deinit();
+        auto w = Writer{ .ctx = &data as *void, .write_fn = output_list };
+        csv::write_record(&w, ["plain", "a,b", "say \"yes\"", "two\nlines", ""])?;
+        assert(data.slice() == "plain,\"a,b\",\"say \"\"yes\"\"\",\"two\nlines\",\r\n");
+        auto mem = io::MemoryReader::init(data.slice());
+        u8[3] buf;
+        auto r = csv::Reader::init(dbg.allocator(), mem.reader(), buf[..])?;
+        defer r.deinit();
+        assert(r.next()? && r.len() == 5);
+        assert(r.field(1)? == "a,b" && r.field(2)? == "say \"yes\"" && r.field(3)? == "two\nlines" && r.field(4)? == "");
+        assert(!r.next()?);
+    }
+    dbg.deinit()?;
+}
+
+test "CSV rejects malformed records and enforces limits" {
+    for (auto input : ["\"unterminated", "a\"b", "\"ok\"x", "a\rb"]) {
+        auto mem = io::MemoryReader::init(input);
+        u8[2] buf;
+        auto r = csv::Reader::init(c_allocator(), mem.reader(), buf[..])?;
+        defer r.deinit();
+        auto rejected = false;
+        _ = r.next() catch |e| { rejected = e == error.InvalidCsv; false };
+        assert(rejected);
+        auto unusable = false;
+        _ = r.next() catch |e| { unusable = e == error.InvalidState; false };
+        assert(unusable);
+    }
+    auto mem = io::MemoryReader::init("abcd\n");
+    u8[2] buf;
+    auto r = csv::Reader::init(c_allocator(), mem.reader(), buf[..])?;
+    defer r.deinit();
+    r.max_bytes = 3;
+    auto too_large = false;
+    _ = r.next() catch |e| { too_large = e == error.RecordTooLarge; false };
+    assert(too_large);
+}
+
+test "CSV handles empty records, limits and I/O errors" {
+    {
+        auto mem = io::MemoryReader::init("\n,\n\"\"\r\n");
+        u8[1] buf;
+        auto r = csv::Reader::init(c_allocator(), mem.reader(), buf[..])?;
+        defer r.deinit();
+        assert(r.next()? && r.len() == 1 && r.field(0)? == "");
+        assert(r.next()? && r.len() == 2 && r.field(0)? == "" && r.field(1)? == "");
+        assert(r.next()? && r.len() == 1 && r.field(0)? == "");
+        assert(!r.next()?);
+    }
+    {
+        auto mem = io::MemoryReader::init(",,\n");
+        u8[1] buf;
+        auto r = csv::Reader::init(c_allocator(), mem.reader(), buf[..])?;
+        defer r.deinit();
+        r.max_fields = 2;
+        auto limit = false;
+        _ = r.next() catch |e| { limit = e == error.TooManyFields; false };
+        assert(limit);
+    }
+    {
+        u8[1] buf;
+        auto source = io::Reader{ .read_fn = broken_input };
+        auto r = csv::Reader::init(c_allocator(), source, buf[..])?;
+        defer r.deinit();
+        auto failed = false;
+        _ = r.next() catch |e| { failed = e == error.IoError; false };
+        assert(failed);
+        auto unusable = false;
+        _ = r.next() catch |e| { unusable = e == error.InvalidState; false };
+        assert(unusable);
+    }
+}
+
+test "CSV allocation failures do not leak" {
+    for (auto fail : 0..4) {
+        auto dbg = DebugAllocator::init();
+        {
+            auto mem = io::MemoryReader::init("alpha,beta\n");
+            u8[2] buf;
+            auto r = csv::Reader::init(dbg.allocator(), mem.reader(), buf[..])?;
+            defer r.deinit();
+            dbg.fail_after_n(fail);
+            _ = r.next() catch |e| { assert(e == error.OutOfMemory); false };
+        }
+        dbg.deinit()?;
+    }
+}
+
+test "CSV round-trips every byte" {
+    u8[256] raw;
+    for (auto i : 0..256) { raw[i] = i as u8; }
+    auto output = List<u8>::init(c_allocator());
+    defer output.deinit();
+    auto w = Writer{ .ctx = &output as *void, .write_fn = output_list };
+    csv::write_record(&w, [raw[..]])?;
+    auto source = io::MemoryReader::init(output.slice());
+    u8[7] buffer;
+    auto r = csv::Reader::init(c_allocator(), source.reader(), buffer[..])?;
+    defer r.deinit();
+    assert(r.next()? && r.len() == 1 && r.field(0)? == raw[..]);
+    assert(!r.next()?);
+}

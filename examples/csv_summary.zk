@@ -1,0 +1,30 @@
+// Summarize a CSV file without loading it all into memory.
+// zark run examples/csv_summary.zk -- data.csv
+import "std/file" as file;
+import "std/csv" as csv;
+
+!void main() {
+    if (arg_count() != 2) {
+        eprintln("usage: csv_summary FILE.csv");
+        return error.InvalidArguments;
+    }
+    auto f = file::File::open_read(arg(1))?;
+    defer f.close() catch |e| {};
+    u8[4096] buffer;
+    auto rows = csv::Reader::init(c_allocator(), f.reader(), buffer[..])?;
+    defer rows.deinit();
+    rows.max_bytes = 4 * 1024 * 1024;
+    rows.max_fields = 10000;
+    if (!rows.next()?) { println("empty CSV file"); return; }
+    const auto columns = rows.len();
+    println("columns: {columns}");
+    for (auto i : 0..columns) { println("  {i + 1}: {rows.field(i)?}"); }
+    auto records = 0;
+    auto irregular = 0;
+    while (rows.next()?) {
+        records += 1;
+        if (rows.len() != columns) { irregular += 1; }
+    }
+    println("data rows: {records}");
+    println("rows with different field counts: {irregular}");
+}

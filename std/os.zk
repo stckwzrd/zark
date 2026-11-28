@@ -17,6 +17,8 @@ extern i32 chdir(u8* path);
 
 struct PollFd { i32 fd; i16 events; i16 revents; }
 extern i32 poll(PollFd* fds, u64 n, i32 timeout);
+extern i32 vrt_set_nonblocking(i32 fd);
+extern i64 vrt_pipe_write(i32 fd, void* data, u64 len);
 
 /// the result of exec: the exit code and everything the process wrote
 struct Output {
@@ -41,6 +43,74 @@ struct Command {
 
 !Output exec(Allocator a, str[] argv) { return exec_with(a, Command{ .argv = argv }); }
 
+void close_fd(i32* fd) {
+    if (*fd >= 0) { _ = close(*fd); *fd = -1; }
+}
+
+!i64 read_pipe(i32 fd, u8[] buf) {
+    while (true) {
+        const auto n = Sys::read(fd as i64, buf.ptr, buf.len as u64) catch |e| {
+            if (vrt_errno() == 4) { continue; }
+            return e;
+        };
+        return n;
+    }
+    return error.SystemCall;
+}
+
+// On an error after fork, terminate and reap the child before returning.
+void stop_child(i32 pid) {
+    _ = kill(pid, 9);
+    i32 status = 0;
+    while (waitpid(pid, &status, 0) < 0 && vrt_errno() == 4) {}
+}
+
+/// An owned child process with inherited standard streams. Call deinit once.
+/// If still running, deinit kills and reaps it. Do not reap the PID elsewhere.
+owned struct Child {
+    i32 pid;
+    bool reaped;
+
+    /// Starts a program searched through PATH. An exec failure exits with code 127.
+    static !Self spawn(Allocator a, str[] argv) {
+        if (argv.len == 0) { return error.NoProgram; }
+        const auto args = a.alloc<u8*>(argv.len + 1)?;
+        defer a.free(args);
+        auto copied = 0;
+        defer { for (auto i : 0..copied) { a.free_fn(a.ctx, args[i], (argv[i].len + 1) as u64); } }
+        for (auto [i, arg] : argv) {
+            args[i] = a.dupz(arg)?;
+            copied += 1;
+        }
+        _ = fflush(null);
+        const auto pid = fork();
+        if (pid < 0) { errno_error()?; }
+        if (pid == 0) { _ = execvp(args[0], args.ptr); _exit(127); }
+        return Self{ .pid = pid };
+    }
+
+    /// Waits once. A signal is reported as 128 plus the signal number.
+    !i32 wait() {
+        if (this->reaped) { return error.AlreadyWaited; }
+        i32 status = 0;
+        while (waitpid(this->pid, &status, 0) < 0) {
+            if (vrt_errno() == 10) { this->reaped = true; return error.WaitFailed; }
+            if (vrt_errno() != 4) { errno_error()?; }
+        }
+        this->reaped = true;
+        if ((status & 0x7f) != 0) { return 128 + (status & 0x7f); }
+        return (status >> 8) & 0xff;
+    }
+
+    !void signal(i32 sig) {
+        if (this->reaped) { return error.AlreadyWaited; }
+        if (sig <= 0) { return error.InvalidArgument; }
+        if (kill(this->pid, sig) != 0) { errno_error()?; }
+    }
+
+    void deinit() move { if (!this->reaped) { stop_child(this->pid); } }
+}
+
 /// starts the program (found through PATH), waits for it and collects stdout and stderr
 !Output exec_with(Allocator a, Command c) {
     if (c.argv.len == 0) { return error.NoProgram; }
@@ -56,9 +126,15 @@ struct Command {
     u8* cwdp = null;
     if (c.cwd.len > 0) { cwdp = to_cstr(cwdb[..], c.cwd)?; }
 
-    i32[2] po;
-    i32[2] pe;
-    i32[2] pi;
+    i32[2] po = [-1, -1];
+    i32[2] pe = [-1, -1];
+    i32[2] pi = [-1, -1];
+    defer close_fd(&po[0]);
+    defer close_fd(&po[1]);
+    defer close_fd(&pe[0]);
+    defer close_fd(&pe[1]);
+    defer close_fd(&pi[0]);
+    defer close_fd(&pi[1]);
     if (pipe(&po[0]) != 0 || pipe(&pe[0]) != 0 || pipe(&pi[0]) != 0) { errno_error()?; }
     const auto pid = fork();
     if (pid < 0) { errno_error()?; }
@@ -71,17 +147,19 @@ struct Command {
         _ = execvp(cargs[0], cargs.ptr);
         _exit(127);
     }
-    _ = close(po[1]);
-    _ = close(pe[1]);
-    _ = close(pi[0]);
+    auto child_live = true;
+    errdefer { if (child_live) { stop_child(pid); } }
+    close_fd(&po[1]);
+    close_fd(&pe[1]);
+    close_fd(&pi[0]);
+    if (vrt_set_nonblocking(pi[1]) != 0) { return error.SystemCall; }
     auto out = List<u8>::init(a);
     errdefer out.deinit();
     auto err = List<u8>::init(a);
     errdefer err.deinit();
     // feed stdin while reading both outputs, so that no pipe fills up and blocks the child
-    auto in_fd = pi[1];
     auto in_off = 0;
-    if (c.input.len == 0) { _ = close(in_fd); in_fd = -1; }
+    if (c.input.len == 0) { close_fd(&pi[1]); }
     auto open_out = true;
     auto open_err = true;
     u8[65536] buf;
@@ -92,31 +170,45 @@ struct Command {
         fds[2] = PollFd{ .fd = -1 };
         if (open_out) { fds[0] = PollFd{ .fd = po[0], .events = 1 }; }
         if (open_err) { fds[1] = PollFd{ .fd = pe[0], .events = 1 }; }
-        if (in_fd >= 0) { fds[2] = PollFd{ .fd = in_fd, .events = 4 }; }
-        if (poll(&fds[0], 3, -1) < 0) { continue; }
-        if (in_fd >= 0 && fds[2].revents != 0) {
-            const auto w = Sys::write(in_fd as i64, c.input.ptr + in_off, (c.input.len - in_off) as u64) catch -1;
-            if (w > 0) { in_off += w; }
-            if (w <= 0 || in_off >= c.input.len) { _ = close(in_fd); in_fd = -1; }
+        if (pi[1] >= 0) { fds[2] = PollFd{ .fd = pi[1], .events = 4 }; }
+        if (poll(&fds[0], 3, -1) < 0) {
+            if (vrt_errno() == 4) { continue; }
+            errno_error()?;
+        }
+        if (pi[1] >= 0 && fds[2].revents != 0) {
+            if ((fds[2].revents & 56) != 0) { close_fd(&pi[1]); }
+            else {
+                const auto w = vrt_pipe_write(pi[1], c.input.ptr + in_off, (c.input.len - in_off) as u64);
+                if (w > 0) { in_off += w; }
+                if (w == -32 || w == 0 || in_off >= c.input.len) { close_fd(&pi[1]); }
+                else if (w < 0 && w != -4 && w != -11) { _ = __sys_result(w)?; }
+            }
         }
         if (open_out && fds[0].revents != 0) {
-            const auto n = Sys::read(po[0] as i64, &buf[0], 65536) catch 0;
+            const auto n = read_pipe(po[0], buf[..])?;
             if (n <= 0) { open_out = false; } else { out.append(buf[0..n])?; }
         }
         if (open_err && fds[1].revents != 0) {
-            const auto n = Sys::read(pe[0] as i64, &buf[0], 65536) catch 0;
+            const auto n = read_pipe(pe[0], buf[..])?;
             if (n <= 0) { open_err = false; } else { err.append(buf[0..n])?; }
         }
     }
-    if (in_fd >= 0) { _ = close(in_fd); }
-    _ = close(po[0]);
-    _ = close(pe[0]);
+    close_fd(&pi[1]);
+    close_fd(&po[0]);
+    close_fd(&pe[0]);
     i32 status = 0;
-    if (waitpid(pid, &status, 0) < 0) { errno_error()?; }
+    while (waitpid(pid, &status, 0) < 0) {
+        if (vrt_errno() == 10) { child_live = false; return error.WaitFailed; }
+        if (vrt_errno() != 4) { errno_error()?; }
+    }
+    child_live = false;
     auto code = (status >> 8) & 0xff;
     if ((status & 0x7f) != 0) { code = 128 + (status & 0x7f); }
     if (code == 127 && out.len == 0 && err.len == 0) { return error.ProgramNotFound; }
-    return Output{ .code = code, .out = out.take()?, .err = err.take()?, .a = a };
+    const auto out_bytes = out.take()?;
+    errdefer a.free(out_bytes);
+    const auto err_bytes = err.take()?;
+    return Output{ .code = code, .out = out_bytes, .err = err_bytes, .a = a };
 }
 
 /// runs a command line through /bin/sh -c

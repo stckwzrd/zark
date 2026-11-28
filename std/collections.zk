@@ -97,3 +97,220 @@ owned struct LinkedList<T> {
 
     void deinit() move { this->clear(); }
 }
+
+// A double-ended queue backed by a circular allocation.
+struct DequeIter<T> {
+    T[] items;
+    i64 head;
+    i64 len;
+    i64 index;
+
+    bool next() { this->index += 1; return this->index < this->len; }
+    T* value() borrows { return &this->items[(this->head + this->index) % this->items.len]; }
+}
+
+owned struct Deque<T> {
+    T[] items;
+    i64 head;
+    i64 len;
+    Allocator a;
+    fn(T*) -> void cleanup;
+
+    static Self init(Allocator a, fn(T*) -> void cleanup) {
+        return Self{ .a = a, .cleanup = cleanup };
+    }
+
+    !void grow() {
+        auto cap = 8;
+        if (this->items.len > 0) {
+            if (this->items.len > 0x1fffffffffffffff) { return error.OutOfMemory; }
+            cap = this->items.len * 2;
+        }
+        const auto fresh = this->a.alloc<T>(cap)?;
+        for (auto i : 0..this->len) {
+            fresh[i] = move_out(&this->items[(this->head + i) % this->items.len]);
+        }
+        this->a.free(this->items);
+        this->items = fresh;
+        this->head = 0;
+    }
+
+    !void push_back(T value) invalidates {
+        if (this->len == this->items.len) {
+            this->grow() catch |e| {
+                if (this->cleanup != null) { this->cleanup(&value); }
+                return e;
+            };
+        }
+        this->items[(this->head + this->len) % this->items.len] = value;
+        this->len += 1;
+    }
+
+    !void push_front(T value) invalidates {
+        if (this->len == this->items.len) {
+            this->grow() catch |e| {
+                if (this->cleanup != null) { this->cleanup(&value); }
+                return e;
+            };
+        }
+        this->head = (this->head + this->items.len - 1) % this->items.len;
+        this->items[this->head] = value;
+        this->len += 1;
+    }
+
+    !T pop_front() invalidates {
+        if (this->len == 0) { return error.Empty; }
+        const auto result = move_out(&this->items[this->head]);
+        this->head = (this->head + 1) % this->items.len;
+        this->len -= 1;
+        return result;
+    }
+
+    !T pop_back() invalidates {
+        if (this->len == 0) { return error.Empty; }
+        this->len -= 1;
+        return move_out(&this->items[(this->head + this->len) % this->items.len]);
+    }
+
+    T* front() borrows { if (this->len == 0) { return null; } return &this->items[this->head]; }
+    T* back() borrows { if (this->len == 0) { return null; } return &this->items[(this->head + this->len - 1) % this->items.len]; }
+    bool is_empty() { return this->len == 0; }
+    DequeIter<T> iter() borrows { return DequeIter<T>{ .items = this->items, .head = this->head, .len = this->len, .index = -1 }; }
+
+    void clear() invalidates {
+        if (this->cleanup != null) {
+            for (auto i : 0..this->len) { this->cleanup(&this->items[(this->head + i) % this->items.len]); }
+        }
+        this->head = 0;
+        this->len = 0;
+    }
+
+    void deinit() move { this->clear(); this->a.free(this->items); }
+}
+
+/// Compact, explicitly allocated set of bits with indices 0..len.
+owned struct BitSet {
+    u64[] words;
+    i64 len;
+    Allocator a;
+
+    static !Self init(Allocator a, i64 len) {
+        if (len < 0) { return error.InvalidArgument; }
+        const auto n = len / 64 + (len % 64 != 0) as i64;
+        return Self{ .words = a.alloc<u64>(n)?, .len = len, .a = a };
+    }
+    !bool contains(i64 index) {
+        if (index < 0 || index >= this->len) { return error.OutOfRange; }
+        return (this->words[index / 64] & ((1 as u64) << ((index % 64) as u64))) != 0;
+    }
+    !void set(i64 index, bool value) {
+        if (index < 0 || index >= this->len) { return error.OutOfRange; }
+        const auto mask = (1 as u64) << ((index % 64) as u64);
+        if (value) { this->words[index / 64] |= mask; }
+        else { this->words[index / 64] &= ~mask; }
+    }
+    void clear() { for (auto i : 0..this->words.len) { this->words[i] = 0; } }
+    i64 count() {
+        i64 total = 0;
+        for (auto word : this->words) {
+            auto x = word;
+            while (x != 0) { x &= x - 1; total += 1; }
+        }
+        return total;
+    }
+    !void union_with(BitSet* other) {
+        if (this->len != other.len) { return error.SizeMismatch; }
+        for (auto i : 0..this->words.len) { this->words[i] |= other.words[i]; }
+    }
+    !void intersect_with(BitSet* other) {
+        if (this->len != other.len) { return error.SizeMismatch; }
+        for (auto i : 0..this->words.len) { this->words[i] &= other.words[i]; }
+    }
+    void deinit() move { this->a.free(this->words); }
+}
+
+struct PoolSlot<T> {
+    PoolSlot<T>* free_next;
+    bool live;
+    T value;
+}
+struct PoolBlock<T> {
+    PoolBlock<T>* next;
+    PoolSlot<T>[] slots;
+}
+
+/// A block-allocated pool with stable pointers. Not thread-safe.
+owned struct Pool<T> {
+    PoolBlock<T>* blocks;
+    PoolSlot<T>* free_head;
+    Allocator a;
+    i64 block_size;
+    i64 len;
+    fn(T*) -> void cleanup;
+
+    static !Self init(Allocator a, i64 block_size, fn(T*) -> void cleanup) {
+        if (block_size <= 0) { return error.InvalidArgument; }
+        return Self{ .a = a, .block_size = block_size, .cleanup = cleanup };
+    }
+    !void grow() {
+        const auto block = this->a.create<PoolBlock<T>>()?;
+        errdefer this->a.destroy(block);
+        const auto slots = this->a.alloc<PoolSlot<T>>(this->block_size)?;
+        block.slots = slots;
+        block.next = this->blocks;
+        for (auto i : 0..slots.len) {
+            slots[i].free_next = this->free_head;
+            this->free_head = &slots[i];
+        }
+        this->blocks = block;
+    }
+    /// Moves value into a pool slot; on allocation failure invokes cleanup if set.
+    !T* acquire(T value) {
+        if (this->free_head == null) {
+            this->grow() catch |e| {
+                if (this->cleanup != null) { this->cleanup(&value); }
+                return e;
+            };
+        }
+        const auto slot = this->free_head;
+        this->free_head = slot.free_next;
+        slot.live = true;
+        slot.value = value;
+        this->len += 1;
+        return &slot.value;
+    }
+    /// Cleans and releases a live slot; rejects pointers not owned by this pool.
+    !void release(T* value) {
+        auto block = this->blocks;
+        while (block != null) {
+            for (auto i : 0..block.slots.len) {
+                const auto slot = &block.slots[i];
+                if (&slot.value != value) { continue; }
+                if (!slot.live) { return error.AlreadyReleased; }
+                if (this->cleanup != null) { this->cleanup(&slot.value); }
+                _ = memset(&slot.value as *void, 0, sizeof(T));
+                slot.live = false;
+                slot.free_next = this->free_head;
+                this->free_head = slot;
+                this->len -= 1;
+                return;
+            }
+            block = block.next;
+        }
+        return error.InvalidPointer;
+    }
+    void deinit() move {
+        auto block = this->blocks;
+        while (block != null) {
+            const auto next = block.next;
+            if (this->cleanup != null) {
+                for (auto i : 0..block.slots.len) {
+                    if (block.slots[i].live) { this->cleanup(&block.slots[i].value); }
+                }
+            }
+            this->a.free(block.slots);
+            this->a.destroy(block);
+            block = next;
+        }
+    }
+}

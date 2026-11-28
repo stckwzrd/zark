@@ -1,0 +1,21 @@
+// Endian-aware integer I/O over std/io readers and prelude writers.
+import "std/io" as io;
+import "std/binary" as binary;
+
+/// Reads exactly 1..8 bytes. A short input returns EndOfStream.
+!u64 read_uint(io::Reader* source, i64 bytes, binary::Endian order) {
+    if (bytes < 1 || bytes > 8) { return error.InvalidWidth; }
+    u8[8] data;
+    source.read_exact(data[0..bytes])?;
+    auto input = binary::Reader::init(data[0..bytes]);
+    return input.read_uint(bytes, order);
+}
+
+/// Writes exactly 1..8 bytes. Invalid values do not reach the destination.
+!void write_uint(Writer* dest, u64 value, i64 bytes, binary::Endian order) {
+    if (bytes < 1 || bytes > 8) { return error.InvalidWidth; }
+    u8[8] data;
+    auto output = binary::Writer::init(data[0..bytes]);
+    output.write_uint(value, bytes, order)?;
+    dest.write(data[0..bytes])?;
+}

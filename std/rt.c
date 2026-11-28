@@ -520,6 +520,33 @@ int vrt_set_nonblocking(int fd)
     return 0;
 }
 
+// Write to a pipe without changing the process-wide SIGPIPE disposition.
+long vrt_pipe_write(int fd, const void *data, unsigned long len)
+{
+    sigset_t set, old, pending;
+    sigemptyset(&set);
+    sigaddset(&set, SIGPIPE);
+    int rc = pthread_sigmask(SIG_BLOCK, &set, &old);
+    if (rc != 0) return -(long)rc;
+    if (sigpending(&pending) < 0) {
+        int saved = vrt_errno();
+        pthread_sigmask(SIG_SETMASK, &old, NULL);
+        return -(long)saved;
+    }
+    int already_pending = sigismember(&pending, SIGPIPE);
+    int already_blocked = sigismember(&old, SIGPIPE);
+    long result = write(fd, data, (size_t)len);
+    int saved = errno;
+    int mapped = vrt_errno();
+    if (result < 0 && saved == EPIPE && !already_pending && !already_blocked &&
+        sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE)) {
+        int sig;
+        (void)sigwait(&set, &sig);
+    }
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
+    return result < 0 ? -(long)mapped : result;
+}
+
 int vrt_poller_wake(long p)
 {
     if (p <= 0) return -EBADF;
@@ -583,6 +610,12 @@ int vrt_cond_broadcast(vcond *c)
 {
     lazy(&c->state, cond_init, c);
     return pthread_cond_broadcast(&c->c);
+}
+
+int vrt_cond_destroy(vcond *c)
+{
+    if (atomic_load(&c->state) == 0) return 0;
+    return pthread_cond_destroy(&c->c);
 }
 
 uint64_t vrt_fetch_add64(_Atomic uint64_t *p, uint64_t v) { return atomic_fetch_add(p, v); }
