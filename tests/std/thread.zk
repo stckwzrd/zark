@@ -3,6 +3,57 @@ import "std/thread" as thread;
 void cleanup_locked(thread::Locked<i64>* value) { value.deinit(); }
 struct Tracked { thread::AtomicI64* destroyed; }
 void cleanup_tracked(Tracked* value) { value.destroyed.add(1); }
+
+test "weak arc expires and retains the control block" {
+    auto dbg = DebugAllocator::init();
+    auto destroyed = thread::AtomicI64{};
+    {
+        auto owner = thread::Arc<Tracked>::init(dbg.allocator(), Tracked{ .destroyed = &destroyed }, cleanup_tracked)?;
+        errdefer owner.deinit();
+        auto weak = owner.downgrade();
+        errdefer weak.deinit();
+        auto other = weak.clone();
+        errdefer other.deinit();
+        auto upgraded = weak.upgrade() orelse return error.Unexpected;
+        owner.deinit();
+        assert(destroyed.load() == 0);
+        upgraded.deinit();
+        assert(destroyed.load() == 1 && dbg.live == 1);
+        assert(weak.upgrade() is .None);
+        weak.deinit();
+        assert(dbg.live == 1 && other.upgrade() is .None);
+        auto expired_clone = other.clone();
+        other.deinit();
+        assert(dbg.live == 1 && expired_clone.upgrade() is .None);
+        expired_clone.deinit();
+        assert(dbg.live == 0);
+    }
+    dbg.deinit()?;
+}
+
+test "weak arc upgrade races the last strong release" {
+    auto destroyed = thread::AtomicI64{};
+    auto started = thread::AtomicBool{};
+    auto owner = thread::Arc<Tracked>::init(c_allocator(), Tracked{ .destroyed = &destroyed }, cleanup_tracked)?;
+    errdefer owner.deinit();
+    auto weak = owner.downgrade();
+    errdefer weak.deinit();
+    auto worker = thread::spawn([&weak, &started]() -> void {
+        started.store(true);
+        for (auto i : 0..20000) {
+            auto result = weak.upgrade();
+            match (result) {
+                .Some(value) => { assert(value.get().destroyed != null); value.deinit(); },
+                .None => {},
+            }
+        }
+    })?;
+    while (!started.load()) { thread::yield(); }
+    owner.deinit();
+    worker.join();
+    assert(destroyed.load() == 1 && weak.upgrade() is .None);
+    weak.deinit();
+}
 void cleanup_list(List<i64>* value) { value.deinit(); }
 
 test "arc owns a resource value" {

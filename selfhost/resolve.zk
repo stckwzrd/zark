@@ -137,6 +137,14 @@ struct Resolver {
                 if (s.has_idx) { this->locals.push(s.idx)?; }
                 this->rstmt(s.body)?;
             }
+            .ForZip => {
+                for (auto clause : s.stmts) { this->rexpr(clause.e)?; this->rexpr(clause.e2)?; }
+                for (auto clause : s.stmts) {
+                    this->locals.push(clause.name)?;
+                    if (clause.has_idx) { this->locals.push(clause.idx)?; }
+                }
+                this->rstmt(s.body)?;
+            }
             .Block => {
                 for (auto x : s.stmts) { this->rstmt(x)?; }
             }

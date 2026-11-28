@@ -14,6 +14,7 @@ extern i32 rename(u8* from, u8* to);
 extern u8* getcwd(u8* buf, u64 n);
 extern i32 chdir(u8* path);
 extern i32 chmod(u8* path, u32 mode);
+extern i64 vrt_copy_prepare(i64 src, i64 dst);
 
 enum Kind { File, Dir, Link, Other }
 
@@ -202,14 +203,17 @@ bool entry_less(Entry x, Entry y) { return str_less(x.name, y.name); }
     if (rename(to_cstr(fb[..], from)?, to_cstr(tb[..], to)?) != 0) { errno_error()?; }
 }
 
+/// Copies a file; returns error.SameFile if both paths refer to the same file.
 !void copy_file(str from, str to) {
     u8[4096] fb;
     u8[4096] tb;
     const auto src = Sys::open(to_cstr(fb[..], from)?, 0, 0)?;
     defer _ = Sys::close(src);
     const auto mode = info(from)?.mode;
-    const auto dst = Sys::open(to_cstr(tb[..], to)?, 0o1 | 0o100 | 0o1000, mode as i64)?;
+    const auto dst = Sys::open(to_cstr(tb[..], to)?, 0o1 | 0o100, mode as i64)?;
     defer _ = Sys::close(dst);
+    const auto prepared = __sys_result(vrt_copy_prepare(src, dst))?;
+    if (prepared == 1) { return error.SameFile; }
     u8[65536] buf;
     while (true) {
         const auto n = Sys::read(src, &buf[0], 65536)?;

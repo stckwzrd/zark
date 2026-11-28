@@ -349,6 +349,26 @@ struct Walker {
         return null;
     }
 
+    TypeExpr* iterator_of(TypeExpr* te) {
+        if (this->member(te, "next") != null) { return te; }
+        return this->member_type(te, this->member(te, "iter"));
+    }
+
+    TypeExpr* for_value_type(TypeExpr* te) {
+        const auto elem = this->elem_of(te);
+        if (elem != null) { return elem; }
+        const auto it = this->iterator_of(te);
+        return this->member_type(it, this->member(it, "value"));
+    }
+
+    TypeExpr* for_index_type(TypeExpr* te) {
+        if (te == null) { return null; }
+        const auto it = this->iterator_of(te);
+        const auto key = this->member_type(it, this->member(it, "key"));
+        if (key != null) { return key; }
+        return this->p.mk_name("i64") catch null;
+    }
+
     TypeExpr* infer(Expr* e) {
         if (e == null) { return null; }
         match e.k {
@@ -655,8 +675,19 @@ struct Walker {
             }
             .ForEach => {
                 this->wexpr(s.e);
-                if (s.has_idx) { this->declare(.Local, s.idx, s.idx_off, this->p.mk_name("i64") catch null) catch {} }
-                this->declare(.Local, s.name, s.name_off, this->elem_of(this->infer(s.e))) catch {};
+                const auto ty = this->infer(s.e);
+                if (s.has_idx) { this->declare(.Local, s.idx, s.idx_off, this->for_index_type(ty)) catch {} }
+                this->declare(.Local, s.name, s.name_off, this->for_value_type(ty)) catch {};
+                this->wstmt(s.body);
+            }
+            .ForZip => {
+                for (auto clause : s.stmts) { this->wexpr(clause.e); this->wexpr(clause.e2); }
+                for (auto clause : s.stmts) {
+                    auto ty = this->infer(clause.e);
+                    if (clause.has_idx) { this->declare(.Local, clause.idx, clause.idx_off, this->for_index_type(ty)) catch {} }
+                    if (clause.k == .ForEach) { ty = this->for_value_type(ty); }
+                    this->declare(.Local, clause.name, clause.name_off, ty) catch {};
+                }
                 this->wstmt(s.body);
             }
             .Block => {

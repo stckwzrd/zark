@@ -64,7 +64,7 @@ void cfg_decode(i64 n) {
 
 bool stmt_ends_with_block(Stmt* s) {
     match s.k {
-        .If, .While, .ForRange, .ForEach, .Match, .Block => return true;
+        .If, .While, .ForRange, .ForEach, .ForZip, .Match, .Block => return true;
         .Defer => return stmt_ends_with_block(s.body);
         _ => {}
     }
